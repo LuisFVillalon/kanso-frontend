@@ -15,8 +15,8 @@ const TasksContext = createContext<TasksContextValue | null>(null);
  * instead of each independently re-fetching on mount.
  */
 export const TasksProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const value = useTasksData(!!user);
+  const { dataUserId } = useAuth();
+  const value = useTasksData(!!dataUserId);
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;
 };
 

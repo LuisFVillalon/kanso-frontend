@@ -2,6 +2,8 @@
 
 import React, { useEffect, useId, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
+import { useToast } from '@/app/context/ToastContext';
+import { IMAGE_TOO_LARGE_MESSAGE, MAX_IMAGE_BYTES } from './imageLimits';
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight,
   Bold, ChevronDown, Highlighter, Image as ImageIcon, Italic, List, ListOrdered,
@@ -419,6 +421,7 @@ const HeadingPicker: React.FC<{ editor: Editor | null }> = ({ editor }) => {
 // ─── ImageButton ──────────────────────────────────────────────────────────────
 
 const ImageButton: React.FC<{ editor: Editor | null }> = ({ editor }) => {
+  const showToast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
 
@@ -426,6 +429,10 @@ const ImageButton: React.FC<{ editor: Editor | null }> = ({ editor }) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !editor) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      showToast(IMAGE_TOO_LARGE_MESSAGE);
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = readerEvent => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { FilterType, EditTaskForm, Tag, EditTaskModalState, NewTag, BaseTaskForm, Task } from '@/app/types/task';
 import { taskToEditForm } from '@/app/utils/taskUtils';
+import { useToast } from '@/app/context/ToastContext';
 
 interface UseTaskHandlersProps {
   // State setters
@@ -58,6 +59,7 @@ export const useTaskHandlers = ({
   updateTag,
   delTag,
 }: UseTaskHandlersProps) => {
+  const showToast = useToast();
 
   const toggleSelectedTag = (tag: Tag) => {
     setSelectedTags(prev => toggleById(prev, tag));
@@ -65,12 +67,10 @@ export const useTaskHandlers = ({
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    // ✅ Always require title
     if (!newTask.title.trim()) {
-      alert("Title is required.");
+      showToast('Give the task a title first.', 'info');
       return;
     }
-    // 🚀 Now safe to create
     const success = await addTask(newTask);
     if (success) {
       setShowNewTaskModal(false);

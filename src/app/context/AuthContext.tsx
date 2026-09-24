@@ -9,6 +9,7 @@ import React, {
 } from 'react';
 import type { Session, User, AuthError } from '@supabase/supabase-js';
 import { supabase } from '@/app/lib/supabase';
+import { seedDemoData } from '@/app/lib/backend-api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -19,10 +20,21 @@ interface AuthContextValue {
   session: Session | null;
   /** True while the initial session is being restored from storage. */
   loading: boolean;
+  /** True for a "Try the demo" sandbox (a Supabase anonymous user). */
+  isDemo: boolean;
+  /** True while a demo sandbox is signed in but still being filled with sample data. */
+  demoSeeding: boolean;
+  /**
+   * The user whose data the app should load: null while signed out or while
+   * a demo sandbox is still seeding, so nothing fetches an empty sandbox.
+   */
+  dataUserId: string | null;
 
   signUpWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signInWithGoogle: () => Promise<{ error: AuthError | null }>;
+  /** Signs in as a fresh, private demo sandbox and fills it with sample data. */
+  startDemo: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 
   /**
@@ -43,7 +55,7 @@ interface AuthContextValue {
  *                                   NEXT_PUBLIC_SITE_URL (a production value)
  *                                   can never hijack local OAuth redirects.
  *  2. NEXT_PUBLIC_SITE_URL       — explicit canonical URL set in Vercel env
- *                                   vars (e.g. https://task-master-mvp.vercel.app).
+ *                                   vars (e.g. https://kanso-web-app.vercel.app).
  *                                   Set this once in Vercel → Settings → Environment
  *                                   Variables for the Production environment only —
  *                                   never in .env on disk.
@@ -84,6 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser]       = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [demoSeeding, setDemoSeeding] = useState(false);
 
   useEffect(() => {
     // 1. Restore session on mount (handles OAuth redirect callbacks too).
@@ -150,6 +163,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error };
   }, []);
 
+  const startDemo = useCallback(async () => {
+    setDemoSeeding(true);
+    try {
+      // Each visitor gets their own anonymous user, so demo sessions never
+      // share data. The backend deletes sandboxes after a day.
+      const { error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+      await seedDemoData();
+      return { error: null };
+    } catch (err) {
+      await supabase.auth.signOut();
+      const message = err instanceof Error ? err.message : '';
+      return { error: `Couldn't start the demo. Please try again in a moment.${message ? ` (${message})` : ''}` };
+    } finally {
+      setDemoSeeding(false);
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -165,9 +196,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         session,
         loading,
+        isDemo: !!user?.is_anonymous,
+        demoSeeding,
+        dataUserId: user && !demoSeeding ? user.id : null,
         signUpWithEmail,
         signInWithEmail,
         signInWithGoogle,
+        startDemo,
         signOut,
         getAccessToken,
       }}

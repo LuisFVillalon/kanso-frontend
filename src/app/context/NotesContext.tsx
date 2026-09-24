@@ -13,8 +13,8 @@ const NotesContext = createContext<NotesContextValue | null>(null);
  * TasksContext.tsx for why this is a context rather than a plain hook.
  */
 export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const value = useNotesData(!!user);
+  const { dataUserId } = useAuth();
+  const value = useNotesData(!!dataUserId);
   return <NotesContext.Provider value={value}>{children}</NotesContext.Provider>;
 };
 

@@ -13,8 +13,8 @@ const HabitsContext = createContext<HabitsContextValue | null>(null);
  * TasksContext.tsx for why this is a context rather than a plain hook.
  */
 export const HabitsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const value = useHabitsData(!!user);
+  const { dataUserId } = useAuth();
+  const value = useHabitsData(!!dataUserId);
   return <HabitsContext.Provider value={value}>{children}</HabitsContext.Provider>;
 };
 

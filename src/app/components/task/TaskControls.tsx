@@ -10,6 +10,7 @@ import {
 import { FilterType, Tag } from '@/app/types/task';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
 import Modal from '@/app/components/common/Modal';
+import { useAuth } from '@/app/context/AuthContext';
 
 interface TaskControlsProps {
   searchTerm: string;
@@ -94,6 +95,7 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
   onLogout,
 }) => {
   const collapsed = menuCollapsed;
+  const { isDemo } = useAuth();
   const [sortExpanded, setSortExpanded] = useState(true);
   const [tagsExpanded, setTagsExpanded] = useState(true);
   const [actionsExpanded, setActionsExpanded] = useState(true);
@@ -159,7 +161,18 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
         {/* Brand + collapse toggle */}
         <div className="flex items-center h-14 px-3 border-b border-border-subtle flex-shrink-0 justify-between">
           {!collapsed && (
-            <span className="font-bold text-text-primary tracking-tight pl-1">Kanso</span>
+            <span className="flex items-center gap-2 pl-1">
+              <span className="font-bold text-text-primary tracking-tight">kanso</span>
+              {isDemo && (
+                <span
+                  className="chip"
+                  title="A private sandbox with sample data, deleted after a day"
+                  style={{ backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)' }}
+                >
+                  demo
+                </span>
+              )}
+            </span>
           )}
           <button
             onClick={onToggleMenu}

@@ -1,5 +1,5 @@
 /*
- * Backend API client — all requests to the FastAPI backend (taskmaster-backend).
+ * API client — every request to the kanso backend and the kanso AI service.
  *
  * Every request is authenticated via the Supabase JWT:
  *   Authorization: Bearer <access_token>
@@ -8,7 +8,6 @@
  * session the call throws so the caller can redirect to /login.
  */
 
-import { Task } from "../types/task";
 import { Note, NoteSession } from "../types/notes";
 import { CalendarSettings } from "../types/calendar";
 import { Habit, HabitHistoryEntry } from "../types/habit";
@@ -20,7 +19,7 @@ import { LearningResourcesResponse } from "../types/learningResources";
 import type { StructuredNoteContent } from "../utils/noteContentExtractor";
 import { supabase } from "./supabase";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_TASKMASTER_DB_URL!;
+const API_BASE_URL = process.env.NEXT_PUBLIC_KANSO_API_URL!;
 
 // ── Auth header helper ────────────────────────────────────────────────────────
 
@@ -36,78 +35,48 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   };
 }
 
-/** Throws a descriptive error if the response is not 2xx. */
+/** A non-2xx API response. `detail` is FastAPI's error detail when it sent one. */
+export class ApiError extends Error {
+  constructor(readonly status: number, readonly detail: string, context: string) {
+    super(`[${context}] ${detail}`);
+    this.name = 'ApiError';
+  }
+}
+
+// Statuses whose `detail` is a sentence written for the user (a duplicate
+// tag name, a taken priority, a rate limit), not a stack of validation errors.
+const USER_FACING_STATUSES = new Set([400, 403, 404, 409, 429]);
+
+/** A message fit for a toast: the server's own reason when it gave one, else `fallback`. */
+export function describeError(err: unknown, fallback: string): string {
+  return err instanceof ApiError && USER_FACING_STATUSES.has(err.status) ? err.detail : fallback;
+}
+
+/** Throws an ApiError if the response is not 2xx. */
 async function assertOk(res: Response, context: string): Promise<void> {
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
       const body = await res.json();
-      detail = body?.detail ?? JSON.stringify(body);
+      detail = typeof body?.detail === 'string' ? body.detail : JSON.stringify(body?.detail ?? body);
     } catch {
       // body wasn't JSON
     }
-    throw new Error(`[${context}] ${detail}`);
-  }
-}
-
-// ── Claim orphaned data ───────────────────────────────────────────────────────
-
-/**
- * Assigns all database rows where user_id IS NULL to the currently
- * authenticated user.  Safe to call multiple times — already-owned rows are
- * never touched.  Returns the count of rows claimed per table.
- *
- * Called automatically:
- *   • On every successful sign-in / OAuth callback
- *   • Once on TaskManager mount (via per-user localStorage flag) so existing
- *     signed-in accounts are fixed without requiring a re-login.
- */
-export async function claimOrphanedData(): Promise<{
-  tasks: number;
-  notes: number;
-  tags: number;
-  calendar_settings: number;
-} | null> {
-  try {
-    const headers = await getAuthHeaders();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    try {
-      const res = await fetch(`${API_BASE_URL}/claim-data`, {
-        method: 'POST',
-        headers,
-        signal: controller.signal,
-      });
-      if (!res.ok) return null;
-      const body = await res.json();
-      return body.claimed ?? null;
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch {
-    return null;
+    throw new ApiError(res.status, detail, context);
   }
 }
 
 // ── Demo / trial account ─────────────────────────────────────────────────────
 
 /**
- * Idempotently provisions the fixed demo auth account. Public — no session
- * required yet, since this runs before the demo sign-in itself.
- */
-export async function ensureDemoAccount(): Promise<void> {
-  const res = await fetch(`${API_BASE_URL}/demo/ensure-account`, { method: 'POST' });
-  await assertOk(res, 'ensureDemoAccount');
-}
-
-/**
- * Wipes and repopulates the demo account's tasks/habits/notes with fresh,
- * date-relative sample data. Requires an active demo-account session —
- * the backend rejects this for any other user.
+ * Fills the visitor's demo sandbox (a Supabase anonymous user) with fresh
+ * sample data dated relative to their local day. The backend rejects this
+ * for any non-anonymous user, so it can never touch a real account.
  */
 export async function seedDemoData(): Promise<void> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/demo/seed`, { method: 'POST', headers });
+  const params = new URLSearchParams({ local_date: toLocalDateStr(new Date()) });
+  const res = await fetch(`${API_BASE_URL}/demo/seed?${params}`, { method: 'POST', headers });
   await assertOk(res, 'seedDemoData');
 }
 
@@ -178,18 +147,6 @@ export async function updateWholeTask(id: number, task: {
     body: JSON.stringify(task),
   });
   await assertOk(res, "updateWholeTask");
-  return res.json();
-}
-
-/** Bulk-saves an array of tasks (used by the AI task-plan flow). */
-export async function saveTasksToDBAPI(tasks: Task[]) {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/save-tasks-list`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(tasks),
-  });
-  await assertOk(res, "saveTasksToDBAPI");
   return res.json();
 }
 
@@ -640,7 +597,7 @@ export async function deleteDrawingRemote(): Promise<void> {
   await assertOk(res, "deleteDrawingRemote");
 }
 
-const AI_BASE_URL = process.env.NEXT_PUBLIC_TASKMASTER_AI_URL!;
+const AI_BASE_URL = process.env.NEXT_PUBLIC_KANSO_AI_URL!;
 
 // ── Learning Resources ────────────────────────────────────────────────────────
 

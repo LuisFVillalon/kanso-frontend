@@ -1,6 +1,5 @@
 /**
- * The doodle-mode canvas ("drawing mode" in the app UI — unrelated to the
- * Canvas-LMS integration in lib/canvas_api.ts, an unfortunate name clash).
+ * The doodle-mode canvas ("drawing mode" in the app UI).
  *
  * Raster-blob shape, matching what DoodleCanvas.tsx already produces via
  * `canvas.toDataURL('image/png')` — a vector/stroke-based representation

@@ -7,32 +7,25 @@
  *   1. Google OAuth completes
  *   2. The user clicks their email-confirmation link
  *
- * After the session is established we call /claim-data before redirecting so
- * any pre-existing orphaned rows (user_id = NULL) are linked to this account.
- * The call is idempotent — already-owned rows are never touched.
+ * Once the Supabase client has established the session from the callback
+ * URL, redirect to the dashboard.
  */
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
-import { claimOrphanedData } from '@/app/lib/backend-api';
-
-async function claimAndRedirect(router: ReturnType<typeof useRouter>) {
-  await claimOrphanedData();
-  router.replace('/');
-}
 
 export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Safety net: if session exchange or API call hangs, redirect after 15s.
+    // Safety net: if the session exchange hangs, redirect after 15s.
     const fallback = setTimeout(() => router.replace('/'), 15000);
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         clearTimeout(fallback);
-        claimAndRedirect(router);
+        router.replace('/');
       } else {
         // Session not ready yet — wait for the Supabase client to process the
         // callback URL fragment/code and fire onAuthStateChange.
@@ -41,7 +34,7 @@ export default function AuthCallbackPage() {
             if (session) {
               clearTimeout(fallback);
               subscription.unsubscribe();
-              claimAndRedirect(router);
+              router.replace('/');
             }
           },
         );

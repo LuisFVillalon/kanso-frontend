@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -13,12 +13,12 @@ const ProtectedPage: React.FC<ProtectedPageProps> = ({ children }) => {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  if (loading) return <PageSpinner />;
+  // Navigating is a side effect, so it belongs in an effect, not in render.
+  useEffect(() => {
+    if (!loading && !user) router.replace('/login');
+  }, [loading, user, router]);
 
-  if (!user) {
-    router.replace('/login');
-    return null;
-  }
+  if (loading || !user) return <PageSpinner />;
 
   return <Suspense fallback={<PageSpinner />}>{children}</Suspense>;
 };

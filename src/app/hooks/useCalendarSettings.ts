@@ -4,12 +4,22 @@ import { useCallback, useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchCalendarSettings, updateCalendarSettings } from '@/app/lib/backend-api';
 import type { CalendarSettings } from '@/app/types/calendar';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
 
-const DEFAULTS: Omit<CalendarSettings, 'id'> = {
-  title: 'Term Tracker',
-  start_date: '2026-01-01',
-  end_date: '2026-03-31',
-};
+/**
+ * Placeholder term shown until the user saves their own: the current month
+ * plus the next two, so a new account never opens on a term that's already
+ * over. Mirrors the backend's default in calendar_crud.py.
+ */
+export function defaultTermSettings(): CalendarSettings {
+  const now = new Date();
+  return {
+    id: 0,
+    title: 'Term Tracker',
+    start_date: toLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1)),
+    end_date: toLocalDateStr(new Date(now.getFullYear(), now.getMonth() + 3, 0)),
+  };
+}
 
 /**
  * Single source of truth for Term Tracker (the `calendar_settings` table) —
@@ -20,7 +30,7 @@ const DEFAULTS: Omit<CalendarSettings, 'id'> = {
  * useProfile.ts.
  */
 export function useCalendarSettings(user: User | null) {
-  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>({ id: 0, ...DEFAULTS });
+  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(defaultTermSettings);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

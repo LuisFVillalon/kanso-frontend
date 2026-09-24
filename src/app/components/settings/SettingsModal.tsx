@@ -14,10 +14,14 @@
  *
  * This matches the backend guard on POST /update-password, which also reads
  * provider from the JWT payload and returns 403 for OAuth accounts.
+ *
+ * Demo sandboxes (Supabase anonymous users) have no credentials or account to
+ * manage, so they only get the Profile tab.
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { X, Loader2, Eye, EyeOff, AlertTriangle, ExternalLink, ShieldCheck, User, Check, Palette, CircleUserRound } from 'lucide-react';
+import Link from 'next/link';
+import { X, Loader2, Eye, EyeOff, AlertTriangle, ExternalLink, ShieldCheck, User, Check, Palette, CircleUserRound, Info } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { useAuth } from '@/app/context/AuthContext';
 import { updatePassword, deleteAccount } from '@/app/lib/backend-api';
@@ -70,7 +74,7 @@ export default function SettingsModal({
   calendarSettingsLoading,
   onSaveCalendarSettings,
 }: Props) {
-  const { user } = useAuth();
+  const { user, isDemo } = useAuth();
 
   // ── Provider detection ───────────────────────────────────────────────────
   // app_metadata is set by Supabase server-side and cannot be spoofed by users.
@@ -361,29 +365,47 @@ export default function SettingsModal({
           >
             Profile
           </button>
-          <button
-            onClick={() => !isOAuth && setSection('password')}
-            className={tabClass('password')}
-            style={tabStyle('password')}
-            title={isOAuth ? `Password management is handled by ${providerLabel}` : undefined}
-          >
-            Password
-          </button>
-          <button
-            onClick={() => setSection('email')}
-            className={tabClass('email')}
-            style={tabStyle('email')}
-          >
-            Email
-          </button>
-          <button
-            onClick={() => setSection('delete')}
-            className={tabClass('delete')}
-            style={tabStyle('delete')}
-          >
-            Delete Account
-          </button>
+          {!isDemo && <>
+            <button
+              onClick={() => !isOAuth && setSection('password')}
+              className={tabClass('password')}
+              style={tabStyle('password')}
+              title={isOAuth ? `Password management is handled by ${providerLabel}` : undefined}
+            >
+              Password
+            </button>
+            <button
+              onClick={() => setSection('email')}
+              className={tabClass('email')}
+              style={tabStyle('email')}
+            >
+              Email
+            </button>
+            <button
+              onClick={() => setSection('delete')}
+              className={tabClass('delete')}
+              style={tabStyle('delete')}
+            >
+              Delete Account
+            </button>
+          </>}
         </div>
+
+        {isDemo && (
+          <div
+            className="flex items-start gap-2 px-6 py-3 border-b text-sm shrink-0"
+            style={{ borderColor: 'var(--tm-border)', color: 'var(--tm-text-secondary)' }}
+          >
+            <Info className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--tm-accent)' }} />
+            <p>
+              You&apos;re in a private demo sandbox, which is deleted after a day.{' '}
+              <Link href="/signup" className="font-medium hover:underline" style={{ color: 'var(--tm-accent)' }}>
+                Create an account
+              </Link>{' '}
+              to keep your own data.
+            </p>
+          </div>
+        )}
 
         <div className="px-6 py-5 overflow-y-auto flex-1 scrollbar-custom">
 
@@ -392,7 +414,7 @@ export default function SettingsModal({
             <form onSubmit={handleSaveProfile} className="space-y-5">
               <div className="flex items-center gap-2 mb-1" style={{ color: 'var(--tm-text-secondary)' }}>
                 <User className="w-4 h-4" />
-                <p className="text-sm">Customize how Kanso knows you.</p>
+                <p className="text-sm">Customize how kanso knows you.</p>
                 {profileLoading && <Loader2 className="w-3.5 h-3.5 animate-spin ml-auto" />}
               </div>
 
@@ -605,7 +627,7 @@ export default function SettingsModal({
                     </p>
                     <p className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
                       Your account uses {providerLabel} for authentication. You don&apos;t have a
-                      separate Kanso password — {providerLabel} handles your security.
+                      separate kanso password — {providerLabel} handles your security.
                     </p>
                   </div>
                 </div>
@@ -691,7 +713,7 @@ export default function SettingsModal({
                 >
                   <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--tm-accent)' }} />
                   <p style={{ color: 'var(--tm-text-secondary)' }}>
-                    This changes your <strong>contact/notification email</strong> in Kanso.
+                    This changes your <strong>contact/notification email</strong> in kanso.
                     Your <strong>{providerLabel} login is not affected</strong> — you&apos;ll still sign
                     in with {providerLabel}, and all your data stays linked to your account.
                   </p>

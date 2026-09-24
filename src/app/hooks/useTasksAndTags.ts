@@ -8,7 +8,9 @@ import {
   onDeleteTag,
   updateTag as updateTagApi,
   updateWholeTask,
+  describeError,
 } from '@/app/lib/backend-api';
+import { useToast } from '@/app/context/ToastContext';
 import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag } from '@/app/types/task';
 import { toLocalISOString, toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 
@@ -20,6 +22,7 @@ import { toLocalISOString, toLocalDateStr, toLocalTimeStr } from '@/app/utils/da
  * gates this on auth so pages outside the signed-in app never fire it.
  */
 export const useTasks = (enabled: boolean) => {
+  const showToast = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Guards toggle/delete against double-click races the same way useHabits
@@ -97,7 +100,7 @@ export const useTasks = (enabled: boolean) => {
       setCompletionSyncToken(v => v + 1);
     } catch (err) {
       console.error('Toggle complete failed:', err);
-      alert("Failed to update task completion");
+      showToast(describeError(err, "Couldn't update the task. Please try again."));
       // Revert local state
       setTasks(tasks.map(t =>
         t.id === id ? { ...t, completed: task.completed, completed_date: task.completed_date, priority: task.priority } : t
@@ -123,7 +126,7 @@ export const useTasks = (enabled: boolean) => {
       return createdTask;
     } catch (err) {
       console.error(err);
-      alert("Failed to create task");
+      showToast(describeError(err, "Couldn't create the task. Please try again."));
       return false;
     }
   }; 
@@ -148,7 +151,7 @@ export const useTasks = (enabled: boolean) => {
         next.sort((a, b) => b.id - a.id);
         return next;
       });
-      alert("Couldn't delete the task — it has been restored.");
+      showToast("Couldn't delete the task, so it has been restored.");
       return false;
     } finally {
       pendingRef.current.delete(delTask.id);
@@ -173,7 +176,7 @@ export const useTasks = (enabled: boolean) => {
       return true;
     } catch (err) {
       console.error(err);
-      alert("Failed to update task");
+      showToast(describeError(err, "Couldn't save the task. Please try again."));
       return false;
     }
   };
@@ -199,6 +202,7 @@ export const useTasks = (enabled: boolean) => {
  * gates this on auth so pages outside the signed-in app never fire it.
  */
 export const useTags = (enabled: boolean) => {
+  const showToast = useToast();
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagsLoading, setTagsLoading] = useState(true);
 
@@ -229,7 +233,7 @@ export const useTags = (enabled: boolean) => {
       return tag;
     } catch (err) {
       console.error(err);
-      alert("Failed to create tag");
+      showToast(describeError(err, "Couldn't create the tag. Please try again."));
       return false;
     }
   };
@@ -241,7 +245,7 @@ export const useTags = (enabled: boolean) => {
       return delTag.id;
     } catch (err) {
       console.error('Delete failed:', err);
-      alert("Failed to delete tag");
+      showToast(describeError(err, "Couldn't delete the tag. Please try again."));
       return null;
     }
   };
@@ -253,7 +257,7 @@ export const useTags = (enabled: boolean) => {
       return tagToUpdate.id;
     } catch (err) {
       console.error('Update failed:', err);
-      alert("Failed to update tag");
+      showToast(describeError(err, "Couldn't update the tag. Please try again."));
       return null;
     }
   };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * Keeps a conditionally-rendered subtree mounted for `duration` ms after
@@ -11,21 +11,16 @@ import { useEffect, useRef, useState } from 'react';
  */
 export function useMountTransition(show: boolean, duration = 200) {
   const [shouldRender, setShouldRender] = useState(show);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Showing mounts immediately: adjust state during render rather than in an
+  // effect, so there's no extra frame where `show` is true but nothing renders.
+  if (show && !shouldRender) setShouldRender(true);
+
+  // Hiding unmounts only after the exit animation has had time to play.
   useEffect(() => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-    if (show) {
-      setShouldRender(true);
-    } else if (shouldRender) {
-      timeoutRef.current = setTimeout(() => setShouldRender(false), duration);
-    }
-
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (show) return;
+    const timeout = setTimeout(() => setShouldRender(false), duration);
+    return () => clearTimeout(timeout);
   }, [show, duration]);
 
   return shouldRender;

@@ -39,6 +39,9 @@ const ResizableImageComponent: React.FC<NodeViewProps> = ({ node, updateAttribut
 
   return (
     <NodeViewWrapper className="notes-image-wrapper" data-drag-handle>
+      {/* An editor node view over an inline base64 data URL: there's nothing
+          for next/image to optimize, and it needs a plain, resizable <img>. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         ref={imgRef}
         src={src}

@@ -13,8 +13,8 @@ const TagsContext = createContext<TagsContextValue | null>(null);
  * TasksContext.tsx for why this is a context rather than a plain hook.
  */
 export const TagsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const value = useTagsData(!!user);
+  const { dataUserId } = useAuth();
+  const value = useTagsData(!!dataUserId);
   return <TagsContext.Provider value={value}>{children}</TagsContext.Provider>;
 };
 

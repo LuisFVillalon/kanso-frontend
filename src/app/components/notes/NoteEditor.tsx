@@ -15,7 +15,9 @@ import {
 import { EditorToolbar } from './EditorToolbar';
 import { Note } from '@/app/types/notes';
 import { Tag } from '@/app/types/task';
-import { fetchLearningResources } from '@/app/lib/backend-api';
+import { describeError, fetchLearningResources } from '@/app/lib/backend-api';
+import { useToast } from '@/app/context/ToastContext';
+import { IMAGE_TOO_LARGE_MESSAGE, MAX_IMAGE_BYTES } from './imageLimits';
 import { LearningResourcesResponse } from '@/app/types/learningResources';
 import { extractStructuredNoteContent } from '@/app/utils/noteContentExtractor';
 import { useNotePdfExport } from '@/app/hooks/useNotePdfExport';
@@ -47,6 +49,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   sidebarOpen = true, onToggleSidebar,
   showExtendedActions = false,
 }) => {
+  const showToast = useToast();
   const [title, setTitle]               = useState(note?.title ?? '');
   const [saveStatus, setSaveStatus]     = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [emptyToast, setEmptyToast]     = useState(false);
@@ -54,6 +57,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const [tagTogglingId, setTagTogglingId] = useState<number | null>(null);
   const [resourcesStatus, setResourcesStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [resourcesData, setResourcesData]     = useState<LearningResourcesResponse | null>(null);
+  const [resourcesError, setResourcesError]   = useState('');
   const [resourcesOpen, setResourcesOpen]     = useState(false);
   const [wordCount, setWordCount]             = useState(0);
 
@@ -122,6 +126,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         event.preventDefault();
         const file = imgItem.getAsFile();
         if (!file) return false;
+        if (file.size > MAX_IMAGE_BYTES) {
+          showToast(IMAGE_TOO_LARGE_MESSAGE);
+          return true;
+        }
 
         const reader = new FileReader();
         reader.onload = readerEvent => {
@@ -246,7 +254,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       const data = await fetchLearningResources(condensed);
       setResourcesData(data);
       setResourcesStatus('done');
-    } catch {
+    } catch (err) {
+      setResourcesError(describeError(err, "Couldn't fetch resources. Please try again."));
       setResourcesStatus('error');
     }
   };
@@ -549,7 +558,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 
               {resourcesStatus === 'error' && (
                 <div className="px-4 py-8 flex flex-col items-center gap-3 text-center">
-                  <p className="text-sm" style={{ color: 'var(--tm-danger)' }}>Failed to fetch resources — please try again.</p>
+                  <p className="text-sm" style={{ color: 'var(--tm-danger)' }}>{resourcesError}</p>
                   <button
                     type="button"
                     onClick={runResourcesFetch}

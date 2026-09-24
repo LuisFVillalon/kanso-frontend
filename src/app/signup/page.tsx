@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
-import { claimOrphanedData, ensureDemoAccount, seedDemoData } from '@/app/lib/backend-api';
-import { DEMO_EMAIL, DEMO_PASSWORD } from '@/app/lib/demo';
 import { validatePassword, MIN_LENGTH } from '@/app/lib/passwordValidation';
 import PasswordStrengthMeter from '@/app/components/auth/PasswordStrengthMeter';
 import AuthPageCard from '@/app/components/auth/AuthPageCard';
@@ -16,7 +14,7 @@ import GoogleAuthButton from '@/app/components/auth/GoogleAuthButton';
 import DemoTrialButton from '@/app/components/auth/DemoTrialButton';
 
 export default function SignupPage() {
-  const { signUpWithEmail, signInWithEmail, signInWithGoogle, getAccessToken } = useAuth();
+  const { signUpWithEmail, signInWithGoogle, getAccessToken, startDemo, demoSeeding } = useAuth();
   const router = useRouter();
 
   const [email, setEmail]       = useState('');
@@ -25,7 +23,6 @@ export default function SignupPage() {
   const [error, setError]       = useState<string | null>(null);
   const [loading, setLoading]   = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [demoLoading, setDemoLoading] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
 
   const pwCheck = useMemo(
@@ -45,7 +42,7 @@ export default function SignupPage() {
     if (error) { setError(error.message); return; }
 
     const token = await getAccessToken();
-    if (token) { await claimOrphanedData(); router.replace('/'); }
+    if (token) router.replace('/');
     else setConfirmed(true);
   };
 
@@ -58,17 +55,9 @@ export default function SignupPage() {
 
   const handleDemoTrial = async () => {
     setError(null);
-    setDemoLoading(true);
-    try {
-      await ensureDemoAccount();
-      const { error } = await signInWithEmail(DEMO_EMAIL, DEMO_PASSWORD);
-      if (error) throw new Error(error.message);
-      await seedDemoData();
-      router.replace('/');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not start the demo. Please try again.');
-      setDemoLoading(false);
-    }
+    const { error } = await startDemo();
+    if (error) { setError(error); return; }
+    router.replace('/');
   };
 
   if (confirmed) {
@@ -94,11 +83,11 @@ export default function SignupPage() {
       <div className="mb-8 text-center">
         <h1 className="text-2xl font-bold text-text-primary">Create an account</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--tm-text-muted)' }}>
-          Start managing your tasks with Kanso
+          Start managing your tasks with kanso
         </p>
       </div>
 
-      <DemoTrialButton loading={demoLoading} onClick={handleDemoTrial} />
+      <DemoTrialButton loading={demoSeeding} onClick={handleDemoTrial} />
 
       <GoogleAuthButton label="Sign up with Google" loading={googleLoading} onClick={handleGoogleSignup} />
       <AuthDivider />

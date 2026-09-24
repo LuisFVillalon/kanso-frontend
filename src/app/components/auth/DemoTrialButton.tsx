@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, NotebookText } from 'lucide-react';
 
 interface DemoTrialButtonProps {
   loading?: boolean;
@@ -13,7 +13,7 @@ const DemoTrialButton: React.FC<DemoTrialButtonProps> = ({ loading = false, onCl
     disabled={loading}
     className="btn btn-secondary w-full flex items-center justify-center gap-2 py-2.5 mb-5 disabled:opacity-60 disabled:cursor-not-allowed"
   >
-    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <NotebookText className="w-4 h-4" />}
     Try the demo — no signup required
   </button>
 );

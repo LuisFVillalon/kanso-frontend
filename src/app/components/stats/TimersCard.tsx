@@ -8,13 +8,9 @@ import { CardShell } from '@/app/components/stats/CardShell';
 import { parseLocalDate, formatLongDate, isWeekday, isWeekend } from '@/app/utils/dateUtils';
 import { useMidnightTick } from '@/app/hooks/useMidnightTick';
 import type { ProfileFields } from '@/app/hooks/useProfile';
+import { defaultTermSettings } from '@/app/hooks/useCalendarSettings';
 import TileTools from './TileTools';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
-
-// Falls back to the same range BigPictureCalendar defaults to while its own
-// settings are loading, so "in session" reads the same way in both cards.
-const DEFAULT_START_DATE = '2026-01-01';
-const DEFAULT_END_DATE = '2026-03-31';
 
 const pad = (n: number, width: number) => String(n).padStart(width, '0');
 
@@ -427,7 +423,9 @@ const useTimersSession = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  const cur = settings ?? { id: 0, title: '', start_date: DEFAULT_START_DATE, end_date: DEFAULT_END_DATE };
+  // Same placeholder range useCalendarSettings shows while settings load, so
+  // "in session" reads the same way in both cards.
+  const cur = settings ?? { ...defaultTermSettings(), title: '' };
   const start = parseLocalDate(cur.start_date);
   const end = parseLocalDate(cur.end_date);
   const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());

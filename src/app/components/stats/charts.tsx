@@ -220,7 +220,6 @@ export const CategoryDonut: React.FC<CategoryDonutProps> = ({ categories, size =
 
   useLayoutEffect(() => {
     if (!hoveredLabel || !containerRef.current) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPopoverPos(null);
       return;
     }

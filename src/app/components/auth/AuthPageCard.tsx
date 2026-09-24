@@ -12,7 +12,7 @@ const AuthPageCard: React.FC<AuthPageCardProps> = ({ children }) => (
           className="text-center text-xs uppercase mb-6"
           style={{ letterSpacing: '0.1em', color: 'var(--tm-accent-hover)' }}
         >
-          Kanso · Clarity on the go
+          kanso · Clarity on the go
         </p>
         <div className="w-full card p-8">
           {children}

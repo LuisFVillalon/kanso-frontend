@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-import { createHabit, deleteHabit, updateHabit } from '@/app/lib/backend-api';
+import { createHabit, deleteHabit, describeError, updateHabit } from '@/app/lib/backend-api';
+import { useToast } from '@/app/context/ToastContext';
 import { Tag, Task } from '@/app/types/task';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
 import { useTasksContext } from '@/app/context/TasksContext';
@@ -14,7 +15,6 @@ import { useTaskManagerState } from '@/app/hooks/useTaskManagerState';
 import { useSplitPanel } from '@/app/hooks/useSplitPanel';
 import { useTaskHandlers } from '@/app/hooks/useTaskHandlers';
 import { useTaskFiltering } from '@/app/hooks/useTaskFiltering';
-import { useClaimOrphanedData } from '@/app/hooks/useClaimOrphanedData';
 import { useProfile } from '@/app/hooks/useProfile';
 import { useCalendarSettings } from '@/app/hooks/useCalendarSettings';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
@@ -38,11 +38,11 @@ import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 const TaskManager: React.FC = () => {
   const router = useRouter();
   const { signOut, user } = useAuth();
+  const showToast = useToast();
   const doodleCanvasRef = useRef<DoodleCanvasHandle>(null);
   const [doodleColor, setDoodleColor] = useState(() => getStoredThemeColor() ?? DEFAULT_ACCENT);
   const [doodleErasing, setDoodleErasing] = useState(false);
 
-  useClaimOrphanedData(user);
   const { profile, loading: profileLoading, saveProfile } = useProfile(user);
   const { calendarSettings, loading: calendarSettingsLoading, saveCalendarSettings } = useCalendarSettings(user);
   const [mode, setMode] = usePersistedPref<AppMode>(
@@ -63,12 +63,12 @@ const TaskManager: React.FC = () => {
 
   const handleLogout = async () => {
     await signOut();
-    // Every tm_*/komorebi_* key is a per-device cache of this account's data
-    // (profile fields, theme, doodle, the one-time orphaned-data-claim flag)
-    // — clear all of it so a different account signing in on this browser
-    // doesn't inherit the previous user's name/avatar/rest-days/doodle.
+    // Every tm_*/tm-* key is a per-device cache of this account's data
+    // (profile fields, theme, doodle) — clear all of it so a different
+    // account signing in on this browser doesn't inherit the previous
+    // user's name/avatar/rest-days/doodle.
     Object.keys(localStorage)
-      .filter(k => k.startsWith('komorebi_') || k.startsWith('tm_') || k.startsWith('tm-'))
+      .filter(k => k.startsWith('tm_') || k.startsWith('tm-'))
       .forEach(k => localStorage.removeItem(k));
     router.replace('/login');
   };
@@ -217,7 +217,7 @@ const TaskManager: React.FC = () => {
       refetchHabits();
     } catch (err) {
       console.error('Failed to delete habit:', err);
-      alert('Failed to delete habit — please try again.');
+      showToast(describeError(err, "Couldn't delete the habit. Please try again."));
     }
   };
 
@@ -227,7 +227,7 @@ const TaskManager: React.FC = () => {
       refetchHabits();
     } catch (err) {
       console.error('Failed to update habit:', err);
-      alert('Failed to update habit — please try again.');
+      showToast(describeError(err, "Couldn't update the habit. Please try again."));
     }
   };
 
@@ -245,7 +245,7 @@ const TaskManager: React.FC = () => {
       refetchHabits();
     } catch (err) {
       console.error('Failed to create habit:', err);
-      alert('Failed to save habit — please try again.');
+      showToast(describeError(err, "Couldn't save the habit. Please try again."));
     }
   };
 

@@ -3,6 +3,7 @@ import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
 import { AppDataProvider } from "./context/AppDataProvider";
+import { ToastProvider } from "./context/ToastContext";
 
 const inter = Inter({
   variable: "--font-heading",
@@ -15,9 +16,31 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://kanso-web-app.vercel.app";
+const DESCRIPTION =
+  "Tasks, notes, habits and a daily debrief in one calm workspace. " +
+  "A full-stack Next.js + FastAPI + Postgres app. Try the demo, no signup needed.";
+
 export const metadata: Metadata = {
-  title: "Kanso",
-  description: "Clarity on the go.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "kanso · clarity on the go",
+    template: "%s · kanso",
+  },
+  description: DESCRIPTION,
+  applicationName: "kanso",
+  openGraph: {
+    type: "website",
+    siteName: "kanso",
+    title: "kanso · clarity on the go",
+    description: DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "kanso · clarity on the go",
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
@@ -68,7 +91,9 @@ export default function RootLayout({
           }}
         />
         <AuthProvider>
-          <AppDataProvider>{children}</AppDataProvider>
+          <ToastProvider>
+            <AppDataProvider>{children}</AppDataProvider>
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>
