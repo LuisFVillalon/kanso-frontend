@@ -3,8 +3,8 @@ import Logo from '@/app/components/common/Logo';
 import ThemeToggle from '@/app/components/common/ThemeToggle';
 import AuthShowcase from '@/app/components/auth/AuthShowcase';
 
-/** The kanso-landing marketing site; falls back to this app's own signed-out home. */
-const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL ?? '/';
+/** The kanso-landing marketing site; falls back to the production landing deploy. */
+const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL || 'https://kanso-landing.vercel.app';
 
 interface AuthLayoutProps {
   /** Display headline; wrap one word in <span className="highlight"> for the marigold pill. */
