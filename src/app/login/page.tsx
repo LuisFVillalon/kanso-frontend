@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
-import AuthPageCard from '@/app/components/auth/AuthPageCard';
+import AuthLayout from '@/app/components/auth/AuthLayout';
+import AuthErrorMessage from '@/app/components/auth/AuthErrorMessage';
 import AuthDivider from '@/app/components/auth/AuthDivider';
 import AuthInput from '@/app/components/auth/AuthInput';
 import GoogleAuthButton from '@/app/components/auth/GoogleAuthButton';
-import DemoTrialButton from '@/app/components/auth/DemoTrialButton';
 
 export default function LoginPage() {
   const { signInWithEmail, signInWithGoogle, startDemo, demoSeeding } = useAuth();
@@ -46,17 +46,11 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthPageCard>
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold text-text-primary">Welcome back</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--tm-text-muted)' }}>
-          Sign in to your kanso account
-        </p>
-      </div>
-
-      <DemoTrialButton loading={demoSeeding} onClick={handleDemoTrial} />
-
-      <GoogleAuthButton label="Sign in with Google" loading={googleLoading} onClick={handleGoogleLogin} />
+    <AuthLayout
+      title={<>Welcome <span className="highlight">back</span></>}
+      subtitle="Sign in to pick up where you left off."
+    >
+      <GoogleAuthButton label="Continue with Google" loading={googleLoading} onClick={handleGoogleLogin} />
       <AuthDivider />
 
       <form onSubmit={handleEmailLogin} className="space-y-4">
@@ -67,33 +61,29 @@ export default function LoginPage() {
           placeholder="you@example.com"
         />
         <AuthInput
-          label="Password" id="password" type="password"
+          label="Password" id="password" type="password" revealable
           autoComplete="current-password" required
           value={password} onChange={e => setPassword(e.target.value)}
-          placeholder="••••••••"
+          placeholder="Your password"
         />
 
-        {error && (
-          <p className="text-sm rounded-md px-3 py-2" style={{ color: 'var(--tm-danger)', backgroundColor: 'var(--tm-danger-subtle)' }}>
-            {error}
-          </p>
-        )}
+        {error && <AuthErrorMessage message={error} />}
 
         <button
           type="submit" disabled={loading}
-          className="btn btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
+          className="btn btn-primary w-full min-h-11 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          Sign in
+          {loading ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
 
-      <p className="text-sm text-center mt-6" style={{ color: 'var(--tm-text-muted)' }}>
-        Don&apos;t have an account?{' '}
-        <Link href="/signup" className="font-medium hover:underline" style={{ color: 'var(--tm-accent)' }}>
-          Sign up
+      <p className="text-sm text-center mt-5 text-text-secondary">
+        New to kanso?{' '}
+        <Link href="/signup" className="font-medium text-accent hover:underline">
+          Create an account
         </Link>
       </p>
-    </AuthPageCard>
+    </AuthLayout>
   );
 }

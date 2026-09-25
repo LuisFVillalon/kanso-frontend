@@ -13,9 +13,8 @@ const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ label, loading = fa
     type="button"
     onClick={onClick}
     disabled={loading}
-    className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed mb-5"
+    className="w-full min-h-11 flex items-center justify-center gap-3 px-4 py-2.5 rounded-md border text-sm font-medium transition-colors bg-[#ffffff] hover:bg-[#f8f9fa] disabled:opacity-60 disabled:cursor-not-allowed"
     style={{
-      backgroundColor: '#ffffff',
       borderColor: '#dadce0',
       color: '#3c4043',
       fontFamily: "'Roboto', sans-serif",

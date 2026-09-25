@@ -14,6 +14,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/app/lib/supabase';
+import Logo from '@/app/components/common/Logo';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -46,12 +47,13 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
+      <div className="flex flex-col items-center gap-5">
+        <Logo />
         <div
-          className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mx-auto mb-3"
+          className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
           style={{ borderColor: 'var(--tm-accent)', borderTopColor: 'transparent' }}
         />
-        <p className="text-sm" style={{ color: 'var(--tm-text-muted)' }}>Signing you in…</p>
+        <p className="text-sm text-text-secondary">Signing you in…</p>
       </div>
     </div>
   );

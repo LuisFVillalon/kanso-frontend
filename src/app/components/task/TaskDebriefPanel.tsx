@@ -26,6 +26,16 @@ function formatMinutes(mins: number): string {
   return `${h}h ${m}m`;
 }
 
+/**
+ * Where a bar segment's tooltip attaches. Centering it on the segment lets
+ * the tooltip hang past the bar's end for the outermost segments, and even
+ * while hidden (opacity 0) it still widens the page and causes sideways
+ * scrolling on phones. Anchoring toward the bar's middle keeps it inside.
+ */
+function tooltipAnchor(segmentCenterPct: number): string {
+  return segmentCenterPct < 50 ? 'left-0' : 'right-0';
+}
+
 interface TaskDebriefPanelProps {
   profile: ProfileFields;
   onSaveProfile: ReturnType<typeof useProfile>['saveProfile'];
@@ -97,7 +107,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, onSaveProf
   };
 
   return (
-    <div className="card-glass mb-4 sm:mb-6 relative">
+    <div className="card-glass mb-4 sm:mb-6 relative overflow-x-clip">
       <div className="flex items-center justify-between p-4 sm:p-5">
         <button
           onClick={toggle}
@@ -420,6 +430,8 @@ function WorkloadCard({ debrief }: { debrief: DailyDebriefReport }) {
                   const contributors = workloadContributorsByTag.get(b.label) ?? [];
                   const isFirst = i === 0;
                   const isLast = i === visible.length - 1;
+                  const startPct = visible.slice(0, i).reduce((sum, v) => sum + (v.value / tagTotal) * 100, 0);
+                  const centerPct = (barPct / 100) * (startPct + (b.value / tagTotal) * 50);
                   return (
                     <div
                       key={b.label}
@@ -428,7 +440,7 @@ function WorkloadCard({ debrief }: { debrief: DailyDebriefReport }) {
                     >
                       <div
                         role="tooltip"
-                        className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 min-w-[180px] max-w-xs rounded-md px-2.5 py-2 text-[11px] font-medium opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+                        className={`pointer-events-none absolute bottom-full ${tooltipAnchor(centerPct)} mb-2 min-w-[180px] max-w-xs rounded-md px-2.5 py-2 text-[11px] font-medium opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10`}
                         style={{ backgroundColor: 'var(--tm-text-primary)', color: 'var(--tm-surface)' }}
                       >
                         <p className="whitespace-nowrap font-semibold">
@@ -592,6 +604,8 @@ function TimeByTagCard({ tasks, habits }: { tasks: Task[]; habits: Habit[] }) {
           <div className="flex h-2.5 rounded-full" style={{ backgroundColor: 'var(--tm-border)' }}>
             {buckets.map((b, i) => {
               const contributors = contributorsByTag.get(b.label) ?? [];
+              const startPct = buckets.slice(0, i).reduce((sum, v) => sum + (v.value / total) * 100, 0);
+              const centerPct = startPct + (b.value / total) * 50;
               const roundedClass = i === 0 && i === buckets.length - 1
                 ? 'rounded-full'
                 : i === 0
@@ -608,7 +622,7 @@ function TimeByTagCard({ tasks, habits }: { tasks: Task[]; habits: Habit[] }) {
                   <div className={`h-full ${roundedClass}`} style={{ backgroundColor: b.color }} />
                   <div
                     role="tooltip"
-                    className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 min-w-[180px] max-w-xs rounded-md px-2.5 py-2 text-[11px] font-medium opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10"
+                    className={`pointer-events-none absolute bottom-full ${tooltipAnchor(centerPct)} mb-2 min-w-[180px] max-w-xs rounded-md px-2.5 py-2 text-[11px] font-medium opacity-0 scale-95 transition-all duration-150 group-hover:opacity-100 group-hover:scale-100 z-10`}
                     style={{ backgroundColor: 'var(--tm-text-primary)', color: 'var(--tm-surface)' }}
                   >
                     <p className="whitespace-nowrap font-semibold">

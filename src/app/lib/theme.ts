@@ -9,7 +9,7 @@ import { ColorOption } from './colorOptions';
 const THEME_ACCENT_STORAGE_KEY = 'tm_theme_accent';
 
 // Notion Blue, defined in globals.css — offered as the "reset" option.
-export const DEFAULT_ACCENT = '#0075DE';
+export const DEFAULT_ACCENT = '#006BCB';
 
 // The app's curated color palette — used both for the theme accent color
 // (Settings → Appearance) and for tag-category colors (Create/Edit Tag),
@@ -53,8 +53,8 @@ export function relativeLuminance(hex: string): number {
 export function applyThemeColor(hex: string): void {
   const root = document.documentElement.style;
   root.setProperty('--tm-accent', hex);
-  // A gentle brightening on hover — matches the documented Notion Blue → Signal Blue shift.
-  root.setProperty('--tm-accent-hover', `color-mix(in srgb, ${hex} 88%, white)`);
+  // A gentle darkening on hover — matches the default #006BCB → #005DB0 shift.
+  root.setProperty('--tm-accent-hover', `color-mix(in srgb, ${hex} 88%, black)`);
   // A flat tinted wash for ghost fills, à la the Sky Tint token.
   root.setProperty('--tm-accent-subtle', `color-mix(in srgb, ${hex} 12%, white)`);
   root.setProperty('--tm-accent-text', relativeLuminance(hex) > 0.45 ? '#171717' : '#FFFFFF');
@@ -70,7 +70,7 @@ export function setStoredThemeColor(hex: string): void {
   applyThemeColor(hex);
 }
 
-// Reverts to the notebook's default kraft-brown accent and forgets the override.
+// Reverts to the default blue accent and forgets the override.
 export function resetThemeColor(): void {
   localStorage.removeItem(THEME_ACCENT_STORAGE_KEY);
   applyThemeColor(DEFAULT_ACCENT);

@@ -29,7 +29,7 @@ export default function OpenGraphImage() {
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 28, color: '#615D59' }}>
           <span>Next.js · FastAPI · Postgres · LLM</span>
-          <span style={{ color: '#0075DE', fontWeight: 600 }}>Try the demo, no signup</span>
+          <span style={{ color: '#006BCB', fontWeight: 600 }}>Try the demo, no signup</span>
         </div>
       </div>
     ),

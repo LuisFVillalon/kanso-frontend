@@ -3,11 +3,12 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { Loader2, MailCheck } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { validatePassword, MIN_LENGTH } from '@/app/lib/passwordValidation';
 import PasswordStrengthMeter from '@/app/components/auth/PasswordStrengthMeter';
-import AuthPageCard from '@/app/components/auth/AuthPageCard';
+import AuthLayout from '@/app/components/auth/AuthLayout';
+import AuthErrorMessage from '@/app/components/auth/AuthErrorMessage';
 import AuthDivider from '@/app/components/auth/AuthDivider';
 import AuthInput from '@/app/components/auth/AuthInput';
 import GoogleAuthButton from '@/app/components/auth/GoogleAuthButton';
@@ -62,34 +63,30 @@ export default function SignupPage() {
 
   if (confirmed) {
     return (
-      <AuthPageCard>
-        <div className="text-center">
-          <CheckCircle className="w-12 h-12 mx-auto mb-4" style={{ color: 'var(--tm-success)' }} />
-          <h2 className="text-xl font-bold text-text-primary mb-2">Check your email</h2>
-          <p className="text-sm" style={{ color: 'var(--tm-text-muted)' }}>
-            We sent a confirmation link to <strong>{email}</strong>.
-            Click it to activate your account, then{' '}
-            <Link href="/login" className="font-medium hover:underline" style={{ color: 'var(--tm-accent)' }}>
-              sign in
-            </Link>.
+      <AuthLayout
+        title={<>Check your <span className="highlight">email</span></>}
+        subtitle={<>We sent a confirmation link to <strong className="font-semibold text-text-primary">{email}</strong>.</>}
+      >
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-surface p-4">
+          <MailCheck aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+          <p className="text-sm leading-6 text-text-secondary">
+            Open the link to activate your account, then come back and sign in.
+            It can take a minute to arrive, so check your spam folder too.
           </p>
         </div>
-      </AuthPageCard>
+        <Link href="/login" className="btn btn-primary w-full min-h-11 mt-6">
+          Go to sign in
+        </Link>
+      </AuthLayout>
     );
   }
 
   return (
-    <AuthPageCard>
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold text-text-primary">Create an account</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--tm-text-muted)' }}>
-          Start managing your tasks with kanso
-        </p>
-      </div>
-
-      <DemoTrialButton loading={demoSeeding} onClick={handleDemoTrial} />
-
-      <GoogleAuthButton label="Sign up with Google" loading={googleLoading} onClick={handleGoogleSignup} />
+    <AuthLayout
+      title={<>Create your <span className="highlight">account</span></>}
+      subtitle="Tasks, notes and habits in one calm place."
+    >
+      <GoogleAuthButton label="Continue with Google" loading={googleLoading} onClick={handleGoogleSignup} />
       <AuthDivider />
 
       <form onSubmit={handleEmailSignup} className="space-y-4">
@@ -102,42 +99,40 @@ export default function SignupPage() {
 
         <div>
           <AuthInput
-            label="Password" id="password" type="password"
+            label="Password" id="password" type="password" revealable
             autoComplete="new-password" required
             value={password} onChange={e => setPassword(e.target.value)}
-            placeholder={`Min. ${MIN_LENGTH} characters — try a passphrase`}
+            placeholder={`At least ${MIN_LENGTH} characters`}
           />
           <PasswordStrengthMeter password={password} check={pwCheck} />
         </div>
 
         <AuthInput
-          label="Confirm password" id="confirm" type="password"
+          label="Confirm password" id="confirm" type="password" revealable
           autoComplete="new-password" required
           value={confirm} onChange={e => setConfirm(e.target.value)}
-          placeholder="••••••••"
+          placeholder="Type it again"
         />
 
-        {error && (
-          <p className="text-sm rounded-md px-3 py-2" style={{ color: 'var(--tm-danger)', backgroundColor: 'var(--tm-danger-subtle)' }}>
-            {error}
-          </p>
-        )}
+        {error && <AuthErrorMessage message={error} />}
 
         <button
           type="submit" disabled={loading}
-          className="btn btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
+          className="btn btn-primary w-full min-h-11 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          Create account
+          {loading ? 'Creating account…' : 'Create account'}
         </button>
       </form>
 
-      <p className="text-sm text-center mt-6" style={{ color: 'var(--tm-text-muted)' }}>
+      <p className="text-sm text-center mt-5 text-text-secondary">
         Already have an account?{' '}
-        <Link href="/login" className="font-medium hover:underline" style={{ color: 'var(--tm-accent)' }}>
+        <Link href="/login" className="font-medium text-accent hover:underline">
           Sign in
         </Link>
       </p>
-    </AuthPageCard>
+
+      <DemoTrialButton loading={demoSeeding} onClick={handleDemoTrial} />
+    </AuthLayout>
   );
 }

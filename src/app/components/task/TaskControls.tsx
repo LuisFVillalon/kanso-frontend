@@ -10,6 +10,7 @@ import {
 import { FilterType, Tag } from '@/app/types/task';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
 import Modal from '@/app/components/common/Modal';
+import Logo from '@/app/components/common/Logo';
 import { useAuth } from '@/app/context/AuthContext';
 
 interface TaskControlsProps {
@@ -162,7 +163,7 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
         <div className="flex items-center h-14 px-3 border-b border-border-subtle flex-shrink-0 justify-between">
           {!collapsed && (
             <span className="flex items-center gap-2 pl-1">
-              <span className="font-bold text-text-primary tracking-tight">kanso</span>
+              <Logo />
               {isDemo && (
                 <span
                   className="chip"

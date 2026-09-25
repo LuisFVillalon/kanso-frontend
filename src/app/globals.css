@@ -25,11 +25,12 @@
   /* Text (ink) */
   --tm-text-primary:     #171717;
   --tm-text-secondary:   #615D59;
-  --tm-text-muted:       #757575;
+  --tm-text-muted:       #6B6B6B;
 
-  /* Accent — Notion Blue, the single primary action color */
-  --tm-accent:           #0075DE;
-  --tm-accent-hover:     #097FE8;
+  /* Accent — the single primary action color. Same values as kanso-landing:
+     a deeper Notion Blue that clears WCAG AA for white text, darkening on hover. */
+  --tm-accent:           #006BCB;
+  --tm-accent-hover:     #005DB0;
   --tm-accent-subtle:    #E6F3FE;
   --tm-accent-text:      #FFFFFF;
 
@@ -48,6 +49,13 @@
 
   /* Wire/coil */
   --tm-wire:             rgba(0, 0, 0, 0.16);
+
+  /* Feature colors — flat sticky-note accents, shared with kanso-landing */
+  --marigold:            #FFB110;
+  --saffron:             #E89D01;
+  --mocha:               #B18164;
+  --sky-wash:            #62AEF0;
+  --midnight-ink:        #02093A;
 
   /* Radius — DESIGN.md scale */
   --tm-radius-small:     4px;
@@ -106,6 +114,11 @@
   --color-accent-2:         var(--tm-accent-2);
   --color-accent-2-hover:   var(--tm-accent-2-hover);
   --color-accent-2-subtle:  var(--tm-accent-2-subtle);
+  --color-marigold:         var(--marigold);
+  --color-saffron:          var(--saffron);
+  --color-mocha:            var(--mocha);
+  --color-sky-wash:         var(--sky-wash);
+  --color-midnight-ink:     var(--midnight-ink);
 
   --color-background:       var(--tm-bg);
   --color-foreground:       var(--tm-text-primary);
@@ -120,6 +133,9 @@
   --radius-lg: 12px;
   --radius-xl: 12px;
   --radius-2xl: 12px;
+
+  --shadow-nav:     var(--tm-shadow-nav);
+  --shadow-product: var(--tm-shadow-product);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -444,7 +460,7 @@ html[data-page-style="blank"] body {
     border-color: transparent;
   }
   .btn-secondary:hover:not(:disabled) {
-    background-color: color-mix(in srgb, var(--tm-accent-subtle) 70%, var(--tm-accent) 8%);
+    border-color: var(--tm-accent);
   }
 
   /* Outlined text button — compact mid-priority action */
@@ -456,6 +472,31 @@ html[data-page-style="blank"] body {
   }
   .btn-outline:hover:not(:disabled) {
     background-color: var(--tm-surface-raised);
+  }
+
+  /* Large — hero-size CTA, as on kanso-landing */
+  .btn-lg {
+    padding: 0.875rem 1.5rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+
+  /* Focus: accent edge + 3px light-blue ring */
+  .btn:focus-visible,
+  a:focus-visible,
+  button:focus-visible {
+    outline: 1px solid var(--tm-accent);
+    outline-offset: 0;
+    box-shadow: 0 0 0 3px var(--tm-accent-subtle);
+  }
+
+  /* Signature highlight pill inside a display headline */
+  .highlight {
+    display: inline-block;
+    border-radius: var(--tm-radius-pills);
+    background-color: var(--marigold);
+    color: #000000;
+    padding: 0.05em 0.4em 0.12em;
   }
 
   /* Cards */
