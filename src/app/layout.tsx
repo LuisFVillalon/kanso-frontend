@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
 import { AppDataProvider } from "./context/AppDataProvider";
 import { ToastProvider } from "./context/ToastContext";
+import { COLOR_SCHEME_BG, COLOR_SCHEME_SCRIPT } from "./lib/colorScheme";
 
 const inter = Inter({
   variable: "--font-heading",
@@ -43,6 +44,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: COLOR_SCHEME_BG.light },
+    { media: "(prefers-color-scheme: dark)", color: COLOR_SCHEME_BG.dark },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -50,33 +58,29 @@ export default function RootLayout({
 }>) {
   return (
     /*
-     * suppressHydrationWarning is required because the anti-flash script below
-     * may add the .dark class to <html> before React hydrates, causing a
-     * mismatch between server-rendered HTML and the client DOM.
+     * suppressHydrationWarning is required because the anti-flash scripts below
+     * set data-theme, inline accent variables and data-page-style on <html>
+     * before React hydrates, causing a mismatch between server-rendered HTML
+     * and the client DOM.
      */
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
         {/*
          * Anti-flash script — runs synchronously before the first paint.
-         * Follows the OS dark-mode preference and sets .dark on <html> so the
-         * correct CSS variables are active before any component renders,
-         * preventing the flash of the wrong theme. There is no manual
-         * light/dark toggle in the app today — this only mirrors the OS setting.
+         * Applies a light/dark theme pinned with the theme toggle by setting
+         * data-theme on <html>; with nothing saved, the OS setting applies
+         * through the prefers-color-scheme tokens in globals.css.
          */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{if(window.matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}})()`,
-          }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: COLOR_SCHEME_SCRIPT }} />
         {/*
          * Same anti-flash approach, but for the user's chosen accent color
-         * (Settings → Appearance). Mirrors the luminance check in
-         * src/app/lib/theme.ts so the correct --tm-accent-text is set before
-         * first paint.
+         * (Settings → Appearance). Mirrors applyThemeColor in
+         * src/app/lib/theme.ts (default-accent skip, color-mix formulas,
+         * luminance check), so change the two together.
          */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var c=localStorage.getItem('tm_theme_accent');if(!c)return;var s=document.documentElement.style;s.setProperty('--tm-accent',c);s.setProperty('--tm-accent-hover','color-mix(in srgb, '+c+' 88%, black)');s.setProperty('--tm-accent-subtle','color-mix(in srgb, '+c+' 12%, white)');var r=parseInt(c.slice(1,3),16)/255,g=parseInt(c.slice(3,5),16)/255,b=parseInt(c.slice(5,7),16)/255;var lin=function(v){return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)};var lum=0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);s.setProperty('--tm-accent-text',lum>0.45?'#171717':'#FFFFFF')}catch(e){}})()`,
+            __html: `(function(){try{var c=localStorage.getItem('tm_theme_accent');if(!c||c.toUpperCase()==='#006BCB')return;var s=document.documentElement.style;s.setProperty('--tm-accent',c);s.setProperty('--tm-accent-hover','color-mix(in srgb, '+c+' 88%, var(--tm-text-primary))');s.setProperty('--tm-accent-subtle','color-mix(in srgb, '+c+' 12%, var(--tm-surface))');var r=parseInt(c.slice(1,3),16)/255,g=parseInt(c.slice(3,5),16)/255,b=parseInt(c.slice(5,7),16)/255;var lin=function(v){return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)};var lum=0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);s.setProperty('--tm-accent-text',lum>0.45?'#171717':'#FFFFFF')}catch(e){}})()`,
           }}
         />
         {/*

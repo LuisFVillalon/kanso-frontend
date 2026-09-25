@@ -12,6 +12,8 @@
 ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
+  color-scheme: light;
+
   /* Surfaces */
   --tm-bg:               #F6F5F4;
   --tm-surface:          #FFFFFF;
@@ -80,6 +82,87 @@
   --tm-dur-slow:     350ms;
 }
 
+/* Dark tokens — same palette as kanso-landing. Follow the OS unless the
+   theme toggle (components/common/ThemeToggle.tsx) pinned a theme via
+   data-theme on <html>. The two blocks must stay identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --tm-bg:               #191817;
+    --tm-surface:          #232120;
+    --tm-surface-raised:   #2C2A28;
+    --tm-surface-overlay:  rgba(35, 33, 32, 0.92);
+    --tm-border-subtle:    rgba(255, 255, 255, 0.06);
+    --tm-border:           rgba(255, 255, 255, 0.10);
+    --tm-text-primary:     #F1EFEC;
+    --tm-text-secondary:   #B9B3AD;
+    --tm-text-muted:       #9D978F;
+    --tm-accent:           #62AEF0;
+    --tm-accent-hover:     #7DBCF3;
+    --tm-accent-subtle:    #1B2A3A;
+    --tm-accent-text:      #0A1628;
+    --tm-accent-2:         #FF6A52;
+    --tm-accent-2-hover:   #FF8570;
+    --tm-accent-2-subtle:  #3A211C;
+    --tm-success:          #4CC28A;
+    --tm-success-subtle:   #173024;
+    --tm-warning:          #E0A53A;
+    --tm-warning-subtle:   #36290F;
+    --tm-danger:           #E5534B;
+    --tm-danger-subtle:    #3A211C;
+    --tm-wire:             rgba(255, 255, 255, 0.18);
+    --tm-shadow-nav:       0px 0.7px 1.462px 0px rgba(0, 0, 0, 0.2), 0px 3px 9px 0px rgba(0, 0, 0, 0.25);
+    --tm-shadow-product:   0px 4px 12px rgba(0, 0, 0, 0.4);
+    --tm-shadow-md:        0px 6px 16px rgba(0, 0, 0, 0.35);
+    --tm-shadow-lg:        0px 12px 32px rgba(0, 0, 0, 0.45);
+    --tm-shadow-xl:        0px 20px 60px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --tm-bg:               #191817;
+  --tm-surface:          #232120;
+  --tm-surface-raised:   #2C2A28;
+  --tm-surface-overlay:  rgba(35, 33, 32, 0.92);
+  --tm-border-subtle:    rgba(255, 255, 255, 0.06);
+  --tm-border:           rgba(255, 255, 255, 0.10);
+  --tm-text-primary:     #F1EFEC;
+  --tm-text-secondary:   #B9B3AD;
+  --tm-text-muted:       #9D978F;
+  --tm-accent:           #62AEF0;
+  --tm-accent-hover:     #7DBCF3;
+  --tm-accent-subtle:    #1B2A3A;
+  --tm-accent-text:      #0A1628;
+  --tm-accent-2:         #FF6A52;
+  --tm-accent-2-hover:   #FF8570;
+  --tm-accent-2-subtle:  #3A211C;
+  --tm-success:          #4CC28A;
+  --tm-success-subtle:   #173024;
+  --tm-warning:          #E0A53A;
+  --tm-warning-subtle:   #36290F;
+  --tm-danger:           #E5534B;
+  --tm-danger-subtle:    #3A211C;
+  --tm-wire:             rgba(255, 255, 255, 0.18);
+  --tm-shadow-nav:       0px 0.7px 1.462px 0px rgba(0, 0, 0, 0.2), 0px 3px 9px 0px rgba(0, 0, 0, 0.25);
+  --tm-shadow-product:   0px 4px 12px rgba(0, 0, 0, 0.4);
+  --tm-shadow-md:        0px 6px 16px rgba(0, 0, 0, 0.35);
+  --tm-shadow-lg:        0px 12px 32px rgba(0, 0, 0, 0.45);
+  --tm-shadow-xl:        0px 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* dark: variant with the same rules as the tokens above */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where(:root[data-theme="dark"] *) {
+    @slot;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    RESIZABLE SPLIT PANE
    Column widths are driven by the --tasks-w CSS variable set from React state.
@@ -122,7 +205,9 @@
 
   --color-background:       var(--tm-bg);
   --color-foreground:       var(--tm-text-primary);
-  --color-white:            var(--tm-surface);
+  /* Literal white, for ink on colored fills (tag chips, danger buttons) — use
+     bg-surface for card backgrounds, which darken in dark mode. */
+  --color-white:            #FFFFFF;
 
   --font-sans: var(--font-heading), var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-geist-mono), 'Courier New', monospace;

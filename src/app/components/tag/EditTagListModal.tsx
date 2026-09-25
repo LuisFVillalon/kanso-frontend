@@ -105,7 +105,7 @@ const EditTagModal: React.FC<EditTagModalProps> = ({
                 <button
                   type="button"
                   onClick={(e) => handleEditClick(t, e)}
-                  className="absolute -top-2 -left-2 p-1.5 rounded-full text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
+                  className="absolute -top-2 -left-2 p-1.5 rounded-full text-[var(--tm-accent-text)] opacity-0 group-hover:opacity-100 transition-all hover:scale-110"
                   style={{ backgroundColor: 'var(--tm-accent)', boxShadow: 'var(--tm-shadow-md)' }}
                   title="Edit tag"
                   aria-label={`Edit ${t.name}`}

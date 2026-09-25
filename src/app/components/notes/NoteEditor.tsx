@@ -738,7 +738,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         .notes-editor mark {
           border-radius: 3px;
           padding: 0 2px;
-          /* color is inherited so text stays legible on any bg */
+          /* Pastel highlight colors, so keep light-mode ink on them in dark mode too */
+          color: #171717;
         }
 
         /* Pasted / inserted images */

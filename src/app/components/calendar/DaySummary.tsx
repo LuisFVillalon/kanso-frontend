@@ -332,7 +332,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
         <SummaryTile icon={<Flame className="w-3.5 h-3.5" />} label="Habits" value={`${habitsCompleted.length}/${totalHabits}`} color="#F97316" bg="var(--tm-warning-subtle)" />
         <SummaryTile icon={<SquareCheck className="w-3.5 h-3.5" />} label="Tasks due" value={`${tasksDue.length}`} color="var(--tm-danger)" bg="var(--tm-danger-subtle)" />
         <SummaryTile icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Tasks completed" value={`${tasksCompleted.length}`} color="var(--tm-success)" bg="var(--tm-success-subtle)" />
-        <SummaryTile icon={<FileText className="w-3.5 h-3.5" />} label="Notes edited" value={`${notesEdited.length}`} color="#006BCB" bg="#E6F3FE" />
+        <SummaryTile icon={<FileText className="w-3.5 h-3.5" />} label="Notes edited" value={`${notesEdited.length}`} color="var(--tm-accent)" bg="var(--tm-accent-subtle)" />
       </div>
 
       <div className={`grid grid-cols-1 ${compact ? 'sm:grid-cols-2' : 'xl:grid-cols-2'} gap-5`}>

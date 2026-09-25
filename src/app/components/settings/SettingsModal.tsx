@@ -302,7 +302,7 @@ export default function SettingsModal({
   const tabClass = (s: Section) =>
     `px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
       section === s
-        ? 'text-white'
+        ? s === 'delete' ? 'text-white' : 'text-[var(--tm-accent-text)]'
         : s === 'password' && isOAuth
           ? 'opacity-40 cursor-not-allowed text-[var(--tm-text-muted)]'
           : 'text-[var(--tm-text-secondary)] hover:text-[var(--tm-text-primary)]'
@@ -602,7 +602,7 @@ export default function SettingsModal({
               <button
                 type="submit"
                 disabled={profileSaving}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-[var(--tm-accent-text)] disabled:opacity-60"
                 style={{ backgroundColor: 'var(--tm-accent)' }}
               >
                 {profileSaving && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -692,7 +692,7 @@ export default function SettingsModal({
                 <button
                   type="submit"
                   disabled={pwStatus === 'saving' || !pwCheck?.ok}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-[var(--tm-accent-text)] disabled:opacity-60"
                   style={{ backgroundColor: 'var(--tm-accent)' }}
                 >
                   {pwStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -751,7 +751,7 @@ export default function SettingsModal({
               <button
                 type="submit"
                 disabled={emailStatus === 'saving'}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold text-[var(--tm-accent-text)] disabled:opacity-60"
                 style={{ backgroundColor: 'var(--tm-accent)' }}
               >
                 {emailStatus === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}

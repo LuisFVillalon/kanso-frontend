@@ -11,6 +11,7 @@ import { FilterType, Tag } from '@/app/types/task';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
 import Modal from '@/app/components/common/Modal';
 import Logo from '@/app/components/common/Logo';
+import ThemeToggle from '@/app/components/common/ThemeToggle';
 import { useAuth } from '@/app/context/AuthContext';
 
 interface TaskControlsProps {
@@ -155,8 +156,8 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
 
       <aside
         className={`main-menu fixed inset-y-0 left-0 z-50 flex flex-col transition-[width,transform] duration-200 ease-out
+          bg-bg md:bg-transparent
           ${collapsed ? 'w-16 -translate-x-full md:translate-x-0' : 'w-72 translate-x-0'}`}
-        style={{ backgroundColor: 'transparent' }}
         aria-label="Main menu"
       >
         {/* Brand + collapse toggle */}
@@ -407,7 +408,7 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
           </div>
         </div>
 
-        {/* Account — profile, settings, logout */}
+        {/* Account — profile, theme, settings, logout */}
         {(onSettings || onLogout) && (
           <div className="border-t border-border-subtle p-3 flex-shrink-0 space-y-1.5">
             {!collapsed && profileName && (
@@ -420,6 +421,7 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
               </div>
             )}
             <div className="space-y-0.5">
+              <ThemeToggle variant="sidebar" collapsed={collapsed} />
               {onSettings && (
                 collapsed ? (
                   <button

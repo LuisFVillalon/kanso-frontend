@@ -36,9 +36,9 @@ const RING_STYLE = {
   '--tw-ring-offset-color': 'var(--tm-surface-raised)',
 } as React.CSSProperties;
 
-/** Black outline that frames an active/toggled control so selection reads clearly against the accent tint. */
+/** Ink outline that frames an active/toggled control so selection reads clearly against the accent tint. */
 const ACTIVE_OUTLINE_STYLE: React.CSSProperties = {
-  outline: '2px solid #000000',
+  outline: '2px solid var(--tm-text-primary)',
   outlineOffset: '-2px',
 };
 

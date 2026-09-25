@@ -1,6 +1,10 @@
 import React from 'react';
 import Logo from '@/app/components/common/Logo';
+import ThemeToggle from '@/app/components/common/ThemeToggle';
 import AuthShowcase from '@/app/components/auth/AuthShowcase';
+
+/** The kanso-landing marketing site; falls back to this app's own signed-out home. */
+const LANDING_URL = process.env.NEXT_PUBLIC_LANDING_URL ?? '/';
 
 interface AuthLayoutProps {
   /** Display headline; wrap one word in <span className="highlight"> for the marigold pill. */
@@ -17,8 +21,11 @@ interface AuthLayoutProps {
 const AuthLayout: React.FC<AuthLayoutProps> = ({ title, subtitle, children }) => (
   <div className="min-h-screen grid lg:grid-cols-2">
     <div className="flex min-h-screen flex-col px-5 sm:px-10">
-      <header className="flex h-16 items-center">
-        <Logo />
+      <header className="flex h-16 items-center justify-between">
+        <a href={LANDING_URL} aria-label="kanso home" className="rounded-md">
+          <Logo />
+        </a>
+        <ThemeToggle />
       </header>
 
       <main id="main" className="flex flex-1 items-center justify-center py-10">

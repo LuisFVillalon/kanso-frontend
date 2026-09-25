@@ -12,7 +12,7 @@ import AuthInput from '@/app/components/auth/AuthInput';
 import GoogleAuthButton from '@/app/components/auth/GoogleAuthButton';
 
 export default function LoginPage() {
-  const { signInWithEmail, signInWithGoogle, startDemo, demoSeeding } = useAuth();
+  const { signInWithEmail, signInWithGoogle, } = useAuth();
   const router = useRouter();
 
   const [email, setEmail]       = useState('');
@@ -36,13 +36,6 @@ export default function LoginPage() {
     setGoogleLoading(true);
     const { error } = await signInWithGoogle();
     if (error) { setGoogleLoading(false); setError(error.message); }
-  };
-
-  const handleDemoTrial = async () => {
-    setError(null);
-    const { error } = await startDemo();
-    if (error) { setError(error); return; }
-    router.replace('/');
   };
 
   return (

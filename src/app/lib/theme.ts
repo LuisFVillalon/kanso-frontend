@@ -50,13 +50,22 @@ export function relativeLuminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+const ACCENT_PROPS = ['--tm-accent', '--tm-accent-hover', '--tm-accent-subtle', '--tm-accent-text'];
+
 export function applyThemeColor(hex: string): void {
   const root = document.documentElement.style;
+  // The default accent lives in globals.css with a separate dark-mode value,
+  // so clear the inline overrides rather than pinning the light-mode blue.
+  if (hex.toUpperCase() === DEFAULT_ACCENT) {
+    ACCENT_PROPS.forEach(prop => root.removeProperty(prop));
+    return;
+  }
   root.setProperty('--tm-accent', hex);
-  // A gentle darkening on hover — matches the default #006BCB → #005DB0 shift.
-  root.setProperty('--tm-accent-hover', `color-mix(in srgb, ${hex} 88%, black)`);
-  // A flat tinted wash for ghost fills, à la the Sky Tint token.
-  root.setProperty('--tm-accent-subtle', `color-mix(in srgb, ${hex} 12%, white)`);
+  // A gentle shift toward the ink on hover: darker in light mode (matches the
+  // default #006BCB → #005DB0), lighter in dark mode.
+  root.setProperty('--tm-accent-hover', `color-mix(in srgb, ${hex} 88%, var(--tm-text-primary))`);
+  // A flat tinted wash over the card surface for ghost fills, à la the Sky Tint token.
+  root.setProperty('--tm-accent-subtle', `color-mix(in srgb, ${hex} 12%, var(--tm-surface))`);
   root.setProperty('--tm-accent-text', relativeLuminance(hex) > 0.45 ? '#171717' : '#FFFFFF');
 }
 

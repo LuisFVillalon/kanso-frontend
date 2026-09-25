@@ -66,7 +66,7 @@ const DoodleToolbar: React.FC<DoodleToolbarProps> = ({ color, onColorChange, isE
         title="Eraser"
         onClick={onToggleErase}
         className={`p-1.5 rounded-lg transition-colors ${
-          isErasing ? 'bg-accent text-white' : 'text-text-secondary hover:bg-surface-raised'
+          isErasing ? 'bg-accent text-[var(--tm-accent-text)]' : 'text-text-secondary hover:bg-surface-raised'
         }`}
       >
         <Eraser className="w-4 h-4" />
