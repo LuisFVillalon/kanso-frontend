@@ -1,6 +1,7 @@
 import React from 'react';
 import { Calendar, Clock } from 'lucide-react';
 import { Tag } from '@/app/types/task';
+import DurationPicker from './DurationPicker';
 
 export interface TaskFormData {
   title: string;
@@ -129,19 +130,15 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
         />
       </div>
 
-      {/* Estimated Hours */}
+      {/* Estimated Duration */}
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Estimated Hours</label>
-        <input
-          type="number"
-          min={0}
-          step={0.5}
-          value={values.estimated_time ?? 0}
-          onChange={e => set({ estimated_time: Number(e.target.value) || 0 })}
-          placeholder="e.g. 2.5"
-          className="input-field"
+        <label id="estimated-duration-label" className="block text-sm font-medium text-text-secondary mb-2">
+          Estimated Duration
+        </label>
+        <DurationPicker
+          value={values.estimated_time}
+          onChange={hours => set({ estimated_time: hours })}
         />
-        <p className="text-xs text-text-muted mt-1">Increments of 0.5 hours</p>
       </div>
 
       {/* Tags */}
