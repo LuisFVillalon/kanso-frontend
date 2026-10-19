@@ -27,7 +27,7 @@ const MAX_SIDE = 560;
 const DEFAULT_SIDE = 288;
 
 const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
-  const { notes, isLoading: notesLoading, addNote, updateNote, deleteNote, discardDraft, pendingNoteIds } = useNotesContext();
+  const { notes, isLoading: notesLoading, addNote, updateNote, deleteNote, archiveNote, discardDraft, pendingNoteIds } = useNotesContext();
   const { user } = useAuth();
   const { profile, saveProfile } = useProfile(user);
   const [viewMode, setViewMode] = usePersistedPref<ViewMode>(
@@ -84,8 +84,9 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
     setMobileView('editor');
   };
 
-  const handleDeleteNote = (id: number) => {
-    deleteNote(id);
+  // Deleting or archiving the open note moves the editor on to the next one.
+  const handleRemoveNote = (remove: (id: number) => unknown) => (id: number) => {
+    remove(id);
     if (activeNoteId === id) {
       const next = notes.filter(n => n.id !== id)[0] ?? null;
       setActiveNoteId(next?.id ?? null);
@@ -124,7 +125,8 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
             onSelectNote={handleSelectNote}
             onNewNote={handleNewNote}
             onUpdateNote={updateNote}
-            onDeleteNote={handleDeleteNote}
+            onDeleteNote={handleRemoveNote(deleteNote)}
+            onArchiveNote={handleRemoveNote(archiveNote)}
             pendingNoteIds={pendingNoteIds}
             viewMode={viewMode}
             onViewModeChange={setViewMode}

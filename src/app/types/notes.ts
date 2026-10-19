@@ -9,6 +9,8 @@ export interface Note {
   updated_date: string;
   /** Supabase Auth UUID — set server-side, never supplied by the client. */
   user_id?: string | null;
+  /** When the note was archived; null while active. */
+  archived_at?: string | null;
   /**
    * Set once a draft note (negative temp `id` — see useNotes.ts) is first
    * persisted by an edit. The temp id is kept as `id` for the rest of the

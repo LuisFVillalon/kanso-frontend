@@ -47,6 +47,7 @@ interface TaskManagerModalsProps {
   showEditTagModal: boolean;
   onCloseEditTagModal: () => void;
   onDeleteTag: (tag: Tag) => void;
+  onArchiveTag: (tag: Tag) => Promise<boolean>;
   onEditTag: (tag: Tag) => void;
   onOpenCreateTag: () => void;
 
@@ -89,7 +90,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   onSubmitTask, activeTaskCount, occupiedPriorityLevels, tags,
   showEditTaskModal, editTask, onCloseEditTaskModal, onEditTaskChange, onToggleEditTag, onSubmitEditTask,
   showCreateTagModal, onCloseCreateTagModal, newTag, onTagChange, onSubmitTag,
-  editingTag, showEditTagModal, onCloseEditTagModal, onDeleteTag, onEditTag, onOpenCreateTag,
+  editingTag, showEditTagModal, onCloseEditTagModal, onDeleteTag, onArchiveTag, onEditTag, onOpenCreateTag,
   showCreateHabitModal, onCloseCreateHabitModal, newHabit, onHabitChange, onSubmitHabit,
   showManageHabitsModal, onCloseManageHabitsModal, habits, onCreateHabitFromManage,
   onDeleteHabit, onUpdateHabit, onViewHabitHistory,
@@ -137,6 +138,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
           onClose={onCloseEditTagModal}
           allTags={tags}
           onDeleteTag={onDeleteTag}
+          onArchiveTag={onArchiveTag}
           onEditTag={onEditTag}
           onCreateTag={onOpenCreateTag}
         />

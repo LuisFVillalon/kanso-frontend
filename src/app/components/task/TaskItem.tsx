@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Check, Timer, Trash2, Calendar, SquarePen } from 'lucide-react';
+import { Archive, Check, Timer, Trash2, Calendar, SquarePen } from 'lucide-react';
 import { Task } from '@/app/types/task';
 import {
   getDueColor,
@@ -19,12 +19,13 @@ interface TaskItemProps {
   onToggleComplete?: (id: number) => void;
   tags: Array<{ id: number; name: string; color: string }>;
   onDeleteTask?: (task: Task) => void;
+  onArchiveTask?: (task: Task) => void;
   onUpdatePriority?: (id: number, priority: number | null) => void;
   onEditTask?: (task: Task) => void;
   activeTaskCount?: number;
   occupiedPriorities?: number[];
   compact?: boolean;
-  /** True while a toggle-complete or delete request for this task is in flight. */
+  /** True while a toggle-complete, archive or delete request for this task is in flight. */
   pending?: boolean;
 }
 
@@ -34,6 +35,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
   onToggleComplete,
   tags,
   onDeleteTask,
+  onArchiveTask,
   onUpdatePriority,
   onEditTask,
   activeTaskCount,
@@ -143,6 +145,18 @@ const TaskItem: React.FC<TaskItemProps> = ({
             <SquarePen className="w-3.5 h-3.5" />
           </button>
 
+          {onArchiveTask && (
+            <button
+              onClick={() => onArchiveTask(task)}
+              disabled={pending}
+              className="btn btn-ghost p-1 flex-shrink-0 disabled:opacity-50 disabled:cursor-wait"
+              title="Archive task"
+              aria-label="Archive task"
+            >
+              <Archive className="w-3.5 h-3.5" />
+            </button>
+          )}
+
           <button
             onClick={() => onDeleteTask?.(task)}
             disabled={pending}
@@ -218,6 +232,18 @@ const TaskItem: React.FC<TaskItemProps> = ({
               >
                 <SquarePen className="w-4 h-4" />
               </button>
+
+              {onArchiveTask && (
+                <button
+                  onClick={() => onArchiveTask(task)}
+                  disabled={pending}
+                  className="btn btn-ghost p-1.5 disabled:opacity-50 disabled:cursor-wait"
+                  title="Archive task"
+                  aria-label="Archive task"
+                >
+                  <Archive className="w-4 h-4" />
+                </button>
+              )}
 
               <button
                 onClick={() => onDeleteTask?.(task)}

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Trash2 } from 'lucide-react';
+import { Archive, Trash2 } from 'lucide-react';
 import { Note } from '@/app/types/notes';
 import { stripHtml } from '@/app/utils/textUtils';
 import { formatUpdatedDate } from '@/app/utils/dateUtils';
@@ -12,12 +12,14 @@ interface NoteCardProps {
   isActive: boolean;
   onClick: () => void;
   onDelete: (id: number) => void;
+  onArchive?: (id: number) => void;
+  /** True while an archive or delete request for this note is in flight. */
   deleting?: boolean;
 }
 
 const MAX_VISIBLE_TAGS = 2;
 
-const NoteCard: React.FC<NoteCardProps> = ({ note, isActive, onClick, onDelete, deleting }) => {
+const NoteCard: React.FC<NoteCardProps> = ({ note, isActive, onClick, onDelete, onArchive, deleting }) => {
   const preview = stripHtml(note.content);
   const accentColor = note.tags[0]?.color;
 
@@ -50,6 +52,17 @@ const NoteCard: React.FC<NoteCardProps> = ({ note, isActive, onClick, onDelete, 
           >
             {note.title || 'Untitled Note'}
           </h3>
+          {onArchive && (
+            <button
+              onClick={e => { e.stopPropagation(); onArchive(note.id); }}
+              disabled={deleting}
+              className="btn btn-ghost flex-shrink-0 opacity-0 group-hover:opacity-100 p-0.5 disabled:opacity-50 disabled:cursor-wait"
+              title="Archive note"
+              aria-label="Archive note"
+            >
+              <Archive className="w-3 h-3" />
+            </button>
+          )}
           <button
             onClick={e => { e.stopPropagation(); onDelete(note.id); }}
             disabled={deleting}

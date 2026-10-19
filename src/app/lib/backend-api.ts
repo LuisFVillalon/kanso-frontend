@@ -9,6 +9,7 @@
  */
 
 import { Note, NoteSession } from "../types/notes";
+import { Tag, Task } from "../types/task";
 import { CalendarSettings } from "../types/calendar";
 import { Habit, HabitHistoryEntry } from "../types/habit";
 import { Profile } from "../types/profile";
@@ -66,6 +67,25 @@ async function assertOk(res: Response, context: string): Promise<void> {
   }
 }
 
+/** Query string for the list endpoints: active rows by default, only archived rows with `archived`. */
+const archivedQuery = (archived: boolean) => (archived ? "?archived=true" : "");
+
+/**
+ * Sets (`archived`) or clears `archived_at` on one of the user's tasks, notes
+ * or tags via PATCH /archive-{kind}/{id} or /unarchive-{kind}/{id}, returning
+ * the updated record. Both directions are idempotent server-side.
+ */
+async function setArchived<T>(kind: "task" | "note" | "tag", id: number, archived: boolean): Promise<T> {
+  const headers = await getAuthHeaders();
+  const action = archived ? "archive" : "unarchive";
+  const res = await fetch(`${API_BASE_URL}/${action}-${kind}/${id}`, {
+    method: "PATCH",
+    headers,
+  });
+  await assertOk(res, `${action}-${kind}`);
+  return res.json();
+}
+
 // ── Demo / trial account ─────────────────────────────────────────────────────
 
 /**
@@ -82,10 +102,10 @@ export async function seedDemoData(): Promise<void> {
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
-/** Fetches all tasks belonging to the authenticated user. */
-export async function fetchTasks() {
+/** Fetches the authenticated user's active tasks, or only the archived ones when `archived` is set. */
+export async function fetchTasks(archived = false): Promise<Task[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/get-tasks`, { headers });
+  const res = await fetch(`${API_BASE_URL}/get-tasks${archivedQuery(archived)}`, { headers });
   await assertOk(res, "fetchTasks");
   return res.json();
 }
@@ -150,12 +170,22 @@ export async function updateWholeTask(id: number, task: {
   return res.json();
 }
 
+/** Archives a task (and, server-side, its subtasks). Returns the updated task. */
+export function archiveTask(id: number): Promise<Task> {
+  return setArchived<Task>("task", id, true);
+}
+
+/** Restores an archived task (and, server-side, its subtasks). Returns the updated task. */
+export function unarchiveTask(id: number): Promise<Task> {
+  return setArchived<Task>("task", id, false);
+}
+
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
-/** Fetches all tags belonging to the authenticated user. */
-export async function fetchTags() {
+/** Fetches the authenticated user's active tags, or only the archived ones when `archived` is set. */
+export async function fetchTags(archived = false): Promise<Tag[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/get-tags`, { headers });
+  const res = await fetch(`${API_BASE_URL}/get-tags${archivedQuery(archived)}`, { headers });
   await assertOk(res, "fetchTags");
   return res.json();
 }
@@ -194,12 +224,22 @@ export async function onDeleteTag(id: number): Promise<void> {
   await assertOk(res, "onDeleteTag");
 }
 
+/** Archives a tag. Its task/note/habit links are left untouched. Returns the updated tag. */
+export function archiveTag(id: number): Promise<Tag> {
+  return setArchived<Tag>("tag", id, true);
+}
+
+/** Restores an archived tag. Returns the updated tag. */
+export function unarchiveTag(id: number): Promise<Tag> {
+  return setArchived<Tag>("tag", id, false);
+}
+
 // ── Notes ─────────────────────────────────────────────────────────────────────
 
-/** Fetches all notes belonging to the authenticated user. */
-export async function fetchNotes(): Promise<Note[]> {
+/** Fetches the authenticated user's active notes, or only the archived ones when `archived` is set. */
+export async function fetchNotes(archived = false): Promise<Note[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/get-notes`, { headers });
+  const res = await fetch(`${API_BASE_URL}/get-notes${archivedQuery(archived)}`, { headers });
   await assertOk(res, "fetchNotes");
   return res.json();
 }
@@ -248,6 +288,16 @@ export async function deleteNote(id: number): Promise<Note> {
   });
   await assertOk(res, "deleteNote");
   return res.json();
+}
+
+/** Archives a note. Returns the updated note. */
+export function archiveNote(id: number): Promise<Note> {
+  return setArchived<Note>("note", id, true);
+}
+
+/** Restores an archived note. Returns the updated note. */
+export function unarchiveNote(id: number): Promise<Note> {
+  return setArchived<Note>("note", id, false);
 }
 
 /** Opens a new editing session for a note. Close it with `endNoteSession`. */

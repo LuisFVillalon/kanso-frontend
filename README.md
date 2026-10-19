@@ -21,6 +21,7 @@ This repository is the web app. kanso is three services, each in its own reposit
 - **Daily debrief**: overdue work, what's due today, whether today's plan fits your available hours, and a short "focus next" list. It's rule-based on the backend; no LLM is involved.
 - **Big-picture calendar**: a year and month view of tasks, habits and notes, plus a term tracker with a countdown.
 - **Customizable dashboard**: drag-and-drop, resizable stats widgets; accent colors; notebook page styles; focus mode; and a doodle canvas.
+- **Archive**: archive tasks, notes and tags to hide them from the dashboard, calendar, daily debrief and stats without deleting them. Archived tags disappear from pickers, filters and note folders but stay attached to their tasks and notes. The Archive page lists everything archived, with Restore and Delete permanently.
 - **Accounts**: email/password (with a NIST-style password policy) or Google sign-in, plus account settings and account deletion.
 
 ## Architecture
@@ -64,7 +65,7 @@ A few decisions worth calling out:
 src/app/
   page.tsx               # Landing page when signed out, dashboard (TaskManager) when signed in
   TaskManager.tsx        # The dashboard
-  notes/ calendar/       # /notes and /calendar pages
+  notes/ calendar/ archive/  # /notes, /calendar and /archive pages
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
   components/            # Grouped by domain: task, notes, habit, calendar, stats, settings,
