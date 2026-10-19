@@ -1,0 +1,236 @@
+/**
+ * Pure helpers behind the calendar's week view: week arithmetic, turning
+ * tasks / calendar activity into per-day timed blocks and all-day items,
+ * and laying overlapping blocks out side by side.
+ *
+ * All positions are minutes from local midnight (0–1440) of the day column
+ * the block sits in, read from local calendar fields so they stay correct
+ * for the viewer's own time zone.
+ */
+import type { ActivityHabitCompletion, ActivityNoteSession, ActivityTask } from '@/app/types/activity';
+import type { Task } from '@/app/types/task';
+import { toLocalDateStr, toLocalTimeStr } from './dateUtils';
+
+export const MINUTES_PER_DAY = 24 * 60;
+/** Granularity of the click-to-create slots. */
+export const SLOT_MINUTES = 30;
+/** Height given to a timed task that has no estimate. */
+export const DEFAULT_TASK_MINUTES = 30;
+/** Height given to a completion marker, which is a single instant. */
+export const COMPLETION_MARKER_MINUTES = 30;
+/** Shortest block drawn, so a 2-minute note session is still clickable. */
+export const MIN_BLOCK_MINUTES = 20;
+
+export type TimedEventKind = 'task' | 'completed' | 'note';
+export type AllDayItemKind = 'task' | 'habit';
+
+export interface TimedEvent {
+  key: string;
+  kind: TimedEventKind;
+  title: string;
+  /** 0 = Monday … 6 = Sunday, within the displayed week. */
+  dayIndex: number;
+  /** The real start/end, used for labels. */
+  startMin: number;
+  endMin: number;
+  /** The drawn extent: real times padded to MIN_BLOCK_MINUTES, clamped to the day. */
+  drawStartMin: number;
+  drawEndMin: number;
+  taskId?: number;
+  noteId?: number;
+  /** Planned tasks only: whether the task has since been completed. */
+  completed?: boolean;
+}
+
+export interface AllDayItem {
+  key: string;
+  kind: AllDayItemKind;
+  title: string;
+  dayIndex: number;
+  taskId?: number;
+  habitId?: number;
+  completed?: boolean;
+}
+
+export interface PositionedEvent extends TimedEvent {
+  /** Zero-based column within its overlap cluster. */
+  column: number;
+  /** Number of columns its overlap cluster is split into. */
+  columns: number;
+}
+
+/** Local midnight `n` days after `date` (DST-safe: steps calendar days, not 24h). */
+export const addDays = (date: Date, n: number): Date =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
+
+/** Local midnight of the Monday starting the week that contains `date`. */
+export const startOfWeek = (date: Date): Date =>
+  addDays(date, -((date.getDay() + 6) % 7));
+
+/** The seven local-midnight days of the week starting `weekStart`. */
+export const weekDays = (weekStart: Date): Date[] =>
+  Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+/** "HH:MM" or "HH:MM:SS" → minutes from midnight; null when unparseable. */
+export const parseTimeToMinutes = (time: string): number | null => {
+  const match = /^(\d{1,2}):(\d{2})/.exec(time);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+};
+
+/** Minutes from midnight → "HH:MM", the shape the task form's time input takes. */
+export const minutesToTimeStr = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** Rounds `minutes` down to the nearest multiple of `step`. */
+export const snapMinutes = (minutes: number, step = SLOT_MINUTES): number =>
+  Math.floor(minutes / step) * step;
+
+/** Short wall-clock label like "9:30 AM" for minutes from midnight. */
+export const formatMinutes = (minutes: number): string => {
+  const d = new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+};
+
+const minutesOfDay = (date: Date): number => date.getHours() * 60 + date.getMinutes();
+
+/** Pads a real [start, end) to at least `minLength` drawn minutes without leaving the day. */
+const drawExtent = (startMin: number, endMin: number, minLength = MIN_BLOCK_MINUTES) => {
+  const drawEndMin = Math.min(MINUTES_PER_DAY, Math.max(endMin, startMin + minLength));
+  const drawStartMin = Math.max(0, Math.min(startMin, drawEndMin - minLength));
+  return { drawStartMin, drawEndMin };
+};
+
+type ScheduledTask = Pick<Task, 'id' | 'title' | 'due_date' | 'due_time' | 'estimated_time' | 'completed'>;
+
+interface BuildWeekEventsInput {
+  weekStart: Date;
+  /** Tasks with a due date; those due outside the week are ignored. */
+  scheduledTasks: ScheduledTask[];
+  completedTasks: Pick<ActivityTask, 'id' | 'title' | 'completed_date'>[];
+  noteSessions: ActivityNoteSession[];
+  habitCompletions: ActivityHabitCompletion[];
+}
+
+/**
+ * Places everything for one week into day columns:
+ * - planned tasks at their due time, sized by estimated_time (hours), or in
+ *   the all-day row when they have a date but no time;
+ * - completed tasks as a marker at their completion instant;
+ * - note sessions as blocks from start to end, split at midnight when a
+ *   session runs into the next day;
+ * - habit completions in the all-day row, since they carry no time.
+ */
+export function buildWeekEvents({
+  weekStart,
+  scheduledTasks,
+  completedTasks,
+  noteSessions,
+  habitCompletions,
+}: BuildWeekEventsInput): { timed: TimedEvent[]; allDay: AllDayItem[] } {
+  const days = weekDays(weekStart);
+  const dayIndexByDate = new Map(days.map((d, i) => [toLocalDateStr(d), i]));
+  const timed: TimedEvent[] = [];
+  const allDay: AllDayItem[] = [];
+
+  for (const task of scheduledTasks) {
+    if (!task.due_date) continue;
+    const dayIndex = dayIndexByDate.get(toLocalDateStr(task.due_date));
+    if (dayIndex === undefined) continue;
+    const timeStr = task.due_time instanceof Date ? toLocalTimeStr(task.due_time) : task.due_time;
+    const startMin = timeStr ? parseTimeToMinutes(timeStr) : null;
+    if (startMin === null) {
+      allDay.push({ key: `task-${task.id}`, kind: 'task', title: task.title, dayIndex, taskId: task.id, completed: task.completed });
+      continue;
+    }
+    const estimate = task.estimated_time ? Math.round(task.estimated_time * 60) : DEFAULT_TASK_MINUTES;
+    const endMin = Math.min(MINUTES_PER_DAY, startMin + estimate);
+    timed.push({
+      key: `task-${task.id}`, kind: 'task', title: task.title, dayIndex, startMin, endMin,
+      ...drawExtent(startMin, endMin), taskId: task.id, completed: task.completed,
+    });
+  }
+
+  for (const task of completedTasks) {
+    if (!task.completed_date) continue;
+    const at = new Date(task.completed_date);
+    if (isNaN(at.getTime())) continue;
+    const dayIndex = dayIndexByDate.get(toLocalDateStr(at));
+    if (dayIndex === undefined) continue;
+    const startMin = minutesOfDay(at);
+    timed.push({
+      key: `completed-${task.id}`, kind: 'completed', title: task.title, dayIndex, startMin, endMin: startMin,
+      ...drawExtent(startMin, startMin, COMPLETION_MARKER_MINUTES), taskId: task.id,
+    });
+  }
+
+  for (const session of noteSessions) {
+    const start = new Date(session.started_at);
+    const end = new Date(session.ended_at);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) continue;
+    days.forEach((day, dayIndex) => {
+      const nextDay = addDays(day, 1);
+      if (end < day || start >= nextDay) return;
+      // A session ending exactly at midnight belongs to the day before.
+      if (end.getTime() === day.getTime() && start < day) return;
+      const startMin = start <= day ? 0 : minutesOfDay(start);
+      const endMin = end >= nextDay ? MINUTES_PER_DAY : minutesOfDay(end);
+      timed.push({
+        key: `note-${session.id}-${dayIndex}`, kind: 'note', title: session.note_title || 'Untitled note',
+        dayIndex, startMin, endMin, ...drawExtent(startMin, endMin), noteId: session.note_id,
+      });
+    });
+  }
+
+  for (const completion of habitCompletions) {
+    const dayIndex = dayIndexByDate.get(completion.date);
+    if (dayIndex === undefined) continue;
+    allDay.push({
+      key: `habit-${completion.habit_id}-${completion.date}`, kind: 'habit', title: completion.habit_title,
+      dayIndex, habitId: completion.habit_id,
+    });
+  }
+
+  return { timed, allDay };
+}
+
+/**
+ * Splits one day's blocks into side-by-side columns wherever they overlap
+ * (by drawn extent), like Google Calendar: each run of transitively
+ * overlapping blocks shares a column count, and each block takes the
+ * leftmost column free at its start.
+ */
+export function layoutDayEvents(events: TimedEvent[]): PositionedEvent[] {
+  const sorted = [...events].sort(
+    (a, b) => a.drawStartMin - b.drawStartMin || b.drawEndMin - a.drawEndMin || a.key.localeCompare(b.key),
+  );
+  const result: PositionedEvent[] = [];
+  let cluster: PositionedEvent[] = [];
+  let columnEnds: number[] = [];
+  let clusterEnd = -1;
+
+  const flush = () => {
+    for (const e of cluster) e.columns = columnEnds.length;
+    result.push(...cluster);
+    cluster = [];
+    columnEnds = [];
+  };
+
+  for (const event of sorted) {
+    if (event.drawStartMin >= clusterEnd) flush();
+    let column = columnEnds.findIndex(end => end <= event.drawStartMin);
+    if (column === -1) {
+      column = columnEnds.length;
+      columnEnds.push(event.drawEndMin);
+    } else {
+      columnEnds[column] = event.drawEndMin;
+    }
+    cluster.push({ ...event, column, columns: 1 });
+    clusterEnd = Math.max(clusterEnd, event.drawEndMin);
+  }
+  flush();
+  return result;
+}
