@@ -151,7 +151,7 @@ const TaskManager: React.FC = () => {
   const { habits, habitsLoading, toggle: toggleHabit, toggleDate: toggleHabitDate, pendingHabitIds, refetch: refetchHabits } = useHabitsContext();
   const historyHabit = habits.find(h => h.id === state.historyHabitId) ?? null;
 
-  const { notes: allNotes, isLoading: notesLoading, addNote, deleteNote, archiveNote, updateNote, discardDraft, pendingNoteIds } = useNotesContext();
+  const { notes: allNotes, isLoading: notesLoading, addNote, deleteNote, archiveNote, updateNote, discardDraft, pendingNoteIds, archiveSyncToken: noteArchiveSyncToken } = useNotesContext();
   // Only the id is held in state; the note itself is derived live from
   // allNotes on every render so edits (title/content debounce, tag toggles)
   // always flow straight through — no separate copy to fall out of sync or
@@ -351,7 +351,7 @@ const TaskManager: React.FC = () => {
           <div className={doodleMode ? 'animate-fade-out' : 'animate-fade-in'}>
             {showDebriefPanels && (
               <div className={!doodleMode && !focusMode ? 'animate-fade-in' : 'animate-fade-out'}>
-                <TaskDebriefPanel profile={profile} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken} />
+                <TaskDebriefPanel profile={profile} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken} />
 
                 <CalendarAndStats
                   habits={habits}

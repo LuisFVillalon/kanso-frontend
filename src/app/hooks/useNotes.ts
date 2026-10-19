@@ -25,6 +25,9 @@ export const useNotes = (enabled: boolean) => {
   // mirroring the pendingIds pattern in useHabits/useTasks.
   const pendingRef = useRef<Set<number>>(new Set());
   const [pendingNoteIds, setPendingNoteIds] = useState<Set<number>>(new Set());
+  // Bumped only after an archive/restore is confirmed by the server, so the
+  // daily debrief can re-fetch without racing the in-flight request.
+  const [archiveSyncToken, setArchiveSyncToken] = useState(0);
 
   // Mirrors `notes` so callbacks can read the latest state without a stale
   // closure (setState updates aren't visible synchronously).
@@ -212,6 +215,7 @@ export const useNotes = (enabled: boolean) => {
     try {
       const backendId = creating ? (await creating).id : realId ?? id;
       await apiArchiveNote(backendId);
+      setArchiveSyncToken(v => v + 1);
       showToast('Note archived. You can restore it from the Archive page.', 'info');
     } catch (err) {
       if (archived) {
@@ -232,6 +236,7 @@ export const useNotes = (enabled: boolean) => {
   // Puts a note restored from the Archive page back into the active list.
   const restoreNote = useCallback((restored: Note) => {
     setNotes(prev => [restored, ...prev.filter(note => note.id !== restored.id)]);
+    setArchiveSyncToken(v => v + 1);
   }, []);
 
   // Strips a permanently deleted tag from every note still carrying it.
@@ -245,6 +250,6 @@ export const useNotes = (enabled: boolean) => {
 
   return {
     notes, isLoading, error, addNote, updateNote, deleteNote, archiveNote, restoreNote, removeTagFromNotes,
-    discardDraft, pendingNoteIds,
+    discardDraft, pendingNoteIds, archiveSyncToken,
   };
 };
