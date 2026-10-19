@@ -98,7 +98,7 @@ const ArchiveView: React.FC = () => {
   const visibleNotes = useMemo(() => filterByAnyTag(notes, activeTagIds), [notes, activeTagIds]);
   // Archived items keep their tags even when those tags are archived too.
   const archivedTagIds = useMemo(() => new Set(tags.map(t => t.id)), [tags]);
-  const isTagArchived = (tag: Tag) => archivedTagIds.has(tag.id) || !!tag.archived_at;
+  const isTagArchived = (tag: Tag) => archivedTagIds.has(tag.id);
 
   const toggleTagFilter = (tag: Tag) => {
     setSelectedTagIds(prev => {
