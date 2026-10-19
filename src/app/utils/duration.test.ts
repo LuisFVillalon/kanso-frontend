@@ -30,9 +30,13 @@ describe('parseCustomHours', () => {
     expect(parseCustomHours('4')).toEqual({ ok: true, hours: 4 });
   });
 
-  it('rejects non-numeric, zero, negative and oversized input', () => {
-    for (const t of ['abc', '1h', '-2', '0', '0.0', '1e3', '1000']) {
+  it('rejects non-numeric, zero and negative input', () => {
+    for (const t of ['abc', '1h', '-2', '0', '0.0', '1e3']) {
       expect(parseCustomHours(t).ok).toBe(false);
     }
+  });
+
+  it('accepts large values', () => {
+    expect(parseCustomHours('1000')).toEqual({ ok: true, hours: 1000 });
   });
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { DURATION_PRESETS, findDurationPreset, parseCustomHours } from '@/app/utils/duration';
 
 interface DurationPickerProps {
@@ -9,13 +9,19 @@ interface DurationPickerProps {
 const formatHours = (hours: number) => String(Math.round(hours * 100) / 100);
 
 // Segmented choice of preset estimates plus a free-form "Custom" hours input.
-// Clicking the selected preset again clears the estimate.
+// Clicking the selected preset again clears the estimate. Invalid custom text
+// keeps the current estimate and blocks the enclosing form from submitting.
 const DurationPicker: React.FC<DurationPickerProps> = ({ value, onChange }) => {
   const hasValue = value != null && value > 0;
   const initialCustom = hasValue && !findDurationPreset(value);
   const [customOpen, setCustomOpen] = useState(initialCustom);
   const [customText, setCustomText] = useState(initialCustom ? formatHours(value!) : '');
   const [error, setError] = useState<string | null>(null);
+  const customInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    customInputRef.current?.setCustomValidity(error ?? '');
+  }, [error]);
 
   const selectedPreset = customOpen ? null : findDurationPreset(value);
 
@@ -47,7 +53,6 @@ const DurationPicker: React.FC<DurationPickerProps> = ({ value, onChange }) => {
       onChange(parsed.hours);
     } else {
       setError(parsed.error);
-      onChange(null);
     }
   };
 
@@ -93,6 +98,7 @@ const DurationPicker: React.FC<DurationPickerProps> = ({ value, onChange }) => {
         <div id="estimated-duration-custom" className="mt-2">
           <div className="relative">
             <input
+              ref={customInputRef}
               type="text"
               inputMode="decimal"
               autoFocus

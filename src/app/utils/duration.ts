@@ -14,8 +14,6 @@ export const DURATION_PRESETS: DurationPreset[] = [
   { label: '3 hours', hours: 3 },
 ];
 
-export const MAX_CUSTOM_HOURS = 999;
-
 // Tolerates values the backend may have rounded (e.g. 0.08 for 5 min).
 const MATCH_TOLERANCE = 0.01;
 
@@ -27,7 +25,7 @@ export function findDurationPreset(hours: number | null | undefined): DurationPr
 
 /**
  * Parses custom-duration text as hours. Empty text means "no estimate" (null);
- * anything that isn't a positive number up to MAX_CUSTOM_HOURS is invalid.
+ * anything that isn't a positive number is invalid.
  */
 export function parseCustomHours(
   text: string,
@@ -37,6 +35,5 @@ export function parseCustomHours(
   if (!/^\d*\.?\d+$|^\d+\.$/.test(trimmed)) return { ok: false, error: 'Enter a number of hours, like 1.5' };
   const hours = Number(trimmed);
   if (hours <= 0) return { ok: false, error: 'Duration must be greater than 0' };
-  if (hours > MAX_CUSTOM_HOURS) return { ok: false, error: `Duration must be ${MAX_CUSTOM_HOURS} hours or less` };
   return { ok: true, hours };
 }
