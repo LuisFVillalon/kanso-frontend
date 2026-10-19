@@ -14,6 +14,7 @@ import type { Task } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
 import { bucketByTag } from '@/app/utils/tagBucketing';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { formatDuration } from '@/app/utils/duration';
 import type { DebriefTag } from '@/app/types/debrief';
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
@@ -550,7 +551,7 @@ function FocusNextRow({ item }: { item: FocusNextItem }) {
             <span className="text-[10px] text-text-muted">· due {formatDueDate(item.due_date)}</span>
           )}
           {item.estimated_time != null && (
-            <span className="text-[10px] text-text-muted">· {item.estimated_time} hrs</span>
+            <span className="text-[10px] text-text-muted">· {formatDuration(item.estimated_time)}</span>
           )}
         </div>
       </div>

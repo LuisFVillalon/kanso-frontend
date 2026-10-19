@@ -10,6 +10,7 @@ import {
   PRIORITY_COLORS,
 } from '@/app/utils/taskUtils';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
+import { formatDuration } from '@/app/utils/duration';
 import PriorityPicker from './PriorityPicker';
 import TaskTags from './TaskTags';
 
@@ -317,7 +318,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
               <div className="flex items-center gap-1.5">
                 <Timer className={`w-3.5 h-3.5 ${toInkTone(getDurationColor(Number(task.estimated_time)))}`} />
                 <span className={toInkTone(getDurationColor(Number(task.estimated_time)))}>
-                  {task.estimated_time} hrs
+                  {formatDuration(Number(task.estimated_time))}
                 </span>
               </div>
             )}
