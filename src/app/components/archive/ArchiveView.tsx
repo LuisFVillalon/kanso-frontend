@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ChevronLeft, ArchiveRestore, Trash2, Loader2, Archive, ListChecks, NotebookText, Tags,
+  ChevronLeft, ArchiveRestore, Trash2, Loader2, Archive, Filter, ListChecks, NotebookText, Tags,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -28,9 +28,11 @@ import { Note } from '@/app/types/notes';
 import { subtaskTreeIds } from '@/app/utils/taskUtils';
 import { stripHtml } from '@/app/utils/textUtils';
 import { formatUpdatedDate } from '@/app/utils/dateUtils';
+import { collectItemTags, filterByAnyTag } from '@/app/utils/tagFilter';
 import TagChipList from '@/app/components/common/TagChipList';
 import Modal from '@/app/components/common/Modal';
 import PageSpinner from '@/app/components/common/PageSpinner';
+import ArchiveTagFilter from './ArchiveTagFilter';
 
 type TabKey = 'tasks' | 'notes' | 'tags';
 
@@ -74,6 +76,39 @@ const ArchiveView: React.FC = () => {
   const [restoringKeys, setRestoringKeys] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
+
+  // Each tab filters on its own — switching tabs starts from an unfiltered list.
+  const switchTab = (key: TabKey) => {
+    setTab(key);
+    setSelectedTagIds(new Set());
+  };
+
+  const filterTags = useMemo(
+    () => (tab === 'tasks' ? collectItemTags(tasks) : tab === 'notes' ? collectItemTags(notes) : []),
+    [tab, tasks, notes],
+  );
+  // A selected tag no longer carried by any item (its last item was restored
+  // or deleted) stops filtering.
+  const activeTagIds = useMemo(
+    () => new Set(filterTags.filter(t => selectedTagIds.has(t.id)).map(t => t.id)),
+    [filterTags, selectedTagIds],
+  );
+  const visibleTasks = useMemo(() => filterByAnyTag(tasks, activeTagIds), [tasks, activeTagIds]);
+  const visibleNotes = useMemo(() => filterByAnyTag(notes, activeTagIds), [notes, activeTagIds]);
+  // Archived items keep their tags even when those tags are archived too.
+  const archivedTagIds = useMemo(() => new Set(tags.map(t => t.id)), [tags]);
+  const isTagArchived = (tag: Tag) => archivedTagIds.has(tag.id);
+
+  const toggleTagFilter = (tag: Tag) => {
+    setSelectedTagIds(prev => {
+      const next = new Set(prev);
+      if (next.has(tag.id)) next.delete(tag.id);
+      else next.add(tag.id);
+      return next;
+    });
+  };
+  const clearTagFilter = () => setSelectedTagIds(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -193,6 +228,7 @@ const ArchiveView: React.FC = () => {
 
   const counts: Record<TabKey, number> = { tasks: tasks.length, notes: notes.length, tags: tags.length };
   const activeTab = TABS.find(t => t.key === tab)!;
+  const visibleCount = tab === 'tasks' ? visibleTasks.length : tab === 'notes' ? visibleNotes.length : tags.length;
   const taskTitle = (id: number | null | undefined) => tasks.find(t => t.id === id)?.title;
 
   const rowActions = (key: string, onRestore: () => void, onDelete: () => void) => {
@@ -239,30 +275,44 @@ const ArchiveView: React.FC = () => {
       </div>
 
       <div className="flex-1 max-w-4xl mx-auto w-full px-3 sm:px-4 md:px-6 pb-6 sm:pb-10">
-        <div role="tablist" aria-label="Archived items" className="inline-flex items-center gap-1 p-1 mb-4 rounded-lg bg-surface border border-border">
-          {TABS.map(({ key, label, icon: Icon }) => {
-            const active = tab === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                id={`archive-tab-${key}`}
-                aria-selected={active}
-                aria-controls="archive-panel"
-                onClick={() => setTab(key)}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-surface-raised text-text-primary shadow-sm'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                {label}
-                <span className="text-xs text-text-muted tabular-nums">{counts[key]}</span>
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <div role="tablist" aria-label="Archived items" className="inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+            {TABS.map(({ key, label, icon: Icon }) => {
+              const active = tab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  id={`archive-tab-${key}`}
+                  aria-selected={active}
+                  aria-controls="archive-panel"
+                  onClick={() => switchTab(key)}
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-surface-raised text-text-primary shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                  <span className="text-xs text-text-muted tabular-nums">{counts[key]}</span>
+                </button>
+              );
+            })}
+          </div>
+          {status === 'ready' && filterTags.length > 0 && (
+            <div className="ml-auto">
+              <ArchiveTagFilter
+                key={tab}
+                tags={filterTags}
+                selectedIds={activeTagIds}
+                isArchived={isTagArchived}
+                onToggle={toggleTagFilter}
+                onClear={clearTagFilter}
+              />
+            </div>
+          )}
         </div>
 
         <div id="archive-panel" role="tabpanel" aria-labelledby={`archive-tab-${tab}`}>
@@ -284,9 +334,24 @@ const ArchiveView: React.FC = () => {
               <h2 className="text-base font-semibold text-text-primary mb-1">No archived {activeTab.label.toLowerCase()}</h2>
               <p className="text-sm text-text-secondary">{activeTab.empty}</p>
             </div>
+          ) : visibleCount === 0 ? (
+            <div className="card p-6 sm:p-8 text-center">
+              <div
+                className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3"
+                style={{ backgroundColor: 'var(--tm-surface-raised)' }}
+              >
+                <Filter className="w-6 h-6 text-text-muted" />
+              </div>
+              <h2 className="text-base font-semibold text-text-primary mb-1">
+                No archived {activeTab.label.toLowerCase()} with {activeTagIds.size === 1 ? 'this tag' : 'these tags'}
+              </h2>
+              <button type="button" onClick={clearTagFilter} className="btn btn-secondary px-3 py-1.5 text-sm mt-3">
+                Clear filter
+              </button>
+            </div>
           ) : (
             <ul className="flex flex-col gap-2">
-              {tab === 'tasks' && tasks.map(task => {
+              {tab === 'tasks' && visibleTasks.map(task => {
                 const parentTitle = taskTitle(task.parent_task_id);
                 return (
                   <li key={task.id} className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -309,7 +374,7 @@ const ArchiveView: React.FC = () => {
                 );
               })}
 
-              {tab === 'notes' && notes.map(note => {
+              {tab === 'notes' && visibleNotes.map(note => {
                 const preview = stripHtml(note.content);
                 return (
                   <li key={note.id} className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
