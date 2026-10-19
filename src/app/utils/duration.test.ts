@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DURATION_PRESETS, findDurationPreset, parseCustomHours } from './duration';
+import { DURATION_PRESETS, findDurationPreset, formatDuration, parseCustomHours } from './duration';
 
 describe('findDurationPreset', () => {
   it('matches exact preset hours', () => {
@@ -38,5 +38,20 @@ describe('parseCustomHours', () => {
 
   it('accepts large values', () => {
     expect(parseCustomHours('1000')).toEqual({ ok: true, hours: 1000 });
+  });
+});
+
+describe('formatDuration', () => {
+  it('shows minutes under an hour', () => {
+    expect(formatDuration(5 / 60)).toBe('5 min');
+    expect(formatDuration(0.08)).toBe('5 min');
+    expect(formatDuration(0.25)).toBe('15 min');
+    expect(formatDuration(0.5)).toBe('30 min');
+  });
+
+  it('shows rounded hours from one hour up', () => {
+    expect(formatDuration(1)).toBe('1 hr');
+    expect(formatDuration(1.5)).toBe('1.5 hrs');
+    expect(formatDuration(4 / 3)).toBe('1.33 hrs');
   });
 });

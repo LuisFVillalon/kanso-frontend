@@ -37,3 +37,11 @@ export function parseCustomHours(
   if (hours <= 0) return { ok: false, error: 'Duration must be greater than 0' };
   return { ok: true, hours };
 }
+
+/** Formats a stored estimate for display: minutes under an hour, otherwise rounded hours. */
+export function formatDuration(hours: number): string {
+  const minutes = Math.round(hours * 60);
+  if (minutes < 60) return `${minutes} min`;
+  const rounded = Math.round(hours * 100) / 100;
+  return `${rounded} ${rounded === 1 ? 'hr' : 'hrs'}`;
+}
