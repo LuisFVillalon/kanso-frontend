@@ -8,11 +8,14 @@ import {
   onDeleteTag,
   updateTag as updateTagApi,
   updateWholeTask,
+  archiveTask as archiveTaskApi,
+  archiveTag as archiveTagApi,
   describeError,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
 import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag } from '@/app/types/task';
 import { toLocalISOString, toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
+import { subtaskTreeIds } from '@/app/utils/taskUtils';
 
 /**
  * Manages task state and CRUD operations.
@@ -30,10 +33,10 @@ export const useTasks = (enabled: boolean) => {
   // state so the UI can disable/dim just the item that's in flight.
   const pendingRef = useRef<Set<number>>(new Set());
   const [pendingTaskIds, setPendingTaskIds] = useState<Set<number>>(new Set());
-  // Bumped only once the server has confirmed a completion toggle (not on
-  // the optimistic local update) — consumers like TaskDebriefPanel key
-  // their refetch off this instead of `tasks` so they don't race the
-  // in-flight PUT and refetch before the completion has actually committed.
+  // Bumped only once the server has confirmed a completion toggle or an
+  // archive (not on the optimistic local update) — consumers like
+  // TaskDebriefPanel key their refetch off this instead of `tasks` so they
+  // don't race the in-flight request and refetch before it has committed.
   const [completionSyncToken, setCompletionSyncToken] = useState(0);
 
   useEffect(() => {
@@ -159,6 +162,40 @@ export const useTasks = (enabled: boolean) => {
     }
   };
 
+  // Archiving a task archives its subtasks too (server-side), so the whole
+  // subtree leaves the active list together.
+  const archiveTask = async (archTask: Task): Promise<boolean> => {
+    if (pendingRef.current.has(archTask.id)) return false;
+    pendingRef.current.add(archTask.id);
+    setPendingTaskIds(new Set(pendingRef.current));
+
+    const subtreeIds = subtaskTreeIds(tasks, archTask.id);
+    const removed = tasks.filter(t => subtreeIds.has(t.id));
+    setTasks(prev => prev.filter(t => !subtreeIds.has(t.id)));
+
+    try {
+      await archiveTaskApi(archTask.id);
+      setCompletionSyncToken(v => v + 1);
+      showToast('Task archived. You can restore it from the Archive page.', 'info');
+      return true;
+    } catch (err) {
+      console.error('Archive failed:', err);
+      setTasks(prev => [...prev, ...removed].sort((a, b) => b.id - a.id));
+      showToast(describeError(err, "Couldn't archive the task, so it has been restored."));
+      return false;
+    } finally {
+      pendingRef.current.delete(archTask.id);
+      setPendingTaskIds(new Set(pendingRef.current));
+    }
+  };
+
+  // Puts tasks restored from the Archive page back into the active list.
+  const restoreTasks = (restored: Task[]) => {
+    const ids = new Set(restored.map(t => t.id));
+    setTasks(prev => [...prev.filter(t => !ids.has(t.id)), ...restored].sort((a, b) => b.id - a.id));
+    setCompletionSyncToken(v => v + 1);
+  };
+
   const updateTask = async (id: number, updatedTask: EditTaskForm) => {
     try {
       const taskToUpdate = {
@@ -188,6 +225,8 @@ export const useTasks = (enabled: boolean) => {
     addTask,
     setTasks,
     deleteTask,
+    archiveTask,
+    restoreTasks,
     updateTask,
     pendingTaskIds,
     completionSyncToken,
@@ -250,6 +289,33 @@ export const useTags = (enabled: boolean) => {
     }
   };
 
+  // Archiving only hides the tag: tasks and notes keep carrying it, it just
+  // drops out of `tags` (pickers, filters, note folders).
+  const archiveTag = async (archTag: Tag): Promise<boolean> => {
+    const index = tags.findIndex(t => t.id === archTag.id);
+    setTags(prev => prev.filter(t => t.id !== archTag.id));
+    try {
+      await archiveTagApi(archTag.id);
+      showToast('Tag archived. You can restore it from the Archive page.', 'info');
+      return true;
+    } catch (err) {
+      console.error('Archive failed:', err);
+      setTags(prev => {
+        if (prev.some(t => t.id === archTag.id)) return prev;
+        const next = [...prev];
+        next.splice(index < 0 ? next.length : index, 0, archTag);
+        return next;
+      });
+      showToast(describeError(err, "Couldn't archive the tag, so it has been restored."));
+      return false;
+    }
+  };
+
+  // Puts a tag restored from the Archive page back into the active list.
+  const restoreTag = (restored: Tag) => {
+    setTags(prev => [...prev.filter(t => t.id !== restored.id), restored]);
+  };
+
   const updateTag = async (tagToUpdate: Tag) => {
     try {
       await updateTagApi(tagToUpdate.id, { name: tagToUpdate.name, color: tagToUpdate.color });
@@ -266,6 +332,8 @@ export const useTags = (enabled: boolean) => {
     tagsLoading,
     addTag,
     delTag,
+    archiveTag,
+    restoreTag,
     updateTag,
     setTags
   };

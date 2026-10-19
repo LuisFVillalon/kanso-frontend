@@ -264,7 +264,6 @@ const useNotesStats = (notes: Note[], noteTags: TagStats[]) => {
 
   const todayStr = toLocalDateStr(now);
   const todayTimeTotals = useNoteTimeTotalsForRange(todayStr, todayStr);
-  const todayTotalTimeSpent = Object.values(todayTimeTotals).reduce((sum, s) => sum + s, 0);
 
   // Current calendar month and year, local time — same day-boundary
   // approximation the week bucketing above uses.
@@ -285,6 +284,9 @@ const useNotesStats = (notes: Note[], noteTags: TagStats[]) => {
   // Wedge color follows the note's first tag, same as everywhere else in the
   // card. buildTimeCategories already does exactly this given a totals map.
   const todayNoteCategories = buildTimeCategories(notes, todayTimeTotals);
+  // Summed over `notes` rather than every key in the totals map, so a note
+  // archived since the totals were fetched stops counting immediately.
+  const todayTotalTimeSpent = todayNoteCategories.reduce((sum, c) => sum + c.count, 0);
   // Distinct tag names on the notes worked on today, most-used first — the
   // compact tile lists just these names (no counts) beside the donut.
   const todayTagCount = new Map<string, { color: string; count: number }>();

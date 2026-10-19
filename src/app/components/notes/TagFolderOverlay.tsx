@@ -16,6 +16,7 @@ interface TagFolderOverlayProps {
   allTags: Tag[];
   onUpdate: (id: number, changes: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) => void | Promise<boolean>;
   onDeleteNote: (id: number) => void;
+  onArchiveNote?: (id: number) => void;
   onClose: () => void;
   /**
    * When provided, picking a note closes the overlay and hands the note to
@@ -34,6 +35,7 @@ const TagFolderOverlay: React.FC<TagFolderOverlayProps> = ({
   allTags,
   onUpdate,
   onDeleteNote,
+  onArchiveNote,
   onClose,
   onSelectNote,
 }) => {
@@ -146,6 +148,7 @@ const TagFolderOverlay: React.FC<TagFolderOverlayProps> = ({
                     }
                   }}
                   onDelete={onDeleteNote}
+                  onArchive={onArchiveNote}
                 />
               ))}
             </div>

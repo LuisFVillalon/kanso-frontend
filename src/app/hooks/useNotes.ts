@@ -5,8 +5,11 @@ import {
   createNote as apiCreateNote,
   updateNote as apiUpdateNote,
   deleteNote as apiDeleteNote,
+  archiveNote as apiArchiveNote,
   reapStaleNoteSessions,
+  describeError,
 } from '@/app/lib/backend-api';
+import { useToast } from '@/app/context/ToastContext';
 
 /**
  * @param enabled - Set false to skip the initial fetch (e.g. no signed-in
@@ -14,6 +17,7 @@ import {
  * gates this on auth so pages outside the signed-in app never fire it.
  */
 export const useNotes = (enabled: boolean) => {
+  const showToast = useToast();
   const [notes, setNotes] = useState<Note[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,5 +192,59 @@ export const useNotes = (enabled: boolean) => {
     }
   }, []);
 
-  return { notes, isLoading, error, addNote, updateNote, deleteNote, discardDraft, pendingNoteIds };
+  const archiveNote = useCallback(async (id: number) => {
+    if (pendingRef.current.has(id)) return;
+    const creating = draftCreating.current.get(id);
+    const realId = draftRealId.current.get(id);
+    // An untouched draft was never saved, so there is nothing to archive.
+    if (isDraftId(id) && !creating && realId === undefined) {
+      discardDraft(id);
+      return;
+    }
+
+    pendingRef.current.add(id);
+    setPendingNoteIds(new Set(pendingRef.current));
+
+    const index = notesRef.current.findIndex(note => note.id === id);
+    const archived = notesRef.current[index];
+    setNotes(prev => prev.filter(note => note.id !== id));
+
+    try {
+      const backendId = creating ? (await creating).id : realId ?? id;
+      await apiArchiveNote(backendId);
+      showToast('Note archived. You can restore it from the Archive page.', 'info');
+    } catch (err) {
+      if (archived) {
+        setNotes(prev => {
+          if (prev.some(note => note.id === id)) return prev;
+          const next = [...prev];
+          next.splice(index, 0, archived);
+          return next;
+        });
+      }
+      showToast(describeError(err, "Couldn't archive the note, so it has been restored."));
+    } finally {
+      pendingRef.current.delete(id);
+      setPendingNoteIds(new Set(pendingRef.current));
+    }
+  }, [discardDraft, showToast]);
+
+  // Puts a note restored from the Archive page back into the active list.
+  const restoreNote = useCallback((restored: Note) => {
+    setNotes(prev => [restored, ...prev.filter(note => note.id !== restored.id)]);
+  }, []);
+
+  // Strips a permanently deleted tag from every note still carrying it.
+  const removeTagFromNotes = useCallback((tagId: number) => {
+    setNotes(prev =>
+      prev.map(note =>
+        note.tags.some(t => t.id === tagId) ? { ...note, tags: note.tags.filter(t => t.id !== tagId) } : note,
+      ),
+    );
+  }, []);
+
+  return {
+    notes, isLoading, error, addNote, updateNote, deleteNote, archiveNote, restoreNote, removeTagFromNotes,
+    discardDraft, pendingNoteIds,
+  };
 };

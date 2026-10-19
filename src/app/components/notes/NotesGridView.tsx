@@ -13,6 +13,7 @@ interface NotesGridViewProps {
   activeNoteId: number | null;
   onSelectNote: (note: Note) => void;
   onDeleteNote: (id: number) => void;
+  onArchiveNote?: (id: number) => void;
   onFolderClick?: (tag: Tag, notes: Note[]) => void;
   /** Use a wider responsive column count (for full-width contexts like TaskManager). */
   wide?: boolean;
@@ -26,6 +27,7 @@ const NotesGridView: React.FC<NotesGridViewProps> = ({
   activeNoteId,
   onSelectNote,
   onDeleteNote,
+  onArchiveNote,
   onFolderClick,
   wide = false,
   tagFilter,
@@ -52,7 +54,12 @@ const NotesGridView: React.FC<NotesGridViewProps> = ({
     return map;
   }, [notes, activeTags]);
 
-  const untaggedNotes = useMemo(() => notes.filter(n => n.tags.length === 0), [notes]);
+  // Notes whose only tags are archived (absent from allTags) get no folder,
+  // so they sit with the untagged notes instead of vanishing from the grid.
+  const untaggedNotes = useMemo(() => {
+    const folderTagIds = new Set(allTags.map(t => t.id));
+    return notes.filter(n => !n.tags.some(t => folderTagIds.has(t.id)));
+  }, [notes, allTags]);
 
   const handleFolderClick = (tag: Tag) => {
     if (onFolderClick) {
@@ -96,6 +103,7 @@ const NotesGridView: React.FC<NotesGridViewProps> = ({
             isActive={note.id === activeNoteId}
             onClick={() => onSelectNote(note)}
             onDelete={onDeleteNote}
+            onArchive={onArchiveNote}
           />
         ))}
       </div>
@@ -118,6 +126,7 @@ const NotesGridView: React.FC<NotesGridViewProps> = ({
                   isActive={note.id === activeNoteId}
                   onClick={() => onSelectNote(note)}
                   onDelete={onDeleteNote}
+                  onArchive={onArchiveNote}
                 />
               ))}
             </div>

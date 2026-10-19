@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, FolderPen, FolderPlus, Loader2 } from 'lucide-react';
+import { X, Trash2, FolderPen, FolderPlus, Loader2, Archive } from 'lucide-react';
 import { Tag } from '@/app/types/task';
 import { THEME_ACCENT_COLORS } from '@/app/lib/theme';
 import ColorSwatchPicker from '@/app/components/common/ColorSwatchPicker';
@@ -10,6 +10,7 @@ interface EditTagModalProps {
   onClose: () => void;
   allTags: Tag[];
   onDeleteTag?: (tag: Tag) => void | Promise<boolean>;
+  onArchiveTag?: (tag: Tag) => void | Promise<boolean>;
   onEditTag?: (tag: Tag) => void | Promise<boolean>;
   onCreateTag?: () => void;
 }
@@ -19,6 +20,7 @@ const EditTagModal: React.FC<EditTagModalProps> = ({
   onClose,
   allTags,
   onDeleteTag,
+  onArchiveTag,
   onEditTag,
   onCreateTag
 }) => {
@@ -92,6 +94,9 @@ const EditTagModal: React.FC<EditTagModalProps> = ({
           </div>
         </div>
         <div className="p-5">
+          {allTags.length === 0 && (
+            <p className="text-sm text-text-muted text-center">No active tags. Archived tags live on the Archive page.</p>
+          )}
           <div className="grid grid-cols-3 gap-3">
             {allTags.map((t) => (
               <div key={t.id} className="relative group">
@@ -112,6 +117,19 @@ const EditTagModal: React.FC<EditTagModalProps> = ({
                 >
                   <FolderPen className="w-3 h-3" />
                 </button>
+                {/* Archive — bottom-right */}
+                {onArchiveTag && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onArchiveTag(t); }}
+                    className="absolute -bottom-2 -right-2 p-1.5 rounded-full border border-border text-text-secondary opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all hover:scale-110"
+                    style={{ backgroundColor: 'var(--tm-surface)', boxShadow: 'var(--tm-shadow-md)' }}
+                    title="Archive tag"
+                    aria-label={`Archive ${t.name}`}
+                  >
+                    <Archive className="w-3 h-3" />
+                  </button>
+                )}
                 {/* Delete — top-right */}
                 <button
                   type="button"

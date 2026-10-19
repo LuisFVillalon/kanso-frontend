@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FileText, LayoutGrid, FolderClosed } from 'lucide-react';
 import NoteCard from '@/app/components/notes/NoteCard';
 import NotesGridView from '@/app/components/notes/NotesGridView';
@@ -17,6 +17,7 @@ interface NotesPanelProps {
   noteEditorOverlay: Note | null;
   onUpdateNote: (id: number, changes: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) => void | Promise<boolean>;
   onDeleteNote: (id: number) => void;
+  onArchiveNote: (id: number) => void;
   onEditorChange: (note: Note | null) => void;
   /** User-adjustable scroll-area height in px (overrides the default responsive height). */
   heightPx?: number | null;
@@ -47,6 +48,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
   noteEditorOverlay,
   onUpdateNote,
   onDeleteNote,
+  onArchiveNote,
   onEditorChange,
   heightPx,
   isLoading,
@@ -63,7 +65,12 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
     profile.notesViewMode as ViewMode | null,
     next => { onSaveProfile({ ...profile, notesViewMode: next }); },
   );
-  const [notesFolderOverlay, setNotesFolderOverlay] = useState<{ tag: Tag; notes: Note[] } | null>(null);
+  const [notesFolderOverlay, setNotesFolderOverlay] = useState<Tag | null>(null);
+  // Read live so notes archived or deleted from inside the open folder leave it.
+  const folderNotes = useMemo(
+    () => (notesFolderOverlay ? notes.filter(n => n.tags.some(t => t.id === notesFolderOverlay.id)) : []),
+    [notes, notesFolderOverlay],
+  );
 
   return (
     <div className="split-notes relative flex flex-col space-y-2 sm:space-y-3">
@@ -125,6 +132,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
                     isActive={note.id === activeNoteId}
                     onClick={() => { setActiveNoteId(note.id); onEditorChange(note); }}
                     onDelete={onDeleteNote}
+                    onArchive={onArchiveNote}
                     deleting={pendingNoteIds?.has(note.id)}
                   />
                 ))}
@@ -136,7 +144,8 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
                 activeNoteId={activeNoteId}
                 onSelectNote={note => { setActiveNoteId(note.id); onEditorChange(note); }}
                 onDeleteNote={onDeleteNote}
-                onFolderClick={(tag, folderNotes) => setNotesFolderOverlay({ tag, notes: folderNotes })}
+                onArchiveNote={onArchiveNote}
+                onFolderClick={tag => setNotesFolderOverlay(tag)}
                 wide
                 tagFilter={tagFilter}
               />
@@ -147,12 +156,13 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
 
       {notesFolderOverlay && (
         <TagFolderOverlay
-          tag={notesFolderOverlay.tag}
-          notes={notesFolderOverlay.notes}
+          tag={notesFolderOverlay}
+          notes={folderNotes}
           activeNoteId={activeNoteId}
           allTags={tags}
           onUpdate={onUpdateNote}
           onDeleteNote={onDeleteNote}
+          onArchiveNote={onArchiveNote}
           onClose={() => setNotesFolderOverlay(null)}
         />
       )}

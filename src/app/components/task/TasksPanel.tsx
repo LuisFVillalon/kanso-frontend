@@ -10,6 +10,7 @@ interface TasksPanelProps {
   filteredTasks: Task[];
   onToggleComplete: (id: number) => void;
   onDeleteTask: (task: Task) => void;
+  onArchiveTask: (task: Task) => void;
   onUpdatePriority: (taskId: number, priority: number | null) => void;
   onEditTask: (task: Task) => void;
   activeTaskCount: number;
@@ -25,6 +26,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   filteredTasks,
   onToggleComplete,
   onDeleteTask,
+  onArchiveTask,
   onUpdatePriority,
   onEditTask,
   activeTaskCount,
@@ -59,6 +61,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
               onToggleComplete={onToggleComplete}
               tags={tags}
               onDeleteTask={onDeleteTask}
+              onArchiveTask={onArchiveTask}
               onUpdatePriority={onUpdatePriority}
               onEditTask={onEditTask}
               activeTaskCount={activeTaskCount}

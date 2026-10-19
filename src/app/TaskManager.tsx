@@ -73,8 +73,8 @@ const TaskManager: React.FC = () => {
     router.replace('/login');
   };
 
-  const { tasks, isLoading, toggleComplete, addTask, deleteTask, updateTask, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
-  const { tags, tagsLoading, addTag, delTag, updateTag } = useTagsContext();
+  const { tasks, isLoading, toggleComplete, addTask, deleteTask, archiveTask, updateTask, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+  const { tags, tagsLoading, addTag, delTag, archiveTag, updateTag } = useTagsContext();
 
   const updatePriority = async (taskId: number, priority: number | null) => {
     const task = tasks.find(t => t.id === taskId);
@@ -151,7 +151,7 @@ const TaskManager: React.FC = () => {
   const { habits, habitsLoading, toggle: toggleHabit, toggleDate: toggleHabitDate, pendingHabitIds, refetch: refetchHabits } = useHabitsContext();
   const historyHabit = habits.find(h => h.id === state.historyHabitId) ?? null;
 
-  const { notes: allNotes, isLoading: notesLoading, addNote, deleteNote, updateNote, discardDraft, pendingNoteIds } = useNotesContext();
+  const { notes: allNotes, isLoading: notesLoading, addNote, deleteNote, archiveNote, updateNote, discardDraft, pendingNoteIds } = useNotesContext();
   // Only the id is held in state; the note itself is derived live from
   // allNotes on every render so edits (title/content debounce, tag toggles)
   // always flow straight through — no separate copy to fall out of sync or
@@ -170,6 +170,18 @@ const TaskManager: React.FC = () => {
       return next?.id ?? null;
     });
   }, [discardDraft]);
+
+  const handleArchiveNote = (id: number) => {
+    // Close the overlay first so the note can't pop back open if it's
+    // restored later while its id is still held here.
+    if (noteEditorOverlayId === id) setNoteEditorOverlay(null);
+    archiveNote(id);
+  };
+
+  const handleArchiveTag = (tag: Tag) => {
+    state.setSelectedTags(prev => prev.filter(t => t.id !== tag.id));
+    return archiveTag(tag);
+  };
 
   const noteTags = useMemo(() => {
     const map: Record<number, { name: string; color: string; count: number }> = {};
@@ -284,6 +296,7 @@ const TaskManager: React.FC = () => {
         onNewNote={async () => { const note = await addNote(); setNoteEditorOverlay(note); }}
         onViewNotes={() => router.push('/notes')}
         onViewCalendar={() => router.push('/calendar')}
+        onViewArchive={() => router.push('/archive')}
         onEditTag={() => handlers.openEditTagModal(tags[0])}
         onEditHabit={() => state.setShowManageHabitsModal(true)}
         menuCollapsed={!state.taskSidebarOpen}
@@ -369,6 +382,7 @@ const TaskManager: React.FC = () => {
                   filteredTasks={filteredTasks}
                   onToggleComplete={toggleComplete}
                   onDeleteTask={deleteTask}
+                  onArchiveTask={archiveTask}
                   onUpdatePriority={updatePriority}
                   onEditTask={openEditTaskModal}
                   activeTaskCount={activeTaskCount}
@@ -386,6 +400,7 @@ const TaskManager: React.FC = () => {
                   noteEditorOverlay={noteEditorOverlay}
                   onUpdateNote={updateNote}
                   onDeleteNote={deleteNote}
+                  onArchiveNote={handleArchiveNote}
                   onEditorChange={setNoteEditorOverlay}
                   heightPx={panelHeightPx}
                   isLoading={notesLoading}
@@ -433,6 +448,7 @@ const TaskManager: React.FC = () => {
         showEditTagModal={state.showEditTagModal}
         onCloseEditTagModal={() => { state.setShowEditTagModal(false); state.setEditingTag(null); }}
         onDeleteTag={handlers.handleDeleteTag}
+        onArchiveTag={handleArchiveTag}
         onEditTag={handlers.handleEditTag}
         onOpenCreateTag={() => state.setShowCreateTagModal(true)}
         // Create habit

@@ -137,6 +137,22 @@ export function taskToEditForm(task: Task, overrides: Partial<EditTaskForm> = {}
   };
 }
 
+/** Ids of `rootId` and every task nested under it (subtasks, their subtasks, …). */
+export function subtaskTreeIds(tasks: Pick<Task, 'id' | 'parent_task_id'>[], rootId: number): Set<number> {
+  const ids = new Set([rootId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const t of tasks) {
+      if (t.parent_task_id != null && ids.has(t.parent_task_id) && !ids.has(t.id)) {
+        ids.add(t.id);
+        grew = true;
+      }
+    }
+  }
+  return ids;
+}
+
 export const countTasksByTag = (tasks: Task[]) => {
   const map: Record<number, { name: string; color: string; count: number }> = {};
   tasks.forEach(task => {

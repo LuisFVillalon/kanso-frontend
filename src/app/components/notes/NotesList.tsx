@@ -18,6 +18,7 @@ interface NotesListProps {
   onNewNote: () => void | Promise<void>;
   onUpdateNote: (id: number, changes: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) => void | Promise<boolean>;
   onDeleteNote: (id: number) => void;
+  onArchiveNote: (id: number) => void;
   pendingNoteIds?: Set<number>;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
@@ -36,12 +37,13 @@ const NotesList: React.FC<NotesListProps> = ({
   onNewNote,
   onUpdateNote,
   onDeleteNote,
+  onArchiveNote,
   pendingNoteIds,
   viewMode,
   onViewModeChange,
 }) => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('recent');
-  const [tagFolderOverlay, setTagFolderOverlay] = useState<{ tag: Tag; notes: Note[] } | null>(null);
+  const [tagFolderOverlay, setTagFolderOverlay] = useState<Tag | null>(null);
   const [creatingNote, setCreatingNote] = useState(false);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
@@ -74,15 +76,27 @@ const NotesList: React.FC<NotesListProps> = ({
     }
   };
 
+  // A tag archived while selected stops filtering — it's no longer offered here.
+  const activeSelectedTags = useMemo(
+    () => selectedTags.filter(sel => allTags.some(t => t.id === sel.id)),
+    [selectedTags, allTags],
+  );
+
   const sortedNotes = useMemo(() => {
-    const filtered = selectedTags.length === 0
+    const filtered = activeSelectedTags.length === 0
       ? notes
-      : notes.filter(note => note.tags.some(t => selectedTags.some(sel => sel.id === t.id)));
+      : notes.filter(note => note.tags.some(t => activeSelectedTags.some(sel => sel.id === t.id)));
     const sorted = [...filtered].sort(
       (a, b) => new Date(a.updated_date).getTime() - new Date(b.updated_date).getTime(),
     );
     return sortOrder === 'recent' ? sorted.reverse() : sorted;
-  }, [notes, sortOrder, selectedTags]);
+  }, [notes, sortOrder, activeSelectedTags]);
+
+  // Read live so notes archived or deleted from inside the open folder leave it.
+  const folderNotes = useMemo(
+    () => (tagFolderOverlay ? sortedNotes.filter(n => n.tags.some(t => t.id === tagFolderOverlay.id)) : []),
+    [sortedNotes, tagFolderOverlay],
+  );
 
   return (
     <div className="relative flex flex-col h-full">
@@ -133,20 +147,20 @@ const NotesList: React.FC<NotesListProps> = ({
             onClick={() => setTagFilterOpen(prev => !prev)}
             className="relative flex items-center justify-center w-8 h-8 rounded-lg border transition-colors flex-shrink-0"
             style={{
-              borderColor: selectedTags.length > 0 ? 'var(--tm-accent)' : 'var(--tm-border)',
-              color: selectedTags.length > 0 ? 'var(--tm-accent)' : 'var(--tm-text-muted)',
+              borderColor: activeSelectedTags.length > 0 ? 'var(--tm-accent)' : 'var(--tm-border)',
+              color: activeSelectedTags.length > 0 ? 'var(--tm-accent)' : 'var(--tm-text-muted)',
             }}
             title="Filter by tag"
             aria-label="Filter by tag"
-            aria-pressed={selectedTags.length > 0}
+            aria-pressed={activeSelectedTags.length > 0}
           >
             <Filter className="w-3.5 h-3.5" />
-            {selectedTags.length > 0 && (
+            {activeSelectedTags.length > 0 && (
               <span
                 className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[9px] font-bold leading-none"
                 style={{ backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)' }}
               >
-                {selectedTags.length}
+                {activeSelectedTags.length}
               </span>
             )}
           </button>
@@ -180,7 +194,7 @@ const NotesList: React.FC<NotesListProps> = ({
                   );
                 })}
               </div>
-              {selectedTags.length > 0 && (
+              {activeSelectedTags.length > 0 && (
                 <button
                   onClick={() => setSelectedTags([])}
                   className="text-[10px] font-medium text-text-muted hover:text-text-primary transition-colors text-center pt-0.5"
@@ -231,9 +245,9 @@ const NotesList: React.FC<NotesListProps> = ({
               <FileText className="w-6 h-6 text-text-muted" />
             </div>
             <p className="text-sm font-medium text-text-secondary">
-              {searchTerm || selectedTags.length > 0 ? 'No notes match your filters' : 'No notes yet'}
+              {searchTerm || activeSelectedTags.length > 0 ? 'No notes match your filters' : 'No notes yet'}
             </p>
-            {!searchTerm && selectedTags.length === 0 && (
+            {!searchTerm && activeSelectedTags.length === 0 && (
               <p className="text-xs text-text-muted mt-1">Click New Note to get started</p>
             )}
           </div>
@@ -249,6 +263,7 @@ const NotesList: React.FC<NotesListProps> = ({
                 isActive={note.id === activeNoteId}
                 onClick={() => onSelectNote(note)}
                 onDelete={onDeleteNote}
+                onArchive={onArchiveNote}
                 deleting={pendingNoteIds?.has(note.id)}
               />
             ))}
@@ -260,20 +275,22 @@ const NotesList: React.FC<NotesListProps> = ({
             activeNoteId={activeNoteId}
             onSelectNote={onSelectNote}
             onDeleteNote={onDeleteNote}
-            onFolderClick={(tag, folderNotes) => setTagFolderOverlay({ tag, notes: folderNotes })}
-            tagFilter={selectedTags}
+            onArchiveNote={onArchiveNote}
+            onFolderClick={tag => setTagFolderOverlay(tag)}
+            tagFilter={activeSelectedTags}
           />
         )}
       </div>
 
       {tagFolderOverlay && (
         <TagFolderOverlay
-          tag={tagFolderOverlay.tag}
-          notes={tagFolderOverlay.notes}
+          tag={tagFolderOverlay}
+          notes={folderNotes}
           activeNoteId={activeNoteId}
           allTags={allTags}
           onUpdate={onUpdateNote}
           onDeleteNote={onDeleteNote}
+          onArchiveNote={onArchiveNote}
           onClose={() => setTagFolderOverlay(null)}
           onSelectNote={onSelectNote}
         />

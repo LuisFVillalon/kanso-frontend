@@ -28,6 +28,8 @@ export interface Tag {
   id: number;
   name: string;
   color: string;
+  /** When the tag was archived (hidden from pickers/filters/folders); null while active. */
+  archived_at?: string | null;
 }
 
 export type FilterType = 'all' | 'active' | 'completed' | 'priority' | 'created' | 'duration';
@@ -50,6 +52,8 @@ export interface Task {
   parent_task_id?: number | null;
   /** Supabase Auth UUID — set server-side, never supplied by the client. */
   user_id?: string | null;
+  /** When the task was archived; null while active. */
+  archived_at?: string | null;
 }
 
 export interface BaseTaskForm {
