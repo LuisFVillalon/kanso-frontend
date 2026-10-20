@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, GalleryHorizontal, LayoutGrid } from 'lucide-react';
+import { CalendarRange, ChevronLeft, GalleryHorizontal, LayoutGrid } from 'lucide-react';
 import { useYearCalendarData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -10,12 +10,13 @@ import MonthCalendar from './MonthCalendar';
 import MonthCarousel from './MonthCarousel';
 import DaySummaryPanel from './DaySummaryPanel';
 import DayDetailModal from './DayDetailModal';
+import WeekView from './WeekView';
 
 const CalendarView: React.FC = () => {
   const { year, dayData, habits, loading } = useYearCalendarData();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [carouselDate, setCarouselDate] = useState<Date | null>(() => new Date());
-  const [viewMode, setViewMode] = useState<'carousel' | 'all'>('all');
+  const [viewMode, setViewMode] = useState<'week' | 'carousel' | 'all'>('all');
 
   const todayStr = toLocalDateStr(new Date());
 
@@ -30,9 +31,23 @@ const CalendarView: React.FC = () => {
         </Link>
         <span className="text-text-muted select-none">/</span>
         <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Calendar</h1>
-        <span className="text-sm text-text-muted ml-1">{year}</span>
+        {viewMode !== 'week' && <span className="text-sm text-text-muted ml-1">{year}</span>}
 
         <div className="ml-auto flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">
+          <button
+            type="button"
+            onClick={() => setViewMode('week')}
+            aria-pressed={viewMode === 'week'}
+            title="Week view"
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+              viewMode === 'week'
+                ? 'bg-surface-raised text-text-primary shadow-sm'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            <CalendarRange className="w-4 h-4" />
+            <span className="hidden sm:inline">Week</span>
+          </button>
           <button
             type="button"
             onClick={() => setViewMode('carousel')}
@@ -65,7 +80,9 @@ const CalendarView: React.FC = () => {
       </div>
 
       <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 pb-6 sm:pb-10">
-        {viewMode === 'carousel' ? (
+        {viewMode === 'week' ? (
+          <WeekView />
+        ) : viewMode === 'carousel' ? (
           <div className="flex flex-col lg:flex-row gap-4 items-stretch">
             <div className="lg:flex-1 lg:min-w-0">
               <MonthCarousel

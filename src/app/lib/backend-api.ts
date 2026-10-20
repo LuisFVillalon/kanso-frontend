@@ -11,6 +11,7 @@
 import { Note, NoteSession } from "../types/notes";
 import { Tag, Task } from "../types/task";
 import { CalendarSettings } from "../types/calendar";
+import { CalendarActivity } from "../types/activity";
 import { Habit, HabitHistoryEntry } from "../types/habit";
 import { Profile } from "../types/profile";
 import { Drawing } from "../types/drawing";
@@ -457,6 +458,26 @@ export async function updateCalendarSettings(
     body: JSON.stringify(changes),
   });
   await assertOk(res, "updateCalendarSettings");
+  return res.json();
+}
+
+// ── Calendar activity (week view, reports) ──────────────────────────────────
+
+/**
+ * Fetches what the user planned and did across [startDate, endDate]
+ * (inclusive local "YYYY-MM-DD" days, at most 366): tasks due and completed,
+ * closed note sessions, and habit completions. Sends the browser's IANA time
+ * zone so the server matches UTC completion/session times to our local days.
+ */
+export async function fetchCalendarActivity(startDate: string, endDate: string): Promise<CalendarActivity> {
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams({
+    start_date: startDate,
+    end_date: endDate,
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+  const res = await fetch(`${API_BASE_URL}/get-calendar-activity?${params}`, { headers });
+  await assertOk(res, "fetchCalendarActivity");
   return res.json();
 }
 
