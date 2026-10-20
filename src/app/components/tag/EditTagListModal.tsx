@@ -160,7 +160,10 @@ const EditTagModal: React.FC<EditTagModalProps> = ({
             </span>
             ?
           </p>
-          <p className="text-center text-sm text-text-muted">This action cannot be undone.</p>
+          <p className="text-center text-sm text-text-muted">
+            It moves to Recently deleted and is hidden from every task, note and habit carrying it.
+            Restore it within 30 days to bring it back on all of them.
+          </p>
           <div className="flex gap-3 pt-1">
             <button
               type="button"

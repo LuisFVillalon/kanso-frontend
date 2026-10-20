@@ -10,6 +10,7 @@ import {
   updateWholeTask,
   archiveTask as archiveTaskApi,
   archiveTag as archiveTagApi,
+  restoreTask as restoreTaskApi,
   describeError,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
@@ -33,8 +34,8 @@ export const useTasks = (enabled: boolean) => {
   // state so the UI can disable/dim just the item that's in flight.
   const pendingRef = useRef<Set<number>>(new Set());
   const [pendingTaskIds, setPendingTaskIds] = useState<Set<number>>(new Set());
-  // Bumped only once the server has confirmed a completion toggle or an
-  // archive (not on the optimistic local update) — consumers like
+  // Bumped only once the server has confirmed a completion toggle, an
+  // archive or a delete (not on the optimistic local update) — consumers like
   // TaskDebriefPanel key their refetch off this instead of `tasks` so they
   // don't race the in-flight request and refetch before it has committed.
   const [completionSyncToken, setCompletionSyncToken] = useState(0);
@@ -134,27 +135,52 @@ export const useTasks = (enabled: boolean) => {
     }
   }; 
 
+  // Puts tasks restored from the Archive or Recently deleted page (or by an
+  // Undo) back into the active list.
+  const restoreTasks = (restored: Task[]) => {
+    const ids = new Set(restored.map(t => t.id));
+    setTasks(prev => [...prev.filter(t => !ids.has(t.id)), ...restored].sort((a, b) => b.id - a.id));
+    setCompletionSyncToken(v => v + 1);
+  };
+
+  // Brings a just-deleted task back from the trash with the subtasks that
+  // went with it (server-side too), all as they were.
+  const undoDelete = async (rootId: number, removed: Task[]) => {
+    try {
+      const restored = await restoreTaskApi(rootId);
+      restoreTasks([restored, ...removed.filter(t => t.id !== rootId)]);
+      showToast('Task restored.', 'success');
+    } catch (err) {
+      console.error('Undo delete failed:', err);
+      showToast(describeError(err, "Couldn't restore the task. You can still restore it from Recently deleted."));
+    }
+  };
+
+  // Deleting a task moves it and its subtasks to the trash (server-side), so
+  // the whole subtree leaves the list together.
   const deleteTask = async (delTask: Task) => {
     if (pendingRef.current.has(delTask.id)) return false;
     pendingRef.current.add(delTask.id);
     setPendingTaskIds(new Set(pendingRef.current));
 
     // Optimistic update: remove immediately so the UI responds instantly.
-    setTasks(prev => prev.filter(task => task.id !== delTask.id));
+    const subtreeIds = subtaskTreeIds(tasks, delTask.id);
+    const removed = tasks.filter(t => subtreeIds.has(t.id));
+    setTasks(prev => prev.filter(t => !subtreeIds.has(t.id)));
 
     try {
       await onDelete(delTask.id);
+      setCompletionSyncToken(v => v + 1);
+      showToast('Task moved to Recently deleted. You can restore it for 30 days.', 'info', {
+        label: 'Undo',
+        onClick: () => undoDelete(delTask.id, removed),
+      });
       return true;
     } catch (err) {
-      // Rollback: restore the task at its original position.
+      // Rollback: put the subtree back, sorted by id to preserve list order.
       console.error('Delete failed:', err);
-      setTasks(prev => {
-        // Re-insert in sorted order by id to preserve list order.
-        const next = [...prev, delTask];
-        next.sort((a, b) => b.id - a.id);
-        return next;
-      });
-      showToast("Couldn't delete the task, so it has been restored.");
+      setTasks(prev => [...prev, ...removed].sort((a, b) => b.id - a.id));
+      showToast(describeError(err, "Couldn't delete the task, so it has been restored."));
       return false;
     } finally {
       pendingRef.current.delete(delTask.id);
@@ -187,13 +213,6 @@ export const useTasks = (enabled: boolean) => {
       pendingRef.current.delete(archTask.id);
       setPendingTaskIds(new Set(pendingRef.current));
     }
-  };
-
-  // Puts tasks restored from the Archive page back into the active list.
-  const restoreTasks = (restored: Task[]) => {
-    const ids = new Set(restored.map(t => t.id));
-    setTasks(prev => [...prev.filter(t => !ids.has(t.id)), ...restored].sort((a, b) => b.id - a.id));
-    setCompletionSyncToken(v => v + 1);
   };
 
   const updateTask = async (id: number, updatedTask: EditTaskForm) => {

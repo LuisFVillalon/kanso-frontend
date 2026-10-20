@@ -18,6 +18,7 @@ import { Drawing } from "../types/drawing";
 import { DailyDebriefReport } from "../types/debrief";
 import { toLocalDateStr, toLocalTimeStr } from "../utils/dateUtils";
 import { LearningResourcesResponse } from "../types/learningResources";
+import { TrashItem, TrashKind } from "../types/trash";
 import type { StructuredNoteContent } from "../utils/noteContentExtractor";
 import { supabase } from "./supabase";
 
@@ -71,15 +72,19 @@ async function assertOk(res: Response, context: string): Promise<void> {
 /** Query string for the list endpoints: active rows by default, only archived rows with `archived`. */
 const archivedQuery = (archived: boolean) => (archived ? "?archived=true" : "");
 
+/** `?local_date=` with the caller's own calendar day, for habit responses that carry today's completion state. */
+const localDateQuery = () => `?${new URLSearchParams({ local_date: toLocalDateStr(new Date()) })}`;
+
 /**
- * Sets (`archived`) or clears `archived_at` on one of the user's tasks, notes
- * or tags via PATCH /archive-{kind}/{id} or /unarchive-{kind}/{id}, returning
- * the updated record. Both directions are idempotent server-side.
+ * Sets (`archived`) or clears `archived_at` on one of the user's tasks, notes,
+ * tags or habits via PATCH /archive-{kind}/{id} or /unarchive-{kind}/{id},
+ * returning the updated record. Both directions are idempotent server-side.
  */
-async function setArchived<T>(kind: "task" | "note" | "tag", id: number, archived: boolean): Promise<T> {
+async function setArchived<T>(kind: TrashKind, id: number, archived: boolean): Promise<T> {
   const headers = await getAuthHeaders();
   const action = archived ? "archive" : "unarchive";
-  const res = await fetch(`${API_BASE_URL}/${action}-${kind}/${id}`, {
+  const query = kind === "habit" ? localDateQuery() : "";
+  const res = await fetch(`${API_BASE_URL}/${action}-${kind}/${id}${query}`, {
     method: "PATCH",
     headers,
   });
@@ -136,7 +141,7 @@ export async function createTask(task: {
   return res.json();
 }
 
-/** Deletes a task by ID. Throws on any non-2xx response. */
+/** Moves a task and its subtasks to the trash, restorable for 30 days. Throws on any non-2xx response. */
 export async function onDelete(id: number): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/del-task/${id}`, {
@@ -215,7 +220,7 @@ export async function updateTag(id: number, tag: { name: string; color: string }
   return res.json();
 }
 
-/** Deletes a tag by ID. Throws on any non-2xx response. */
+/** Moves a tag to the trash; items carrying it hide it until it's restored. Throws on any non-2xx response. */
 export async function onDeleteTag(id: number): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/del-tag/${id}`, {
@@ -280,7 +285,7 @@ export async function updateNote(
   return res.json();
 }
 
-/** Deletes a note by ID and returns the deleted record. */
+/** Moves a note to the trash, restorable for 30 days, and returns the deleted record. */
 export async function deleteNote(id: number): Promise<Note> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/del-note/${id}`, {
@@ -484,7 +489,8 @@ export async function fetchCalendarActivity(startDate: string, endDate: string):
 // ── Habits ────────────────────────────────────────────────────────────────────
 
 /**
- * Fetches all habits for the authenticated user, including today's completion state.
+ * Fetches the authenticated user's active habits (or only the archived ones
+ * when `archived` is set), including today's completion state.
  *
  * Sends our own local date rather than letting the server infer "today" from
  * its own clock — the backend may run in a different timezone (e.g. UTC), so
@@ -492,9 +498,10 @@ export async function fetchCalendarActivity(startDate: string, endDate: string):
  * we logged for our local day read back as not-done-today (streak stays
  * right, but the checkbox / line-through / heatmap cell drop off).
  */
-export async function fetchHabits(): Promise<Habit[]> {
+export async function fetchHabits(archived = false): Promise<Habit[]> {
   const headers = await getAuthHeaders();
   const params = new URLSearchParams({ local_date: toLocalDateStr(new Date()) });
+  if (archived) params.set("archived", "true");
   const res = await fetch(`${API_BASE_URL}/get-habits?${params.toString()}`, { headers });
   await assertOk(res, "fetchHabits");
   return res.json();
@@ -536,7 +543,7 @@ export async function updateHabit(
   return res.json();
 }
 
-/** Deletes a habit (and all its logs via CASCADE). */
+/** Moves a habit to the trash; restoring it within 30 days brings back its logs. */
 export async function deleteHabit(id: number): Promise<Habit> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/del-habit/${id}`, {
@@ -545,6 +552,16 @@ export async function deleteHabit(id: number): Promise<Habit> {
   });
   await assertOk(res, "deleteHabit");
   return res.json();
+}
+
+/** Archives a habit: it leaves the habit list, stats, streak checks and the debrief, keeping its logs. */
+export function archiveHabit(id: number): Promise<Habit> {
+  return setArchived<Habit>("habit", id, true);
+}
+
+/** Restores an archived habit. Returns the updated habit. */
+export function unarchiveHabit(id: number): Promise<Habit> {
+  return setArchived<Habit>("habit", id, false);
 }
 
 /** Fetches logged/not-logged status for the past `days` days (default 30) for a habit. */
@@ -588,6 +605,55 @@ export async function verifyHabitStreaks(): Promise<{ reset_count: number }> {
   });
   await assertOk(res, "verifyHabitStreaks");
   return res.json();
+}
+
+// ── Trash ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetches the user's deleted tasks, notes, tags and habits, newest first,
+ * each with its `purge_at` (30 days after deletion).
+ */
+export async function fetchTrash(): Promise<TrashItem[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-trash`, { headers });
+  await assertOk(res, "fetchTrash");
+  return res.json();
+}
+
+/**
+ * Brings an item back from the trash intact via PATCH /restore-{kind}/{id}
+ * (into the archive if it was archived) and returns it. A task comes back
+ * with the subtasks deleted along with it and any deleted parents above it,
+ * though only the task itself is returned; a tag comes back on every item
+ * it was on.
+ */
+async function restoreFromTrash<T>(kind: TrashKind, id: number): Promise<T> {
+  const headers = await getAuthHeaders();
+  const query = kind === "habit" ? localDateQuery() : "";
+  const res = await fetch(`${API_BASE_URL}/restore-${kind}/${id}${query}`, {
+    method: "PATCH",
+    headers,
+  });
+  await assertOk(res, `restore-${kind}`);
+  return res.json();
+}
+
+export const restoreTask = (id: number) => restoreFromTrash<Task>("task", id);
+export const restoreNote = (id: number) => restoreFromTrash<Note>("note", id);
+export const restoreTag = (id: number) => restoreFromTrash<Tag>("tag", id);
+export const restoreHabit = (id: number) => restoreFromTrash<Habit>("habit", id);
+
+/**
+ * Permanently deletes an item that is in the trash, without waiting out the
+ * 30 days. A task goes with the subtasks deleted along with it.
+ */
+export async function purgeFromTrash(kind: TrashKind, id: number): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/purge-${kind}/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  await assertOk(res, `purge-${kind}`);
 }
 
 // ── Profile ───────────────────────────────────────────────────────────────────

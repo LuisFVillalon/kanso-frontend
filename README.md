@@ -21,7 +21,8 @@ This repository is the web app. kanso is three services, each in its own reposit
 - **Daily debrief**: overdue work, what's due today, whether today's plan fits your available hours, and a short "focus next" list. It's rule-based on the backend; no LLM is involved.
 - **Big-picture calendar**: a year and month view of tasks, habits and notes, a week view that lays out planned and completed tasks, note-editing sessions and habit check-ins on an hourly timeline (click an empty slot to create a task at that time), plus a term tracker with a countdown.
 - **Customizable dashboard**: drag-and-drop, resizable stats widgets; accent colors; notebook page styles; focus mode; and a doodle canvas.
-- **Archive**: archive tasks, notes and tags to hide them from the dashboard, calendar, daily debrief and stats without deleting them. Archived tags disappear from pickers, filters and note folders but stay attached to their tasks and notes. The Archive page lists everything archived, with Restore and Delete permanently, and its Tasks and Notes tabs can be filtered by tag (including archived tags).
+- **Archive**: archive tasks, notes, tags and habits to hide them from the dashboard, calendar, daily debrief and stats without deleting them. Archived tags disappear from pickers, filters and note folders but stay attached to their tasks and notes; archived habits keep their history. The Archive page lists everything archived, with Restore and Delete, and its Tasks and Notes tabs can be filtered by tag (including archived tags).
+- **Recently deleted**: deleting a task, note, tag or habit moves it to Recently deleted for 30 days, with an Undo on the confirmation toast. The Recently deleted page lists them newest first with the days left before each is deleted for good, filters by kind, and offers Restore (back where it was, or to the Archive if it was archived) and Delete forever.
 - **Accounts**: email/password (with a NIST-style password policy) or Google sign-in, plus account settings and account deletion.
 
 ## Architecture
@@ -65,7 +66,7 @@ A few decisions worth calling out:
 src/app/
   page.tsx               # Landing page when signed out, dashboard (TaskManager) when signed in
   TaskManager.tsx        # The dashboard
-  notes/ calendar/ archive/  # /notes, /calendar and /archive pages
+  notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
   components/            # Grouped by domain: task, notes, habit, calendar, stats, settings,

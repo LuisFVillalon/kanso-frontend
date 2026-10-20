@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchHabits, toggleHabitDate, verifyHabitStreaks } from '@/app/lib/backend-api';
+import {
+  fetchHabits,
+  toggleHabitDate,
+  verifyHabitStreaks,
+  deleteHabit as deleteHabitApi,
+  archiveHabit as archiveHabitApi,
+  restoreHabit as restoreHabitApi,
+  describeError,
+} from '@/app/lib/backend-api';
+import { useToast } from '@/app/context/ToastContext';
 import { Habit } from '@/app/types/habit';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 
@@ -9,6 +18,7 @@ import { toLocalDateStr } from '@/app/utils/dateUtils';
  * gates this on auth so pages outside the signed-in app never fire it.
  */
 export function useHabits(enabled: boolean) {
+  const showToast = useToast();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [habitsLoading, setHabitsLoading] = useState(true);
   // Toggles read-modify-write the streak server-side, so overlapping requests
@@ -18,6 +28,13 @@ export function useHabits(enabled: boolean) {
   // state just mirrors it so the UI can show/disable the pending habit.
   const pendingRef = useRef<Set<number>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
+  // Bumped only once the server has confirmed an archive, delete or restore,
+  // so the daily debrief can re-fetch without racing the request.
+  const [syncToken, setSyncToken] = useState(0);
+
+  // Mirrors `habits` so callbacks can read the latest list without a stale closure.
+  const habitsRef = useRef<Habit[]>([]);
+  useEffect(() => { habitsRef.current = habits; }, [habits]);
 
   const load = useCallback(async () => {
     try {
@@ -78,5 +95,68 @@ export function useHabits(enabled: boolean) {
   // calendar — so both surfaces agree on what "today" means and stay in sync.
   const toggle = useCallback((id: number) => toggleDate(id, toLocalDateStr(new Date())), [toggleDate]);
 
-  return { habits, habitsLoading, toggle, toggleDate, pendingHabitIds: pendingIds, refetch: load };
+  // Puts a habit restored from the Archive or Recently deleted page (or by an
+  // Undo) back into the list, in id order like the server returns them.
+  const restoreHabit = useCallback((restored: Habit) => {
+    setHabits(prev => [...prev.filter(h => h.id !== restored.id), restored].sort((a, b) => a.id - b.id));
+    setSyncToken(v => v + 1);
+  }, []);
+
+  // Optimistically drops a habit from the list while `request` runs, putting
+  // it back if the request fails. Returns whether it succeeded.
+  const removeWhile = useCallback(async (habit: Habit, request: () => Promise<unknown>, failure: string) => {
+    if (pendingRef.current.has(habit.id)) return false;
+    pendingRef.current.add(habit.id);
+    setPendingIds(new Set(pendingRef.current));
+    const removed = habitsRef.current.find(h => h.id === habit.id) ?? habit;
+    setHabits(prev => prev.filter(h => h.id !== habit.id));
+    try {
+      await request();
+      setSyncToken(v => v + 1);
+      return true;
+    } catch (err) {
+      console.error('[useHabits] Request failed:', err);
+      setHabits(prev => (prev.some(h => h.id === habit.id) ? prev : [...prev, removed].sort((a, b) => a.id - b.id)));
+      showToast(describeError(err, failure));
+      return false;
+    } finally {
+      pendingRef.current.delete(habit.id);
+      setPendingIds(new Set(pendingRef.current));
+    }
+  }, [showToast]);
+
+  // Brings a just-deleted habit back from the trash with its logs.
+  const undoDelete = useCallback(async (id: number) => {
+    try {
+      restoreHabit(await restoreHabitApi(id));
+      showToast('Habit restored.', 'success');
+    } catch (err) {
+      console.error('[useHabits] Undo delete failed:', err);
+      showToast(describeError(err, "Couldn't restore the habit. You can still restore it from Recently deleted."));
+    }
+  }, [restoreHabit, showToast]);
+
+  const deleteHabit = useCallback(async (habit: Habit) => {
+    const ok = await removeWhile(habit, () => deleteHabitApi(habit.id), "Couldn't delete the habit, so it has been restored.");
+    if (ok) {
+      showToast('Habit moved to Recently deleted. You can restore it for 30 days.', 'info', {
+        label: 'Undo',
+        onClick: () => undoDelete(habit.id),
+      });
+    }
+    return ok;
+  }, [removeWhile, showToast, undoDelete]);
+
+  // Archiving keeps the habit's logs but takes it out of the list, stats,
+  // streak checks and the debrief until it's restored from the Archive page.
+  const archiveHabit = useCallback(async (habit: Habit) => {
+    const ok = await removeWhile(habit, () => archiveHabitApi(habit.id), "Couldn't archive the habit, so it has been restored.");
+    if (ok) showToast('Habit archived. You can restore it from the Archive page.', 'info');
+    return ok;
+  }, [removeWhile, showToast]);
+
+  return {
+    habits, habitsLoading, toggle, toggleDate, pendingHabitIds: pendingIds, refetch: load,
+    deleteHabit, archiveHabit, restoreHabit, syncToken,
+  };
 }
