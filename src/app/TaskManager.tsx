@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-import { createHabit, deleteHabit, describeError, updateHabit } from '@/app/lib/backend-api';
+import { createHabit, describeError, updateHabit } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
 import { Tag, Task } from '@/app/types/task';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
@@ -19,6 +19,7 @@ import { useProfile } from '@/app/hooks/useProfile';
 import { useCalendarSettings } from '@/app/hooks/useCalendarSettings';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import { useMountTransition } from '@/app/hooks/useMountTransition';
+import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
 import { Note } from '@/app/types/notes';
 import { taskToEditForm } from '@/app/utils/taskUtils';
 import DragHandle from '@/app/components/common/DragHandle';
@@ -148,10 +149,17 @@ const TaskManager: React.FC = () => {
     tasks, state.filter, state.sortOrder, state.searchTerm, state.selectedTags,
   );
 
-  const { habits, habitsLoading, toggle: toggleHabit, toggleDate: toggleHabitDate, pendingHabitIds, refetch: refetchHabits } = useHabitsContext();
+  const {
+    habits, habitsLoading, toggle: toggleHabit, toggleDate: toggleHabitDate, pendingHabitIds, refetch: refetchHabits,
+    deleteHabit, archiveHabit, syncToken: habitSyncToken,
+  } = useHabitsContext();
   const historyHabit = habits.find(h => h.id === state.historyHabitId) ?? null;
 
-  const { notes: allNotes, isLoading: notesLoading, addNote, deleteNote, archiveNote, updateNote, discardDraft, pendingNoteIds, archiveSyncToken: noteArchiveSyncToken } = useNotesContext();
+  const {
+    notes: allNotes, isLoading: notesLoading, addNote, deleteNote, archiveNote, updateNote, discardDraft, pendingNoteIds,
+    removeTagFromNotes, archiveSyncToken: noteArchiveSyncToken,
+  } = useNotesContext();
+  const restoreFromTrash = useRestoreFromTrash();
   // Only the id is held in state; the note itself is derived live from
   // allNotes on every render so edits (title/content debounce, tag toggles)
   // always flow straight through — no separate copy to fall out of sync or
@@ -181,6 +189,27 @@ const TaskManager: React.FC = () => {
   const handleArchiveTag = (tag: Tag) => {
     state.setSelectedTags(prev => prev.filter(t => t.id !== tag.id));
     return archiveTag(tag);
+  };
+
+  // A deleted tag is hidden from every item carrying it until it's restored.
+  const handleDeleteTag = async (tag: Tag) => {
+    const deleted = await handlers.handleDeleteTag(tag);
+    if (!deleted) return false;
+    state.setSelectedTags(prev => prev.filter(t => t.id !== tag.id));
+    removeTagFromNotes(tag.id);
+    refetchHabits();
+    showToast('Tag moved to Recently deleted. You can restore it for 30 days.', 'info', {
+      label: 'Undo',
+      onClick: () => {
+        restoreFromTrash('tag', tag.id)
+          .then(() => showToast('Tag restored.', 'success'))
+          .catch(err => {
+            console.error('Undo delete failed:', err);
+            showToast(describeError(err, "Couldn't restore the tag. You can still restore it from Recently deleted."));
+          });
+      },
+    });
+    return true;
   };
 
   const noteTags = useMemo(() => {
@@ -222,16 +251,6 @@ const TaskManager: React.FC = () => {
   }, [allNotes, state.searchTerm, state.selectedTags, state.noteSortOrder]);
 
   // ── Habit handlers ────────────────────────────────────────────────────────────
-
-  const handleDeleteHabit = async (id: number) => {
-    try {
-      await deleteHabit(id);
-      refetchHabits();
-    } catch (err) {
-      console.error('Failed to delete habit:', err);
-      showToast(describeError(err, "Couldn't delete the habit. Please try again."));
-    }
-  };
 
   const handleUpdateHabit = async (id: number, title: string, habitTags: Tag[], estimatedTime?: number | null) => {
     try {
@@ -297,6 +316,7 @@ const TaskManager: React.FC = () => {
         onViewNotes={() => router.push('/notes')}
         onViewCalendar={() => router.push('/calendar')}
         onViewArchive={() => router.push('/archive')}
+        onViewTrash={() => router.push('/trash')}
         onEditTag={() => handlers.openEditTagModal(tags[0])}
         onEditHabit={() => state.setShowManageHabitsModal(true)}
         menuCollapsed={!state.taskSidebarOpen}
@@ -351,7 +371,7 @@ const TaskManager: React.FC = () => {
           <div className={doodleMode ? 'animate-fade-out' : 'animate-fade-in'}>
             {showDebriefPanels && (
               <div className={!doodleMode && !focusMode ? 'animate-fade-in' : 'animate-fade-out'}>
-                <TaskDebriefPanel profile={profile} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken} />
+                <TaskDebriefPanel profile={profile} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
 
                 <CalendarAndStats
                   habits={habits}
@@ -447,7 +467,7 @@ const TaskManager: React.FC = () => {
         editingTag={state.editingTag}
         showEditTagModal={state.showEditTagModal}
         onCloseEditTagModal={() => { state.setShowEditTagModal(false); state.setEditingTag(null); }}
-        onDeleteTag={handlers.handleDeleteTag}
+        onDeleteTag={handleDeleteTag}
         onArchiveTag={handleArchiveTag}
         onEditTag={handlers.handleEditTag}
         onOpenCreateTag={() => state.setShowCreateTagModal(true)}
@@ -473,7 +493,8 @@ const TaskManager: React.FC = () => {
           state.setCreateHabitFromManage(true);
           state.setShowCreateHabitModal(true);
         }}
-        onDeleteHabit={handleDeleteHabit}
+        onDeleteHabit={deleteHabit}
+        onArchiveHabit={archiveHabit}
         onUpdateHabit={handleUpdateHabit}
         onViewHabitHistory={id => { state.setShowManageHabitsModal(false); state.setHistoryFromManageHabits(true); state.setHistoryHabitId(id); }}
         // Habit history

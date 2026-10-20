@@ -63,7 +63,8 @@ interface TaskManagerModalsProps {
   onCloseManageHabitsModal: () => void;
   habits: Habit[];
   onCreateHabitFromManage: () => void;
-  onDeleteHabit: (id: number) => Promise<void>;
+  onDeleteHabit: (habit: Habit) => Promise<boolean>;
+  onArchiveHabit: (habit: Habit) => Promise<boolean>;
   onUpdateHabit: (id: number, title: string, tags: Tag[], estimatedTime?: number | null) => Promise<void>;
   onViewHabitHistory: (id: number) => void;
 
@@ -93,7 +94,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   editingTag, showEditTagModal, onCloseEditTagModal, onDeleteTag, onArchiveTag, onEditTag, onOpenCreateTag,
   showCreateHabitModal, onCloseCreateHabitModal, newHabit, onHabitChange, onSubmitHabit,
   showManageHabitsModal, onCloseManageHabitsModal, habits, onCreateHabitFromManage,
-  onDeleteHabit, onUpdateHabit, onViewHabitHistory,
+  onDeleteHabit, onArchiveHabit, onUpdateHabit, onViewHabitHistory,
   historyHabit, historyShowBackButton, onCloseHabitHistory, onToggleHabitDate,
   showSettings, onCloseSettings, onAccountDeleted, profile, profileLoading, onSaveProfile,
   calendarSettings, calendarSettingsLoading, onSaveCalendarSettings,
@@ -160,6 +161,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         availableTags={tags}
         onCreateHabit={onCreateHabitFromManage}
         onDeleteHabit={onDeleteHabit}
+        onArchiveHabit={onArchiveHabit}
         onUpdateHabit={onUpdateHabit}
         onViewHistory={onViewHabitHistory}
       />

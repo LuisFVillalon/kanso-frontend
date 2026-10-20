@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Flame, Star, Grid2x2Plus, Pencil, Trash2, Save, CalendarDays, Loader2 } from 'lucide-react';
+import { X, Flame, Star, Grid2x2Plus, Pencil, Trash2, Save, CalendarDays, Loader2, Archive } from 'lucide-react';
 import { Habit } from '@/app/types/habit';
 import { Tag } from '@/app/types/task';
 import Modal from '@/app/components/common/Modal';
@@ -11,7 +11,8 @@ interface ManageHabitsModalProps {
   habits: Habit[];
   availableTags?: Tag[];
   onCreateHabit?: () => void;
-  onDeleteHabit?: (id: number) => Promise<void>;
+  onDeleteHabit?: (habit: Habit) => Promise<boolean>;
+  onArchiveHabit?: (habit: Habit) => Promise<boolean>;
   onUpdateHabit?: (id: number, title: string, tags: Tag[], estimatedTime?: number | null) => Promise<void>;
   onViewHistory?: (id: number) => void;
 }
@@ -23,6 +24,7 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
   availableTags = [],
   onCreateHabit,
   onDeleteHabit,
+  onArchiveHabit,
   onUpdateHabit,
   onViewHistory,
 }) => {
@@ -67,20 +69,15 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!onDeleteHabit) return;
-    setDeletingId(id);
+  const confirmDelete = async () => {
+    if (!deletingHabit || !onDeleteHabit) return;
+    setDeletingId(deletingHabit.id);
     try {
-      await onDeleteHabit(id);
+      await onDeleteHabit(deletingHabit);
     } finally {
       setDeletingId(null);
+      setDeletingHabit(null);
     }
-  };
-
-  const confirmDelete = async () => {
-    if (!deletingHabit) return;
-    await handleDelete(deletingHabit.id);
-    setDeletingHabit(null);
   };
 
   return (
@@ -108,7 +105,9 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
 
       <div className="p-5">
         {habits.length === 0 ? (
-          <p className="text-sm text-text-muted text-center py-4">No habits yet. Create one to get started!</p>
+          <p className="text-sm text-text-muted text-center py-4">
+            No habits yet. Create one to get started! Archived habits live on the Archive page.
+          </p>
         ) : (
           <div className="flex flex-col gap-3 max-h-[60vh] overflow-y-auto scrollbar-custom pr-1">
             {habits.map(habit => (
@@ -212,6 +211,16 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
                             <Pencil className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
                           </button>
                         )}
+                        {onArchiveHabit && (
+                          <button
+                            onClick={() => onArchiveHabit(habit)}
+                            className="btn btn-ghost p-1"
+                            title="Archive habit"
+                            aria-label={`Archive ${habit.title}`}
+                          >
+                            <Archive className="w-3.5 h-3.5 text-text-muted hover:text-text-primary" />
+                          </button>
+                        )}
                         {onDeleteHabit && (
                           <button
                             onClick={() => setDeletingHabit(habit)}
@@ -267,7 +276,9 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
             Are you sure you want to delete the habit{' '}
             <span className="font-medium">{deletingHabit.title}</span>?
           </p>
-          <p className="text-center text-sm text-text-muted">This action cannot be undone.</p>
+          <p className="text-center text-sm text-text-muted">
+            It moves to Recently deleted, where you can restore it with its history for 30 days.
+          </p>
           <div className="flex gap-3 pt-1">
             <button
               type="button"

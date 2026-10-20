@@ -3,19 +3,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ChevronLeft, ArchiveRestore, Trash2, Loader2, Archive, Filter, ListChecks, NotebookText, Tags,
+  ChevronLeft, ArchiveRestore, Trash2, Loader2, Archive, Filter, ListChecks, NotebookText, Tags, Blocks, Flame,
   type LucideIcon,
 } from 'lucide-react';
 import {
   fetchTasks,
   fetchNotes,
   fetchTags,
+  fetchHabits,
   unarchiveTask,
   unarchiveNote,
   unarchiveTag,
+  unarchiveHabit,
   onDelete as deleteTaskApi,
   deleteNote as deleteNoteApi,
   onDeleteTag as deleteTagApi,
+  deleteHabit as deleteHabitApi,
   describeError,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
@@ -23,8 +26,10 @@ import { useTasksContext } from '@/app/context/TasksContext';
 import { useNotesContext } from '@/app/context/NotesContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
+import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
 import { Tag, Task } from '@/app/types/task';
 import { Note } from '@/app/types/notes';
+import { Habit } from '@/app/types/habit';
 import { subtaskTreeIds } from '@/app/utils/taskUtils';
 import { stripHtml } from '@/app/utils/textUtils';
 import { formatUpdatedDate } from '@/app/utils/dateUtils';
@@ -34,12 +39,13 @@ import Modal from '@/app/components/common/Modal';
 import PageSpinner from '@/app/components/common/PageSpinner';
 import ArchiveTagFilter from './ArchiveTagFilter';
 
-type TabKey = 'tasks' | 'notes' | 'tags';
+type TabKey = 'tasks' | 'notes' | 'tags' | 'habits';
 
 const TABS: { key: TabKey; label: string; icon: LucideIcon; empty: string }[] = [
   { key: 'tasks', label: 'Tasks', icon: ListChecks, empty: 'Archive a task from the dashboard to tuck it away without deleting it.' },
   { key: 'notes', label: 'Notes', icon: NotebookText, empty: 'Archive a note from its card to tuck it away without deleting it.' },
   { key: 'tags', label: 'Tags', icon: Tags, empty: 'Archive a tag from Manage tags to hide it from pickers, filters and folders.' },
+  { key: 'habits', label: 'Habits', icon: Blocks, empty: 'Archive a habit from Manage habits to set it aside with its history.' },
 ];
 
 type Archived = { id: number; archived_at?: string | null };
@@ -51,21 +57,25 @@ const byArchivedDesc = (a: Archived, b: Archived) =>
 type PendingDelete =
   | { kind: 'task'; item: Task }
   | { kind: 'note'; item: Note }
-  | { kind: 'tag'; item: Tag };
+  | { kind: 'tag'; item: Tag }
+  | { kind: 'habit'; item: Habit };
+
+const KIND_LABEL: Record<PendingDelete['kind'], string> = { task: 'Task', note: 'Note', tag: 'Tag', habit: 'Habit' };
 
 /**
- * Lists the user's archived tasks, notes and tags (fetched fresh with
- * `?archived=true` on every visit — the app-wide stores only ever hold
- * active rows) and lets each be restored or deleted for good. Restoring
- * hands the record back to the matching store so the dashboard, calendar
- * and stats pick it up again without a refetch.
+ * Lists the user's archived tasks, notes, tags and habits (fetched fresh
+ * with `?archived=true` on every visit — the app-wide stores only ever hold
+ * active rows) and lets each be restored or deleted (moved to Recently
+ * deleted). Restoring hands the record back to the matching store so the
+ * dashboard, calendar and stats pick it up again without a refetch.
  */
 const ArchiveView: React.FC = () => {
   const showToast = useToast();
   const { restoreTasks, setTasks } = useTasksContext();
   const { restoreNote, removeTagFromNotes } = useNotesContext();
   const { restoreTag } = useTagsContext();
-  const { refetch: refetchHabits } = useHabitsContext();
+  const { restoreHabit, refetch: refetchHabits } = useHabitsContext();
+  const restoreFromTrash = useRestoreFromTrash();
 
   const [tab, setTab] = useState<TabKey>('tasks');
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -73,6 +83,7 @@ const ArchiveView: React.FC = () => {
   const [tasks, setArchivedTasks] = useState<Task[]>([]);
   const [notes, setArchivedNotes] = useState<Note[]>([]);
   const [tags, setArchivedTags] = useState<Tag[]>([]);
+  const [habits, setArchivedHabits] = useState<Habit[]>([]);
   const [restoringKeys, setRestoringKeys] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -112,12 +123,13 @@ const ArchiveView: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchTasks(true), fetchNotes(true), fetchTags(true)])
-      .then(([t, n, g]) => {
+    Promise.all([fetchTasks(true), fetchNotes(true), fetchTags(true), fetchHabits(true)])
+      .then(([t, n, g, h]) => {
         if (cancelled) return;
         setArchivedTasks([...t].sort(byArchivedDesc));
         setArchivedNotes([...n].sort(byArchivedDesc));
         setArchivedTags([...g].sort(byArchivedDesc));
+        setArchivedHabits([...h].sort(byArchivedDesc));
         setStatus('ready');
       })
       .catch(err => {
@@ -133,7 +145,7 @@ const ArchiveView: React.FC = () => {
   };
 
   // Guards each restore against a double click, keyed by kind + id since
-  // a task, a note and a tag can share an id.
+  // a task, a note, a tag and a habit can share an id.
   const withRestoring = async (key: string, run: () => Promise<void>) => {
     if (restoringKeys.has(key)) return;
     setRestoringKeys(prev => new Set(prev).add(key));
@@ -192,23 +204,76 @@ const ArchiveView: React.FC = () => {
     }
   });
 
+  const handleRestoreHabit = (habit: Habit) => withRestoring(`habit:${habit.id}`, async () => {
+    setArchivedHabits(prev => prev.filter(h => h.id !== habit.id));
+    try {
+      restoreHabit(await unarchiveHabit(habit.id));
+      showToast('Habit restored.', 'success');
+    } catch (err) {
+      console.error('Restore failed:', err);
+      setArchivedHabits(prev => [...prev, habit].sort(byArchivedDesc));
+      showToast(describeError(err, "Couldn't restore the habit. Please try again."));
+    }
+  });
+
+  // Undo brings the deleted item back from the trash into the archive, and
+  // puts back here what the delete took off this page.
+  const undoDelete = async (deleted: PendingDelete, removedTasks: Task[], tagCarriers: { tasks: Set<number>; notes: Set<number> }) => {
+    try {
+      await restoreFromTrash(deleted.kind, deleted.item.id);
+      if (deleted.kind === 'task') {
+        const ids = new Set(removedTasks.map(t => t.id));
+        setArchivedTasks(prev => [...prev.filter(t => !ids.has(t.id)), ...removedTasks].sort(byArchivedDesc));
+      } else if (deleted.kind === 'note') {
+        const note = deleted.item;
+        setArchivedNotes(prev => [...prev.filter(n => n.id !== note.id), note].sort(byArchivedDesc));
+      } else if (deleted.kind === 'habit') {
+        const habit = deleted.item;
+        setArchivedHabits(prev => [...prev.filter(h => h.id !== habit.id), habit].sort(byArchivedDesc));
+      } else {
+        const tag = deleted.item;
+        setArchivedTags(prev => [...prev.filter(t => t.id !== tag.id), tag].sort(byArchivedDesc));
+        const addTag = <T extends { id: number; tags: Tag[] }>(carriers: Set<number>) => (item: T): T =>
+          carriers.has(item.id) && !item.tags.some(t => t.id === tag.id) ? { ...item, tags: [...item.tags, tag] } : item;
+        setArchivedTasks(prev => prev.map(addTag(tagCarriers.tasks)));
+        setArchivedNotes(prev => prev.map(addTag(tagCarriers.notes)));
+      }
+      showToast(`${KIND_LABEL[deleted.kind]} restored to the archive.`, 'success');
+    } catch (err) {
+      console.error('Undo delete failed:', err);
+      showToast(describeError(err, `Couldn't restore the ${deleted.kind}. You can still restore it from Recently deleted.`));
+    }
+  };
+
   const confirmDelete = async () => {
     if (!pendingDelete) return;
+    const deleted = pendingDelete;
+    let removedTasks: Task[] = [];
+    const tagCarriers = { tasks: new Set<number>(), notes: new Set<number>() };
     setDeleting(true);
     try {
-      if (pendingDelete.kind === 'task') {
-        await deleteTaskApi(pendingDelete.item.id);
-        setArchivedTasks(prev => prev.filter(t => t.id !== pendingDelete.item.id));
-      } else if (pendingDelete.kind === 'note') {
-        await deleteNoteApi(pendingDelete.item.id);
-        setArchivedNotes(prev => prev.filter(n => n.id !== pendingDelete.item.id));
+      if (deleted.kind === 'task') {
+        await deleteTaskApi(deleted.item.id);
+        // Its archived subtasks go to the trash with it.
+        const subtree = subtaskTreeIds(tasks, deleted.item.id);
+        removedTasks = tasks.filter(t => subtree.has(t.id));
+        setArchivedTasks(prev => prev.filter(t => !subtree.has(t.id)));
+      } else if (deleted.kind === 'note') {
+        await deleteNoteApi(deleted.item.id);
+        setArchivedNotes(prev => prev.filter(n => n.id !== deleted.item.id));
+      } else if (deleted.kind === 'habit') {
+        await deleteHabitApi(deleted.item.id);
+        setArchivedHabits(prev => prev.filter(h => h.id !== deleted.item.id));
       } else {
-        const tagId = pendingDelete.item.id;
+        const tagId = deleted.item.id;
         await deleteTagApi(tagId);
         setArchivedTags(prev => prev.filter(t => t.id !== tagId));
-        // The tag's links go with it, so drop it from every item still carrying it.
+        // A deleted tag is hidden from every item carrying it until it's restored.
+        const carries = (item: { tags: Tag[] }) => item.tags.some(t => t.id === tagId);
+        tasks.filter(carries).forEach(t => tagCarriers.tasks.add(t.id));
+        notes.filter(carries).forEach(n => tagCarriers.notes.add(n.id));
         const dropTag = <T extends { tags: Tag[] }>(item: T): T =>
-          item.tags.some(t => t.id === tagId) ? { ...item, tags: item.tags.filter(t => t.id !== tagId) } : item;
+          carries(item) ? { ...item, tags: item.tags.filter(t => t.id !== tagId) } : item;
         setTasks(prev => prev.map(dropTag));
         setArchivedTasks(prev => prev.map(dropTag));
         setArchivedNotes(prev => prev.map(dropTag));
@@ -216,9 +281,13 @@ const ArchiveView: React.FC = () => {
         refetchHabits();
       }
       setPendingDelete(null);
+      showToast(`${KIND_LABEL[deleted.kind]} moved to Recently deleted. You can restore it for 30 days.`, 'info', {
+        label: 'Undo',
+        onClick: () => undoDelete(deleted, removedTasks, tagCarriers),
+      });
     } catch (err) {
       console.error('Delete failed:', err);
-      showToast(describeError(err, `Couldn't delete the ${pendingDelete.kind}. Please try again.`));
+      showToast(describeError(err, `Couldn't delete the ${deleted.kind}. Please try again.`));
     } finally {
       setDeleting(false);
     }
@@ -226,9 +295,9 @@ const ArchiveView: React.FC = () => {
 
   if (status === 'loading') return <PageSpinner />;
 
-  const counts: Record<TabKey, number> = { tasks: tasks.length, notes: notes.length, tags: tags.length };
+  const counts: Record<TabKey, number> = { tasks: tasks.length, notes: notes.length, tags: tags.length, habits: habits.length };
   const activeTab = TABS.find(t => t.key === tab)!;
-  const visibleCount = tab === 'tasks' ? visibleTasks.length : tab === 'notes' ? visibleNotes.length : tags.length;
+  const visibleCount = tab === 'tasks' ? visibleTasks.length : tab === 'notes' ? visibleNotes.length : counts[tab];
   const taskTitle = (id: number | null | undefined) => tasks.find(t => t.id === id)?.title;
 
   const rowActions = (key: string, onRestore: () => void, onDelete: () => void) => {
@@ -250,11 +319,11 @@ const ArchiveView: React.FC = () => {
           disabled={restoring}
           className="btn btn-outline px-2.5 py-1.5 text-sm gap-1.5 disabled:opacity-50"
           style={{ color: 'var(--tm-danger)' }}
-          title="Delete permanently"
-          aria-label="Delete permanently"
+          title="Move to Recently deleted"
+          aria-label="Delete"
         >
           <Trash2 className="w-4 h-4" />
-          <span className="hidden sm:inline">Delete permanently</span>
+          <span className="hidden sm:inline">Delete</span>
         </button>
       </div>
     );
@@ -272,6 +341,13 @@ const ArchiveView: React.FC = () => {
         </Link>
         <span className="text-text-muted select-none">/</span>
         <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Archive</h1>
+        <Link
+          href="/trash"
+          className="ml-auto flex items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <Trash2 className="w-4 h-4" />
+          Recently deleted
+        </Link>
       </div>
 
       <div className="flex-1 max-w-4xl mx-auto w-full px-3 sm:px-4 md:px-6 pb-6 sm:pb-10">
@@ -410,6 +486,26 @@ const ArchiveView: React.FC = () => {
                   )}
                 </li>
               ))}
+
+              {tab === 'habits' && habits.map(habit => (
+                <li key={habit.id} className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm sm:text-base font-semibold text-text-primary truncate">{habit.title}</h3>
+                    <p className="text-xs text-text-muted mt-0.5 flex items-center gap-1">
+                      {archivedLabel(habit)}
+                      <span aria-hidden="true">·</span>
+                      <Flame className="w-3 h-3" aria-hidden="true" />
+                      Best streak {habit.max_streak} day{habit.max_streak === 1 ? '' : 's'}
+                    </p>
+                    <TagChipList tags={habit.tags} size="xs" className="mt-2" />
+                  </div>
+                  {rowActions(
+                    `habit:${habit.id}`,
+                    () => handleRestoreHabit(habit),
+                    () => setPendingDelete({ kind: 'habit', item: habit }),
+                  )}
+                </li>
+              ))}
             </ul>
           )}
         </div>
@@ -422,7 +518,7 @@ const ArchiveView: React.FC = () => {
           panelClassName="modal-panel max-w-sm w-full p-6 space-y-4"
         >
           <p className="text-center text-text-primary">
-            Permanently delete the {pendingDelete.kind}{' '}
+            Delete the {pendingDelete.kind}{' '}
             {pendingDelete.kind === 'tag' ? (
               <span className="chip rounded-full text-white font-medium" style={{ backgroundColor: pendingDelete.item.color }}>
                 {pendingDelete.item.name}
@@ -436,8 +532,8 @@ const ArchiveView: React.FC = () => {
           </p>
           <p className="text-center text-sm text-text-muted">
             {pendingDelete.kind === 'tag'
-              ? 'It will be removed from every task, note and habit that carries it. This cannot be undone.'
-              : 'This cannot be undone.'}
+              ? 'It moves to Recently deleted and is hidden from every task, note and habit carrying it. Restore it within 30 days to bring it back on all of them.'
+              : 'It moves to Recently deleted, where you can restore it for 30 days.'}
           </p>
           <div className="flex gap-3 pt-1">
             <button

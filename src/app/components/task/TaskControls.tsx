@@ -5,7 +5,7 @@ import {
   Search, Filter, FolderCog, Blocks, Menu, SquarePlus, FilePlus,
   ChevronsLeft, ChevronsRight, ChevronDown, LayoutList, CalendarClock,
   Siren, SquareCheck, Timer, History, NotebookText, Settings, LogOut, Loader2,
-  CalendarDays, Archive, type LucideIcon,
+  CalendarDays, Archive, Trash2, type LucideIcon,
 } from 'lucide-react';
 import { FilterType, Tag } from '@/app/types/task';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
@@ -33,6 +33,7 @@ interface TaskControlsProps {
   onViewNotes?: () => void;
   onViewCalendar?: () => void;
   onViewArchive?: () => void;
+  onViewTrash?: () => void;
   onEditTag?: () => void;
   onEditHabit?: () => void;
   menuCollapsed: boolean;
@@ -89,6 +90,7 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
   onViewNotes,
   onViewCalendar,
   onViewArchive,
+  onViewTrash,
   onEditTag,
   onEditHabit,
   menuCollapsed,
@@ -407,6 +409,9 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
                 )}
                 {onViewArchive && (
                   <NavAction icon={Archive} label="Archive" onClick={onViewArchive} collapsed={collapsed} />
+                )}
+                {onViewTrash && (
+                  <NavAction icon={Trash2} label="Recently deleted" onClick={onViewTrash} collapsed={collapsed} />
                 )}
               </div>
             )}

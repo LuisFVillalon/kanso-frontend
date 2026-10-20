@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Note } from '@/app/types/notes';
+import { Tag } from '@/app/types/task';
 import {
   fetchNotes,
   createNote as apiCreateNote,
   updateNote as apiUpdateNote,
   deleteNote as apiDeleteNote,
   archiveNote as apiArchiveNote,
+  restoreNote as apiRestoreNote,
   reapStaleNoteSessions,
   describeError,
 } from '@/app/lib/backend-api';
@@ -25,8 +27,8 @@ export const useNotes = (enabled: boolean) => {
   // mirroring the pendingIds pattern in useHabits/useTasks.
   const pendingRef = useRef<Set<number>>(new Set());
   const [pendingNoteIds, setPendingNoteIds] = useState<Set<number>>(new Set());
-  // Bumped only after an archive/restore is confirmed by the server, so the
-  // daily debrief can re-fetch without racing the in-flight request.
+  // Bumped only after an archive, delete or restore is confirmed by the
+  // server, so the daily debrief can re-fetch without racing the request.
   const [archiveSyncToken, setArchiveSyncToken] = useState(0);
 
   // Mirrors `notes` so callbacks can read the latest state without a stale
@@ -168,6 +170,23 @@ export const useNotes = (enabled: boolean) => {
     setNotes(prev => prev.filter(note => note.id !== id));
   }, []);
 
+  // Puts a note restored from the Archive or Recently deleted page (or by an
+  // Undo) back into the active list.
+  const restoreNote = useCallback((restored: Note) => {
+    setNotes(prev => [restored, ...prev.filter(note => note.id !== restored.id)]);
+    setArchiveSyncToken(v => v + 1);
+  }, []);
+
+  // Brings a just-deleted note back from the trash, editing time included.
+  const undoDelete = useCallback(async (backendId: number) => {
+    try {
+      restoreNote(await apiRestoreNote(backendId));
+      showToast('Note restored.', 'success');
+    } catch (err) {
+      showToast(describeError(err, "Couldn't restore the note. You can still restore it from Recently deleted."));
+    }
+  }, [restoreNote, showToast]);
+
   const deleteNote = useCallback(async (id: number) => {
     if (pendingRef.current.has(id)) return;
     pendingRef.current.add(id);
@@ -184,6 +203,11 @@ export const useNotes = (enabled: boolean) => {
       } else {
         const backendId = creating ? (await creating).id : realId ?? id;
         await apiDeleteNote(backendId);
+        setArchiveSyncToken(v => v + 1);
+        showToast('Note moved to Recently deleted. You can restore it for 30 days.', 'info', {
+          label: 'Undo',
+          onClick: () => undoDelete(backendId),
+        });
       }
     } catch {
       setError('Failed to delete note');
@@ -193,7 +217,7 @@ export const useNotes = (enabled: boolean) => {
       pendingRef.current.delete(id);
       setPendingNoteIds(new Set(pendingRef.current));
     }
-  }, []);
+  }, [showToast, undoDelete]);
 
   const archiveNote = useCallback(async (id: number) => {
     if (pendingRef.current.has(id)) return;
@@ -233,13 +257,7 @@ export const useNotes = (enabled: boolean) => {
     }
   }, [discardDraft, showToast]);
 
-  // Puts a note restored from the Archive page back into the active list.
-  const restoreNote = useCallback((restored: Note) => {
-    setNotes(prev => [restored, ...prev.filter(note => note.id !== restored.id)]);
-    setArchiveSyncToken(v => v + 1);
-  }, []);
-
-  // Strips a permanently deleted tag from every note still carrying it.
+  // Strips a deleted tag from every note still carrying it.
   const removeTagFromNotes = useCallback((tagId: number) => {
     setNotes(prev =>
       prev.map(note =>
@@ -248,8 +266,19 @@ export const useNotes = (enabled: boolean) => {
     );
   }, []);
 
+  // Puts a tag restored from the trash back on the notes (by backend id) that carry it.
+  const addTagToNotes = useCallback((tag: Tag, noteIds: Set<number>) => {
+    setNotes(prev =>
+      prev.map(note =>
+        noteIds.has(note.persistedId ?? note.id) && !note.tags.some(t => t.id === tag.id)
+          ? { ...note, tags: [...note.tags, tag] }
+          : note,
+      ),
+    );
+  }, []);
+
   return {
-    notes, isLoading, error, addNote, updateNote, deleteNote, archiveNote, restoreNote, removeTagFromNotes,
+    notes, isLoading, error, addNote, updateNote, deleteNote, archiveNote, restoreNote, removeTagFromNotes, addTagToNotes,
     discardDraft, pendingNoteIds, archiveSyncToken,
   };
 };
