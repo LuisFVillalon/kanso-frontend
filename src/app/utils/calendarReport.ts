@@ -7,7 +7,7 @@
 
 import type { CalendarActivity } from '@/app/types/activity';
 import type { Habit } from '@/app/types/habit';
-import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 export type ReportPeriodKind = 'week' | 'month' | 'year';
 
@@ -124,14 +124,12 @@ export interface HabitReportRow {
 }
 
 export interface CalendarReport {
-  /** Tasks due in the period, up to the report's last counted day. */
+  /** Tasks due in the period. */
   tasksPlanned: number;
   /** Of those, how many are now complete. */
   plannedCompleted: number;
   /** plannedCompleted / tasksPlanned as a whole percentage; null when nothing was due. */
   completionRate: number | null;
-  /** Tasks due later in the period than the last counted day. */
-  upcomingPlanned: number;
   /** Tasks marked complete during the period, whatever their due date. */
   tasksCompleted: number;
   /** Summed estimated_time of the tasks completed during the period. */
@@ -231,25 +229,7 @@ const buildBuckets = (period: ReportPeriod, days: Map<string, DayActivity>, now:
 };
 
 /**
- * The last day to count for a period and for the period before it. A period
- * still in progress counts through today, and the previous period is cut at
- * the same number of days in, so "this week so far" is compared with the
- * same days of last week rather than all of it. Finished periods count whole.
- */
-export const reportCutoffs = (period: ReportPeriod, now: Date = new Date()): { current?: Date; previous?: Date } => {
-  const elapsed = elapsedDays(period, now);
-  if (elapsed >= periodLength(period)) return {};
-  const previous = shiftPeriod(period, -1);
-  const dayIn = (p: ReportPeriod) => {
-    const d = new Date(p.start.getFullYear(), p.start.getMonth(), p.start.getDate() + Math.max(elapsed, 1) - 1);
-    return d > p.end ? p.end : d;
-  };
-  return { current: dayIn(period), previous: dayIn(previous) };
-};
-
-/**
- * Summarizes one period's calendar activity, counting days up to `through`
- * (inclusive) when given. `habits` supplies current and best streaks, which
+ * Summarizes one period's calendar activity. `habits` supplies current and best streaks, which
  * the activity endpoint doesn't carry; every current habit gets a row, even
  * with no check-ins in the period.
  */
@@ -258,11 +238,9 @@ export const buildCalendarReport = (
   period: ReportPeriod,
   habits: Habit[],
   now: Date = new Date(),
-  through?: Date,
 ): CalendarReport => {
   const firstDay = toLocalDateStr(period.start);
-  const periodLastDay = toLocalDateStr(period.end);
-  const lastDay = through && toLocalDateStr(through) < periodLastDay ? toLocalDateStr(through) : periodLastDay;
+  const lastDay = toLocalDateStr(period.end);
   const inPeriod = (dateStr: string) => dateStr >= firstDay && dateStr <= lastDay;
 
   const days = new Map<string, DayActivity>();
@@ -275,7 +253,7 @@ export const buildCalendarReport = (
     return d;
   };
 
-  const planned = activity.scheduled_tasks.filter(t => t.due_date !== null && toLocalDateStr(t.due_date) <= lastDay);
+  const planned = activity.scheduled_tasks.filter(t => t.due_date !== null);
   const plannedCompleted = planned.filter(t => t.completed).length;
 
   let completedEstimatedHours = 0;
@@ -292,7 +270,7 @@ export const buildCalendarReport = (
   // Sessions come back when they merely overlap the period, so only the part
   // inside it counts.
   const periodStartMs = period.start.getTime();
-  const end = parseLocalDate(lastDay);
+  const { end } = period;
   const periodEndMs = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).getTime();
   const secondsByDay = new Map<string, number>();
   const notes = new Map<number, NoteTime>();
@@ -337,7 +315,6 @@ export const buildCalendarReport = (
     tasksPlanned: planned.length,
     plannedCompleted,
     completionRate: planned.length > 0 ? Math.round((plannedCompleted / planned.length) * 100) : null,
-    upcomingPlanned: activity.scheduled_tasks.length - planned.length,
     tasksCompleted,
     completedEstimatedHours,
     plannedEstimatedHours: planned.reduce((sum, t) => sum + (t.estimated_time ?? 0), 0),

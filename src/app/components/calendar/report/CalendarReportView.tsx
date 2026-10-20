@@ -2,8 +2,6 @@
 
 import React, { useState } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
   CalendarRange,
   ChartColumn,
   ChevronLeft,
@@ -43,32 +41,6 @@ const KINDS: { kind: ReportPeriodKind; label: string }[] = [
 
 const iconClass = 'w-3.5 h-3.5 sm:w-4 sm:h-4';
 
-// ── Comparison with the previous period ─────────────────────────────────────
-
-interface DeltaProps {
-  current: number;
-  previous: number;
-  /** Formats the absolute difference, e.g. "3", "1.5h", "12 pts". */
-  format: (diff: number) => string;
-  versus: string;
-}
-
-const Delta: React.FC<DeltaProps> = ({ current, previous, format, versus }) => {
-  const diff = current - previous;
-  if (Math.abs(diff) < 1e-9) return <span className="text-[11px] text-text-muted">No change vs {versus}</span>;
-  const up = diff > 0;
-  const Icon = up ? ArrowUp : ArrowDown;
-  return (
-    <span className="inline-flex items-center gap-0.5 text-[11px] font-medium" style={{ color: up ? 'var(--tm-success)' : 'var(--tm-text-muted)' }}>
-      <Icon className="w-3 h-3" aria-hidden="true" />
-      <span>
-        <span className="sr-only">{up ? 'Up' : 'Down'} </span>
-        {format(Math.abs(diff))} vs {versus}
-      </span>
-    </span>
-  );
-};
-
 // ── Stat tiles ──────────────────────────────────────────────────────────────
 
 interface StatTileProps {
@@ -78,10 +50,9 @@ interface StatTileProps {
   detail: string;
   color: string;
   bg: string;
-  delta?: React.ReactNode;
 }
 
-const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, bg, delta }) => (
+const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, bg }) => (
   <div className="p-3 rounded-lg border border-border-subtle flex flex-col gap-1 min-w-0" style={{ backgroundColor: bg }}>
     <span className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold" style={{ color }}>
       {icon}
@@ -89,27 +60,15 @@ const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, 
     </span>
     <span className="text-xl sm:text-2xl font-bold leading-none text-text-primary">{value}</span>
     <span className="text-[11px] sm:text-xs text-text-secondary">{detail}</span>
-    {delta}
   </div>
 );
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-const plannedDetail = (report: CalendarReport, partial: boolean): string => {
-  const upcoming = report.upcomingPlanned > 0 ? `${report.upcomingPlanned} upcoming` : null;
-  if (report.tasksPlanned === 0) return upcoming ? `None due yet · ${upcoming}` : 'No tasks were due';
-  const done = `${report.plannedCompleted} of ${plural(report.tasksPlanned, 'task')} due${partial ? ' so far' : ''}`;
-  return upcoming ? `${done} · ${upcoming}` : done;
-};
+const plannedDetail = (report: CalendarReport): string =>
+  report.tasksPlanned === 0 ? 'No tasks due' : `${report.plannedCompleted} of ${plural(report.tasksPlanned, 'task')} due`;
 
-interface StatTilesProps {
-  report: CalendarReport;
-  previous: CalendarReport | null;
-  versus: string;
-  partial: boolean;
-}
-
-const StatTiles: React.FC<StatTilesProps> = ({ report, previous, versus, partial }) => (
+const StatTiles: React.FC<{ report: CalendarReport }> = ({ report }) => (
   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
     <StatTile
       icon={<CircleCheck className={iconClass} />}
@@ -118,18 +77,14 @@ const StatTiles: React.FC<StatTilesProps> = ({ report, previous, versus, partial
       detail={`${plural(report.tasksCompleted, 'task')} finished`}
       color="var(--tm-accent)"
       bg="var(--tm-accent-subtle)"
-      delta={previous && <Delta current={report.tasksCompleted} previous={previous.tasksCompleted} format={String} versus={versus} />}
     />
     <StatTile
       icon={<Percent className={iconClass} />}
       title="Planned done"
       value={report.completionRate === null ? '—' : `${report.completionRate}%`}
-      detail={plannedDetail(report, partial)}
+      detail={plannedDetail(report)}
       color="var(--tm-success)"
       bg="var(--tm-success-subtle)"
-      delta={previous && report.completionRate !== null && previous.completionRate !== null && (
-        <Delta current={report.completionRate} previous={previous.completionRate} format={d => `${d} pts`} versus={versus} />
-      )}
     />
     <StatTile
       icon={<Hourglass className={iconClass} />}
@@ -138,9 +93,6 @@ const StatTiles: React.FC<StatTilesProps> = ({ report, previous, versus, partial
       detail={report.plannedEstimatedHours > 0 ? `done · ${formatHours(report.plannedEstimatedHours)}h planned` : 'in completed tasks'}
       color="var(--tm-warning)"
       bg="var(--tm-warning-subtle)"
-      delta={previous && (
-        <Delta current={report.completedEstimatedHours} previous={previous.completedEstimatedHours} format={d => `${formatHours(d)}h`} versus={versus} />
-      )}
     />
     <StatTile
       icon={<Clock className={iconClass} />}
@@ -149,9 +101,6 @@ const StatTiles: React.FC<StatTilesProps> = ({ report, previous, versus, partial
       detail={`across ${plural(report.notesWorkedOn, 'note')}`}
       color="var(--tm-accent-2)"
       bg="var(--tm-accent-2-subtle)"
-      delta={previous && (
-        <Delta current={report.noteSeconds / 60} previous={previous.noteSeconds / 60} format={d => formatDurationShort(d * 60)} versus={versus} />
-      )}
     />
     <StatTile
       icon={<Repeat className={iconClass} />}
@@ -160,7 +109,6 @@ const StatTiles: React.FC<StatTilesProps> = ({ report, previous, versus, partial
       detail={plural(report.habitCheckIns, 'check-in')}
       color="var(--tm-success)"
       bg="var(--tm-surface-raised)"
-      delta={previous && <Delta current={report.habitCheckIns} previous={previous.habitCheckIns} format={String} versus={versus} />}
     />
   </div>
 );
@@ -262,19 +210,14 @@ const HabitList: React.FC<{ report: CalendarReport; days: number }> = ({ report,
 // ── Report body ─────────────────────────────────────────────────────────────
 
 const isEmpty = (r: CalendarReport) =>
-  r.tasksPlanned === 0 && r.upcomingPlanned === 0 && r.tasksCompleted === 0 && r.noteSeconds === 0 && r.habitCheckIns === 0;
+  r.tasksPlanned === 0 && r.tasksCompleted === 0 && r.noteSeconds === 0 && r.habitCheckIns === 0;
 
 interface ReportBodyProps {
   period: ReportPeriod;
   report: CalendarReport;
-  previous: CalendarReport | null;
-  /** The period is still in progress and compared with the same days of the previous one. */
-  partial: boolean;
 }
 
-const ReportBody: React.FC<ReportBodyProps> = ({ period, report, previous, partial }) => {
-  const previousLabel = describePeriod(shiftPeriod(period, -1));
-  const versus = partial ? `same point ${previousLabel}` : previousLabel;
+const ReportBody: React.FC<ReportBodyProps> = ({ period, report }) => {
   const days = elapsedDays(period);
 
   if (isEmpty(report)) {
@@ -293,7 +236,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, previous, parti
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      <StatTiles report={report} previous={previous} versus={versus} partial={partial} />
+      <StatTiles report={report} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <div className="lg:col-span-2">
@@ -337,11 +280,11 @@ const ReportSkeleton: React.FC = () => (
 /**
  * Weekly / monthly / yearly report on the calendar page: tasks completed vs
  * planned, estimated hours, time in notes, habit check-ins and streaks, the
- * busiest days and an activity chart, each compared with the period before.
+ * busiest days and an activity chart.
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
-  const { report, previous, partial, loading, error, retry } = useCalendarReport(period);
+  const { report, loading, error, retry } = useCalendarReport(period);
 
   const current = periodContaining(period.kind, new Date());
   const isCurrent = isSamePeriod(period, current);
@@ -418,7 +361,7 @@ const CalendarReportView: React.FC = () => {
           <ReportSkeleton />
         </>
       ) : (
-        <ReportBody period={period} report={report} previous={previous} partial={partial} />
+        <ReportBody period={period} report={report} />
       )}
 
       <p className="text-[11px] sm:text-xs text-text-muted">

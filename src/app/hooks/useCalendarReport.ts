@@ -3,24 +3,19 @@ import { fetchCalendarActivity } from '@/app/lib/backend-api';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
-import { buildCalendarReport, reportCutoffs, shiftPeriod, type CalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
+import { buildCalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
 
 interface FetchedReport {
   key: string;
-  current: CalendarActivity;
-  previous: CalendarActivity;
+  activity: CalendarActivity;
 }
 
 const periodKey = (p: ReportPeriod) => `${p.kind}:${toLocalDateStr(p.start)}`;
 
-const fetchPeriod = (p: ReportPeriod) => fetchCalendarActivity(toLocalDateStr(p.start), toLocalDateStr(p.end));
-
 /**
- * Loads a report period's calendar activity and the period before it (one
- * call each — a year fits in one), and summarizes both. A period still in
- * progress is compared with the same number of days of the previous one
- * (`partial`). Habit streaks come from the shared habits list, since the
- * activity endpoint doesn't carry them.
+ * Loads a report period's calendar activity (one call — a year fits in one)
+ * and summarizes it. Habit streaks come from the shared habits list, since
+ * the activity endpoint doesn't carry them.
  */
 export function useCalendarReport(period: ReportPeriod) {
   const { habits } = useHabitsContext();
@@ -31,15 +26,18 @@ export function useCalendarReport(period: ReportPeriod) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchPeriod(period), fetchPeriod(shiftPeriod(period, -1))])
-      .then(([current, previous]) => {
-        if (!cancelled) setFetched({ key, current, previous });
+    fetchCalendarActivity(toLocalDateStr(period.start), toLocalDateStr(period.end))
+      .then(activity => {
+        if (!cancelled) setFetched({ key, activity });
       })
       .catch(err => {
         console.error('[useCalendarReport] Failed to fetch calendar activity:', err);
         if (!cancelled) setError({ key, message: 'Couldn’t load this report.' });
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      setError(null);
+    };
     // `key` identifies the period; the Date objects inside it change identity every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, attempt]);
@@ -47,27 +45,16 @@ export function useCalendarReport(period: ReportPeriod) {
   const ready = fetched?.key === key ? fetched : null;
   const failed = !ready && error?.key === key ? error.message : null;
 
-  const reports = useMemo((): { current: CalendarReport; previous: CalendarReport; partial: boolean } | null => {
-    if (!ready) return null;
-    const now = new Date();
-    const cutoffs = reportCutoffs(period, now);
-    return {
-      current: buildCalendarReport(ready.current, period, habits, now, cutoffs.current),
-      previous: buildCalendarReport(ready.previous, shiftPeriod(period, -1), habits, now, cutoffs.previous),
-      partial: cutoffs.current !== undefined,
-    };
+  const report = useMemo(
+    () => (ready ? buildCalendarReport(ready.activity, period, habits) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, habits]);
+    [ready, habits],
+  );
 
-  const retry = useCallback(() => {
-    setError(null);
-    setAttempt(a => a + 1);
-  }, []);
+  const retry = useCallback(() => setAttempt(a => a + 1), []);
 
   return {
-    report: reports?.current ?? null,
-    previous: reports?.previous ?? null,
-    partial: reports?.partial ?? false,
+    report,
     loading: !ready && !failed,
     error: failed,
     retry,

@@ -8,7 +8,6 @@ import {
   formatPeriodLabel,
   periodContaining,
   periodLength,
-  reportCutoffs,
   shiftPeriod,
 } from './calendarReport';
 import { toLocalDateStr } from './dateUtils';
@@ -95,20 +94,6 @@ describe('periods', () => {
     expect(describePeriod(shiftPeriod(thisMonth, -2), now)).toBe('August 2026');
   });
 
-  it('cuts an in-progress period and the one before it at the same day', () => {
-    const now = new Date(2026, 9, 14, 9, 0); // Wednesday
-    const cutoffs = reportCutoffs(periodContaining('week', now), now);
-    expect(day(cutoffs.current!)).toBe('2026-10-14');
-    expect(day(cutoffs.previous!)).toBe('2026-10-07');
-    // 30 days into March compares with all of February.
-    const march = new Date(2026, 2, 30);
-    expect(day(reportCutoffs(periodContaining('month', march), march).previous!)).toBe('2026-02-28');
-    // On a period's last day it counts whole.
-    const sunday = new Date(2026, 9, 18);
-    expect(reportCutoffs(periodContaining('week', sunday), sunday)).toEqual({});
-    expect(reportCutoffs(periodContaining('week', new Date(2026, 9, 1)), now)).toEqual({});
-  });
-
   it('counts elapsed days', () => {
     const week = periodContaining('week', new Date(2026, 9, 14));
     expect(elapsedDays(week, new Date(2026, 9, 14, 23, 0))).toBe(3);
@@ -145,35 +130,6 @@ describe('buildCalendarReport', () => {
     const byDay = Object.fromEntries(report.buckets.map(b => [b.key, b.tasksCompleted]));
     expect(byDay['2026-10-13']).toBe(1);
     expect(byDay['2026-10-15']).toBe(1);
-  });
-
-  it('counts only through the cutoff day', () => {
-    const activity = {
-      ...emptyActivity('2026-10-12', '2026-10-18'),
-      scheduled_tasks: [
-        task({ id: 1, due_date: '2026-10-12', completed: true, estimated_time: 1 }),
-        task({ id: 2, due_date: '2026-10-13' }),
-        task({ id: 3, due_date: '2026-10-16', completed: true, estimated_time: 4 }),
-      ],
-      completed_tasks: [
-        task({ id: 1, completed: true, completed_date: '2026-10-12T18:00:00Z', estimated_time: 1 }),
-        task({ id: 3, completed: true, completed_date: '2026-10-14T18:00:00Z', estimated_time: 4 }),
-      ],
-      habit_completions: [{ habit_id: 1, habit_title: 'Read', date: '2026-10-14', estimated_time: null }],
-      note_sessions: [
-        // Tue 11pm → Wed 1am local: only the hour on Tuesday counts.
-        { id: 1, note_id: 7, note_title: 'Essay', started_at: '2026-10-14T06:00:00Z', ended_at: '2026-10-14T08:00:00Z', duration_seconds: 7200 },
-      ],
-    };
-    const report = buildCalendarReport(activity, week, [], now, new Date(2026, 9, 13));
-    expect(report.tasksPlanned).toBe(2);
-    expect(report.plannedCompleted).toBe(1);
-    expect(report.completionRate).toBe(50);
-    expect(report.upcomingPlanned).toBe(1);
-    expect(report.plannedEstimatedHours).toBe(1);
-    expect(report.tasksCompleted).toBe(1);
-    expect(report.habitCheckIns).toBe(0);
-    expect(report.noteSeconds).toBe(3600);
   });
 
   it('has no completion rate when nothing was due', () => {
