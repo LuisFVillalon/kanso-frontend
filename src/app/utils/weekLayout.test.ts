@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  buildNoteBlocks,
   buildWeekEvents,
   layoutDayEvents,
   minutesToTimeStr,
+  NOTE_MERGE_GAP_MINUTES,
   parseTimeToMinutes,
   snapMinutes,
   startOfWeek,
   TimedEvent,
+  weekDays,
 } from './weekLayout';
 
 // Mon 19 Oct 2026, local midnight.
@@ -144,6 +147,87 @@ describe('buildWeekEvents', () => {
       ],
     });
     expect(allDay).toEqual([{ key: 'habit-4-2026-10-23', kind: 'habit', title: 'Run', dayIndex: 4, habitId: 4 }]);
+  });
+});
+
+describe('buildNoteBlocks', () => {
+  const days = weekDays(weekStart);
+  let nextId = 1;
+  // A session of `noteId` on day `date` (October 2026) from h1:m1 to h2:m2, local time.
+  const session = (noteId: number, date: number, [h1, m1]: number[], [h2, m2]: number[], endDate = date) => {
+    const started = new Date(2026, 9, date, h1, m1);
+    const ended = new Date(2026, 9, endDate, h2, m2);
+    return {
+      id: nextId++, note_id: noteId, note_title: `Note ${noteId}`,
+      started_at: started.toISOString(), ended_at: ended.toISOString(),
+      duration_seconds: (ended.getTime() - started.getTime()) / 1000,
+    };
+  };
+
+  it('merges sessions of a note whose gaps are under the threshold into one block', () => {
+    expect(NOTE_MERGE_GAP_MINUTES).toBe(30);
+    const blocks = buildNoteBlocks([
+      session(1, 20, [9, 0], [9, 20]),
+      session(1, 20, [9, 45], [10, 0]), // 25-minute gap
+      session(1, 20, [10, 29], [10, 39]), // 29-minute gap
+    ], days);
+    expect(blocks).toMatchObject([{ kind: 'note', noteId: 1, dayIndex: 1, startMin: 540, endMin: 639, workedMin: 45 }]);
+  });
+
+  it('keeps sessions apart once the gap reaches the threshold', () => {
+    const blocks = buildNoteBlocks([
+      session(1, 20, [9, 0], [9, 20]),
+      session(1, 20, [9, 50], [10, 0]), // exactly 30 minutes
+      session(1, 20, [16, 0], [16, 15]),
+    ], days);
+    expect(blocks).toMatchObject([
+      { startMin: 540, endMin: 560, workedMin: 20 },
+      { startMin: 590, endMin: 600, workedMin: 10 },
+      { startMin: 960, endMin: 975, workedMin: 15 },
+    ]);
+  });
+
+  it('merges overlapping sessions without counting the overlap twice', () => {
+    const blocks = buildNoteBlocks([
+      session(1, 20, [9, 30], [10, 0]),
+      session(1, 20, [9, 0], [10, 10]),
+      session(1, 20, [10, 5], [10, 20]),
+    ], days);
+    expect(blocks).toMatchObject([{ startMin: 540, endMin: 620, workedMin: 80 }]);
+    expect(blocks).toHaveLength(1);
+  });
+
+  it('never merges different notes', () => {
+    const blocks = buildNoteBlocks([
+      session(1, 20, [9, 0], [9, 20]),
+      session(2, 20, [9, 25], [9, 40]),
+    ], days);
+    expect(blocks).toMatchObject([
+      { noteId: 1, title: 'Note 1', startMin: 540, endMin: 560 },
+      { noteId: 2, title: 'Note 2', startMin: 565, endMin: 580 },
+    ]);
+  });
+
+  it('never merges across days, even across a short gap at midnight', () => {
+    const blocks = buildNoteBlocks([
+      session(1, 20, [23, 40], [23, 50]),
+      session(1, 21, [0, 5], [0, 20]),
+    ], days);
+    expect(blocks).toMatchObject([
+      { dayIndex: 1, startMin: 1420, endMin: 1430, workedMin: 10 },
+      { dayIndex: 2, startMin: 5, endMin: 20, workedMin: 15 },
+    ]);
+  });
+
+  it('counts only the part of a midnight-spanning session that falls on each day', () => {
+    const blocks = buildNoteBlocks([
+      session(1, 21, [23, 30], [0, 30], 22),
+      session(1, 22, [0, 45], [1, 0]),
+    ], days);
+    expect(blocks).toMatchObject([
+      { dayIndex: 2, startMin: 1410, endMin: 1440, workedMin: 30 },
+      { dayIndex: 3, startMin: 0, endMin: 60, workedMin: 45 },
+    ]);
   });
 });
 

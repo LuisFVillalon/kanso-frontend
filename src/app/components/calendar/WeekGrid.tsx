@@ -37,10 +37,18 @@ export const WEEK_LEGEND = [
 const dayLabel = (day: Date) =>
   day.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
+/** "45 min worked" / "1 hr 10 min worked" for a note block. */
+const workedText = (minutes: number): string => {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${minutes} min worked`;
+  return rest === 0 ? `${hours} hr worked` : `${hours} hr ${rest} min worked`;
+};
+
 const timedLabel = (e: TimedEvent): string => {
   if (e.kind === 'completed') return `Completed task: ${e.title}, at ${formatMinutes(e.startMin)}`;
   const range = `${formatMinutes(e.startMin)} – ${formatMinutes(e.endMin)}`;
-  if (e.kind === 'note') return `Note session: ${e.title}, ${range}`;
+  if (e.kind === 'note') return `Note session: ${e.title}, ${range}, ${workedText(e.workedMin ?? 0)}`;
   return `${e.completed ? 'Planned task (done)' : 'Planned task'}: ${e.title}, ${range}`;
 };
 
@@ -284,7 +292,10 @@ const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: 
   const height = minutesToPx(event.drawEndMin - event.drawStartMin);
   const label = timedLabel(event);
   const Icon = event.kind === 'note' ? FileText : event.kind === 'completed' ? CheckCircle2 : event.completed ? Check : null;
-  const timeText = event.kind === 'completed' ? formatMinutes(event.startMin) : `${formatMinutes(event.startMin)} – ${formatMinutes(event.endMin)}`;
+  const range = `${formatMinutes(event.startMin)} – ${formatMinutes(event.endMin)}`;
+  const timeText = event.kind === 'completed'
+    ? formatMinutes(event.startMin)
+    : event.kind === 'note' ? `${range} · ${workedText(event.workedMin ?? 0)}` : range;
   const style: React.CSSProperties = {
     top: minutesToPx(event.drawStartMin),
     height,

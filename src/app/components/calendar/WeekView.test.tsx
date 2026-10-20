@@ -87,7 +87,7 @@ describe('WeekView', () => {
     await render();
     expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-19', '2026-10-25');
     expect(button('Planned task: Essay, 2:00 PM – 3:00 PM')).toBeTruthy();
-    expect(button('Note session: Lecture notes, 9:00 AM – 10:00 AM')).toBeTruthy();
+    expect(button('Note session: Lecture notes, 9:00 AM – 10:00 AM, 1 hr worked')).toBeTruthy();
     expect(button('Habit completed: Run')).toBeTruthy();
   });
 
@@ -126,7 +126,7 @@ describe('WeekView', () => {
 
   it('opens a note session in the notes page', async () => {
     await render();
-    await act(async () => button('Note session: Lecture notes, 9:00 AM – 10:00 AM').click());
+    await act(async () => button('Note session: Lecture notes, 9:00 AM – 10:00 AM, 1 hr worked').click());
     expect(mocks.push).toHaveBeenCalledWith('/notes?id=42');
   });
 
