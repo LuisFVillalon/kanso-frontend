@@ -19,7 +19,7 @@ This repository is the web app. kanso is three services, each in its own reposit
 - **Learning resources (AI)**: from any note, get one video, one article and one exercise for going deeper. An LLM reads the note and plans the searches, then real search results are filtered, dead-link-checked and ranked by deterministic code, so the model never invents a link.
 - **Habits**: daily check-ins, current and best streaks, and a 30-day history you can edit retroactively.
 - **Daily debrief**: overdue work, what's due today, whether today's plan fits your available hours, and a short "focus next" list. It's rule-based on the backend; no LLM is involved.
-- **Big-picture calendar**: a year and month view of tasks, habits and notes, plus a term tracker with a countdown.
+- **Big-picture calendar**: a year and month view of tasks, habits and notes, a week view that lays out planned and completed tasks, note-editing sessions and habit check-ins on an hourly timeline (click an empty slot to create a task at that time), plus a term tracker with a countdown.
 - **Customizable dashboard**: drag-and-drop, resizable stats widgets; accent colors; notebook page styles; focus mode; and a doodle canvas.
 - **Archive**: archive tasks, notes and tags to hide them from the dashboard, calendar, daily debrief and stats without deleting them. Archived tags disappear from pickers, filters and note folders but stay attached to their tasks and notes. The Archive page lists everything archived, with Restore and Delete permanently, and its Tasks and Notes tabs can be filtered by tag (including archived tags).
 - **Accounts**: email/password (with a NIST-style password policy) or Google sign-in, plus account settings and account deletion.
