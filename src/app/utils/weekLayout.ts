@@ -20,6 +20,8 @@ export const DEFAULT_TASK_MINUTES = 30;
 export const COMPLETION_MARKER_MINUTES = 30;
 /** Shortest block drawn, so a 2-minute note session is still clickable. */
 export const MIN_BLOCK_MINUTES = 20;
+/** Sessions of one note on one day closer together than this merge into one block. */
+export const NOTE_MERGE_GAP_MINUTES = 30;
 
 export type TimedEventKind = 'task' | 'completed' | 'note';
 export type AllDayItemKind = 'task' | 'habit';
@@ -40,6 +42,8 @@ export interface TimedEvent {
   noteId?: number;
   /** Planned tasks only: whether the task has since been completed. */
   completed?: boolean;
+  /** Notes only: minutes actually spent editing within the block's range. */
+  workedMin?: number;
 }
 
 export interface AllDayItem {
@@ -121,7 +125,8 @@ interface BuildWeekEventsInput {
  *   the all-day row when they have a date but no time;
  * - completed tasks as a marker at their completion instant;
  * - note sessions as blocks from start to end, split at midnight when a
- *   session runs into the next day;
+ *   session runs into the next day, with each note's sessions on a day
+ *   merged when they are close together (see buildNoteBlocks);
  * - habit completions in the all-day row, since they carry no time.
  */
 export function buildWeekEvents({
@@ -167,23 +172,7 @@ export function buildWeekEvents({
     });
   }
 
-  for (const session of noteSessions) {
-    const start = new Date(session.started_at);
-    const end = new Date(session.ended_at);
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) continue;
-    days.forEach((day, dayIndex) => {
-      const nextDay = addDays(day, 1);
-      if (end < day || start >= nextDay) return;
-      // A session ending exactly at midnight belongs to the day before.
-      if (end.getTime() === day.getTime() && start < day) return;
-      const startMin = start <= day ? 0 : minutesOfDay(start);
-      const endMin = end >= nextDay ? MINUTES_PER_DAY : minutesOfDay(end);
-      timed.push({
-        key: `note-${session.id}-${dayIndex}`, kind: 'note', title: session.note_title || 'Untitled note',
-        dayIndex, startMin, endMin, ...drawExtent(startMin, endMin), noteId: session.note_id,
-      });
-    });
-  }
+  timed.push(...buildNoteBlocks(noteSessions, days));
 
   for (const completion of habitCompletions) {
     const dayIndex = dayIndexByDate.get(completion.date);
@@ -195,6 +184,83 @@ export function buildWeekEvents({
   }
 
   return { timed, allDay };
+}
+
+interface NoteSegment {
+  noteId: number;
+  title: string;
+  sessionId: number;
+  dayIndex: number;
+  /** Real instants, clipped to the day. */
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * Turns note sessions into one block per run of work on a note: each session
+ * is split at local midnight, then a note's pieces on the same day merge when
+ * the gap from one's end to the next's start is under NOTE_MERGE_GAP_MINUTES
+ * (overlapping ones always merge). A merged block spans the earliest start to
+ * the latest end, and `workedMin` counts the time covered by its sessions,
+ * without counting overlaps twice.
+ */
+export function buildNoteBlocks(noteSessions: ActivityNoteSession[], days: Date[]): TimedEvent[] {
+  const segments: NoteSegment[] = [];
+  for (const session of noteSessions) {
+    const start = new Date(session.started_at);
+    const end = new Date(session.ended_at);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) continue;
+    days.forEach((day, dayIndex) => {
+      const nextDay = addDays(day, 1);
+      if (end < day || start >= nextDay) return;
+      // A session ending exactly at midnight belongs to the day before.
+      if (end.getTime() === day.getTime() && start < day) return;
+      segments.push({
+        noteId: session.note_id, title: session.note_title || 'Untitled note', sessionId: session.id, dayIndex,
+        startMs: Math.max(start.getTime(), day.getTime()), endMs: Math.min(end.getTime(), nextDay.getTime()),
+      });
+    });
+  }
+
+  segments.sort((a, b) => a.noteId - b.noteId || a.dayIndex - b.dayIndex || a.startMs - b.startMs);
+  const maxGapMs = NOTE_MERGE_GAP_MINUTES * 60_000;
+  const blocks: TimedEvent[] = [];
+  let run: NoteSegment[] = [];
+  let runEndMs = 0;
+
+  const flush = () => {
+    if (run.length === 0) return;
+    const first = run[0];
+    const day = days[first.dayIndex];
+    const dayMs = day.getTime();
+    // Sorted by start, so a running end mark is enough to skip overlaps.
+    let workedMs = 0;
+    let coveredTo = -Infinity;
+    for (const s of run) {
+      workedMs += Math.max(0, s.endMs - Math.max(s.startMs, coveredTo));
+      coveredTo = Math.max(coveredTo, s.endMs);
+    }
+    const startMin = first.startMs === dayMs ? 0 : minutesOfDay(new Date(first.startMs));
+    const endMin = runEndMs === addDays(day, 1).getTime() ? MINUTES_PER_DAY : minutesOfDay(new Date(runEndMs));
+    blocks.push({
+      key: `note-${first.sessionId}-${first.dayIndex}`, kind: 'note', title: first.title,
+      dayIndex: first.dayIndex, startMin, endMin, ...drawExtent(startMin, endMin),
+      noteId: first.noteId, workedMin: Math.round(workedMs / 60_000),
+    });
+    run = [];
+  };
+
+  for (const segment of segments) {
+    const prev = run[run.length - 1];
+    if (!prev || prev.noteId !== segment.noteId || prev.dayIndex !== segment.dayIndex || segment.startMs - runEndMs >= maxGapMs) {
+      flush();
+      runEndMs = segment.endMs;
+    }
+    run.push(segment);
+    runEndMs = Math.max(runEndMs, segment.endMs);
+  }
+  flush();
+  return blocks;
 }
 
 /**
