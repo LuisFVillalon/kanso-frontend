@@ -437,7 +437,7 @@ const ArchiveView: React.FC = () => {
                       </h3>
                       <p className="text-xs text-text-muted mt-0.5">
                         {archivedLabel(task)}
-                        {parentTitle && <> · Subtask of {parentTitle}</>}
+                        {parentTitle && <> · Leads up to {parentTitle}</>}
                       </p>
                       <TagChipList tags={task.tags} size="xs" className="mt-2" />
                     </div>

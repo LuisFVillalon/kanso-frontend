@@ -1,11 +1,11 @@
 /*
 Purpose: This custom hook filters and sorts tasks based on status, search term, and selected tags,
-and computes statistics for different task categories.
+nests linked tasks under their parent, and computes statistics for different task categories.
 */
 
 import { useMemo } from 'react';
 import { FilterType, StatsData, Tag, Task } from '@/app/types/task';
-import { countTasksByTag, getTaskDateTime } from '@/app/utils/taskUtils';
+import { countTasksByTag, getTaskDateTime, groupLinkedTasks } from '@/app/utils/taskUtils';
 
 export const useTaskFiltering = (
   tasks: Task[],
@@ -14,7 +14,7 @@ export const useTaskFiltering = (
   searchTerm: string,
   selectedTags: Tag[]
 ) => {
-  const { filteredTasks, stats } = useMemo(() => {
+  const { taskGroups, stats } = useMemo(() => {
     // Ensure tasks is always an array
     const safeTasks = Array.isArray(tasks) ? tasks : [];
 
@@ -97,8 +97,8 @@ export const useTaskFiltering = (
       }
     };
 
-    return { filteredTasks: filtered, stats };
+    return { taskGroups: groupLinkedTasks(safeTasks, filtered), stats };
   }, [tasks, filter, sortOrder, searchTerm, selectedTags]);
 
-  return { filteredTasks, stats };
+  return { taskGroups, stats };
 };

@@ -145,7 +145,7 @@ const TaskManager: React.FC = () => {
     delTag,
   });
 
-  const { filteredTasks, stats } = useTaskFiltering(
+  const { taskGroups, stats } = useTaskFiltering(
     tasks, state.filter, state.sortOrder, state.searchTerm, state.selectedTags,
   );
 
@@ -399,7 +399,7 @@ const TaskManager: React.FC = () => {
               >
                 <TasksPanel
                   tags={tags}
-                  filteredTasks={filteredTasks}
+                  taskGroups={taskGroups}
                   onToggleComplete={toggleComplete}
                   onDeleteTask={deleteTask}
                   onArchiveTask={archiveTask}

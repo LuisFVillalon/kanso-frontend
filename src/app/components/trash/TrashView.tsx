@@ -242,7 +242,7 @@ const TrashView: React.FC = () => {
                       >
                         {left === 0 ? 'Deleting soon' : `${left} day${left === 1 ? '' : 's'} left`}
                       </span>
-                      {parentTitle && <> · Subtask of {parentTitle}</>}
+                      {parentTitle && <> · Leads up to {parentTitle}</>}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -290,7 +290,7 @@ const TrashView: React.FC = () => {
             {pendingPurge.kind === 'tag' && 'It comes off every task, note and habit that carried it. '}
             {pendingPurge.kind === 'habit' && 'Its history goes with it. '}
             {purgeSubtaskCount > 0 &&
-              `The ${purgeSubtaskCount} subtask${purgeSubtaskCount === 1 ? '' : 's'} deleted with it go${purgeSubtaskCount === 1 ? 'es' : ''} too. `}
+              `The ${purgeSubtaskCount} linked task${purgeSubtaskCount === 1 ? '' : 's'} deleted with it go${purgeSubtaskCount === 1 ? 'es' : ''} too. `}
             This can&apos;t be undone.
           </p>
           <div className="flex gap-3 pt-1">
