@@ -118,7 +118,7 @@ export interface HabitReportRow {
   habitId: number;
   title: string;
   completions: number;
-  /** From the habit itself — null for a habit that has since been deleted. */
+  /** From the habit itself — null for a habit that has since been archived or deleted. */
   currentStreak: number | null;
   bestStreak: number | null;
 }

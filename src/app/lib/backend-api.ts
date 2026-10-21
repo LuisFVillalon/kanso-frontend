@@ -478,14 +478,21 @@ export async function updateCalendarSettings(
  * (inclusive local "YYYY-MM-DD" days, at most 366): tasks due and completed,
  * closed note sessions, and habit completions. Sends the browser's IANA time
  * zone so the server matches UTC completion/session times to our local days.
+ * With `includeArchived`, archived tasks, notes' sessions and habits' check-ins
+ * come back too (trashed items never do).
  */
-export async function fetchCalendarActivity(startDate: string, endDate: string): Promise<CalendarActivity> {
+export async function fetchCalendarActivity(
+  startDate: string,
+  endDate: string,
+  { includeArchived = false }: { includeArchived?: boolean } = {},
+): Promise<CalendarActivity> {
   const headers = await getAuthHeaders();
   const params = new URLSearchParams({
     start_date: startDate,
     end_date: endDate,
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
+  if (includeArchived) params.set("include_archived", "true");
   const res = await fetch(`${API_BASE_URL}/get-calendar-activity?${params}`, { headers });
   await assertOk(res, "fetchCalendarActivity");
   return res.json();

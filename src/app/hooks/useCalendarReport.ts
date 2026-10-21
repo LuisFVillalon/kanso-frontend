@@ -14,8 +14,9 @@ const periodKey = (p: ReportPeriod) => `${p.kind}:${toLocalDateStr(p.start)}`;
 
 /**
  * Loads a report period's calendar activity (one call — a year fits in one)
- * and summarizes it. Habit streaks come from the shared habits list, since
- * the activity endpoint doesn't carry them.
+ * and summarizes it. Archived tasks, notes and habits count too — the report
+ * covers everything the user did, not just what's still active. Habit streaks
+ * come from the shared habits list, since the activity endpoint doesn't carry them.
  */
 export function useCalendarReport(period: ReportPeriod) {
   const { habits } = useHabitsContext();
@@ -26,7 +27,7 @@ export function useCalendarReport(period: ReportPeriod) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchCalendarActivity(toLocalDateStr(period.start), toLocalDateStr(period.end))
+    fetchCalendarActivity(toLocalDateStr(period.start), toLocalDateStr(period.end), { includeArchived: true })
       .then(activity => {
         if (!cancelled) setFetched({ key, activity });
       })
