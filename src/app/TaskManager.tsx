@@ -458,7 +458,10 @@ const TaskManager: React.FC = () => {
               Welcome back{profile.name ? `, ${profile.name}` : ''}
             </h1>
           </div>
-          <div className="@container relative order-last sm:order-none flex-1 min-w-0 sm:min-w-14 self-stretch">
+          {/* Centre slot for the focus moment: only takes the row's free
+              space (-ml-2 cancels its extra gap), so the idle header lays
+              out exactly as without it. */}
+          <div className="@container relative order-last sm:order-none flex-1 min-w-0 sm:-ml-2 self-stretch">
             <KeyPressMoment moment={keyPress} placement="header" onDone={clearKeyPress} />
           </div>
           <div className="flex items-center gap-2">
