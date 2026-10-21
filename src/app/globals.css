@@ -623,6 +623,7 @@ html[data-page-style="blank"] body {
 }
 
 @keyframes kanso-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kanso-fade-out { from { opacity: 1; } to { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .kanso-key-press .kanso-key-face {
@@ -632,8 +633,7 @@ html[data-page-style="blank"] body {
     animation-name: kanso-fade;
   }
   .kanso-key-press.animate-fade-out {
-    animation-name: kanso-fade;
-    animation-direction: reverse;
+    animation-name: kanso-fade-out;
   }
 }
 
