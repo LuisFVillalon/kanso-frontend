@@ -73,7 +73,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
   );
 
   return (
-    <div className="split-notes relative flex flex-col space-y-2 sm:space-y-3">
+    <div className="relative flex flex-col space-y-2 sm:space-y-3">
       {isLoading ? (
         <NotesPanelSkeleton />
       ) : notes.length === 0 ? (

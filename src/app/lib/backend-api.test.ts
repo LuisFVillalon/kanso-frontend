@@ -4,7 +4,7 @@ vi.mock('./supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: { access_token: 'token' } } }) } },
 }));
 
-import { archiveTask, completeTaskWithLinked, fetchCalendarActivity, fetchCanvasCourses, onDelete } from './backend-api';
+import { ApiError, archiveTask, completeTaskWithLinked, fetchCalendarActivity, fetchCanvasCourses, fetchCanvasModules, fetchCanvasOverview, fetchCanvasPanelCourses, onDelete } from './backend-api';
 
 const fetchMock = vi.fn();
 
@@ -91,5 +91,33 @@ describe('linked task modes', () => {
     expect(requestedUrl().pathname).toMatch(/\/update-task-status\/4$/);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH' });
     expect(requestedParams().get('with_linked')).toBe('true');
+  });
+});
+
+describe('Canvas panel reads', () => {
+  it('sends the time zone and only asks for a refresh when told to', async () => {
+    fetchMock.mockImplementation(async () => new Response('{}', { status: 200 }));
+    await fetchCanvasOverview();
+    expect(requestedUrl().pathname).toMatch(/\/canvas\/overview$/);
+    expect(requestedParams().get('tz')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(requestedParams().has('refresh')).toBe(false);
+
+    fetchMock.mockClear();
+    await fetchCanvasModules(460, true);
+    expect(requestedUrl().pathname).toMatch(/\/canvas\/courses\/460\/modules$/);
+    expect(requestedParams().get('refresh')).toBe('true');
+  });
+
+  it('lists only the shown courses', async () => {
+    await fetchCanvasPanelCourses();
+    expect(requestedUrl().pathname).toMatch(/\/canvas\/courses$/);
+    expect(requestedParams().has('include_hidden')).toBe(false);
+  });
+
+  it('carries the Canvas error code as the detail', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: 'canvas_token_invalid' }), { status: 409 }));
+    const err = await fetchCanvasOverview().catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 409, detail: 'canvas_token_invalid' });
   });
 });

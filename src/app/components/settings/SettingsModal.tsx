@@ -50,9 +50,12 @@ interface Props {
   calendarSettings: CalendarSettings;
   calendarSettingsLoading: boolean;
   onSaveCalendarSettings: (changes: Partial<Omit<CalendarSettings, 'id'>>) => Promise<CalendarSettings>;
+  /** The tab to show when the modal opens, e.g. 'integrations' from the Canvas panel. */
+  initialSection?: SettingsSection;
 }
 
-type Section = 'profile' | 'notifications' | 'integrations' | 'password' | 'email' | 'delete';
+export type SettingsSection = 'profile' | 'notifications' | 'integrations' | 'password' | 'email' | 'delete';
+type Section = SettingsSection;
 
 // Providers that use a federated identity — they have no local password.
 const OAUTH_PROVIDERS = new Set(['google', 'github', 'facebook', 'twitter', 'apple']);
@@ -78,6 +81,7 @@ export default function SettingsModal({
   calendarSettings,
   calendarSettingsLoading,
   onSaveCalendarSettings,
+  initialSection,
 }: Props) {
   const { user, isDemo } = useAuth();
   const notifications = useOptionalNotifications();
@@ -92,6 +96,11 @@ export default function SettingsModal({
 
   // Start on 'profile' tab by default.
   const [section, setSection] = useState<Section>('profile');
+  /* eslint-disable react-hooks/set-state-in-effect -- jumping to the requested tab each time the modal opens */
+  useEffect(() => {
+    if (isOpen && initialSection) setSection(initialSection);
+  }, [isOpen, initialSection]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const needsPreferences = showNotifications && !notifications.preferences && !notifications.preferencesError;
   const loadNotificationPreferences = notifications?.loadPreferences;
@@ -218,6 +227,7 @@ export default function SettingsModal({
       dailyBriefCollapsed: profile.dailyBriefCollapsed,
       dashboardView: profile.dashboardView,
       notesViewMode: profile.notesViewMode,
+      homePanels: profile.homePanels,
       moodCheckins,
     });
 

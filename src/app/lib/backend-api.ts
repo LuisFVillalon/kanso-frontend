@@ -21,7 +21,15 @@ import { toLocalDateStr, toLocalTimeStr } from "../utils/dateUtils";
 import { LearningResourcesResponse } from "../types/learningResources";
 import { TrashItem, TrashKind } from "../types/trash";
 import { AppNotification, NotificationPreferences, NotificationPreferencesUpdate } from "../types/notification";
-import { CanvasConnection, CanvasCourse } from "../types/canvas";
+import {
+  CanvasAnnouncements,
+  CanvasAssignments,
+  CanvasConnection,
+  CanvasCourse,
+  CanvasCourses,
+  CanvasModules,
+  CanvasOverview,
+} from "../types/canvas";
 import type { StructuredNoteContent } from "../utils/noteContentExtractor";
 import { supabase } from "./supabase";
 
@@ -743,6 +751,7 @@ export async function saveProfile(profile: {
   daily_brief_collapsed?: boolean | null;
   dashboard_view?: string | null;
   notes_view_mode?: string | null;
+  home_panels?: string | null;
   /** Merges into the saved settings; a null field (or null for all) restores the default. */
   mood_checkins?: Partial<MoodCheckinSettings> | null;
 }): Promise<Profile> {
@@ -891,6 +900,53 @@ export async function fetchCanvasCourses(): Promise<CanvasCourse[]> {
   return list
     .filter(c => typeof c?.id === "number" && typeof c?.name === "string")
     .map(c => ({ id: c.id, name: c.name, course_code: typeof c.course_code === "string" ? c.course_code : null }));
+}
+
+// The home-page panel's read routes. Each proxies the school's Canvas through
+// the backend's short cache and returns fetched_at, busy, stale and sample
+// with the data; demo sandboxes get read-only sample data. `refresh` asks the
+// backend to fetch from Canvas even when its cached copy is fresh (it skips
+// that when the copy is under 30 seconds old). A rejected or expired token
+// fails with canvas_token_invalid (409): "Reconnect Canvas".
+
+const canvasReadQuery = (refresh: boolean, withTimeZone = true) => {
+  const params = new URLSearchParams();
+  if (withTimeZone) params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
+  if (refresh) params.set("refresh", "true");
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+
+async function fetchCanvasRead<T>(path: string, context: string): Promise<T> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/${path}`, { headers });
+  await assertOk(res, context);
+  return res.json();
+}
+
+/** Work due from the start of today through the next 7 days, missing work and recently graded work. */
+export function fetchCanvasOverview(refresh = false): Promise<CanvasOverview> {
+  return fetchCanvasRead(`overview${canvasReadQuery(refresh)}`, "fetchCanvasOverview");
+}
+
+/** The active courses shown on the home page, with current grades. */
+export function fetchCanvasPanelCourses(refresh = false): Promise<CanvasCourses> {
+  return fetchCanvasRead(`courses${canvasReadQuery(refresh, false)}`, "fetchCanvasPanelCourses");
+}
+
+/** A course's modules in order, with each item's lock and completion requirement. */
+export function fetchCanvasModules(courseId: number, refresh = false): Promise<CanvasModules> {
+  return fetchCanvasRead(`courses/${courseId}/modules${canvasReadQuery(refresh)}`, "fetchCanvasModules");
+}
+
+/** A course's assignments and quizzes by due date, each with the user's submission and grade. */
+export function fetchCanvasAssignments(courseId: number, refresh = false): Promise<CanvasAssignments> {
+  return fetchCanvasRead(`courses/${courseId}/assignments${canvasReadQuery(refresh)}`, "fetchCanvasAssignments");
+}
+
+/** The last 14 days of announcements from the shown courses, newest first, as plain text. */
+export function fetchCanvasAnnouncements(refresh = false): Promise<CanvasAnnouncements> {
+  return fetchCanvasRead(`announcements${canvasReadQuery(refresh)}`, "fetchCanvasAnnouncements");
 }
 
 // ── Mood check-ins ───────────────────────────────────────────────────────────

@@ -223,12 +223,14 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RESIZABLE SPLIT PANE
-   Column widths are driven by the --tasks-w CSS variable set from React state.
-   Only applied on md+ so mobile stacking is unaffected.
+   The home page's panel carousel (components/common/PanelCarousel.tsx) shows
+   two panels side by side on md+, the left one --tasks-w wide (set from React
+   state) whichever panel it is; phones show the left one alone, full width.
 ═══════════════════════════════════════════════════════════════════════════ */
+.split-slot { width: 100%; min-width: 0; flex-shrink: 0; }
 @media (min-width: 768px) {
-  .split-tasks { width: var(--tasks-w, 50%); min-width: 0; flex-shrink: 0; overflow: hidden; }
-  .split-notes { width: calc(100% - var(--tasks-w, 50%) - 8px); min-width: 0; flex-shrink: 0; overflow: hidden; }
+  .split-left { width: var(--tasks-w, 50%); overflow: hidden; }
+  .split-right { width: calc(100% - var(--tasks-w, 50%) - 8px); overflow: hidden; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

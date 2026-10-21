@@ -33,6 +33,8 @@ export interface Profile {
   dashboard_view?: string | null;
   /** 'cards' | 'folders' — notes view-mode toggle in NotesPanel.tsx / NotesList.tsx. */
   notes_view_mode?: string | null;
+  /** The two home-page panels shown side by side: 'tasks,notes' | 'notes,canvas' | 'canvas,tasks' — see components/common/PanelCarousel.tsx. */
+  home_panels?: string | null;
   /** Which mood check-ins the dashboard nudges for, and when — the backend fills in defaults. */
   mood_checkins?: MoodCheckinSettings | null;
 }

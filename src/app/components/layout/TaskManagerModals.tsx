@@ -9,7 +9,7 @@ import EditTagModal from '@/app/components/tag/EditTagListModal';
 import CreateHabitModal from '@/app/components/habit/CreateHabitModal';
 import ManageHabitsModal from '@/app/components/habit/ManageHabitsModal';
 import HabitHistoryModal from '@/app/components/habit/HabitHistoryModal';
-import SettingsModal from '@/app/components/settings/SettingsModal';
+import SettingsModal, { type SettingsSection } from '@/app/components/settings/SettingsModal';
 import { Tag, BaseTaskForm, NewTag, NewHabit, Task, LinkedTaskRef } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
 import type { ProfileFields } from '@/app/hooks/useProfile';
@@ -78,6 +78,8 @@ interface TaskManagerModalsProps {
 
   // Settings
   showSettings: boolean;
+  /** The tab Settings opens on; when unset, Settings keeps the tab it showed last. */
+  settingsSection?: SettingsSection;
   onCloseSettings: () => void;
   onAccountDeleted: () => void;
   profile: ProfileFields;
@@ -98,7 +100,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   showManageHabitsModal, onCloseManageHabitsModal, habits, onCreateHabitFromManage,
   onDeleteHabit, onArchiveHabit, onUpdateHabit, onViewHabitHistory,
   historyHabit, historyShowBackButton, onCloseHabitHistory, onToggleHabitDate,
-  showSettings, onCloseSettings, onAccountDeleted, profile, profileLoading, onSaveProfile,
+  showSettings, settingsSection, onCloseSettings, onAccountDeleted, profile, profileLoading, onSaveProfile,
   calendarSettings, calendarSettingsLoading, onSaveCalendarSettings,
 }) => {
   return (
@@ -179,6 +181,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
 
       <SettingsModal
         isOpen={showSettings}
+        initialSection={settingsSection}
         onClose={onCloseSettings}
         onAccountDeleted={onAccountDeleted}
         profile={profile}

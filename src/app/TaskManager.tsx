@@ -27,6 +27,11 @@ import ProfileAvatar from '@/app/components/common/ProfileAvatar';
 import { TaskControls } from '@/app/components/task/TaskControls';
 import TasksPanel from '@/app/components/task/TasksPanel';
 import NotesPanel from '@/app/components/notes/NotesPanel';
+import CanvasPanel from '@/app/components/canvas/CanvasPanel';
+import PanelCarousel, {
+  DEFAULT_HOME_PANELS, isHomePanels, type HomePanels, type PanelCarouselHandle, type PanelKey,
+} from '@/app/components/common/PanelCarousel';
+import type { SettingsSection } from '@/app/components/settings/SettingsModal';
 import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
@@ -57,6 +62,15 @@ const TaskManager: React.FC = () => {
     profile.appMode as AppMode | null,
     next => { saveProfile({ ...profile, appMode: next }); },
   );
+  // The two home-page panels side by side (see PanelCarousel); Tasks + Notes until the user slides.
+  const [homePanels, setHomePanels] = usePersistedPref<HomePanels>(
+    'tm-home-panels',
+    DEFAULT_HOME_PANELS,
+    isHomePanels,
+    profile.homePanels as HomePanels | null,
+    next => { saveProfile({ ...profile, homePanels: next }); },
+  );
+  const carouselRef = useRef<PanelCarouselHandle>(null);
   const focusMode = mode === 'focus';
   const doodleMode = mode === 'doodle';
 
@@ -124,6 +138,13 @@ const TaskManager: React.FC = () => {
   });
 
   const state = useTaskManagerState();
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
+  // Bumped when Settings closes, so the Canvas panel picks up a new or removed connection.
+  const [canvasSyncToken, setCanvasSyncToken] = useState(0);
+  const openSettings = (section?: SettingsSection) => {
+    setSettingsSection(section);
+    state.setShowSettings(true);
+  };
   const {
     tasksWidthPct,
     panelHeightPx,
@@ -310,6 +331,48 @@ const TaskManager: React.FC = () => {
     }
   };
 
+  const renderHomePanel = (key: PanelKey, { widthPct }: { widthPct: number }) => {
+    if (key === 'tasks') {
+      return (
+        <TasksPanel
+          tags={tags}
+          taskGroups={taskGroups}
+          onToggleComplete={toggleComplete}
+          onCompleteWithLinked={completeWithLinked}
+          onDeleteTask={deleteTask}
+          onArchiveTask={archiveTask}
+          onUpdatePriority={updatePriority}
+          onEditTask={openEditTaskModal}
+          activeTaskCount={activeTaskCount}
+          occupiedPriorities={occupiedPriorityLevels}
+          compact={widthPct < 40}
+          heightPx={panelHeightPx}
+          pendingTaskIds={pendingTaskIds}
+        />
+      );
+    }
+    if (key === 'notes') {
+      return (
+        <NotesPanel
+          notes={filteredNotes}
+          tags={tags}
+          noteEditorOverlay={noteEditorOverlay}
+          onUpdateNote={updateNote}
+          onDeleteNote={deleteNote}
+          onArchiveNote={handleArchiveNote}
+          onEditorChange={setNoteEditorOverlay}
+          heightPx={panelHeightPx}
+          isLoading={notesLoading}
+          pendingNoteIds={pendingNoteIds}
+          tagFilter={state.selectedTags}
+          profile={profile}
+          onSaveProfile={saveProfile}
+        />
+      );
+    }
+    return <CanvasPanel heightPx={panelHeightPx} onOpenSettings={() => openSettings('integrations')} syncToken={canvasSyncToken} />;
+  };
+
   if (isLoading || tagsLoading) return <PageSpinner size="lg" />;
 
   return (
@@ -342,7 +405,12 @@ const TaskManager: React.FC = () => {
         tags={tags}
         searchPlaceholder={'Search tasks & notes…'}
         onCreateTask={() => state.setShowNewTaskModal(true)}
-        onNewNote={async () => { const note = await addNote(); setNoteEditorOverlay(note); }}
+        onNewNote={async () => {
+          const note = await addNote();
+          setNoteEditorOverlay(note);
+          // The editor opens inside the Notes panel, so bring it on screen.
+          carouselRef.current?.show('notes');
+        }}
         onViewNotes={() => router.push('/notes')}
         onViewCalendar={() => router.push('/calendar')}
         onViewArchive={() => router.push('/archive')}
@@ -353,7 +421,7 @@ const TaskManager: React.FC = () => {
         onToggleMenu={() => state.setTaskSidebarOpen(prev => !prev)}
         profileName={profile.name}
         profileAvatar={profile.avatar}
-        onSettings={() => state.setShowSettings(true)}
+        onSettings={() => openSettings()}
         onLogout={handleLogout}
       />
       </div>
@@ -423,47 +491,17 @@ const TaskManager: React.FC = () => {
               </div>
             )}
 
-            {/* Tasks & Notes — split layout */}
+            {/* Tasks, Notes & Canvas — two at a time in the resizable split */}
             <div className="space-y-4">
-              <div
-                ref={splitContainerRef}
-                className="flex flex-col md:flex-row"
-                style={{ ['--tasks-w' as string]: `${tasksWidthPct}%` }}
-              >
-                <TasksPanel
-                  tags={tags}
-                  taskGroups={taskGroups}
-                  onToggleComplete={toggleComplete}
-                  onCompleteWithLinked={completeWithLinked}
-                  onDeleteTask={deleteTask}
-                  onArchiveTask={archiveTask}
-                  onUpdatePriority={updatePriority}
-                  onEditTask={openEditTaskModal}
-                  activeTaskCount={activeTaskCount}
-                  occupiedPriorities={occupiedPriorityLevels}
-                  compact={tasksWidthPct < 40}
-                  heightPx={panelHeightPx}
-                  pendingTaskIds={pendingTaskIds}
-                />
-
-                <DragHandle onMouseDown={handleSplitterMouseDown} />
-
-                <NotesPanel
-                  notes={filteredNotes}
-                  tags={tags}
-                  noteEditorOverlay={noteEditorOverlay}
-                  onUpdateNote={updateNote}
-                  onDeleteNote={deleteNote}
-                  onArchiveNote={handleArchiveNote}
-                  onEditorChange={setNoteEditorOverlay}
-                  heightPx={panelHeightPx}
-                  isLoading={notesLoading}
-                  pendingNoteIds={pendingNoteIds}
-                  tagFilter={state.selectedTags}
-                  profile={profile}
-                  onSaveProfile={saveProfile}
-                />
-              </div>
+              <PanelCarousel
+                ref={carouselRef}
+                value={homePanels}
+                onChange={setHomePanels}
+                leftWidthPct={tasksWidthPct}
+                splitRef={splitContainerRef}
+                onSplitterMouseDown={handleSplitterMouseDown}
+                renderPanel={renderHomePanel}
+              />
 
               <DragHandle onMouseDown={handleHeightSplitterMouseDown} orientation="row" alwaysVisible />
             </div>
@@ -545,7 +583,8 @@ const TaskManager: React.FC = () => {
         onToggleHabitDate={toggleHabitDate}
         // Settings
         showSettings={state.showSettings}
-        onCloseSettings={() => state.setShowSettings(false)}
+        settingsSection={settingsSection}
+        onCloseSettings={() => { state.setShowSettings(false); setCanvasSyncToken(n => n + 1); }}
         onAccountDeleted={handleLogout}
         profile={profile}
         profileLoading={profileLoading}
