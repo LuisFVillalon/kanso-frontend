@@ -5,9 +5,9 @@ import { useAuth } from '@/app/context/AuthContext';
 import PageSpinner from '@/app/components/common/PageSpinner';
 import TaskManager from '@/app/TaskManager';
 
-/** Signed in: the dashboard. Signed out (or while a demo sandbox is still seeding): the landing page. */
+/** Shows a spinner while auth loads, then renders the dashboard (TaskManager). */
 export default function Page() {
-  const { user, loading, demoSeeding } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) return <PageSpinner />;
 
