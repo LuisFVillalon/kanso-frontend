@@ -11,7 +11,7 @@ import type { Habit } from '@/app/types/habit';
 import { checkinToSave, moodLabel, type MoodCheckin } from '@/app/types/mood';
 import type { Task } from '@/app/types/task';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
-import { checkinDayAt, moodNudgeState, type MoodNudgeDismissals } from '@/app/utils/moodNudge';
+import { checkinDayAt, endsPastMidnight, moodNudgeState, type MoodNudgeDismissals } from '@/app/utils/moodNudge';
 
 // Skips and snoozes stay on this device (cleared on logout with
 // the other tm_* keys) and never become check-ins.
@@ -148,7 +148,8 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
   const handleSkip = () => {
     setModal(null);
     updateDismissals({ skipped: true });
-    showToast('Skipped for today. You can still log it until midnight.', 'info', {
+    const until = endsPastMidnight(profile.dayStartTime, profile.shutoffTime) ? 'your next day starts' : 'midnight';
+    showToast(`Skipped for today. You can still log it until ${until}.`, 'info', {
       label: 'Undo',
       onClick: () => updateDismissals({ skipped: false }),
     });

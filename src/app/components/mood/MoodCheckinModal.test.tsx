@@ -68,15 +68,20 @@ describe('MoodCheckinModal', () => {
     expect(saveButton().disabled).toBe(false);
   });
 
-  it('picks a mood from the 1–5 keys, but not while typing', async () => {
+  it('picks a mood from the 1–5 keys as soon as it opens, but not while typing', async () => {
     await render();
-    const note = document.body.querySelector('textarea')!;
-    await act(async () => { note.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true })); });
-    expect(saveButton().disabled).toBe(true);
+    const press = (key: string) => act(async () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    });
 
-    await act(async () => { saveButton().dispatchEvent(new KeyboardEvent('keydown', { key: '5', bubbles: true })); });
+    await press('5');
     expect(button('Great').getAttribute('aria-checked')).toBe('true');
     expect(saveButton().disabled).toBe(false);
+
+    document.body.querySelector('textarea')!.focus();
+    await press('2');
+    expect(button('Great').getAttribute('aria-checked')).toBe('true');
+    expect(button('Low').getAttribute('aria-checked')).toBe('false');
   });
 
   it('opens with the face tapped on the nudge already picked', async () => {

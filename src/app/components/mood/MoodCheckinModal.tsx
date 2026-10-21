@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, CircleCheck, Clock, Loader2, Plus, Repeat } from 'lucide-react';
 import Modal from '@/app/components/common/Modal';
 import MoodFacePicker from '@/app/components/mood/MoodFacePicker';
@@ -145,6 +145,8 @@ const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null,
   };
 
   // Keys 1–5 pick a face, except while typing.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { dialogRef.current?.focus(); }, []);
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.target as HTMLElement).closest('input, textarea')) return;
     if (/^[1-5]$/.test(e.key)) setMood(Number(e.key));
@@ -152,7 +154,15 @@ const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null,
 
   return (
     <Modal onClose={onClose} panelClassName="modal-panel w-full max-w-md max-h-[92vh] overflow-y-auto scrollbar-custom">
-      <div role="dialog" aria-modal="true" aria-labelledby="mood-checkin-title" onKeyDown={handleKeyDown}>
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mood-checkin-title"
+        onKeyDown={handleKeyDown}
+        className="outline-none"
+      >
         <div className="px-5 py-4 border-b border-border-subtle flex justify-between items-start gap-3">
           <div className="min-w-0">
             <h3 id="mood-checkin-title" className="text-lg font-semibold text-text-primary leading-tight">{title}</h3>

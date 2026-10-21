@@ -13,6 +13,10 @@ const toMinutes = (hm: string): number => {
   return h * 60 + m;
 };
 
+/** Whether the day is called off after midnight: shutoff at or before the day start. */
+export const endsPastMidnight = (dayStartTime: string, shutoffTime: string): boolean =>
+  toMinutes(shutoffTime) <= toMinutes(dayStartTime);
+
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
 /**
@@ -34,7 +38,7 @@ export function checkinDayAt(
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const today = addDays(now, 0);
 
-  if (shutoff <= start) {
+  if (endsPastMidnight(dayStartTime, shutoffTime)) {
     if (nowMinutes >= start) return { day: today, due: false };
     return { day: addDays(today, -1), due: nowMinutes >= shutoff + delay };
   }
