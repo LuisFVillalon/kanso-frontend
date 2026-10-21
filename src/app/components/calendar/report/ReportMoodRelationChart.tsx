@@ -186,7 +186,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
     const y = yOf(i + 1);
     return (
       <g key={name}>
-        <line x1={padLeft} x2={width - padRight} y1={y} y2={y} stroke="var(--tm-border)" strokeDasharray="2 4" />
+        <line x1={padLeft} x2={width - padRight} y1={y} y2={y} stroke="var(--tm-rule)" strokeDasharray="2 4" />
         <circle cx={9} cy={y} r={3.5} fill={moodColor(i + 1)} />
         <text x={17} y={y + 4} fontSize={11} fill="var(--tm-text-muted)">{name}</text>
       </g>
@@ -269,7 +269,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
           </rect>
         ))}
         {[0, max / 2, max].map(t => (
-          <text key={t} x={width - padRight + 4} y={barTop(t) + 4} fontSize={10.5} fill={info.color}>{formatMetric(metric, metric === 'notes' ? Math.round(t) : t)}</text>
+          <text key={t} x={width - padRight + 4} y={barTop(t) + 4} fontSize={10.5} fill="var(--tm-text-muted)">{formatMetric(metric, metric === 'notes' ? Math.round(t) : t)}</text>
         ))}
         <path d={pathThrough(moodPoints)} fill="none" stroke="var(--tm-text-secondary)" strokeWidth={1.6} strokeOpacity={0.7} strokeLinejoin="round" strokeLinecap="round" />
         {moodPoints.map((pt, i) =>

@@ -72,7 +72,7 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; scope: MoodScope; av
                     className="block h-full rounded-full"
                     style={{ width: `${Math.max(((row.average - 1) / 4) * 100, 4)}%`, backgroundColor: moodColor(Math.round(row.average)) }}
                   />
-                  <span className="absolute -top-1 w-px h-4 bg-text-primary opacity-50" style={{ left: markerLeft }} />
+                  <span className="absolute -top-1 w-px h-4 bg-pencil" style={{ left: markerLeft }} />
                 </span>
                 <span className="text-xs font-semibold text-text-primary w-8 text-right">
                   <span className="sr-only">average mood </span>{row.average.toFixed(1)}
