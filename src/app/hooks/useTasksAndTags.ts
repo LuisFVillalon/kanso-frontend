@@ -99,7 +99,8 @@ export const useTasks = (enabled: boolean) => {
         created_date: task.created_date instanceof Date ? toLocalISOString(task.created_date) : (typeof task.created_date === 'string' ? task.created_date : null),
         completed_date: newCompletedDate,
         estimated_time: task.estimated_time,
-        parent_task_id: task.parent_task_id
+        parent_task_id: task.parent_task_id,
+        reminder_minutes: task.reminder_minutes ?? null,
       });
       setCompletionSyncToken(v => v + 1);
     } catch (err) {

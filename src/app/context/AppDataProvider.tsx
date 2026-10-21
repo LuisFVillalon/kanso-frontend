@@ -6,6 +6,7 @@ import { TasksProvider } from './TasksContext';
 import { TagsProvider } from './TagsContext';
 import { HabitsProvider } from './HabitsContext';
 import { NotesProvider } from './NotesContext';
+import { NotificationsProvider } from './NotificationsContext';
 
 /**
  * Mounted once in the root layout, inside <AuthProvider> — the only place
@@ -33,7 +34,9 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       <TagsProvider>
         <HabitsProvider>
           <NotesProvider>
-            {children}
+            <NotificationsProvider>
+              {children}
+            </NotificationsProvider>
           </NotesProvider>
         </HabitsProvider>
       </TagsProvider>

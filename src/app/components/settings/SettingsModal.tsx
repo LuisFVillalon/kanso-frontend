@@ -21,7 +21,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
-import { X, Loader2, Eye, EyeOff, AlertTriangle, ExternalLink, ShieldCheck, User, Check, Palette, CircleUserRound, Info } from 'lucide-react';
+import { X, Loader2, Eye, EyeOff, AlertTriangle, ExternalLink, ShieldCheck, User, Check, Palette, CircleUserRound, Info, Bell } from 'lucide-react';
 import { supabase } from '@/app/lib/supabase';
 import { useAuth } from '@/app/context/AuthContext';
 import { updatePassword, deleteAccount } from '@/app/lib/backend-api';
@@ -33,6 +33,8 @@ import { AVATAR_OPTIONS } from '@/app/lib/avatar';
 import ThemeAccentPicker from '@/app/components/settings/ThemeAccentPicker';
 import BigPictureSettingsSection, { type TermTrackerDraft } from '@/app/components/settings/BigPictureSettingsSection';
 import Modal from '@/app/components/common/Modal';
+import NotificationPreferencesForm from '@/app/components/settings/NotificationPreferencesForm';
+import { useOptionalNotifications } from '@/app/context/NotificationsContextValue';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { CalendarSettings } from '@/app/types/calendar';
 interface Props {
@@ -47,7 +49,7 @@ interface Props {
   onSaveCalendarSettings: (changes: Partial<Omit<CalendarSettings, 'id'>>) => Promise<CalendarSettings>;
 }
 
-type Section = 'profile' | 'password' | 'email' | 'delete';
+type Section = 'profile' | 'notifications' | 'password' | 'email' | 'delete';
 
 // Providers that use a federated identity — they have no local password.
 const OAUTH_PROVIDERS = new Set(['google', 'github', 'facebook', 'twitter', 'apple']);
@@ -75,6 +77,9 @@ export default function SettingsModal({
   onSaveCalendarSettings,
 }: Props) {
   const { user, isDemo } = useAuth();
+  const notifications = useOptionalNotifications();
+  // Hidden where the API refuses notifications, as the bell is.
+  const showNotifications = !!notifications && notifications.status !== 'unavailable';
 
   // ── Provider detection ───────────────────────────────────────────────────
   // app_metadata is set by Supabase server-side and cannot be spoofed by users.
@@ -84,6 +89,14 @@ export default function SettingsModal({
 
   // Start on 'profile' tab by default.
   const [section, setSection] = useState<Section>('profile');
+
+  const needsPreferences = showNotifications && !notifications.preferences && !notifications.preferencesError;
+  const loadNotificationPreferences = notifications?.loadPreferences;
+  // The provider loads them after its first successful poll; opening the
+  // tab before that (or after that poll failed) asks directly.
+  useEffect(() => {
+    if (isOpen && section === 'notifications' && needsPreferences) void loadNotificationPreferences?.();
+  }, [isOpen, section, needsPreferences, loadNotificationPreferences]);
 
   // ── Profile ──────────────────────────────────────────────────────────────
   // Draft copies of the shared profile (see hooks/useProfile.ts) — edited
@@ -300,7 +313,7 @@ export default function SettingsModal({
   };
 
   const tabClass = (s: Section) =>
-    `px-4 py-2 text-sm font-semibold rounded-lg transition-all ${
+    `px-4 py-2 text-sm font-semibold rounded-lg whitespace-nowrap transition-all ${
       section === s
         ? s === 'delete' ? 'text-white' : 'text-[var(--tm-accent-text)]'
         : s === 'password' && isOAuth
@@ -365,6 +378,15 @@ export default function SettingsModal({
           >
             Profile
           </button>
+          {showNotifications && (
+            <button
+              onClick={() => setSection('notifications')}
+              className={tabClass('notifications')}
+              style={tabStyle('notifications')}
+            >
+              Notifications
+            </button>
+          )}
           {!isDemo && <>
             <button
               onClick={() => !isOAuth && setSection('password')}
@@ -408,6 +430,38 @@ export default function SettingsModal({
         )}
 
         <div className="px-6 py-5 overflow-y-auto flex-1 scrollbar-custom">
+
+          {/* ── Notifications Tab ────────────────────────────────────────── */}
+          {section === 'notifications' && showNotifications && (
+            <div className="space-y-5">
+              <div className="flex items-center gap-2" style={{ color: 'var(--tm-text-secondary)' }}>
+                <Bell className="w-4 h-4" />
+                <p className="text-sm">Choose which in-app alerts kanso sends, and when to keep quiet.</p>
+              </div>
+              {notifications.preferences ? (
+                <NotificationPreferencesForm
+                  preferences={notifications.preferences}
+                  onSave={notifications.savePreferences}
+                />
+              ) : notifications.preferencesError ? (
+                <div className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
+                  <p>Couldn&apos;t load your notification settings.</p>
+                  <button
+                    type="button"
+                    onClick={() => void notifications.loadPreferences()}
+                    className="mt-1 font-medium hover:underline"
+                    style={{ color: 'var(--tm-accent)' }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : (
+                <div className="flex justify-center py-6" style={{ color: 'var(--tm-text-muted)' }}>
+                  <Loader2 className="w-5 h-5 animate-spin" aria-label="Loading notification settings" />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Profile Tab ──────────────────────────────────────────────── */}
           {section === 'profile' && (

@@ -2,6 +2,9 @@ import React from 'react';
 import { Calendar, Clock } from 'lucide-react';
 import { Tag } from '@/app/types/task';
 import DurationPicker from './DurationPicker';
+import ReminderLeadPicker from '@/app/components/notifications/ReminderLeadPicker';
+import { useOptionalNotifications } from '@/app/context/NotificationsContextValue';
+import { DEFAULT_REMINDER_MINUTES } from '@/app/utils/notifications';
 
 export interface TaskFormData {
   title: string;
@@ -12,6 +15,7 @@ export interface TaskFormData {
   tags: Tag[];
   category?: string | null;
   estimated_time?: number | null;
+  reminder_minutes?: number | null;
 }
 
 interface TaskFormFieldsProps {
@@ -41,6 +45,11 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
   );
 
   const set = (patch: Partial<TaskFormData>) => onChange({ ...values, ...patch });
+
+  // Reminders exist only where the API serves notifications (not, say, an
+  // older backend that refuses them).
+  const notifications = useOptionalNotifications();
+  const showReminder = !!notifications && notifications.status !== 'unavailable';
 
   const dueDateValue =
     values.due_date instanceof Date
@@ -117,6 +126,23 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Reminder lead */}
+      {showReminder && (
+        <div>
+          <label id="remind-me-label" className="block text-sm font-medium text-text-secondary mb-2">Remind me</label>
+          <ReminderLeadPicker
+            aria-labelledby="remind-me-label"
+            value={values.reminder_minutes ?? null}
+            onChange={minutes => set({ reminder_minutes: minutes })}
+            defaultMinutes={notifications.preferences?.default_reminder_minutes ?? DEFAULT_REMINDER_MINUTES}
+            disabled={!dueTimeValue || !dueDateValue}
+          />
+          {(!dueTimeValue || !dueDateValue) && (
+            <p className="text-xs text-text-muted mt-1">Set a due date and time to get a reminder before it&apos;s due.</p>
+          )}
+        </div>
+      )}
 
       {/* Description */}
       <div>

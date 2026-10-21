@@ -84,6 +84,7 @@ export const useTaskHandlers = ({
         tags: [],
         category: null,
         estimated_time: null,
+        reminder_minutes: null,
         created_date: '',
       });
     }

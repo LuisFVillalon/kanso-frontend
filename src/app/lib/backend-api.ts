@@ -19,6 +19,7 @@ import { DailyDebriefReport } from "../types/debrief";
 import { toLocalDateStr, toLocalTimeStr } from "../utils/dateUtils";
 import { LearningResourcesResponse } from "../types/learningResources";
 import { TrashItem, TrashKind } from "../types/trash";
+import { AppNotification, NotificationPreferences, NotificationPreferencesUpdate } from "../types/notification";
 import type { StructuredNoteContent } from "../utils/noteContentExtractor";
 import { supabase } from "./supabase";
 
@@ -130,6 +131,7 @@ export async function createTask(task: {
   completed_date?: string | null;
   parent_task_id?: number | null;
   estimated_time?: number | null;
+  reminder_minutes?: number | null;
 }) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/create-task`, {
@@ -165,6 +167,8 @@ export async function updateWholeTask(id: number, task: {
   completed_date?: string | null;
   estimated_time?: number | null;
   parent_task_id?: number | null;
+  /** Replaced like every other field: leaving it out resets the task to the user's default lead. */
+  reminder_minutes?: number | null;
 }) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/update-task/${id}`, {
@@ -695,6 +699,75 @@ export async function saveProfile(profile: {
     body: JSON.stringify(profile),
   });
   await assertOk(res, "saveProfile");
+  return res.json();
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+// Computed on demand server-side from tasks, habits and the profile; `tz` is
+// the browser's IANA zone, since due times, the day start, "Call it a day"
+// and quiet hours are all local times.
+
+const timeZoneQuery = () => `?${new URLSearchParams({ tz: Intl.DateTimeFormat().resolvedOptions().timeZone })}`;
+
+/** Fetches the notifications that have fired by now, newest first, without dismissed ones. */
+export async function fetchNotifications(): Promise<AppNotification[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-notifications${timeZoneQuery()}`, { headers });
+  await assertOk(res, "fetchNotifications");
+  return res.json();
+}
+
+/** Marks notifications read by id (at most 200 per call). */
+export async function markNotificationsRead(ids: string[]): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/mark-notifications-read`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ ids }),
+  });
+  await assertOk(res, "markNotificationsRead");
+}
+
+/** Marks every notification /get-notifications currently returns as read. */
+export async function markAllNotificationsRead(): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/mark-all-notifications-read${timeZoneQuery()}`, {
+    method: 'POST',
+    headers,
+  });
+  await assertOk(res, "markAllNotificationsRead");
+}
+
+/** Dismisses notifications by id (at most 200 per call), so they leave the list for good. */
+export async function dismissNotifications(ids: string[]): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/dismiss-notifications`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ ids }),
+  });
+  await assertOk(res, "dismissNotifications");
+}
+
+/** Fetches the user's notification preferences, with defaults for anything never set. */
+export async function fetchNotificationPreferences(): Promise<NotificationPreferences> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-notification-preferences`, { headers });
+  await assertOk(res, "fetchNotificationPreferences");
+  return res.json();
+}
+
+/** Changes only the preference fields given and returns the full saved preferences. */
+export async function updateNotificationPreferences(
+  changes: NotificationPreferencesUpdate,
+): Promise<NotificationPreferences> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/update-notification-preferences`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(changes),
+  });
+  await assertOk(res, "updateNotificationPreferences");
   return res.json();
 }
 
