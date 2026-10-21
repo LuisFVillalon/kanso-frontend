@@ -855,14 +855,13 @@ export async function removeCanvasConnection(): Promise<void> {
 
 /**
  * Fetches the user's Canvas courses, hidden ones included, keeping only the
- * fields "Courses to show" needs. Accepts a bare list or `{ courses: [...] }`.
+ * fields "Courses to show" needs from the `{ courses: [...] }` response.
  */
 export async function fetchCanvasCourses(): Promise<CanvasCourse[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/canvas/courses`, { headers });
+  const res = await fetch(`${API_BASE_URL}/canvas/courses?include_hidden=true`, { headers });
   await assertOk(res, "fetchCanvasCourses");
-  const body = await res.json();
-  const list: unknown = Array.isArray(body) ? body : body?.courses;
+  const list: unknown = (await res.json())?.courses;
   if (!Array.isArray(list)) throw new Error("[fetchCanvasCourses] unexpected response shape");
   return list
     .filter(c => typeof c?.id === "number" && typeof c?.name === "string")

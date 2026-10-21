@@ -431,9 +431,9 @@ const ConnectionCard: React.FC<{ connection: CanvasConnection; now: Date }> = ({
 const CoursesToShow: React.FC<{
   courses: CanvasCourse[];
   hidden: number[];
-  saving: boolean;
+  disabled: boolean;
   onToggle: (courseId: number) => void;
-}> = ({ courses, hidden, saving, onToggle }) => (
+}> = ({ courses, hidden, disabled, onToggle }) => (
   <fieldset>
     <legend className="text-xs font-medium text-text-muted mb-1">Courses to show</legend>
     {courses.length === 0 ? (
@@ -450,7 +450,7 @@ const CoursesToShow: React.FC<{
               <input
                 type="checkbox"
                 checked={!hidden.includes(course.id)}
-                disabled={saving}
+                disabled={disabled}
                 onChange={() => onToggle(course.id)}
                 style={{ accentColor: 'var(--tm-accent)' }}
               />
@@ -514,7 +514,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
     const next = await connectCanvas(baseUrl, token, allowAccountChange);
     setConnection(next);
     setMode('view');
-    setNotice({ tone: 'success', text: `Canvas connected as ${next.canvas_user_name}.` });
+    setNotice({ tone: 'success', text: next.canvas_user_name ? `Canvas connected as ${next.canvas_user_name}.` : 'Canvas connected.' });
   };
 
   const handleTest = async () => {
@@ -581,7 +581,9 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
       <div className="space-y-4">
         {intro}
         <Banner tone="warning" icon={AlertTriangle}>
-          <p className="font-semibold">Canvas isn&apos;t available in the demo.</p>
+          <p className="font-semibold">
+            {isDemo ? 'Canvas isn\'t available in the demo.' : 'Canvas isn\'t available for this account.'}
+          </p>
           <p className="text-text-secondary">
             {isDemo
               ? 'Connecting Canvas stores your access token, so it needs your own kanso account. Create one to connect Canvas.'
@@ -662,7 +664,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
         <button
           type="button"
           onClick={() => void handleRemove()}
-          disabled={busy === 'remove'}
+          disabled={busy !== null}
           className="btn text-sm py-2 text-white disabled:opacity-60"
           style={{ backgroundColor: 'var(--tm-danger)' }}
         >
@@ -746,7 +748,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
       </>}
       {mode === 'view' && (
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => void handleTest()} disabled={busy === 'test'} className="btn btn-secondary text-sm py-2 disabled:opacity-60">
+          <button type="button" onClick={() => void handleTest()} disabled={busy !== null} className="btn btn-secondary text-sm py-2 disabled:opacity-60">
             {busy === 'test' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             {busy === 'test' ? 'Testing…' : 'Test'}
           </button>
@@ -765,7 +767,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
         <CoursesToShow
           courses={visibleCourses}
           hidden={connection.hidden_course_ids}
-          saving={busy === 'courses'}
+          disabled={busy !== null}
           onToggle={courseId => void handleToggleCourse(courseId)}
         />
       )}

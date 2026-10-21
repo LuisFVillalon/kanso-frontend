@@ -159,6 +159,17 @@ describe('CanvasIntegrationSection', () => {
     expect(container.querySelector('#canvas-token')).toBeNull();
   });
 
+  it('leaves the name out of the success notice when Canvas gives none', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(notConnected);
+    api.connectCanvas.mockResolvedValue(connected({ canvas_user_name: null }));
+    await render();
+    typeInto(urlInput(), 'sdsu.instructure.com');
+    tokenInput().value = '7~secretsecretsecretsecret7Hq2';
+    await submitForm();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Canvas connected.');
+    expect(text()).not.toContain('null');
+  });
+
   it('shows a rejected token under the token field and keeps the form', async () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     api.connectCanvas.mockRejectedValue(apiError(422, 'canvas_token_invalid'));
@@ -300,6 +311,8 @@ describe('CanvasIntegrationSection', () => {
     api.fetchCanvasConnection.mockRejectedValue(apiError(403, "Canvas can't be connected to a demo sandbox."));
     await render();
     expect(text()).toContain("Canvas can't be connected to a demo sandbox.");
+    expect(text()).toContain("Canvas isn't available for this account.");
+    expect(text()).not.toContain('in the demo');
   });
 
   it('leaves out Courses to show while the courses route does not answer', async () => {
@@ -323,6 +336,27 @@ describe('CanvasIntegrationSection', () => {
     await click(boxes[0]);
     expect(api.updateCanvasHiddenCourses).toHaveBeenCalledWith([1, 3]);
     expect(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')[0].checked).toBe(false);
+  });
+
+  it('keeps Test and the course choices disabled until every action started has finished', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(connected());
+    api.fetchCanvasCourses.mockResolvedValue([{ id: 1, name: 'Operating Systems', course_code: 'CS 460' }]);
+    let finishSave!: (c: CanvasConnection) => void;
+    api.updateCanvasHiddenCourses.mockReturnValue(new Promise(resolve => { finishSave = resolve; }));
+    await render();
+    await click(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    expect(button('Test').disabled).toBe(true);
+    await click(button('Test'));
+    expect(api.testCanvasConnection).not.toHaveBeenCalled();
+    await act(async () => finishSave(connected({ hidden_course_ids: [1] })));
+    expect(button('Test').disabled).toBe(false);
+
+    let finishTest!: (c: CanvasConnection) => void;
+    api.testCanvasConnection.mockReturnValue(new Promise(resolve => { finishTest = resolve; }));
+    await click(button('Test'));
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+    await act(async () => finishTest(connected({ hidden_course_ids: [1] })));
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(false);
   });
 
   it('puts a course choice back when saving it fails', async () => {
