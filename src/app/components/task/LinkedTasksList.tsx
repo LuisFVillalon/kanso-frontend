@@ -1,7 +1,8 @@
 import React from 'react';
 import { Check, ChevronDown, ChevronRight, SquarePen } from 'lucide-react';
 import { Task } from '@/app/types/task';
-import { getDueStatus, getPriorityBadgeStyle } from '@/app/utils/taskUtils';
+import { formatDueDateShort, getDueStatus, getPriorityBadgeStyle } from '@/app/utils/taskUtils';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
 import TaskStatusChip from './TaskStatusChip';
 
@@ -130,7 +131,13 @@ const LinkedTaskRow: React.FC<{
         </span>
       )}
 
-      {!compact && !task.completed && dueStatus && <TaskStatusChip status={dueStatus} size="sm" />}
+      {!compact && !task.completed && (dueStatus ? (
+        <TaskStatusChip status={dueStatus} size="sm" />
+      ) : task.due_date && (
+        <span className="flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
+          {formatDueDateShort(toLocalDateStr(task.due_date))}
+        </span>
+      ))}
 
       {!compact && !task.completed && task.estimated_time != null && (
         <span className="hidden sm:inline flex-shrink-0 text-xs whitespace-nowrap text-text-muted">

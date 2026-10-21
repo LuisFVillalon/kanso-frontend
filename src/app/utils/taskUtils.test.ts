@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@/app/types/task';
-import { getDueStatus, groupLinkedTasks, subtaskTreeIds, taskToEditForm, todayPlanProgress } from './taskUtils';
+import { formatDueDateShort, getDueStatus, groupLinkedTasks, subtaskTreeIds, taskToEditForm, todayPlanProgress } from './taskUtils';
 
 describe('subtaskTreeIds', () => {
   const tasks = [
@@ -125,14 +125,27 @@ describe('getDueStatus', () => {
     expect(status('2026-10-21')).toEqual({ kind: 'due', label: 'Due tomorrow' });
   });
 
-  it('counts down the coming week, then falls back to the date', () => {
+  it('counts down the coming week, then shows no chip', () => {
     expect(status('2026-10-23')).toEqual({ kind: 'upcoming', label: 'In 3 days' });
     expect(status('2026-10-27')).toEqual({ kind: 'upcoming', label: 'In 7 days' });
-    expect(status('2026-10-28')).toEqual({ kind: 'later', label: 'Oct 28' });
+    expect(status('2026-10-28')).toBeNull();
   });
 
   it('has no status for an open task without a due date', () => {
     expect(status(null)).toBeNull();
+  });
+});
+
+describe('formatDueDateShort', () => {
+  const now = new Date(2026, 9, 21);
+
+  it('omits the year for dates in the current year', () => {
+    expect(formatDueDateShort('2026-12-05', now)).toBe('Dec 5');
+  });
+
+  it('includes the year for dates in another year', () => {
+    expect(formatDueDateShort('2027-03-01', now)).toBe('Mar 1, 2027');
+    expect(formatDueDateShort('2025-03-01', now)).toBe('Mar 1, 2025');
   });
 });
 

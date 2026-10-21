@@ -332,10 +332,10 @@ const TaskItem: React.FC<TaskItemProps> = ({
               ) : (
                 <span className="flex items-center gap-1.5 text-text-muted">
                   <Calendar className="w-3.5 h-3.5" aria-hidden />
-                  No date
+                  {actualDueDateText ?? 'No date'}
                 </span>
               )}
-              {actualDueDateText && dueStatus?.kind !== 'later' && (
+              {dueStatus && actualDueDateText && (
                 <span className="text-text-muted">{actualDueDateText}</span>
               )}
               {normalizedDueTime && (

@@ -622,9 +622,18 @@ html[data-page-style="blank"] body {
   animation: kanso-key-press 300ms 200ms;
 }
 
+@keyframes kanso-fade { from { opacity: 0; } to { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
   .kanso-key-press .kanso-key-face {
     animation: kanso-key-hold 300ms 200ms;
+  }
+  .kanso-key-press.animate-fade-in {
+    animation-name: kanso-fade;
+  }
+  .kanso-key-press.animate-fade-out {
+    animation-name: kanso-fade;
+    animation-direction: reverse;
   }
 }
 

@@ -25,11 +25,15 @@ export function getPriorityStyle(priority: number | null) {
   return PRIORITY_COLORS[priority] ?? DEFAULT_PRIORITY_COLOR;
 }
 
-export function formatDueDateShort(due: string | Date | null): string | null {
+export function formatDueDateShort(due: string | Date | null, now: Date = new Date()): string | null {
   if (!due) return null;
   const d = typeof due === 'string' ? new Date(due + 'T00:00:00') : due;
   if (isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  });
 }
 
 export const formatDueDate = (
@@ -271,16 +275,16 @@ export const countTasksByTag = (tasks: Task[]) => {
 
 /**
  * done: completed. slipped: past its due date (never shown in red). due: due
- * today or tomorrow. upcoming: due within UPCOMING_DAYS. later: further out.
+ * today or tomorrow. upcoming: due within UPCOMING_DAYS.
  */
-export type DueStatusKind = 'done' | 'slipped' | 'due' | 'upcoming' | 'later';
+export type DueStatusKind = 'done' | 'slipped' | 'due' | 'upcoming';
 
 export interface DueStatus {
   kind: DueStatusKind;
   label: string;
 }
 
-/** How far ahead a due date still counts as "In N days" rather than a plain date. */
+/** How far ahead a due date still gets an "In N days" chip; further out shows only the plain date. */
 const UPCOMING_DAYS = 7;
 
 /** Whole calendar days from `now` to the due date: 0 today, negative once it has passed. */
@@ -290,7 +294,7 @@ function daysUntilDue(dueDate: string | Date, now: Date): number {
   return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-/** The chip state for a task, or null for an open task with no due date. */
+/** The chip state for a task, or null for an open task with no due date or one due beyond UPCOMING_DAYS. */
 export function getDueStatus(
   task: Pick<Task, 'completed' | 'due_date'>,
   now: Date = new Date(),
@@ -302,7 +306,7 @@ export function getDueStatus(
   if (days === 0) return { kind: 'due', label: 'Due today' };
   if (days === 1) return { kind: 'due', label: 'Due tomorrow' };
   if (days <= UPCOMING_DAYS) return { kind: 'upcoming', label: `In ${days} days` };
-  return { kind: 'later', label: formatDueDateShort(toLocalDateStr(task.due_date)) ?? '' };
+  return null;
 }
 
 /**
