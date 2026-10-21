@@ -74,7 +74,7 @@ A few decisions worth calling out:
 src/app/
   (app)/                 # Route group sharing the signed-in app shell (navigation rail, global modals)
     layout.tsx           # Wraps every page below in AppShell
-    page.tsx             # Landing page when signed out, dashboard (TaskManager) when signed in
+    page.tsx             # Spinner while auth loads, then the dashboard (TaskManager)
     notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
   TaskManager.tsx        # The dashboard
   login/ signup/ auth/callback/

@@ -36,8 +36,9 @@ const GO_TO_WINDOW_MS = 1000;
  * the logout confirmation, and the global keyboard shortcuts (T new task,
  * N new note, G then a page's letter to go there).
  *
- * Signed out, it renders the page alone, so the signed-out branch of the
- * home page (src/app/(app)/page.tsx) gets no navigation.
+ * Until a user is signed in it renders the page alone, without navigation, so
+ * the home page (src/app/(app)/page.tsx) shows just its spinner while auth
+ * loads, then the dashboard (TaskManager).
  */
 const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();

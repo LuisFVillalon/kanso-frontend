@@ -290,6 +290,8 @@ const TaskManager: React.FC = () => {
           isLoading={notesLoading}
           pendingNoteIds={pendingNoteIds}
           tagFilter={selectedTags}
+          onToggleTag={toggleSelectedTag}
+          onClearTags={() => setSelectedTags([])}
           profile={profile}
           onSaveProfile={saveProfile}
           noteOrder={noteOrder}

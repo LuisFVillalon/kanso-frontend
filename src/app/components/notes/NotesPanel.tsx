@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { ArrowDownUp, FileText, LayoutGrid, FolderClosed } from 'lucide-react';
+import { ArrowDownUp, FileText, LayoutGrid, FolderClosed, X } from 'lucide-react';
 import NoteCard from '@/app/components/notes/NoteCard';
 import NotesGridView from '@/app/components/notes/NotesGridView';
 import TagFolderOverlay from '@/app/components/notes/TagFolderOverlay';
@@ -23,8 +23,10 @@ interface NotesPanelProps {
   heightPx?: number | null;
   isLoading?: boolean;
   pendingNoteIds?: Set<number>;
-  /** When set, only these tags may appear as folders (e.g. an active sidebar tag filter). */
-  tagFilter?: Tag[];
+  /** The tag filter set from the Tasks toolbar; shown here as removable chips, and only these tags may appear as folders. */
+  tagFilter: Tag[];
+  onToggleTag: (tag: Tag) => void;
+  onClearTags: () => void;
   profile: ProfileFields;
   onSaveProfile: ReturnType<typeof useProfile>['saveProfile'];
   /** Edit-recency order of `notes`, toggled from the panel header. */
@@ -60,6 +62,8 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
   isLoading,
   pendingNoteIds,
   tagFilter,
+  onToggleTag,
+  onClearTags,
   profile,
   onSaveProfile,
   noteOrder,
@@ -82,6 +86,42 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
 
   return (
     <div className="relative flex flex-col space-y-2 sm:space-y-3">
+      {!isLoading && (notes.length > 0 || tagFilter.length > 0) && (
+        <div className="panel-header">
+          {tagFilter.length > 0 && (
+            <div role="group" aria-label="Tag filter" className="flex items-center gap-1.5 min-w-0 overflow-x-auto scrollbar-none">
+              {tagFilter.map(tag => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => onToggleTag(tag)}
+                  aria-label={`Remove tag filter: ${tag.name}`}
+                  className="tag-chip tag-chip-on flex-shrink-0"
+                >
+                  <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: tag.color }} aria-hidden />
+                  <span className="truncate max-w-[10rem]">{tag.name}</span>
+                  <X className="w-3.5 h-3.5" aria-hidden />
+                </button>
+              ))}
+              <button type="button" onClick={onClearTags} aria-label="Clear tag filter" className="tag-chip flex-shrink-0">
+                Clear
+              </button>
+            </div>
+          )}
+          {notes.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onNoteOrderChange(noteOrder === 'newest' ? 'oldest' : 'newest')}
+              aria-label={`Notes order: ${noteOrder === 'newest' ? 'newest' : 'oldest'} first. Switch to ${noteOrder === 'newest' ? 'oldest' : 'newest'} first`}
+              title="Flip the notes' order"
+              className="toolbar-control ml-auto gap-1.5 flex-shrink-0"
+            >
+              <ArrowDownUp className="w-3.5 h-3.5" aria-hidden />
+              {noteOrder === 'newest' ? 'Newest first' : 'Oldest first'}
+            </button>
+          )}
+        </div>
+      )}
       {isLoading ? (
         <NotesPanelSkeleton />
       ) : notes.length === 0 ? (
@@ -97,19 +137,6 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
         </div>
       ) : (
         <>
-          <div className="panel-header">
-            <button
-              type="button"
-              onClick={() => onNoteOrderChange(noteOrder === 'newest' ? 'oldest' : 'newest')}
-              aria-label={`Notes order: ${noteOrder === 'newest' ? 'newest' : 'oldest'} first. Switch to ${noteOrder === 'newest' ? 'oldest' : 'newest'} first`}
-              title="Flip the notes' order"
-              className="toolbar-control ml-auto gap-1.5"
-            >
-              <ArrowDownUp className="w-3.5 h-3.5" aria-hidden />
-              {noteOrder === 'newest' ? 'Newest first' : 'Oldest first'}
-            </button>
-          </div>
-
           {/* View toggle — cards (new) vs. folders (the original file/folder browser) */}
           <button
             type="button"
