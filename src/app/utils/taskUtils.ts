@@ -153,6 +153,82 @@ export function subtaskTreeIds(tasks: Pick<Task, 'id' | 'parent_task_id'>[], roo
   return ids;
 }
 
+// ── Linked tasks (nesting for the task list) ────────────────────────────────
+
+/** A top-level task in the list, with the linked tasks shown under it. */
+export interface TaskGroup {
+  task: Task;
+  /** Linked tasks to render under `task`, oldest first. */
+  linked: Task[];
+  /** Progress over every linked task, including ones the filters hide. */
+  linkedDone: number;
+  linkedTotal: number;
+}
+
+/**
+ * Nests linked tasks (tasks with a parent_task_id) under their parent.
+ *
+ * `matching` is the filtered, sorted list; `allTasks` is everything loaded.
+ * The list is one level deep, so a deeper tree hangs every descendant off its
+ * topmost loaded ancestor. A task whose parent isn't loaded, or whose chain
+ * loops, stays top-level.
+ *
+ * A group is shown when its parent or any of its linked tasks matches the
+ * filters, so a matching linked task never loses its parent. When the parent
+ * matches, the group sits at the parent's place in the sort and shows every
+ * linked task; when only linked tasks match, the group sits at the first
+ * match's place and shows just the matches.
+ */
+export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[] {
+  const byId = new Map(allTasks.map(t => [t.id, t]));
+
+  const rootOf = (task: Task): number => {
+    const seen = new Set([task.id]);
+    let current = task;
+    while (current.parent_task_id != null) {
+      const parent = byId.get(current.parent_task_id);
+      if (!parent) break;
+      if (seen.has(parent.id)) return task.id;
+      seen.add(parent.id);
+      current = parent;
+    }
+    return current.id;
+  };
+
+  const linkedByRoot = new Map<number, Task[]>();
+  for (const t of allTasks) {
+    const root = rootOf(t);
+    if (root === t.id) continue;
+    const list = linkedByRoot.get(root) ?? [];
+    list.push(t);
+    linkedByRoot.set(root, list);
+  }
+  for (const list of linkedByRoot.values()) list.sort((a, b) => a.id - b.id);
+
+  const matchingIds = new Set(matching.map(t => t.id));
+  const groups: TaskGroup[] = [];
+  const placed = new Set<number>();
+
+  for (const m of matching) {
+    const rootId = rootOf(m);
+    // A matching parent gets placed at its own position in the sort.
+    if (rootId !== m.id && matchingIds.has(rootId)) continue;
+    if (placed.has(rootId)) continue;
+    placed.add(rootId);
+
+    const root = byId.get(rootId) ?? m;
+    const allLinked = linkedByRoot.get(rootId) ?? [];
+    groups.push({
+      task: root,
+      linked: matchingIds.has(rootId) ? allLinked : allLinked.filter(t => matchingIds.has(t.id)),
+      linkedDone: allLinked.filter(t => t.completed).length,
+      linkedTotal: allLinked.length,
+    });
+  }
+
+  return groups;
+}
+
 export const countTasksByTag = (tasks: Task[]) => {
   const map: Record<number, { name: string; color: string; count: number }> = {};
   tasks.forEach(task => {
@@ -183,6 +259,16 @@ export const getDueColor = (dueDate?: string | Date | null) => {
   if (diffDays < 0) return "text-red-700 bg-red-50";
   if (diffDays <= 3) return "text-yellow-700 bg-yellow-50";
   return "text-green-700 bg-green-50";
+};
+
+// Recolor the semantic status classes above into the notebook's ink palette
+// instead of raw tailwind red/green/yellow, which clash with the kraft/cream
+// theme.
+export const toInkTone = (classes: string) => {
+  if (classes.includes('red')) return 'text-[var(--tm-accent-2)]';
+  if (classes.includes('yellow')) return 'text-[var(--tm-accent)]';
+  if (classes.includes('green')) return 'text-[var(--tm-success)]';
+  return 'text-text-muted';
 };
 
 export const getDurationColor = (hours?: number | null) => {

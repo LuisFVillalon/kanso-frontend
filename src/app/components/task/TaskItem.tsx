@@ -8,11 +8,13 @@ import {
   formatDueDate,
   formatDueDateShort,
   PRIORITY_COLORS,
+  toInkTone,
 } from '@/app/utils/taskUtils';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
 import PriorityPicker from './PriorityPicker';
 import TaskTags from './TaskTags';
+import LinkedTasksList, { LinkedCountPill, LinkedToggleButton } from './LinkedTasksList';
 
 interface TaskItemProps {
   task: Task;
@@ -28,6 +30,12 @@ interface TaskItemProps {
   compact?: boolean;
   /** True while a toggle-complete, archive or delete request for this task is in flight. */
   pending?: boolean;
+  /** Linked tasks nested under this one (see groupLinkedTasks). */
+  linkedTasks?: Task[];
+  linkedDone?: number;
+  linkedTotal?: number;
+  /** In-flight ids, so a linked task's checkbox can show its own pending state. */
+  pendingTaskIds?: Set<number>;
 }
 
 const TaskItem: React.FC<TaskItemProps> = ({
@@ -43,6 +51,10 @@ const TaskItem: React.FC<TaskItemProps> = ({
   occupiedPriorities = [],
   compact = false,
   pending = false,
+  linkedTasks = [],
+  linkedDone = 0,
+  linkedTotal = 0,
+  pendingTaskIds,
 }) => {
   const maxPriority = activeTaskCount ?? Object.keys(PRIORITY_COLORS).length;
 
@@ -55,6 +67,23 @@ const TaskItem: React.FC<TaskItemProps> = ({
   }, [activeTaskCount, occupiedPriorities, task.priority]);
 
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [linkedExpanded, setLinkedExpanded] = useState(true);
+  const hasLinked = linkedTotal > 0;
+
+  const linkedList = hasLinked && (
+    <LinkedTasksList
+      linkedTasks={linkedTasks}
+      linkedDone={linkedDone}
+      linkedTotal={linkedTotal}
+      expanded={linkedExpanded}
+      onToggleExpanded={() => setLinkedExpanded(v => !v)}
+      onToggleComplete={onToggleComplete}
+      onEditTask={onEditTask}
+      maxPriority={maxPriority}
+      pendingTaskIds={pendingTaskIds}
+      compact={compact}
+    />
+  );
   const [descriptionOverflows, setDescriptionOverflows] = useState(false);
 
   const descriptionRef = useRef<HTMLParagraphElement>(null);
@@ -90,16 +119,6 @@ const TaskItem: React.FC<TaskItemProps> = ({
   const isRelativeDueLabel = dueDateLabel === 'Overdue' || dueDateLabel === 'Today' || dueDateLabel === 'Tomorrow';
   const actualDueDateText = normalizedDueDate ? formatDueDateShort(normalizedDueDate) : null;
 
-  // Recolor the semantic status classes from taskUtils into the notebook's
-  // ink palette instead of raw tailwind red/green/yellow, which clash with
-  // the kraft/cream theme.
-  const toInkTone = (classes: string) => {
-    if (classes.includes('red')) return 'text-[var(--tm-accent-2)]';
-    if (classes.includes('yellow')) return 'text-[var(--tm-accent)]';
-    if (classes.includes('green')) return 'text-[var(--tm-success)]';
-    return 'text-text-muted';
-  };
-
   if (compact) {
     return (
       <div
@@ -107,6 +126,10 @@ const TaskItem: React.FC<TaskItemProps> = ({
         style={{ animationDelay: `${index * 0.05}s` }}
       >
         <div className="flex items-center gap-2 min-w-0">
+          {hasLinked && (
+            <LinkedToggleButton expanded={linkedExpanded} onClick={() => setLinkedExpanded(v => !v)} />
+          )}
+
           <button
             onClick={() => onToggleComplete?.(task.id)}
             disabled={pending}
@@ -128,6 +151,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
           >
             {task.title}
           </span>
+
+          {hasLinked && <LinkedCountPill done={linkedDone} total={linkedTotal} />}
 
           <PriorityPicker
             priority={task.priority}
@@ -169,7 +194,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
           </button>
         </div>
 
-        <TaskTags tags={task.tags} allTags={tags} className="mt-1.5 pl-6" />
+        <TaskTags tags={task.tags} allTags={tags} className={`mt-1.5 ${hasLinked ? 'pl-12' : 'pl-6'}`} />
+        {linkedList}
       </div>
     );
   }
@@ -323,6 +349,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
               </div>
             )}
           </div>
+
+          {linkedList}
         </div>
       </div>
     </div>

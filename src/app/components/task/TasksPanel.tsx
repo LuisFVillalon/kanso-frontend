@@ -4,10 +4,12 @@ import React from 'react';
 import { Filter } from 'lucide-react';
 import TaskItem from './TaskItem';
 import { Tag, Task } from '@/app/types/task';
+import { TaskGroup } from '@/app/utils/taskUtils';
 
 interface TasksPanelProps {
   tags: Tag[];
-  filteredTasks: Task[];
+  /** Filtered, sorted top-level tasks, each with its linked tasks. */
+  taskGroups: TaskGroup[];
   onToggleComplete: (id: number) => void;
   onDeleteTask: (task: Task) => void;
   onArchiveTask: (task: Task) => void;
@@ -23,7 +25,7 @@ interface TasksPanelProps {
 
 const TasksPanel: React.FC<TasksPanelProps> = ({
   tags,
-  filteredTasks,
+  taskGroups,
   onToggleComplete,
   onDeleteTask,
   onArchiveTask,
@@ -37,7 +39,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
 }) => {
   return (
     <div className="split-tasks flex flex-col space-y-2 sm:space-y-3">
-      {filteredTasks.length === 0 ? (
+      {taskGroups.length === 0 ? (
         <div className="card-glass p-6 sm:p-8 text-center mt-2">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
@@ -53,11 +55,15 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
           className="flex flex-col gap-2 overflow-y-auto h-[50vh] lg:h-[600px] pl-2 pr-1 scrollbar-custom"
           style={heightPx ? { height: `${heightPx}px` } : undefined}
         >
-          {filteredTasks.map((task, index) => (
+          {taskGroups.map(({ task, linked, linkedDone, linkedTotal }, index) => (
             <TaskItem
               key={task.id}
               task={task}
               index={index}
+              linkedTasks={linked}
+              linkedDone={linkedDone}
+              linkedTotal={linkedTotal}
+              pendingTaskIds={pendingTaskIds}
               onToggleComplete={onToggleComplete}
               tags={tags}
               onDeleteTask={onDeleteTask}

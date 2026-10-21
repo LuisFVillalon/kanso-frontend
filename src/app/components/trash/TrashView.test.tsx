@@ -80,7 +80,7 @@ describe('TrashView', () => {
     expect(document.body.textContent).toContain('stay here for 30 days');
     expect(document.body.textContent).toContain('2 days left');
     expect(document.body.textContent).toContain('28 days left');
-    expect(document.body.textContent).toContain('Subtask of Plan trip');
+    expect(document.body.textContent).toContain('Leads up to Plan trip');
   });
 
   it('filters by kind on the client', async () => {
