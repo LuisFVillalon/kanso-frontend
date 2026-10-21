@@ -95,7 +95,7 @@ interface BigPictureCalendarProps {
 
 /**
  * Compact dashboard tile: static kicker/title (editing lives in Settings →
- * Big Picture now), the days-remaining headline + a 104px ring, and the
+ * Term Tracker now), the days-remaining headline + a 104px ring, and the
  * four stat tiles compressed (sub-labels dropped). Full detail — the 128px
  * ring, full stat tiles, and date-range line — is in the overlay below.
  */
@@ -104,7 +104,7 @@ const BigPictureCalendar: React.FC<BigPictureCalendarProps> = ({ settings, setti
 
   if (loading) {
     return (
-      <CardShell compact icon={<Hourglass className="w-3.5 h-3.5" style={{ color: 'var(--tm-accent)' }} />} header="Big Picture">
+      <CardShell compact icon={<Hourglass className="w-3.5 h-3.5" style={{ color: 'var(--tm-accent)' }} />} header="Term Tracker">
         <div className="flex-1 min-h-0 animate-pulse rounded-lg" style={{ backgroundColor: 'var(--tm-surface-raised)' }} />
       </CardShell>
     );
@@ -114,7 +114,7 @@ const BigPictureCalendar: React.FC<BigPictureCalendarProps> = ({ settings, setti
     <CardShell
       compact
       icon={<Hourglass className="w-3.5 h-3.5" style={{ color: 'var(--tm-accent)' }} />}
-      header={cur.title || 'Big Picture'}
+      header={cur.title || 'Term Tracker'}
       headerAction={<TileTools onExpand={onExpand} dragHandleProps={dragHandleProps} />}
     >
       {progress ? (
@@ -210,7 +210,7 @@ export const BigPictureOverlay: React.FC<{ settings: CalendarSettings; settingsL
       )}
 
       <p className="text-xs text-text-muted">
-        Range: {formatLongDate(progress?.start ?? parseLocalDate(cur.start_date))} – {formatLongDate(progress?.end ?? parseLocalDate(cur.end_date))} · edit in Settings → Big Picture
+        Range: {formatLongDate(progress?.start ?? parseLocalDate(cur.start_date))} – {formatLongDate(progress?.end ?? parseLocalDate(cur.end_date))} · edit in Settings → Term Tracker
       </p>
     </div>
   );

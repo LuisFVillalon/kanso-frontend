@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Big Picture Calendar's title/date-range editing, moved here
+ * Term Tracker's title/date-range editing, moved here
  * from the dashboard widget itself (BigPictureCalendar.tsx) — the compact
  * tile now just displays these read-only, and the overlay's "Range: … ·
  * edit in Settings" line points here. Purely controlled: the draft lives in
