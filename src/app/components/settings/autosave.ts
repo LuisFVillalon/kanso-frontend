@@ -7,7 +7,8 @@
  * useSaveTracker keeps that per-page status. Each save is tracked under a
  * field key, so a failed field stays reported as failed (and retryable)
  * until a newer save of that same field settles, even if other fields on
- * the page save fine in between.
+ * the page save fine in between. Saves of one field run one after another,
+ * so the last change made is always the last one sent and committed.
  *
  * useFieldAutosave holds the unsaved edits over the committed values
  * (`value` = committed + edits) and sends one field per save. Text saves
@@ -33,6 +34,8 @@ interface PageBook {
   /** The newest attempt per field key, so a stale outcome can't overwrite a newer one. */
   attempt: Map<string, number>;
   failed: Map<string, () => Promise<unknown>>;
+  /** The newest save per field key; the next save of that key waits for it to settle. */
+  queue: Map<string, Promise<unknown>>;
 }
 
 export function useSaveTracker<P extends string>() {
@@ -65,7 +68,7 @@ export function useSaveTracker<P extends string>() {
   const track = useCallback(async (page: P, key: string, run: () => Promise<unknown>): Promise<boolean> => {
     let book = books.current.get(page);
     if (!book) {
-      book = { inFlight: 0, attempt: new Map(), failed: new Map() };
+      book = { inFlight: 0, attempt: new Map(), failed: new Map(), queue: new Map() };
       books.current.set(page, book);
     }
     const attempt = (book.attempt.get(key) ?? 0) + 1;
@@ -73,9 +76,11 @@ export function useSaveTracker<P extends string>() {
     book.failed.delete(key);
     book.inFlight += 1;
     publish(page);
+    const turn = (book.queue.get(key) ?? Promise.resolve()).then(run);
+    book.queue.set(key, turn.catch(() => {}));
     let ok = true;
     try {
-      await run();
+      await turn;
     } catch {
       ok = false;
       if (book.attempt.get(key) === attempt) book.failed.set(key, run);

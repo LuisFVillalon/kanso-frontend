@@ -227,6 +227,23 @@ describe('SettingsModal autosave', () => {
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ name: 'Mabel' });
   });
 
+  it('keeps the last choice when a switch is flipped on then off before the first save lands', async () => {
+    const finishes: (() => void)[] = [];
+    onSaveProfileField.mockImplementation(() => new Promise<void>(resolve => { finishes.push(resolve); }));
+    render('mood');
+    const daily = () => document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="mood-setting-daily"]')!;
+    const flipped = { ...DEFAULT_MOOD_SETTINGS, daily: !DEFAULT_MOOD_SETTINGS.daily };
+    await click(daily());
+    await click(daily());
+    expect(onSaveProfileField).toHaveBeenCalledOnce();
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: flipped });
+    await act(async () => { finishes[0](); });
+    expect(onSaveProfileField).toHaveBeenCalledTimes(2);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: DEFAULT_MOOD_SETTINGS });
+    await act(async () => { finishes[1](); });
+    expect(daily().getAttribute('aria-checked')).toBe(String(DEFAULT_MOOD_SETTINGS.daily));
+  });
+
   it("says when a save failed and retries it", async () => {
     onSaveProfileField.mockRejectedValueOnce(new Error('offline'));
     render();
