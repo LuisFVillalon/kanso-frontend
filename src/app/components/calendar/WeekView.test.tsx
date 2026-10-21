@@ -33,6 +33,10 @@ vi.mock('@/app/context/HabitsContext', () => ({
   useHabitsContext: () => ({ habits: [{ id: 5, title: 'Run' }], toggleDate: vi.fn() }),
 }));
 vi.mock('@/app/context/ToastContext', () => ({ useToast: () => vi.fn() }));
+vi.mock('@/app/context/NotificationsContextValue', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/app/context/NotificationsContextValue')>()),
+  useOptionalNotifications: () => ({ status: 'ready', preferences: { default_reminder_minutes: 60 } }),
+}));
 
 import WeekView from './WeekView';
 
@@ -160,9 +164,16 @@ describe('WeekView', () => {
     expect(mocks.saveLinkedTasks).toHaveBeenCalledWith(created, [{ title: 'Draft cover letter' }]);
     expect(d.querySelector('[role="alert"]')?.textContent).toContain("The task was created, but its linked tasks weren't saved");
 
+    const reminder = d.querySelector<HTMLSelectElement>('select[aria-labelledby="remind-me-label"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(reminder, '15');
+      reminder.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await submit();
     expect(mocks.addTask).toHaveBeenCalledTimes(1);
-    expect(mocks.updateTask).toHaveBeenCalledWith(99, expect.objectContaining({ title: 'Apply', due_date: '2026-10-22' }));
+    expect(mocks.updateTask).toHaveBeenCalledWith(
+      99, expect.objectContaining({ title: 'Apply', due_date: '2026-10-22', reminder_minutes: 15 }),
+    );
     expect(mocks.saveLinkedTasks).toHaveBeenCalledTimes(2);
     expect(d.querySelector('form')).toBeNull();
   });

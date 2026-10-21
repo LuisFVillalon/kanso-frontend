@@ -141,8 +141,10 @@ export function taskToEditForm(task: Task, overrides: Partial<EditTaskForm> = {}
 
 /** `task` with a new-task form's fields applied, for re-saving a task an earlier try already created. */
 export function applyNewTaskForm(task: Task, form: BaseTaskForm): EditTaskForm {
-  const { title, description, priority, due_date, due_time, tags, category, estimated_time } = form;
-  return taskToEditForm(task, { title, description, priority, due_date, due_time, tags, category, estimated_time });
+  const { title, description, priority, due_date, due_time, tags, category, estimated_time, reminder_minutes } = form;
+  return taskToEditForm(task, {
+    title, description, priority, due_date, due_time, tags, category, estimated_time, reminder_minutes,
+  });
 }
 
 /** Ids of `rootId` and every task nested under it (subtasks, their subtasks, …). */

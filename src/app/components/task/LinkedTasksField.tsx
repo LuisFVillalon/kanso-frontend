@@ -119,7 +119,7 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setOpen(true);
-      setActive(Math.min(activeIndex + 1, pickable.length - 1));
+      setActive(open ? Math.min(activeIndex + 1, pickable.length - 1) : 0);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActive(Math.max(activeIndex - 1, 0));

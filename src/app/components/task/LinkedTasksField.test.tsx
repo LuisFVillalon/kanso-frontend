@@ -123,6 +123,20 @@ describe('LinkedTasksField on the new-task form', () => {
     );
   });
 
+  it('highlights the first option when ArrowDown reopens a closed picker', () => {
+    act(() => root.render(<NewHarness onSubmit={vi.fn()} />));
+    act(() => search().focus());
+    type(search(), 'read');
+    key(search(), 'Escape');
+    expect(doc().querySelector('[role="option"]')).toBeNull();
+    key(search(), 'ArrowDown');
+    const first = doc().querySelector('[role="option"]')!;
+    expect(search().getAttribute('aria-activedescendant')).toBe(first.id);
+    key(search(), 'Enter');
+    expect(rowTitles()).toHaveLength(1);
+    expect(first.textContent).toContain(rowTitles()[0]);
+  });
+
   it('lists tasks that have linked tasks of their own as not linkable', () => {
     act(() => root.render(<NewHarness onSubmit={vi.fn()} />));
     act(() => search().focus());
