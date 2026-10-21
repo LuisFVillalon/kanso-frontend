@@ -98,7 +98,7 @@ const Skeleton: React.FC = () => (
 interface CanvasPanelProps {
   /** User-adjustable panel height in px, shared with Tasks and Notes. */
   heightPx?: number | null;
-  /** Opens Settings on the Integrations tab, where Canvas is connected. */
+  /** Opens Settings on the Canvas page, where Canvas is connected. */
   onOpenSettings: () => void;
   /** Bumped by the parent to reload, e.g. after Settings closes. */
   syncToken?: number;

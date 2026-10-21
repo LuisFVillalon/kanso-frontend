@@ -1,0 +1,360 @@
+// @vitest-environment jsdom
+import React, { act, useState } from 'react';
+import { createRoot, Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ProfileFields } from '@/app/hooks/useProfile';
+import type { CalendarSettings } from '@/app/types/calendar';
+import { DEFAULT_MOOD_SETTINGS } from '@/app/types/mood';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const auth = vi.hoisted(() => ({
+  user: null as null | { email: string; app_metadata: { provider: string } },
+  isDemo: false,
+}));
+vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
+vi.mock('@/app/context/NotificationsContextValue', () => ({ useOptionalNotifications: () => null }));
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
+}));
+vi.mock('@/app/components/settings/CanvasIntegrationSection', () => ({
+  default: () => <p>Canvas section</p>,
+}));
+
+const supabaseAuth = vi.hoisted(() => ({
+  signInWithPassword: vi.fn(),
+  updateUser: vi.fn(),
+  signOut: vi.fn(async () => ({ error: null })),
+}));
+vi.mock('@/app/lib/supabase', () => ({ supabase: { auth: supabaseAuth } }));
+
+const api = vi.hoisted(() => {
+  class ApiError extends Error {
+    constructor(readonly status: number, readonly detail: string) {
+      super(detail);
+    }
+  }
+  return { ApiError, updatePassword: vi.fn(), deleteAccount: vi.fn() };
+});
+vi.mock('@/app/lib/backend-api', () => api);
+
+import SettingsModal, { type SettingsSection } from './SettingsModal';
+import { ToastProvider } from '@/app/context/ToastContext';
+import { AUTOSAVE_DEBOUNCE_MS } from './autosave';
+
+let container: HTMLDivElement;
+let root: Root;
+
+const profile: ProfileFields = {
+  name: 'Maya',
+  avatar: null,
+  themeAccent: '#006BCB',
+  pageStyle: 'graph',
+  dayStartTime: '08:30',
+  shutoffTime: '18:00',
+  restDays: [0],
+  layoutOrder: null,
+  layoutSizes: null,
+  appMode: null,
+  dailyBriefCollapsed: null,
+  dashboardView: null,
+  notesViewMode: null,
+  homePanels: null,
+  moodCheckins: DEFAULT_MOOD_SETTINGS,
+};
+const calendarSettings: CalendarSettings = { id: 1, title: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-18' };
+
+const onClose = vi.fn();
+const onAccountDeleted = vi.fn();
+const onSignOut = vi.fn();
+const onSaveProfileField = vi.fn<(patch: Partial<ProfileFields>) => Promise<void>>();
+const onSaveCalendarSettings = vi.fn(async (changes: Partial<Omit<CalendarSettings, 'id'>>) => ({ ...calendarSettings, ...changes }));
+
+/** Commits each successful save to the props, as TaskManager's hooks do. */
+function Harness({ initialSection }: { initialSection?: SettingsSection }) {
+  const [saved, setSaved] = useState(profile);
+  const [term, setTerm] = useState(calendarSettings);
+  return (
+    <SettingsModal
+      isOpen
+      onClose={onClose}
+      onAccountDeleted={onAccountDeleted}
+      onSignOut={onSignOut}
+      profile={saved}
+      profileLoading={false}
+      onSaveProfileField={async patch => {
+        await onSaveProfileField(patch);
+        setSaved(prev => ({ ...prev, ...patch }));
+      }}
+      calendarSettings={term}
+      calendarSettingsLoading={false}
+      onSaveCalendarSettings={async changes => {
+        const next = await onSaveCalendarSettings(changes);
+        setTerm(next);
+        return next;
+      }}
+      initialSection={initialSection}
+    />
+  );
+}
+
+const render = (initialSection?: SettingsSection) => {
+  act(() => root.render(<ToastProvider><Harness initialSection={initialSection} /></ToastProvider>));
+};
+
+const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
+const button = (text: string) => buttons().find(b => b.textContent?.trim() === text)!;
+const navItem = (label: string) =>
+  [...document.querySelectorAll<HTMLButtonElement>('nav button[data-settings-page]')].find(b => b.textContent?.trim() === label);
+/** The Change buttons on the security page: [email, password]. */
+const changeButtons = () => buttons().filter(b => b.textContent?.trim() === 'Change');
+const heading = () => document.getElementById('settings-page-title')!.textContent;
+const field = (id: string) => document.getElementById(id) as HTMLInputElement;
+const typeInto = (el: HTMLInputElement, value: string) => {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+};
+const click = async (el: HTMLElement) => {
+  await act(async () => { el.click(); });
+};
+const pause = async () => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS); });
+};
+const submit = async (el: HTMLElement) => {
+  await act(async () => { el.closest('form')!.requestSubmit(); });
+};
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.clearAllMocks();
+  onSaveProfileField.mockResolvedValue(undefined);
+  auth.user = { email: 'maya@example.com', app_metadata: { provider: 'email' } };
+  auth.isDemo = false;
+  window.matchMedia = vi.fn(() => ({ matches: false })) as unknown as typeof window.matchMedia;
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  document.body.innerHTML = '';
+  vi.useRealTimers();
+});
+
+describe('SettingsModal navigation', () => {
+  it('groups the pages in a side menu and switches between them', async () => {
+    render();
+    const groups = [...document.querySelectorAll('nav ul')].map(ul => ul.getAttribute('aria-labelledby'));
+    expect(groups).toEqual(['settings-group-Account', 'settings-group-Your days', 'settings-group-App']);
+    expect(heading()).toBe('Profile');
+    expect(navItem('Profile')!.getAttribute('aria-current')).toBe('page');
+
+    await click(navItem('Work day and rest')!);
+    expect(heading()).toBe('Work day and rest');
+    expect(navItem('Work day and rest')!.getAttribute('aria-current')).toBe('page');
+    expect(navItem('Profile')!.hasAttribute('aria-current')).toBe(false);
+    expect(field('settings-day-start').value).toBe('08:30');
+  });
+
+  it('opens the page asked for, including the old tab names', () => {
+    render('integrations');
+    expect(heading()).toBe('Canvas');
+    expect(document.body.textContent).toContain('Canvas section');
+  });
+
+  it('drills into a page from the menu list on a phone, with a back arrow', async () => {
+    window.matchMedia = vi.fn(() => ({ matches: true })) as unknown as typeof window.matchMedia;
+    render();
+    const nav = document.querySelector('nav')!;
+    const page = document.querySelector('section[aria-labelledby="settings-page-title"]')!;
+    expect(nav.className).not.toMatch(/(^| )hidden( |$)/);
+    expect(page.className).toMatch(/(^| )hidden( |$)/);
+
+    await click(navItem('Term Tracker')!);
+    await act(async () => { await vi.runAllTimersAsync(); });
+    expect(nav.className).toMatch(/(^| )hidden( |$)/);
+    expect(page.className).not.toMatch(/(^| )hidden( |$)/);
+    expect(heading()).toBe('Term Tracker');
+
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Back to settings"]')!);
+    expect(nav.className).not.toMatch(/(^| )hidden( |$)/);
+    expect(page.className).toMatch(/(^| )hidden( |$)/);
+  });
+
+  it('signs out from the bottom of the menu after the confirm', async () => {
+    render();
+    await click(button('Sign out'));
+    expect(document.body.textContent).toContain('Are you sure you want to sign out?');
+    const confirm = buttons().filter(b => b.textContent?.trim() === 'Sign out').at(-1)!;
+    await click(confirm);
+    expect(onSignOut).toHaveBeenCalledOnce();
+  });
+
+  it('closes on Escape, saving a name still waiting for its pause', async () => {
+    render();
+    act(() => typeInto(field('settings-name'), 'Maya C'));
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(onSaveProfileField).toHaveBeenCalledWith({ name: 'Maya C' });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('SettingsModal autosave', () => {
+  it('saves only the changed field: text after a pause, a swatch at once', async () => {
+    render();
+    act(() => typeInto(field('settings-name'), 'Maya Chen'));
+    expect(onSaveProfileField).not.toHaveBeenCalled();
+    await pause();
+    expect(onSaveProfileField).toHaveBeenCalledOnce();
+    expect(onSaveProfileField).toHaveBeenCalledWith({ name: 'Maya Chen' });
+
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Tractor"]')!);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ avatar: 'tractor' });
+    expect(document.querySelector('[role="status"]')?.textContent).toContain('Saved');
+  });
+
+  it('keeps newer typing when an earlier save finishes', async () => {
+    let finish!: () => void;
+    onSaveProfileField.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    render();
+    act(() => typeInto(field('settings-name'), 'Ma'));
+    await pause();
+    act(() => typeInto(field('settings-name'), 'Mabel'));
+    await act(async () => { finish(); });
+    expect(field('settings-name').value).toBe('Mabel');
+    await pause();
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ name: 'Mabel' });
+  });
+
+  it("says when a save failed and retries it", async () => {
+    onSaveProfileField.mockRejectedValueOnce(new Error('offline'));
+    render();
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Origami"]')!);
+    expect(document.body.textContent).toContain("Couldn't save");
+    await click(button('Retry'));
+    expect(onSaveProfileField).toHaveBeenCalledTimes(2);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ avatar: 'origami' });
+    expect(document.body.textContent).not.toContain("Couldn't save");
+  });
+
+  it('saves Term Tracker changes through the calendar settings, one field at a time', async () => {
+    render('term');
+    act(() => typeInto(field('term-title'), 'Spring 2027'));
+    await pause();
+    expect(onSaveCalendarSettings).toHaveBeenCalledWith({ title: 'Spring 2027' });
+    act(() => typeInto(field('term-end-date'), ''));
+    await pause();
+    expect(onSaveCalendarSettings).toHaveBeenCalledOnce();
+  });
+
+  it('offers Undo for a rest day, which saves the days back', async () => {
+    render('workday');
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Saturday"]')!);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ restDays: [0, 6] });
+    expect(document.body.textContent).toContain('Saturday is now a rest day.');
+    await click(button('Undo'));
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ restDays: [0] });
+    expect(document.querySelector('[aria-label="Saturday"]')!.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('offers Undo for a mood check-in switch', async () => {
+    render('mood');
+    const daily = document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="mood-setting-daily"]')!;
+    await click(daily);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: { ...DEFAULT_MOOD_SETTINGS, daily: !DEFAULT_MOOD_SETTINGS.daily } });
+    await click(button('Undo'));
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: DEFAULT_MOOD_SETTINGS });
+  });
+});
+
+describe('SettingsModal sign-in and security', () => {
+  const strongPassword = 'plinth quasar mossy tundra';
+
+  it('sends the current password with a password change and shows the server refusing it', async () => {
+    api.updatePassword.mockRejectedValueOnce(new api.ApiError(400, 'Your current password is incorrect.'));
+    render('security');
+    await click(changeButtons()[1]);
+    act(() => typeInto(field('settings-current-password'), 'old secret'));
+    act(() => typeInto(field('settings-new-password'), strongPassword));
+    act(() => typeInto(field('settings-confirm-password'), strongPassword));
+    await submit(field('settings-new-password'));
+    expect(api.updatePassword).toHaveBeenCalledWith(strongPassword, 'old secret');
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe('Your current password is incorrect.');
+    expect(field('settings-current-password').value).toBe('');
+  });
+
+  it('re-checks the current password before an email change', async () => {
+    supabaseAuth.signInWithPassword.mockResolvedValueOnce({ error: null });
+    supabaseAuth.updateUser.mockResolvedValueOnce({ error: null });
+    render('security');
+    await click(changeButtons()[0]);
+    act(() => typeInto(field('settings-new-email'), 'maya@new.example'));
+    act(() => typeInto(field('settings-email-current-password'), 'old secret'));
+    await submit(field('settings-new-email'));
+    expect(supabaseAuth.signInWithPassword).toHaveBeenCalledWith({ email: 'maya@example.com', password: 'old secret' });
+    expect(supabaseAuth.updateUser).toHaveBeenCalledWith({ email: 'maya@new.example' });
+    expect(document.body.textContent).toContain('Confirmation sent');
+  });
+
+  it('blocks the email change when the current password is wrong', async () => {
+    supabaseAuth.signInWithPassword.mockResolvedValueOnce({ error: { code: 'invalid_credentials', message: 'Invalid login credentials' } });
+    render('security');
+    await click(changeButtons()[0]);
+    act(() => typeInto(field('settings-new-email'), 'maya@new.example'));
+    act(() => typeInto(field('settings-email-current-password'), 'wrong'));
+    await submit(field('settings-new-email'));
+    expect(supabaseAuth.updateUser).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain("That password isn't right.");
+    expect(field('settings-email-current-password').value).toBe('');
+  });
+
+  it('shows Google users a note and help link instead of a password form', async () => {
+    auth.user = { email: 'maya@gmail.com', app_metadata: { provider: 'google' } };
+    supabaseAuth.updateUser.mockResolvedValueOnce({ error: null });
+    render('security');
+    expect(document.body.textContent).toContain('Signed in with Google');
+    expect(document.querySelector<HTMLAnchorElement>('a[href="https://myaccount.google.com/security"]')).toBeTruthy();
+    expect(field('settings-current-password')).toBeNull();
+
+    await click(button('Change'));
+    expect(field('settings-email-current-password')).toBeNull();
+    act(() => typeInto(field('settings-new-email'), 'maya@new.example'));
+    await submit(field('settings-new-email'));
+    expect(supabaseAuth.signInWithPassword).not.toHaveBeenCalled();
+    expect(supabaseAuth.updateUser).toHaveBeenCalledWith({ email: 'maya@new.example' });
+  });
+
+  it('deletes the account only after the typed phrase, with Cancel focused first', async () => {
+    api.deleteAccount.mockResolvedValueOnce(undefined);
+    render('security');
+    await click(button('Delete account…'));
+    const dialog = document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('Every task, note, tag and habit');
+    expect(document.activeElement?.textContent).toBe('Cancel');
+    const confirm = button('Delete my account');
+    expect(confirm.disabled).toBe(true);
+
+    // Escape closes only the confirm, not Settings.
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await click(button('Delete account…'));
+    act(() => typeInto(field('delete-account-phrase'), 'delete my account'));
+    expect(button('Delete my account').disabled).toBe(false);
+    await click(button('Delete my account'));
+    expect(api.deleteAccount).toHaveBeenCalledOnce();
+    expect(supabaseAuth.signOut).toHaveBeenCalledOnce();
+    expect(onAccountDeleted).toHaveBeenCalledOnce();
+  });
+
+  it('has no sign-in and security page in the demo', () => {
+    auth.user = null;
+    auth.isDemo = true;
+    render('security');
+    expect(navItem('Sign-in and security')).toBeUndefined();
+    expect(heading()).toBe('Profile');
+    expect(document.body.textContent).toContain('private demo sandbox');
+  });
+});

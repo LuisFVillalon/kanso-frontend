@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { fetchProfile, saveProfile as saveProfileApi } from '@/app/lib/backend-api';
 import { DEFAULT_ACCENT, getStoredThemeColor, setStoredThemeColor, resetThemeColor } from '@/app/lib/theme';
@@ -67,6 +67,10 @@ export function useProfile(user: User | null) {
   // Whether the first fetchProfile() has settled (either way), so anything
   // timed off the profile (the mood nudge) doesn't act on the local defaults.
   const [loaded, setLoaded] = useState(false);
+  // The name every saveProfileField request carries, since the endpoint
+  // requires one: the newest name sent so far, so a later save of another
+  // field can't put back the name an earlier, still-unanswered save replaced.
+  const savedName = useRef(profile.name);
 
   useEffect(() => {
     if (!user) return;
@@ -75,6 +79,7 @@ export function useProfile(user: User | null) {
       try {
         const p = await fetchProfile();
         if (!p) return;
+        savedName.current = p.name;
         setProfile(prev => ({
           ...prev,
           name: p.name,
@@ -140,6 +145,7 @@ export function useProfile(user: User | null) {
       if (next.pageStyle === DEFAULT_PAGE_STYLE) resetPageStyle();
       else setStoredPageStyle(next.pageStyle);
 
+      savedName.current = next.name;
       setProfile(next);
       return { ok: true };
     } catch (err) {
@@ -147,5 +153,43 @@ export function useProfile(user: User | null) {
     }
   }, []);
 
-  return { profile, loading, loaded, saveProfile };
+  /**
+   * Saves only the fields in `patch` (Settings' autosave), plus the current
+   * name. Throws when the save fails, leaving the profile as it was.
+   */
+  const saveProfileField = useCallback(async (patch: Partial<ProfileFields>): Promise<void> => {
+    const previousName = savedName.current;
+    if (patch.name !== undefined) savedName.current = patch.name;
+    const body: Parameters<typeof saveProfileApi>[0] = { name: savedName.current };
+    if (patch.shutoffTime !== undefined) body.shutoff_time = patch.shutoffTime;
+    if (patch.avatar !== undefined) body.avatar = patch.avatar;
+    if (patch.themeAccent !== undefined) body.theme_accent = patch.themeAccent;
+    if (patch.pageStyle !== undefined) body.page_style = patch.pageStyle;
+    if (patch.dayStartTime !== undefined) body.day_start_time = patch.dayStartTime;
+    if (patch.restDays !== undefined) body.rest_days = patch.restDays;
+    if (patch.moodCheckins !== undefined) body.mood_checkins = patch.moodCheckins;
+    try {
+      await saveProfileApi(body);
+    } catch (err) {
+      if (patch.name !== undefined && savedName.current === patch.name) savedName.current = previousName;
+      throw err;
+    }
+
+    if (patch.name !== undefined) localStorage.setItem('tm_profile_name', patch.name);
+    if (patch.dayStartTime !== undefined) localStorage.setItem('tm_day_start_time', patch.dayStartTime);
+    if (patch.shutoffTime !== undefined) localStorage.setItem('tm_call_it_a_day', patch.shutoffTime);
+    if (patch.restDays !== undefined) localStorage.setItem('tm_rest_days', JSON.stringify(patch.restDays));
+    if (patch.avatar !== undefined) setStoredProfileAvatar(patch.avatar);
+    if (patch.themeAccent !== undefined) {
+      if (patch.themeAccent === DEFAULT_ACCENT) resetThemeColor();
+      else setStoredThemeColor(patch.themeAccent);
+    }
+    if (patch.pageStyle !== undefined) {
+      if (patch.pageStyle === DEFAULT_PAGE_STYLE) resetPageStyle();
+      else setStoredPageStyle(patch.pageStyle);
+    }
+    setProfile(prev => ({ ...prev, ...patch }));
+  }, []);
+
+  return { profile, loading, loaded, saveProfile, saveProfileField };
 }

@@ -9,9 +9,9 @@ import {
 } from 'lucide-react';
 import { FilterType, Tag } from '@/app/types/task';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
-import Modal from '@/app/components/common/Modal';
 import Logo from '@/app/components/common/Logo';
 import ThemeToggle from '@/app/components/common/ThemeToggle';
+import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import { useAuth } from '@/app/context/AuthContext';
 
 interface TaskControlsProps {
@@ -107,7 +107,6 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
   const [actionsExpanded, setActionsExpanded] = useState(true);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [creatingNote, setCreatingNote] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleNewNoteClick = async () => {
     if (!onNewNote || creatingNote) return;
@@ -116,16 +115,6 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
       await onNewNote();
     } finally {
       setCreatingNote(false);
-    }
-  };
-
-  const handleLogoutConfirm = async () => {
-    setLoggingOut(true);
-    try {
-      await onLogout?.();
-    } finally {
-      setLoggingOut(false);
-      setConfirmingLogout(false);
     }
   };
 
@@ -450,7 +439,6 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
                 <button
                   onClick={() => setConfirmingLogout(true)}
                   className={`sidebar-item ${collapsed ? 'justify-center' : ''}`}
-                  style={{ color: 'var(--tm-danger)' }}
                   title={collapsed ? 'Logout' : undefined}
                   aria-label="Logout"
                 >
@@ -465,29 +453,7 @@ export const TaskControls: React.FC<TaskControlsProps> = ({
 
       {/* Logout confirmation */}
       {confirmingLogout && (
-        <Modal onClose={() => setConfirmingLogout(false)} layer="top" panelClassName="modal-panel max-w-sm w-full p-6 space-y-4">
-          <p className="text-center text-text-primary">Are you sure you want to log out?</p>
-          <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => setConfirmingLogout(false)}
-              disabled={loggingOut}
-              className="btn btn-secondary flex-1 py-2"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleLogoutConfirm}
-              disabled={loggingOut}
-              className="btn flex-1 py-2 text-white flex items-center justify-center gap-1.5 disabled:cursor-wait"
-              style={{ backgroundColor: 'var(--tm-danger)' }}
-            >
-              {loggingOut && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loggingOut ? 'Logging out…' : 'Logout'}
-            </button>
-          </div>
-        </Modal>
+        <SignOutConfirm onCancel={() => setConfirmingLogout(false)} onConfirm={async () => { await onLogout?.(); }} />
       )}
     </>
   );

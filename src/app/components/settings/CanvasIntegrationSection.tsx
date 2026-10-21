@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Settings → Integrations → Canvas: connect the user's Canvas account with a
+ * Settings → Canvas: connect the user's Canvas account with a
  * personal access token and the school's Canvas address, then see it masked
  * ("Connected · ends in …7Hq2"), test it, replace it, remove it, and pick
  * the courses the home page shows.

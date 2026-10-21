@@ -512,15 +512,17 @@ export async function reapStaleNoteSessions(): Promise<{ reaped_count: number }>
 
 /**
  * Updates the authenticated user's password via the backend (which enforces
- * that the account is an email/password account — not Google/OAuth).
- * Throws if the server returns 403 (OAuth account) or any other error.
+ * that the account is an email/password account — not Google/OAuth), sending
+ * the current password for the backend to check first.
+ * Throws if the server returns 403 (OAuth account), rejects the current
+ * password, or returns any other error.
  */
-export async function updatePassword(newPassword: string): Promise<void> {
+export async function updatePassword(newPassword: string, currentPassword: string): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/update-password`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ new_password: newPassword }),
+    body: JSON.stringify({ new_password: newPassword, current_password: currentPassword }),
   });
   await assertOk(res, "updatePassword");
 }

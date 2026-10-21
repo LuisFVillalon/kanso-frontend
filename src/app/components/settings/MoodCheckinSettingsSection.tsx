@@ -1,27 +1,25 @@
 'use client';
 
 /**
- * Settings → Profile → Mood check-ins: which check-ins the dashboard nudges
- * for and when. Purely controlled: the draft lives in SettingsModal with the
- * rest of the Profile tab and is saved (as the profile's `mood_checkins`)
- * when the user clicks Save Profile.
+ * Settings → Mood check-ins: which check-ins the dashboard nudges for and
+ * when. Purely controlled: SettingsModal saves each change at once (as the
+ * profile's `mood_checkins`).
  */
 
 import React from 'react';
-import { Smile } from 'lucide-react';
 import type { MoodCheckinSettings, MoodRemind } from '@/app/types/mood';
 
 interface Props {
   value: MoodCheckinSettings;
   onChange: (value: MoodCheckinSettings) => void;
-  /** The drafted "Call it a day" time ("HH:MM"), which the reminder follows. */
+  /** The "Call it a day" time ("HH:MM"), which the reminder follows. */
   shutoffTime: string;
   loading: boolean;
 }
 
-type Toggle = 'daily' | 'weekly' | 'monthly' | 'show_in_reports';
+export type MoodToggle = 'daily' | 'weekly' | 'monthly' | 'show_in_reports';
 
-const TOGGLES: { key: Toggle; label: string; hint: string }[] = [
+export const MOOD_TOGGLES: { key: MoodToggle; label: string; hint: string }[] = [
   { key: 'daily', label: 'Daily check-in', hint: 'A nudge on the dashboard at “Call it a day”. Skips rest days.' },
   { key: 'weekly', label: 'Weekly check-in', hint: 'Off by default. Added to Sunday’s nudge (end of your Mon–Sun week).' },
   { key: 'monthly', label: 'Monthly check-in', hint: 'Off by default. Added on the last day of the month.' },
@@ -44,14 +42,9 @@ const MoodCheckinSettingsSection: React.FC<Props> = ({ value, onChange, shutoffT
   ];
 
   return (
-    <div className="pt-5 mt-5 border-t space-y-3" style={{ borderColor: 'var(--tm-border)' }}>
-      <div className="flex items-center gap-2" style={{ color: 'var(--tm-text-secondary)' }}>
-        <Smile className="w-4 h-4" />
-        <p className="text-sm flex-1">Mood check-ins — a few seconds at the end of the day.</p>
-      </div>
-
+    <div className="space-y-4">
       <div className="space-y-3">
-        {TOGGLES.map(({ key, label, hint }) => {
+        {MOOD_TOGGLES.map(({ key, label, hint }) => {
           const on = value[key];
           const labelId = `mood-setting-${key}`;
           return (
