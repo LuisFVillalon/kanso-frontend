@@ -52,12 +52,16 @@ describe('TaskItem linked tasks', () => {
 
   it('collapses and expands the linked tasks', () => {
     render();
-    const toggle = container.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+    // The priority badge also carries aria-expanded, so pick the linked tasks header.
+    const toggle = Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-expanded]'))
+      .find(b => b.textContent?.includes('Linked tasks'))!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
     act(() => toggle.click());
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(container.textContent).not.toContain('Mock interview');
     expect(container.textContent).toContain('1 of 2 done');
     act(() => toggle.click());
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(container.textContent).toContain('Mock interview');
   });
 
