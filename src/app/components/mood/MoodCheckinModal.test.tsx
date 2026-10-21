@@ -6,7 +6,6 @@ import type { MoodCheckin } from '@/app/types/mood';
 
 const api = vi.hoisted(() => ({
   saveMoodCheckin: vi.fn(),
-  deleteMoodCheckin: vi.fn(),
   fetchMoodTags: vi.fn(),
 }));
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));

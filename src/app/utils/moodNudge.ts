@@ -53,8 +53,6 @@ export interface MoodNudgeDismissals {
   skipped?: boolean;
   /** "In 1 hour": hidden until this epoch-ms time. */
   snoozedUntil?: number;
-  /** The "Logged today" confirmation was closed. */
-  dismissed?: boolean;
 }
 
 /**
@@ -84,7 +82,7 @@ export function moodNudgeState(input: MoodNudgeInput): MoodNudgeState {
 
   const dismissals = input.dismissals?.date === toLocalDateStr(day) ? input.dismissals : null;
 
-  if (checkedIn) return dismissals?.dismissed ? 'hidden' : 'logged';
+  if (checkedIn) return 'logged';
   if (restDays.includes(day.getDay()) || settings.remind === 'off' || dismissals?.skipped) return 'chip';
   if (dismissals?.snoozedUntil && dismissals.snoozedUntil > now.getTime()) return 'hidden';
   return 'nudge';

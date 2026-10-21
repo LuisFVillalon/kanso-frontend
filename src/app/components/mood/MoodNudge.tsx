@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AlarmClock, Moon, Smile, X } from 'lucide-react';
+import { AlarmClock, Moon, Smile } from 'lucide-react';
 import MoodCheckinModal, { type DaySummary } from '@/app/components/mood/MoodCheckinModal';
 import MoodFacePicker, { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import { useToast } from '@/app/context/ToastContext';
@@ -13,7 +13,7 @@ import type { Task } from '@/app/types/task';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { checkinDayAt, moodNudgeState, type MoodNudgeDismissals } from '@/app/utils/moodNudge';
 
-// Skips, snoozes and dismissals stay on this device (cleared on logout with
+// Skips and snoozes stay on this device (cleared on logout with
 // the other tm_* keys) and never become check-ins.
 const DISMISSALS_KEY = 'tm_mood_nudge';
 
@@ -145,12 +145,6 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
     });
   };
 
-  const handleDeleted = (deleted: MoodCheckin) => {
-    setModal(null);
-    setCheckin(null);
-    showToast('Check-in deleted.', 'info', { label: 'Undo', onClick: () => restore(deleted) });
-  };
-
   const handleSkip = () => {
     setModal(null);
     updateDismissals({ skipped: true });
@@ -229,14 +223,6 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
           <button type="button" onClick={() => setModal({ initialMood: null })} className="text-sm font-medium text-accent hover:underline">
             Edit
           </button>
-          <button
-            type="button"
-            onClick={() => updateDismissals({ dismissed: true })}
-            className="text-text-muted hover:text-text-primary p-1"
-            aria-label="Dismiss"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
       )}
 
@@ -249,7 +235,6 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
           onClose={() => setModal(null)}
           onSkip={state === 'nudge' ? handleSkip : undefined}
           onSaved={handleSaved}
-          onDeleted={handleDeleted}
         />
       )}
     </>

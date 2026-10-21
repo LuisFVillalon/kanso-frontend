@@ -806,7 +806,7 @@ export async function saveMoodCheckin(checkin: MoodCheckinSave): Promise<MoodChe
   return res.json();
 }
 
-/** Deletes a check-in for good (no trash), returning it so Undo can save it again. */
+/** Deletes a check-in for good (no trash); undoes a just-saved check-in. */
 export async function deleteMoodCheckin(id: number): Promise<MoodCheckin> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/del-mood-checkin/${id}`, { method: "DELETE", headers });

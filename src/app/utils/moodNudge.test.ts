@@ -48,9 +48,8 @@ describe('moodNudgeState', () => {
     expect(moodNudgeState(input({ settings: { ...DEFAULT_MOOD_SETTINGS, daily: false } }))).toBe('hidden');
   });
 
-  it('hides the nudge once the day is saved, leaving a dismissible confirmation', () => {
+  it('hides the nudge once the day is saved, leaving the confirmation', () => {
     expect(moodNudgeState(input({ checkedIn: true }))).toBe('logged');
-    expect(moodNudgeState(input({ checkedIn: true, dismissals: { date: '2026-10-20', dismissed: true } }))).toBe('hidden');
   });
 
   it('hides the nudge after a skip, leaving the chip', () => {

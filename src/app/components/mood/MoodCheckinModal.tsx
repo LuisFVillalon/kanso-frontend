@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, CircleCheck, Clock, Loader2, Plus, Repeat } from 'lucide-react';
 import Modal from '@/app/components/common/Modal';
 import MoodFacePicker from '@/app/components/mood/MoodFacePicker';
-import { deleteMoodCheckin, describeError, fetchMoodTags, saveMoodCheckin } from '@/app/lib/backend-api';
+import { describeError, fetchMoodTags, saveMoodCheckin } from '@/app/lib/backend-api';
 import {
   DEFAULT_MOOD_TAGS,
   ENERGY_LABELS,
@@ -37,7 +37,6 @@ interface Props {
   /** Offers "Skip today" on a new check-in; without it that button is Cancel. */
   onSkip?: () => void;
   onSaved: (saved: MoodCheckin, previous: MoodCheckin | null) => void;
-  onDeleted?: (deleted: MoodCheckin) => void;
 }
 
 const sameTag = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
@@ -77,7 +76,7 @@ const FieldLabel: React.FC<{ children: React.ReactNode; htmlFor?: string }> = ({
  * then optional energy, stress, mood tags (their own list, suggested by
  * GET /get-mood-tags) and a note. Saving replaces the day's whole check-in.
  */
-const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null, summary, onClose, onSkip, onSaved, onDeleted }) => {
+const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null, summary, onClose, onSkip, onSaved }) => {
   const editing = existing != null;
   const [mood, setMood] = useState<number | null>(existing?.mood ?? initialMood);
   const [energy, setEnergy] = useState<number | null>(existing?.energy ?? null);
@@ -87,7 +86,7 @@ const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null,
   const [suggestions, setSuggestions] = useState<string[]>(DEFAULT_MOOD_TAGS);
   const [addingTag, setAddingTag] = useState(false);
   const [newTag, setNewTag] = useState('');
-  const [busy, setBusy] = useState<'saving' | 'deleting' | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -126,7 +125,7 @@ const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null,
 
   const handleSave = async () => {
     if (mood == null || busy) return;
-    setBusy('saving');
+    setBusy(true);
     setError(null);
     try {
       const saved = await saveMoodCheckin({
@@ -141,19 +140,7 @@ const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null,
       onSaved(saved, existing);
     } catch (err) {
       setError(describeError(err, "Couldn't save your check-in. Please try again."));
-      setBusy(null);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!existing || busy) return;
-    setBusy('deleting');
-    setError(null);
-    try {
-      onDeleted?.(await deleteMoodCheckin(existing.id));
-    } catch (err) {
-      setError(describeError(err, "Couldn't delete your check-in. Please try again."));
-      setBusy(null);
+      setBusy(false);
     }
   };
 
@@ -292,7 +279,7 @@ const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null,
             <button
               type="button"
               onClick={!editing && onSkip ? onSkip : onClose}
-              disabled={busy != null}
+              disabled={busy}
               className="btn btn-secondary flex-1 py-2"
             >
               {!editing && onSkip ? 'Skip today' : 'Cancel'}
@@ -300,28 +287,15 @@ const MoodCheckinModal: React.FC<Props> = ({ date, existing, initialMood = null,
             <button
               type="button"
               onClick={handleSave}
-              disabled={mood == null || busy != null}
+              disabled={mood == null || busy}
               className="btn btn-primary flex-1 py-2 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {busy === 'saving' && <Loader2 className="w-4 h-4 animate-spin" />}
-              {busy === 'saving' ? 'Saving…' : editing ? 'Save changes' : 'Save check-in'}
+              {busy && <Loader2 className="w-4 h-4 animate-spin" />}
+              {busy ? 'Saving…' : editing ? 'Save changes' : 'Save check-in'}
             </button>
           </div>
           <p className="text-[11px] text-text-muted text-center -mt-1">
             Only the mood is required.
-            {editing && onDeleted && (
-              <>
-                {' '}
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={busy != null}
-                  className="font-medium text-danger hover:underline"
-                >
-                  {busy === 'deleting' ? 'Deleting…' : 'Delete check-in'}
-                </button>
-              </>
-            )}
           </p>
         </div>
       </div>
