@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Bed, Blinds, Briefcase, Grid2x2, Hourglass, PartyPopper, Smile, Timer as TimerIcon } from 'lucide-react';
 import { CalendarSettings } from '@/app/types/calendar';
-import { fetchCalendarSettings } from '@/app/lib/backend-api';
 import { CardShell } from '@/app/components/stats/CardShell';
-import { parseLocalDate, formatLongDate, isWeekday, isWeekend } from '@/app/utils/dateUtils';
+import { parseLocalDate, formatLongDate } from '@/app/utils/dateUtils';
 import { useMidnightTick } from '@/app/hooks/useMidnightTick';
 import type { ProfileFields } from '@/app/hooks/useProfile';
-import { defaultTermSettings } from '@/app/hooks/useCalendarSettings';
+import { isInTerm, termEndInstant } from '@/app/utils/termProgress';
+import { computeDayRun, type DayKind, type DayRunState } from '@/app/utils/dayRuns';
 import TileTools from './TileTools';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
 
@@ -55,11 +55,13 @@ const COUNTDOWN_UNITS: { key: keyof CountdownParts; label: string; width: number
 ];
 
 /**
- * Live-ticking countdown to `target`, broken into months/days/h/m/s.
+ * Live-ticking countdown to the close of `endDate` (the term's last day
+ * counts in full, matching the Term Tracker), broken into months/days/h/m/s.
  * Ticks once a second — no need for anything finer now the display stops
  * at seconds — and owns its own state so only this subtree re-renders.
  */
-const CountdownClock: React.FC<{ target: Date }> = ({ target }) => {
+const CountdownClock: React.FC<{ endDate: Date }> = ({ endDate }) => {
+  const target = useMemo(() => termEndInstant(endDate), [endDate]);
   const [parts, setParts] = useState<CountdownParts>(() => diffParts(new Date(), target));
 
   useEffect(() => {
@@ -77,7 +79,7 @@ const CountdownClock: React.FC<{ target: Date }> = ({ target }) => {
         style={{ color: 'var(--tm-accent)' }}
       >
         <Hourglass className="w-3.5 h-3.5" />
-        Countdown to {formatLongDate(target)}
+        Countdown to end of {formatLongDate(endDate)}
       </p>
       <div className="grid grid-cols-5 divide-x divide-border-subtle">
         {COUNTDOWN_UNITS.map(unit => (
@@ -98,11 +100,11 @@ const CountdownClock: React.FC<{ target: Date }> = ({ target }) => {
   );
 };
 
-// ── Weekday / Weekend period timers ────────────────────────────────────────────
-// "Weekday" period = Monday 12:00 AM through Friday 11:59:59.999 PM.
-// "Weekend" period = Saturday 12:00 AM through Sunday 11:59:59.999 PM.
-// Each card counts down while its own period is active, and otherwise shows
-// the fixed length of that period (5 days / 2 days) as a static readout.
+// ── Work days / Days off timers ────────────────────────────────────────────────
+// Driven by the user's rest days (Settings → Profile). "Days off" are the
+// rest days; "Work days" are every other day. Whichever kind today is counts
+// down to the end of its current run of consecutive days (runs may wrap the
+// week — see utils/dayRuns.ts); the other shows the length of its next run.
 
 interface PeriodParts {
   days: number;
@@ -127,9 +129,6 @@ const HOUR_MIN_SEC_UNITS: { key: keyof PeriodParts; label: string; width?: numbe
   { key: 'seconds', label: 'Sec' },
 ];
 
-const WEEKDAY_PERIOD_LENGTH: PeriodParts = { days: 5, hours: 0, minutes: 0, seconds: 0, milliseconds: 0 };
-const WEEKEND_PERIOD_LENGTH: PeriodParts = { days: 2, hours: 0, minutes: 0, seconds: 0, milliseconds: 0 };
-
 // Straight ms breakdown — no calendar-month awareness needed since these
 // periods never exceed a few days.
 const shortDiffParts = (from: Date, to: Date): PeriodParts => {
@@ -142,15 +141,35 @@ const shortDiffParts = (from: Date, to: Date): PeriodParts => {
   return { days, hours, minutes, seconds, milliseconds };
 };
 
-// End of the current weekday period (Friday 11:59:59.999 PM). Only
-// meaningful while `now` actually falls on a weekday.
-const endOfWeekdayPeriod = (now: Date): Date =>
-  new Date(now.getFullYear(), now.getMonth(), now.getDate() + (5 - now.getDay()), 23, 59, 59, 999);
+const daysParts = (days: number): PeriodParts => ({ days, hours: 0, minutes: 0, seconds: 0, milliseconds: 0 });
 
-// End of the current weekend period (Sunday 11:59:59.999 PM). Only
-// meaningful while `now` actually falls on a weekend.
-const endOfWeekendPeriod = (now: Date): Date =>
-  new Date(now.getFullYear(), now.getMonth(), now.getDate() + (now.getDay() === 0 ? 0 : 1), 23, 59, 59, 999);
+interface DayRunDisplay {
+  active: boolean;
+  parts: PeriodParts;
+  /** Replaces the countdown when there is no run to count (every day / never). */
+  message?: string;
+  compactMessage?: string;
+  statusLabel?: string;
+}
+
+const DAY_RUN_COPY: Record<DayKind, { everyDay: string; never: string }> = {
+  work: { everyDay: 'Every day is a work day — no days off set in Settings → Profile', never: 'No work days — every day is set as a day off' },
+  off: { everyDay: 'Every day is a day off', never: 'No days off set in Settings → Profile' },
+};
+
+const describeDayRun = (now: Date, kind: DayKind, run: DayRunState): DayRunDisplay => {
+  switch (run.status) {
+    case 'active': return { active: true, parts: shortDiffParts(now, run.end) };
+    case 'upcoming': return { active: false, parts: daysParts(run.lengthDays) };
+    case 'everyDay': return { active: true, parts: daysParts(0), message: DAY_RUN_COPY[kind].everyDay, compactMessage: 'Every day' };
+    case 'never': return { active: false, parts: daysParts(0), message: DAY_RUN_COPY[kind].never, compactMessage: 'None set', statusLabel: 'None' };
+  }
+};
+
+const describeDayRuns = (now: Date, restDays: number[]) => ({
+  work: describeDayRun(now, 'work', computeDayRun(now, restDays, 'work')),
+  off: describeDayRun(now, 'off', computeDayRun(now, restDays, 'off')),
+});
 
 interface PeriodTimerCardProps {
   icon: React.ReactNode;
@@ -161,10 +180,13 @@ interface PeriodTimerCardProps {
   color: string;
   bg: string;
   units?: { key: keyof PeriodParts; label: string; width?: number }[];
+  /** Shown in place of the countdown grid. */
+  message?: string;
+  statusLabel?: string;
 }
 
 const PeriodTimerCard: React.FC<PeriodTimerCardProps> = ({
-  icon, label, labelSuffix, active, parts, color, bg, units = PERIOD_UNITS,
+  icon, label, labelSuffix, active, parts, color, bg, units = PERIOD_UNITS, message, statusLabel,
 }) => (
   <div className="p-3 sm:p-4 rounded-lg border border-border-subtle" style={{ backgroundColor: bg }}>
     <div className="flex items-center gap-1.5 mb-2.5">
@@ -182,33 +204,37 @@ const PeriodTimerCard: React.FC<PeriodTimerCardProps> = ({
           color: active ? 'var(--tm-accent-text)' : 'var(--tm-text-muted)',
         }}
       >
-        {active ? 'Now' : 'Upcoming'}
+        {statusLabel ?? (active ? 'Now' : 'Upcoming')}
       </span>
     </div>
-    <div className={`grid ${units.length === 3 ? 'grid-cols-3' : 'grid-cols-4'} divide-x divide-border-subtle`}>
-      {units.map(unit => (
-        <div key={unit.key} className="flex flex-col items-center gap-0.5 px-0.5 sm:px-1 min-w-0">
-          <span
-            className="text-base sm:text-xl md:text-2xl font-bold leading-none tabular-nums"
-            style={{ color }}
-          >
-            {pad(parts[unit.key], unit.width ?? 2)}
-          </span>
-          <span className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wide text-text-muted whitespace-nowrap">
-            {unit.label}
-          </span>
-        </div>
-      ))}
-    </div>
+    {message ? (
+      <p className="text-xs sm:text-sm font-medium text-text-secondary">{message}</p>
+    ) : (
+      <div className={`grid ${units.length === 3 ? 'grid-cols-3' : 'grid-cols-4'} divide-x divide-border-subtle`}>
+        {units.map(unit => (
+          <div key={unit.key} className="flex flex-col items-center gap-0.5 px-0.5 sm:px-1 min-w-0">
+            <span
+              className="text-base sm:text-xl md:text-2xl font-bold leading-none tabular-nums"
+              style={{ color }}
+            >
+              {pad(parts[unit.key], unit.width ?? 2)}
+            </span>
+            <span className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wide text-text-muted whitespace-nowrap">
+              {unit.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 );
 
 /**
- * Side-by-side Weekday / Weekend timers. Whichever period is currently
- * active counts down to its end; the other shows the fixed length of its
- * own period until its turn comes around.
+ * Side-by-side Work days / Days off timers, from the user's rest days.
+ * Whichever kind today is counts down to the end of its run; the other
+ * shows the length of its next run until its turn comes around.
  */
-const WeekPeriodTimers: React.FC = () => {
+const DayRunTimers: React.FC<{ restDays: number[] }> = ({ restDays }) => {
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -216,28 +242,27 @@ const WeekPeriodTimers: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const dow = now.getDay();
-  const inWeekday = isWeekday(dow);
-  const inWeekend = isWeekend(dow);
-
-  const weekdayParts = inWeekday ? shortDiffParts(now, endOfWeekdayPeriod(now)) : WEEKDAY_PERIOD_LENGTH;
-  const weekendParts = inWeekend ? shortDiffParts(now, endOfWeekendPeriod(now)) : WEEKEND_PERIOD_LENGTH;
+  const { work, off } = describeDayRuns(now, restDays);
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <PeriodTimerCard
-        icon={inWeekday ? <Briefcase className="w-3.5 h-3.5" /> : <Bed className="w-3.5 h-3.5" />}
-        label="Weekday"
-        active={inWeekday}
-        parts={weekdayParts}
+        icon={work.active ? <Briefcase className="w-3.5 h-3.5" /> : <Bed className="w-3.5 h-3.5" />}
+        label="Work days"
+        active={work.active}
+        parts={work.parts}
+        message={work.message}
+        statusLabel={work.statusLabel}
         color="var(--tm-success)"
         bg="var(--tm-success-subtle)"
       />
       <PeriodTimerCard
-        icon={inWeekend ? <PartyPopper className="w-3.5 h-3.5" /> : <Smile className="w-3.5 h-3.5" />}
-        label="Weekend"
-        active={inWeekend}
-        parts={weekendParts}
+        icon={off.active ? <PartyPopper className="w-3.5 h-3.5" /> : <Smile className="w-3.5 h-3.5" />}
+        label="Days off"
+        active={off.active}
+        parts={off.parts}
+        message={off.message}
+        statusLabel={off.statusLabel}
         color="var(--tm-accent-2)"
         bg="var(--tm-accent-2-subtle)"
       />
@@ -345,14 +370,16 @@ interface CompactTimerRowProps {
   bg: string;
   active: boolean;
   parts: PeriodParts;
+  /** Shown in place of the time readout. */
+  message?: string;
 }
 
-const CompactTimerRow: React.FC<CompactTimerRowProps> = ({ icon, label, color, bg, active, parts }) => (
+const CompactTimerRow: React.FC<CompactTimerRowProps> = ({ icon, label, color, bg, active, parts, message }) => (
   <div className="flex items-center gap-2 rounded-lg border border-border-subtle px-2 py-1.5 min-w-0" style={{ backgroundColor: bg }}>
     <span className="flex-shrink-0" style={{ color }}>{icon}</span>
     <span className="text-[11px] font-semibold truncate min-w-0" style={{ color }}>{label}</span>
     <span className="ml-auto text-[13px] font-bold tabular-nums whitespace-nowrap flex-shrink-0" style={{ color }}>
-      {formatCompactTime(parts)}
+      {message ?? formatCompactTime(parts)}
     </span>
     <span
       className="w-1.5 h-1.5 rounded-full flex-shrink-0"
@@ -408,28 +435,16 @@ const TimersOverlaySkeleton: React.FC = () => (
 
 // ── Shared session state ─────────────────────────────────────────────────────
 // Both the compact tile and the overlay need the same "is now inside the
-// configured range" fetch/check — the compact rows and the overlay's
-// CountdownClock/full blocks otherwise duplicate this fetch independently.
+// configured range" check. `settings` and `loading` come from TaskManager's
+// useCalendarSettings — the same source the Term Tracker card and Settings
+// use — so a term edited in Settings shows up here immediately.
 
-const useTimersSession = () => {
+const useTimersSession = (settings: CalendarSettings, loading: boolean) => {
   const currentDate = useMidnightTick();
-  const [settings, setSettings] = useState<CalendarSettings | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchCalendarSettings()
-      .then(data => { if (data !== null) setSettings(data); })
-      .catch(() => { /* network / auth error — keep showing defaults */ })
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Same placeholder range useCalendarSettings shows while settings load, so
-  // "in session" reads the same way in both cards.
-  const cur = settings ?? { ...defaultTermSettings(), title: '' };
-  const start = parseLocalDate(cur.start_date);
-  const end = parseLocalDate(cur.end_date);
+  const start = parseLocalDate(settings.start_date);
+  const end = parseLocalDate(settings.end_date);
   const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-  const inSession = today >= start && today <= end;
+  const inSession = isInTerm(start, end, today);
 
   return { loading, inSession, end, today };
 };
@@ -448,18 +463,20 @@ const NotInSessionNotice: React.FC<{ today: Date; compact?: boolean }> = ({ toda
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // Standalone, draggable sibling of BigPictureCalendar's other stat cards.
-// Reads the same CalendarSettings (start/end date) independently so it knows
-// whether "now" falls inside the configured range — the daily/weekly timers
+// Reads the shared CalendarSettings (start/end date) so it knows whether
+// "now" falls inside the configured range — the daily/weekly timers
 // and the countdown only make sense relative to that active window.
 
 interface TimersCardProps {
   profile: ProfileFields;
+  settings: CalendarSettings;
+  settingsLoading: boolean;
   onExpand: () => void;
   dragHandleProps: DragHandleProps;
 }
 
-const TimersCard: React.FC<TimersCardProps> = ({ profile, onExpand, dragHandleProps }) => {
-  const { loading, inSession, today } = useTimersSession();
+const TimersCard: React.FC<TimersCardProps> = ({ profile, settings, settingsLoading, onExpand, dragHandleProps }) => {
+  const { loading, inSession, today } = useTimersSession(settings, settingsLoading);
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -469,9 +486,7 @@ const TimersCard: React.FC<TimersCardProps> = ({ profile, onExpand, dragHandlePr
 
   if (loading) return <TimersCardSkeleton />;
 
-  const dow = now.getDay();
-  const inWeekday = isWeekday(dow);
-  const inWeekend = isWeekend(dow);
+  const { work, off } = describeDayRuns(now, profile.restDays);
   const { active: dailyActive, parts: dailyParts } = computeDailyWindow(now, profile.dayStartTime, profile.shutoffTime, profile.restDays);
 
   return (
@@ -493,20 +508,22 @@ const TimersCard: React.FC<TimersCardProps> = ({ profile, onExpand, dragHandlePr
               parts={dailyParts}
             />
             <CompactTimerRow
-              icon={inWeekday ? <Briefcase className="w-3.5 h-3.5" /> : <Bed className="w-3.5 h-3.5" />}
-              label="Weekday"
+              icon={work.active ? <Briefcase className="w-3.5 h-3.5" /> : <Bed className="w-3.5 h-3.5" />}
+              label="Work days"
               color="var(--tm-success)"
               bg="var(--tm-success-subtle)"
-              active={inWeekday}
-              parts={inWeekday ? shortDiffParts(now, endOfWeekdayPeriod(now)) : WEEKDAY_PERIOD_LENGTH}
+              active={work.active}
+              parts={work.parts}
+              message={work.compactMessage}
             />
             <CompactTimerRow
-              icon={inWeekend ? <PartyPopper className="w-3.5 h-3.5" /> : <Smile className="w-3.5 h-3.5" />}
-              label="Weekend"
+              icon={off.active ? <PartyPopper className="w-3.5 h-3.5" /> : <Smile className="w-3.5 h-3.5" />}
+              label="Days off"
               color="var(--tm-accent-2)"
               bg="var(--tm-accent-2-subtle)"
-              active={inWeekend}
-              parts={inWeekend ? shortDiffParts(now, endOfWeekendPeriod(now)) : WEEKEND_PERIOD_LENGTH}
+              active={off.active}
+              parts={off.parts}
+              message={off.compactMessage}
             />
           </>
         ) : (
@@ -518,8 +535,8 @@ const TimersCard: React.FC<TimersCardProps> = ({ profile, onExpand, dragHandlePr
 };
 
 /** Full-detail body rendered inside the shared expand overlay. */
-export const TimersOverlay: React.FC<{ profile: ProfileFields }> = ({ profile }) => {
-  const { loading, inSession, end, today } = useTimersSession();
+export const TimersOverlay: React.FC<{ profile: ProfileFields; settings: CalendarSettings; settingsLoading: boolean }> = ({ profile, settings, settingsLoading }) => {
+  const { loading, inSession, end, today } = useTimersSession(settings, settingsLoading);
 
   if (loading) return <TimersOverlaySkeleton />;
 
@@ -528,8 +545,8 @@ export const TimersOverlay: React.FC<{ profile: ProfileFields }> = ({ profile })
       {inSession ? (
         <>
           <DailyWindowTimer dayStart={profile.dayStartTime} dayEnd={profile.shutoffTime} restDays={profile.restDays} />
-          <WeekPeriodTimers />
-          <CountdownClock key={end.getTime()} target={end} />
+          <DayRunTimers restDays={profile.restDays} />
+          <CountdownClock key={end.getTime()} endDate={end} />
         </>
       ) : (
         <NotInSessionNotice today={today} />
