@@ -22,8 +22,6 @@ import type {
 
 /** How long after a manual refresh the next one is allowed; the backend won't refetch sooner anyway. */
 export const CANVAS_REFRESH_COOLDOWN_MS = 30 * 1000;
-/** Coming back to the tab refetches data older than this. */
-const FOCUS_REFETCH_AFTER_MS = 5 * 60 * 1000;
 
 /**
  * What the panel shows: a skeleton, the not-connected prompt, "Reconnect
@@ -182,17 +180,6 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
     const timer = setTimeout(() => setRefreshBlocked(false), CANVAS_REFRESH_COOLDOWN_MS);
     return () => clearTimeout(timer);
   }, [refreshBlocked]);
-
-  // No polling: coming back to the tab refetches if the data is old.
-  const fetchedAt = overview?.fetched_at;
-  useEffect(() => {
-    const onFocus = () => {
-      if (status !== 'ready' || !fetchedAt) return;
-      if (Date.now() - new Date(fetchedAt).getTime() > FOCUS_REFETCH_AFTER_MS) void load(false);
-    };
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [status, fetchedAt, load]);
 
   return {
     status,
