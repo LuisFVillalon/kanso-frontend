@@ -21,6 +21,7 @@ import { toLocalDateStr, toLocalTimeStr } from "../utils/dateUtils";
 import { LearningResourcesResponse } from "../types/learningResources";
 import { TrashItem, TrashKind } from "../types/trash";
 import { AppNotification, NotificationPreferences, NotificationPreferencesUpdate } from "../types/notification";
+import { CanvasConnection, CanvasCourse } from "../types/canvas";
 import type { StructuredNoteContent } from "../utils/noteContentExtractor";
 import { supabase } from "./supabase";
 
@@ -793,6 +794,78 @@ export async function updateNotificationPreferences(
   });
   await assertOk(res, "updateNotificationPreferences");
   return res.json();
+}
+
+// ── Canvas LMS ────────────────────────────────────────────────────────────────
+// The user's Canvas token goes to the backend once, in connectCanvas's body,
+// and is never returned: every response is the masked CanvasConnection.
+// Canvas failures come back as an ApiError whose `detail` is a CanvasErrorCode.
+
+/** Fetches the masked connection status; `connected` is false when there is none. */
+export async function fetchCanvasConnection(): Promise<CanvasConnection> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/connection`, { headers });
+  await assertOk(res, "fetchCanvasConnection");
+  return res.json();
+}
+
+/**
+ * Connects, replaces or reconnects Canvas: the backend checks the token with
+ * the school's Canvas before storing it, so a rejected one changes nothing.
+ * A token for a different Canvas account fails with canvas_account_changed
+ * unless `allowAccountChange` confirms the switch.
+ */
+export async function connectCanvas(baseUrl: string, token: string, allowAccountChange = false): Promise<CanvasConnection> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/connection`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ base_url: baseUrl, token, allow_account_change: allowAccountChange }),
+  });
+  await assertOk(res, "connectCanvas");
+  return res.json();
+}
+
+/** Re-checks the stored token with Canvas; a rejected or expired one comes back with status "invalid". */
+export async function testCanvasConnection(): Promise<CanvasConnection> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/connection/test`, { method: "POST", headers });
+  await assertOk(res, "testCanvasConnection");
+  return res.json();
+}
+
+/** Sets the Canvas course ids hidden from the home page ("Courses to show"). */
+export async function updateCanvasHiddenCourses(hiddenCourseIds: number[]): Promise<CanvasConnection> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/connection`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ hidden_course_ids: hiddenCourseIds }),
+  });
+  await assertOk(res, "updateCanvasHiddenCourses");
+  return res.json();
+}
+
+/** Permanently deletes the connection and its token. There is no trash for it. */
+export async function removeCanvasConnection(): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/connection`, { method: "DELETE", headers });
+  await assertOk(res, "removeCanvasConnection");
+}
+
+/**
+ * Fetches the user's Canvas courses, hidden ones included, keeping only the
+ * fields "Courses to show" needs from the `{ courses: [...] }` response.
+ */
+export async function fetchCanvasCourses(): Promise<CanvasCourse[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/courses?include_hidden=true`, { headers });
+  await assertOk(res, "fetchCanvasCourses");
+  const list: unknown = (await res.json())?.courses;
+  if (!Array.isArray(list)) throw new Error("[fetchCanvasCourses] unexpected response shape");
+  return list
+    .filter(c => typeof c?.id === "number" && typeof c?.name === "string")
+    .map(c => ({ id: c.id, name: c.name, course_code: typeof c.course_code === "string" ? c.course_code : null }));
 }
 
 // ── Mood check-ins ───────────────────────────────────────────────────────────

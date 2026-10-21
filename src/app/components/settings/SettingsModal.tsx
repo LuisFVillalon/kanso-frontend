@@ -16,7 +16,8 @@
  * provider from the JWT payload and returns 403 for OAuth accounts.
  *
  * Demo sandboxes (Supabase anonymous users) have no credentials or account to
- * manage, so they only get the Profile tab.
+ * manage, so they only get the Profile tab, plus Integrations to say Canvas
+ * needs a real account.
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -35,6 +36,7 @@ import BigPictureSettingsSection, { type TermTrackerDraft } from '@/app/componen
 import MoodCheckinSettingsSection from '@/app/components/settings/MoodCheckinSettingsSection';
 import Modal from '@/app/components/common/Modal';
 import NotificationPreferencesForm from '@/app/components/settings/NotificationPreferencesForm';
+import CanvasIntegrationSection from '@/app/components/settings/CanvasIntegrationSection';
 import { useOptionalNotifications } from '@/app/context/NotificationsContextValue';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { CalendarSettings } from '@/app/types/calendar';
@@ -50,7 +52,7 @@ interface Props {
   onSaveCalendarSettings: (changes: Partial<Omit<CalendarSettings, 'id'>>) => Promise<CalendarSettings>;
 }
 
-type Section = 'profile' | 'notifications' | 'password' | 'email' | 'delete';
+type Section = 'profile' | 'notifications' | 'integrations' | 'password' | 'email' | 'delete';
 
 // Providers that use a federated identity — they have no local password.
 const OAUTH_PROVIDERS = new Set(['google', 'github', 'facebook', 'twitter', 'apple']);
@@ -391,6 +393,13 @@ export default function SettingsModal({
               Notifications
             </button>
           )}
+          <button
+            onClick={() => setSection('integrations')}
+            className={tabClass('integrations')}
+            style={tabStyle('integrations')}
+          >
+            Integrations
+          </button>
           {!isDemo && <>
             <button
               onClick={() => !isOAuth && setSection('password')}
@@ -466,6 +475,9 @@ export default function SettingsModal({
               )}
             </div>
           )}
+
+          {/* ── Integrations Tab ─────────────────────────────────────────── */}
+          {section === 'integrations' && <CanvasIntegrationSection isDemo={isDemo} />}
 
           {/* ── Profile Tab ──────────────────────────────────────────────── */}
           {section === 'profile' && (
