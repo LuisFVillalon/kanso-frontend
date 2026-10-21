@@ -321,7 +321,7 @@ const MoodCheckinModal: React.FC<Props> = ({
           {kind === 'week' && (
             <>
               <div>
-                <FieldLabel>Workload felt…</FieldLabel>
+                <FieldLabel>Workload felt</FieldLabel>
                 <ScalePicker labels={WORKLOAD_LABELS} value={workload} onChange={setWorkload} label="Workload felt" first={0} />
               </div>
 

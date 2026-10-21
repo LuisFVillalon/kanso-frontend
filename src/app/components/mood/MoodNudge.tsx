@@ -309,7 +309,7 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits, onS
                   <Moon className="w-[18px] h-[18px]" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <h2 id="mood-nudge-title" className="text-base font-semibold text-text-primary">Calling it a day?</h2>
+                  <h2 id="mood-nudge-title" className="text-base text-text-primary">Calling it a day?</h2>
                   <p className="text-sm text-text-secondary">How did {dayName} feel? Tap a face — the rest is optional.</p>
                 </div>
               </div>
