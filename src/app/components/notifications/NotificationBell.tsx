@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import {
-  AlarmClock, AlertTriangle, Bell, BellRing, CheckCheck, Loader2, Repeat, Sun, X,
+  AlarmClock, Bell, BellRing, CheckCheck, CircleDot, Loader2, Repeat, Sun, X,
 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNotifications } from '@/app/context/NotificationsContextValue';
@@ -14,8 +14,9 @@ const TYPE_ICON: Record<string, { icon: React.ElementType; color: string }> = {
   due_today:      { icon: Sun,           color: 'var(--tm-accent)' },
   task_reminder:  { icon: BellRing,      color: 'var(--tm-accent)' },
   final_warning:  { icon: AlarmClock,    color: 'var(--tm-warning)' },
-  overdue:        { icon: AlertTriangle, color: 'var(--tm-danger)' },
-  habit_reminder: { icon: Repeat,        color: 'var(--tm-success)' },
+  // A slipped task gets the gentle amber dot, never red (brand/DESIGN.md).
+  overdue:        { icon: CircleDot,     color: 'var(--tm-slipped-dot)' },
+  habit_reminder: { icon: Repeat,        color: 'var(--tm-success-text)' },
 };
 const FALLBACK_ICON = { icon: Bell, color: 'var(--tm-accent)' };
 
@@ -97,7 +98,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenH
           <span
             aria-hidden="true"
             className="absolute -top-1 -right-1 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full text-[0.625rem] font-bold leading-[1.125rem] text-center"
-            style={{ backgroundColor: 'var(--tm-danger)', color: '#fff' }}
+            style={{ backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)' }}
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
@@ -112,7 +113,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenH
           style={{ boxShadow: 'var(--tm-shadow-lg)' }}
         >
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border-subtle">
-            <h2 className="text-sm font-semibold text-text-primary">Notifications</h2>
+            <h2 className="text-base text-text-primary">Notifications</h2>
             <button
               type="button"
               onClick={markAllRead}

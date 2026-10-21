@@ -65,7 +65,7 @@ describe('NotificationPreferencesForm', () => {
     render(prefs({ types: { ...prefs().types, overdue: false } }));
     expect(document.querySelectorAll('[role="switch"]')).toHaveLength(5);
     expect(switchFor('Morning summary').getAttribute('aria-checked')).toBe('true');
-    expect(switchFor('Overdue nudge').getAttribute('aria-checked')).toBe('false');
+    expect(switchFor('Slipped task nudge').getAttribute('aria-checked')).toBe('false');
   });
 
   it('keeps Save disabled until something changes', () => {

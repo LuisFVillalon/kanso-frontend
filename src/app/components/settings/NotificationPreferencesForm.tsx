@@ -11,7 +11,7 @@ const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
   due_today:      { label: 'Morning summary', hint: 'Tasks due today, when your day starts.' },
   task_reminder:  { label: 'Reminder before a task is due', hint: "At each task's reminder time." },
   final_warning:  { label: 'Final warning', hint: '30 minutes before a task is due.' },
-  overdue:        { label: 'Overdue nudge', hint: "Once, when a task's due time passes." },
+  overdue:        { label: 'Slipped task nudge', hint: "Once, when a task's due time passes." },
   habit_reminder: { label: 'Evening habit reminder', hint: "An hour before you call it a day, if habits are left." },
 };
 const TYPE_ORDER = Object.keys(TYPE_LABELS);
@@ -191,7 +191,7 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave }) =
           {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : 'Save notifications'}
         </button>
         {justSaved && !dirty && (
-          <span role="status" className="flex items-center gap-1 text-sm" style={{ color: 'var(--tm-success)' }}>
+          <span role="status" className="flex items-center gap-1 text-sm" style={{ color: 'var(--tm-success-text)' }}>
             <Check className="w-4 h-4" /> Saved.
           </span>
         )}
