@@ -12,6 +12,18 @@ export const REMINDER_PRESETS = [15, 30, 60, 120, 24 * 60];
 /** The backend always sends a final warning this long before a task is due. */
 export const FINAL_WARNING_MINUTES = 30;
 
+/** The mood reminder's lead choices, in minutes before "Call it a day". */
+export const MOOD_REMINDER_MINUTES = [60, 30];
+export const DEFAULT_MOOD_REMINDER_MINUTES = 60;
+
+export const isMoodType = (type: string) => type === 'mood_reminder' || type === 'mood_missed';
+
+/** The days a mood notification offers to check in for, newest first. Empty for every other type. */
+export function moodCheckinDates(n: AppNotification): string[] {
+  if (!isMoodType(n.type)) return [];
+  return [...new Set((n.dates ?? []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort().reverse();
+}
+
 /** "15 min", "1 h", "1 h 30 min", "1 day", "2 days 3 h". */
 export function formatLeadTime(minutes: number): string {
   const days = Math.floor(minutes / 1440);

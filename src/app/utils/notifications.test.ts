@@ -5,6 +5,7 @@ import {
   createNotificationDeduper,
   formatLeadTime,
   formatRelativeTime,
+  moodCheckinDates,
   startVisiblePolling,
   summarizeFresh,
 } from './notifications';
@@ -158,5 +159,26 @@ describe('startVisiblePolling', () => {
     setVisibility('visible');
     window.dispatchEvent(new Event('focus'));
     expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('moodCheckinDates', () => {
+  it("gives a reminder's own day", () => {
+    expect(moodCheckinDates(notification('a', { type: 'mood_reminder', dates: ['2026-10-20'] }))).toEqual(['2026-10-20']);
+  });
+
+  it('never makes up a day from when a reminder fired', () => {
+    const fired = new Date(2026, 9, 21, 0, 30);
+    expect(moodCheckinDates(notification('a', { type: 'mood_reminder', fire_at: fired.toISOString() }))).toEqual([]);
+  });
+
+  it('lists missed days newest first, without repeats or malformed dates', () => {
+    const n = notification('a', { type: 'mood_missed', dates: ['2026-10-17', '2026-10-19', 'yesterday', '2026-10-18', '2026-10-19'] });
+    expect(moodCheckinDates(n)).toEqual(['2026-10-19', '2026-10-18', '2026-10-17']);
+  });
+
+  it('has nothing for missed days without dates, or for other types', () => {
+    expect(moodCheckinDates(notification('a', { type: 'mood_missed' }))).toEqual([]);
+    expect(moodCheckinDates(notification('a', { dates: ['2026-10-20'] }))).toEqual([]);
   });
 });

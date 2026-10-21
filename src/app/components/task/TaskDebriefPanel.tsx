@@ -17,6 +17,7 @@ import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
 import type { DebriefTag } from '@/app/types/debrief';
 import { DAY_COMPLETE_COPY } from '@/app/components/common/KeyPressMoment';
+import { BriefMoodLine } from '@/app/components/mood/DayMoodCheckin';
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
 
@@ -40,6 +41,8 @@ function tooltipAnchor(segmentCenterPct: number): string {
 
 interface TaskDebriefPanelProps {
   profile: ProfileFields;
+  /** Whether the profile has loaded, so the mood line never shows off the local defaults. */
+  profileLoaded: boolean;
   onSaveProfile: ReturnType<typeof useProfile>['saveProfile'];
   tasks: Task[];
   habits: Habit[];
@@ -48,7 +51,7 @@ interface TaskDebriefPanelProps {
 
 const isBoolean = (c: unknown): c is boolean => typeof c === 'boolean';
 
-const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, onSaveProfile, tasks, habits, completionSyncToken }) => {
+const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoaded, onSaveProfile, tasks, habits, completionSyncToken }) => {
   const [status, setStatus] = useState<Status>('idle');
   const [debrief, setDebrief] = useState<DailyDebriefReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +137,16 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, onSaveProf
           </button>
         </div>
       </div>
+
+      {/* A plain link to the mood form: the AI brief itself never reads mood check-ins. */}
+      {profileLoaded && profile.moodCheckins.daily && (
+        <BriefMoodLine
+          profile={profile}
+          tasks={tasks}
+          habits={habits}
+          className={open ? 'mx-4 sm:mx-5 mb-3' : 'mx-4 sm:mx-5 mb-4 sm:mb-5'}
+        />
+      )}
 
       {open && (
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3">

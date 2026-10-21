@@ -6,6 +6,7 @@ import type { DayData } from '@/app/hooks/useYearCalendarData';
 import type { Habit } from '@/app/types/habit';
 import { getHolidays } from '@/app/lib/monthPersonality';
 import DaySummary from './DaySummary';
+import DayMoodChip from './DayMoodChip';
 import Modal from '@/app/components/common/Modal';
 
 interface DayDetailModalProps {
@@ -15,9 +16,11 @@ interface DayDetailModalProps {
   allHabits: Habit[];
   dayData: Map<string, DayData>;
   onClose: () => void;
+  /** Shows the day's mood chip, to log or edit its check-in. */
+  showMood?: boolean;
 }
 
-const DayDetailModal: React.FC<DayDetailModalProps> = ({ date, data, totalHabits, allHabits, dayData, onClose }) => {
+const DayDetailModal: React.FC<DayDetailModalProps> = ({ date, data, totalHabits, allHabits, dayData, onClose, showMood = false }) => {
   const holidayName = getHolidays(date.getFullYear())[date.getMonth()]?.[date.getDate()];
 
   return (
@@ -39,6 +42,7 @@ const DayDetailModal: React.FC<DayDetailModalProps> = ({ date, data, totalHabits
               {holidayName}
             </span>
           )}
+          {showMood && <DayMoodChip date={date} data={data} totalHabits={totalHabits} modalLayer="top" />}
         </div>
         <button onClick={onClose} className="btn btn-ghost" aria-label="Close">
           <X className="w-5 h-5" />

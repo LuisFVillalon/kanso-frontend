@@ -11,6 +11,7 @@ import type { Habit } from '@/app/types/habit';
 import { checkinToSave, moodLabel, type MoodCheckin, type MoodPeriodKind } from '@/app/types/mood';
 import type { Task } from '@/app/types/task';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
+import { announceMoodCheckin, isLatestMoodCheckin, onMoodCheckin } from '@/app/utils/moodCheckinSync';
 import { indexDayCheckins, summarizeMood } from '@/app/utils/moodReport';
 import {
   checkinDayAt,
@@ -72,8 +73,6 @@ interface Loaded {
   kinds: MoodPeriodKind[];
   rows: MoodCheckin[];
 }
-
-const rowKey = (kind: MoodPeriodKind, start: string) => `${kind}:${start}`;
 
 /**
  * The dashboard's end-of-day mood check-in prompt: from "Call it a day" on
@@ -208,18 +207,19 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits, onS
     return { average, logged, days, tasksDone: tasksDoneBetween(toLocalDateStr(start), toLocalDateStr(last)) };
   };
 
-  // The newest row we saved per period, so an older "Saved" toast's Undo can tell it has since changed.
-  const latestSaved = useRef(new Map<string, MoodCheckin | null>());
   const dismissSavedToast = useRef<(() => void) | null>(null);
   const setRow = (kind: MoodPeriodKind, start: string, row: MoodCheckin | null) => {
-    latestSaved.current.set(rowKey(kind, start), row);
+    announceMoodCheckin({ kind, start, row });
+  };
+  // Saves from here and from elsewhere (the Daily Brief, the calendar, a notification) alike.
+  useEffect(() => onMoodCheckin(({ kind, start, row }) => {
     // Rows are looked up by kind and start, so one saved after the day rolled over is harmless here.
     setLoaded(prev => {
       if (!prev) return prev;
       const rest = prev.rows.filter(r => r.period_kind !== kind || r.period_start !== start);
       return { ...prev, rows: row ? [...rest, row] : rest };
     });
-  };
+  }), []);
 
   const restore = async (row: MoodCheckin) => {
     try {
@@ -239,11 +239,10 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits, onS
       showToast(`${what} updated.`, 'success', { label: 'Undo', onClick: () => restore(previous) });
       return;
     }
-    const key = rowKey(saved.period_kind, saved.period_start);
     dismissSavedToast.current = showToast(`${saved.period_kind === 'day' ? 'Saved' : `${what} saved`} · ${moodLabel(saved.mood)}`, 'success', {
       label: 'Undo',
       onClick: () => {
-        if (latestSaved.current.get(key) !== saved) return;
+        if (!isLatestMoodCheckin(saved)) return;
         deleteMoodCheckin(saved.id)
           .then(() => setRow(saved.period_kind, saved.period_start, null))
           .catch(err => showToast(describeError(err, "Couldn't undo. Please try again.")));

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, CalendarRange, CircleCheck, Clock, Loader2, Plus, Repeat } from 'lucide-react';
-import Modal from '@/app/components/common/Modal';
+import Modal, { type ModalLayer } from '@/app/components/common/Modal';
 import MoodFacePicker from '@/app/components/mood/MoodFacePicker';
 import { describeError, fetchMoodTags, saveMoodCheckin } from '@/app/lib/backend-api';
 import {
@@ -60,6 +60,8 @@ interface Props {
   /** Offers "Skip today" on a new check-in; without it that button is Cancel. */
   onSkip?: () => void;
   onSaved: (saved: MoodCheckin, previous: MoodCheckin | null) => void;
+  /** Its z-index tier: above the modal it was opened from, if any. */
+  layer?: ModalLayer;
 }
 
 const sameTag = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
@@ -121,6 +123,7 @@ const MoodCheckinModal: React.FC<Props> = ({
   onClose,
   onSkip,
   onSaved,
+  layer,
 }) => {
   const editing = existing != null;
   const [mood, setMood] = useState<number | null>(existing?.mood ?? initialMood);
@@ -217,7 +220,7 @@ const MoodCheckinModal: React.FC<Props> = ({
   };
 
   return (
-    <Modal onClose={onClose} panelClassName="modal-panel w-full max-w-md max-h-[92vh] overflow-y-auto scrollbar-custom">
+    <Modal onClose={onClose} layer={layer} panelClassName="modal-panel w-full max-w-md max-h-[92vh] overflow-y-auto scrollbar-custom">
       <div
         ref={dialogRef}
         tabIndex={-1}

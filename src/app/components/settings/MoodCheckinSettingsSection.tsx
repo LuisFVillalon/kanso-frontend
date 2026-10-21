@@ -101,6 +101,9 @@ const MoodCheckinSettingsSection: React.FC<Props> = ({ value, onChange, shutoffT
             </button>
           ))}
         </div>
+        {value.remind === 'off' && (
+          <p className="text-xs text-text-muted mt-1">Also silences the mood reminder and missed check-in notifications.</p>
+        )}
       </div>
 
       <p className="text-xs" style={{ color: 'var(--tm-text-muted)' }}>
