@@ -58,6 +58,10 @@ export interface Task {
   archived_at?: string | null;
   /** Minutes before the due time to send its reminder; null uses the user's default. */
   reminder_minutes?: number | null;
+  /** The Canvas assignment a task added from the Canvas panel follows; absent until the backend sends it. */
+  canvas_assignment_id?: number | null;
+  /** That assignment's page on the school's Canvas. */
+  canvas_html_url?: string | null;
 }
 
 export interface BaseTaskForm {
@@ -75,6 +79,8 @@ export interface BaseTaskForm {
   parent_task_id?: number | null;
   reminder_minutes?: number | null;
   created_date: string | Date;
+  canvas_assignment_id?: number | null;
+  canvas_html_url?: string | null;
 }
 
 

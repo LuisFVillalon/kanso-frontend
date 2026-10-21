@@ -1,8 +1,10 @@
 import React from 'react';
 import {
-  BookOpen, CalendarDays, Clock, File, FileText, ListChecks, MessagesSquare, Minus, StickyNote, type LucideIcon,
+  BookOpen, CalendarDays, Check, Clock, File, FileText, ListChecks, ListPlus, MessagesSquare, Minus, StickyNote,
+  type LucideIcon,
 } from 'lucide-react';
 import TaskStatusChip from '@/app/components/task/TaskStatusChip';
+import type { CanvasAddState, CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import type { CanvasItem, CanvasItemKind } from '@/app/types/canvas';
 import { dueLabel, formatNumber, itemStatus, type CanvasItemStatus } from '@/app/utils/canvas';
 
@@ -53,16 +55,53 @@ export const CanvasLink: React.FC<{ href: string | null; className?: string; chi
     <span className={className}>{children}</span>
   );
 
+/** "Add to tasks" for an item, or "In tasks" once a task follows it. */
+const AddToTasks: React.FC<{ item: CanvasItem; state: NonNullable<CanvasAddState>; onAdd: () => void }> = ({
+  item,
+  state,
+  onAdd,
+}) => {
+  if (state.kind === 'added') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold whitespace-nowrap bg-success-subtle text-success-text"
+        title={`Following "${item.title}" in your tasks`}
+      >
+        <Check className="w-3 h-3" aria-hidden />
+        In tasks
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      disabled={state.pending}
+      aria-label={`Add "${item.title}" to tasks`}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold whitespace-nowrap text-text-secondary transition-colors hover:border-accent hover:text-accent disabled:opacity-50 disabled:cursor-wait"
+    >
+      <ListPlus className="w-3 h-3" aria-hidden />
+      Add to tasks
+    </button>
+  );
+};
+
 interface CanvasItemRowProps {
   item: CanvasItem;
   course: CourseLookup;
   now: Date;
+  /** Offers "Add to tasks" on assignments with work left; left out, the row offers nothing. */
+  addToTasks?: CanvasAddToTasks;
 }
 
-const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now }) => {
+const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, addToTasks }) => {
   const Icon = KIND_ICONS[item.kind] ?? File;
   const status = itemStatus(item, now);
   const { label: courseLabel, color } = course(item.course_id);
+  const addState = addToTasks?.stateOf(item) ?? null;
+  const add = addState && (
+    <AddToTasks item={item} state={addState} onAdd={() => void addToTasks!.add(item, courseLabel ?? item.course_name)} />
+  );
   return (
     <div className="flex gap-2.5 items-start p-2.5 rounded-[10px] border border-border bg-surface">
       <span
@@ -90,9 +129,10 @@ const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now }) => {
           {item.kind === 'quiz' && <span className="font-semibold text-accent">Quiz</span>}
         </div>
       </div>
-      {status && (
-        <div className="shrink-0">
-          <CanvasStatusChip status={status} />
+      {(status || add) && (
+        <div className="shrink-0 flex flex-col items-end gap-1.5">
+          {status && <CanvasStatusChip status={status} />}
+          {add}
         </div>
       )}
     </div>

@@ -188,3 +188,46 @@ describe('TasksPanel deleting or archiving a parent', () => {
     expect(document.body.querySelector('input[name="linked-remove-mode"]')).toBeNull();
   });
 });
+
+describe('TasksPanel tasks added from Canvas', () => {
+  const fromCanvas = task(7, 'Problem Set 6', {
+    canvas_assignment_id: 9876,
+    canvas_html_url: 'https://sdsu.instructure.com/courses/1001/assignments/9876',
+  });
+  const renderWith = (tasks: Task[], canvasSubmitted: Props['canvasSubmitted']) =>
+    act(() => root.render(
+      <TasksPanel
+        tags={[]}
+        taskGroups={groupLinkedTasks(tasks, tasks)}
+        onUpdatePriority={vi.fn()}
+        onEditTask={vi.fn()}
+        activeTaskCount={tasks.length}
+        occupiedPriorities={[]}
+        compact={false}
+        canvasSubmitted={canvasSubmitted}
+        {...handlers}
+      />,
+    ));
+
+  it('offers to mark a task complete once Canvas shows it submitted', () => {
+    const onNotYet = vi.fn();
+    renderWith([fromCanvas, solo], { shows: t => t.id === 7, onNotYet });
+    expect(container.textContent).toContain('Canvas shows this submitted.');
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(1);
+    click('Mark complete');
+    expect(handlers.onToggleComplete).toHaveBeenCalledWith(7);
+  });
+
+  it('"Not yet" hands the task to onNotYet without completing it', () => {
+    const onNotYet = vi.fn();
+    renderWith([fromCanvas], { shows: () => true, onNotYet });
+    click('Not yet');
+    expect(onNotYet).toHaveBeenCalledWith(7);
+    expect(handlers.onToggleComplete).not.toHaveBeenCalled();
+  });
+
+  it('shows no banner while Canvas has nothing to say', () => {
+    renderWith([fromCanvas], { shows: () => false, onNotYet: vi.fn() });
+    expect(container.textContent).not.toContain('Canvas shows this submitted.');
+  });
+});

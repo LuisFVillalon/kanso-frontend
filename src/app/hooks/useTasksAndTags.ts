@@ -13,7 +13,9 @@ import {
   restoreTask as restoreTaskApi,
   updateLinkedTasks,
   completeTaskWithLinked,
+  purgeFromTrash,
   describeError,
+  CanvasTaskExistsError,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
 import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag, LinkedTaskRef, LinkedRemoveMode } from '@/app/types/task';
@@ -149,6 +151,9 @@ export const useTasks = (enabled: boolean) => {
     }
   };
 
+  // A task following a Canvas assignment that an open task already follows
+  // throws the CanvasTaskExistsError instead of toasting, so the Canvas panel
+  // can point to the existing task.
   const addTask = async (newTask: BaseTaskForm): Promise<Task | false> => {
     try {
       const taskWithDates = {
@@ -160,14 +165,46 @@ export const useTasks = (enabled: boolean) => {
         completed: false,
       };
       const createdTask: Task = await createTask(taskWithDates);
-      setTasks([createdTask, ...tasks]);
+      setTasks(prev => [createdTask, ...prev]);
       return createdTask;
     } catch (err) {
+      if (err instanceof CanvasTaskExistsError) throw err;
       console.error(err);
       showToast(describeError(err, "Couldn't create the task. Please try again."));
       return false;
     }
   }; 
+
+  // Undoes a just-added task: deletes it for good rather than leaving it in
+  // Recently deleted. Puts it back if the delete fails.
+  const discardTask = async (task: Task): Promise<boolean> => {
+    setTasks(prev => prev.filter(t => t.id !== task.id));
+    try {
+      await onDelete(task.id);
+    } catch (err) {
+      console.error('Undo add failed:', err);
+      setTasks(prev => (prev.some(t => t.id === task.id) ? prev : [task, ...prev]));
+      showToast(describeError(err, "Couldn't remove the task. Please try again."));
+      return false;
+    }
+    setCompletionSyncToken(v => v + 1);
+    // Already out of the list either way; a failed purge leaves it in Recently deleted.
+    purgeFromTrash('task', task.id).catch(err => console.error('Purging the undone task failed:', err));
+    return true;
+  };
+
+  // Replaces the given tasks with the server's copy, e.g. after a Canvas sync
+  // moved their due dates. Leaves the rest of the list as it is.
+  const refreshTasks = async (ids: number[]): Promise<void> => {
+    if (ids.length === 0) return;
+    const wanted = new Set(ids);
+    try {
+      const fresh = new Map((await fetchTasks()).filter(t => wanted.has(t.id)).map(t => [t.id, t]));
+      setTasks(prev => prev.map(t => fresh.get(t.id) ?? t));
+    } catch (err) {
+      console.error('Refreshing tasks failed:', err);
+    }
+  };
 
   // Puts tasks restored from the Archive or Recently deleted page (or by an
   // Undo) back into the active list.
@@ -328,6 +365,8 @@ export const useTasks = (enabled: boolean) => {
     toggleComplete,
     completeWithLinked,
     addTask,
+    discardTask,
+    refreshTasks,
     setTasks,
     deleteTask,
     archiveTask,

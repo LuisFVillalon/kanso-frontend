@@ -17,8 +17,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useCanvas } from '@/app/hooks/useCanvas';
+import type { CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { canvasView } from '@/app/components/settings/CanvasIntegrationSection';
 import { courseColor, formatShortDate, formatTime, syncedLabel } from '@/app/utils/canvas';
+import { rememberCanvasCourseLabels } from '@/app/utils/canvasTasks';
 import type { CourseLookup } from './CanvasItemRow';
 import CanvasUpcoming from './CanvasUpcoming';
 import CanvasCourses from './CanvasCourses';
@@ -100,9 +102,13 @@ interface CanvasPanelProps {
   onOpenSettings: () => void;
   /** Bumped by the parent to reload, e.g. after Settings closes. */
   syncToken?: number;
+  /** "Add to tasks" on Upcoming and course assignment rows; left out, the rows offer nothing. */
+  addToTasks?: CanvasAddToTasks;
+  /** Called when the user refreshes the panel, so tasks added from Canvas sync too. */
+  onRefresh?: () => void;
 }
 
-const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syncToken }) => {
+const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syncToken, addToTasks, onRefresh }) => {
   const { isDemo } = useAuth();
   const canvas = useCanvas({ isDemo, syncToken });
   const { status, connection, overview, courses, announcements, loadAnnouncements } = canvas;
@@ -114,6 +120,16 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     const timer = setInterval(() => setNow(new Date()), CLOCK_TICK_MS);
     return () => clearInterval(timer);
   }, []);
+
+  // Task cards added from Canvas name their course from these.
+  useEffect(() => {
+    if (courses) rememberCanvasCourseLabels(courses.courses);
+  }, [courses]);
+
+  const refresh = () => {
+    void canvas.refresh();
+    onRefresh?.();
+  };
 
   const courseIds = useMemo(() => (courses?.courses ?? []).map(c => c.id), [courses]);
   const lookup: CourseLookup = useCallback(courseId => {
@@ -150,7 +166,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   const refreshButton = (label: string, className: string) => (
     <button
       type="button"
-      onClick={() => void canvas.refresh()}
+      onClick={refresh}
       disabled={!canvas.canRefresh}
       title={canvas.canRefresh ? 'Fetch the latest from Canvas' : 'Just refreshed. You can refresh again in a moment.'}
       className={className}
@@ -213,7 +229,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   } else {
     let content: React.ReactNode;
     if (tab === 'upcoming') {
-      content = <CanvasUpcoming overview={overview} course={lookup} now={now} />;
+      content = <CanvasUpcoming overview={overview} course={lookup} now={now} addToTasks={addToTasks} />;
     } else if (tab === 'courses') {
       content = openCourse ? (
         <CanvasCourseDetail
@@ -225,6 +241,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
           refreshNonce={canvas.refreshNonce}
           onFail={canvas.fail}
           onBack={() => setOpenCourseId(null)}
+          addToTasks={addToTasks}
         />
       ) : (
         <CanvasCourses
@@ -298,7 +315,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
         {status === 'ready' && (
           <button
             type="button"
-            onClick={() => void canvas.refresh()}
+            onClick={refresh}
             disabled={!canvas.canRefresh}
             aria-label="Refresh Canvas"
             title={canvas.canRefresh ? 'Fetch the latest from Canvas' : 'Just refreshed. You can refresh again in a moment.'}

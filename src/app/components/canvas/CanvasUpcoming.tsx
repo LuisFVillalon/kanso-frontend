@@ -1,5 +1,6 @@
 import React from 'react';
 import { Award, CalendarRange } from 'lucide-react';
+import type { CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import type { CanvasOverview } from '@/app/types/canvas';
 import { groupByDay } from '@/app/utils/canvas';
 import CanvasItemRow, { type CourseLookup } from './CanvasItemRow';
@@ -21,10 +22,11 @@ interface CanvasUpcomingProps {
   overview: CanvasOverview;
   course: CourseLookup;
   now: Date;
+  addToTasks?: CanvasAddToTasks;
 }
 
 /** Missing work, what's due over the next 7 days by day, and recently graded work. */
-const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({ overview, course, now }) => {
+const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({ overview, course, now, addToTasks }) => {
   const days = groupByDay(overview.upcoming, now);
   return (
     <div className="space-y-4">
@@ -41,7 +43,9 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({ overview, course, now }
                 ? 'One thing slipped. Start with this one.'
                 : `${overview.missing.length} things slipped. Start with this one.`}
             </p>
-            {overview.missing.map(item => <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} />)}
+            {overview.missing.map(item => (
+              <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} addToTasks={addToTasks} />
+            ))}
           </div>
         </section>
       )}
@@ -58,7 +62,9 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({ overview, course, now }
                 <span>{day.date}</span>
               </div>
               <div className="space-y-1.5">
-                {day.items.map(item => <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} />)}
+                {day.items.map(item => (
+                  <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} addToTasks={addToTasks} />
+                ))}
               </div>
             </div>
           ))
