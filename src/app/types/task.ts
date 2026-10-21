@@ -86,6 +86,12 @@ export interface EditTaskForm extends BaseTaskForm {
 /** One linked task in a PUT /update-linked-tasks body: an existing task by id, or a new one by title. */
 export type LinkedTaskRef = { id: number } | { title: string };
 
+/**
+ * What deleting or archiving a parent does with its linked tasks: `keep`
+ * unlinks them so they stay as standalone tasks, `cascade` takes them along.
+ */
+export type LinkedRemoveMode = "keep" | "cascade";
+
 export type NewTag = Omit<Tag, "id">;
 
 export interface NewHabit {

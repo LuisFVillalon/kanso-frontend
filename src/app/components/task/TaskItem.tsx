@@ -37,6 +37,8 @@ interface TaskItemProps {
   linkedVia?: Record<number, string>;
   /** In-flight ids, so a linked task's checkbox can show its own pending state. */
   pendingTaskIds?: Set<number>;
+  /** A completion question shown at the bottom of the card (see LinkedTaskBanner). */
+  banner?: React.ReactNode;
 }
 
 const TaskItem: React.FC<TaskItemProps> = ({
@@ -57,6 +59,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
   linkedTotal = 0,
   linkedVia,
   pendingTaskIds,
+  banner,
 }) => {
   const maxPriority = activeTaskCount ?? Object.keys(PRIORITY_COLORS).length;
 
@@ -198,6 +201,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
 
         <TaskTags tags={task.tags} allTags={tags} className={`mt-1.5 ${hasLinked ? 'pl-12' : 'pl-6'}`} />
         {linkedList}
+        {banner}
       </div>
     );
   }
@@ -357,6 +361,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
           </div>
 
           {linkedList}
+          {banner}
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ vi.mock('./supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: { access_token: 'token' } } }) } },
 }));
 
-import { fetchCalendarActivity, fetchCanvasCourses } from './backend-api';
+import { archiveTask, completeTaskWithLinked, fetchCalendarActivity, fetchCanvasCourses, onDelete } from './backend-api';
 
 const fetchMock = vi.fn();
 
@@ -17,7 +17,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const requestedParams = (): URLSearchParams => new URL(String(fetchMock.mock.calls[0][0]), 'http://api.test').searchParams;
+const requestedUrl = (): URL => new URL(String(fetchMock.mock.calls[0][0]), 'http://api.test');
+const requestedParams = (): URLSearchParams => requestedUrl().searchParams;
 
 describe('fetchCalendarActivity', () => {
   it('leaves archived items out by default', async () => {
@@ -55,5 +56,40 @@ describe('fetchCanvasCourses', () => {
   it('rejects a bare list instead of the courses object', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify([{ id: 1, name: 'Operating Systems' }]), { status: 200 }));
     await expect(fetchCanvasCourses()).rejects.toThrow('unexpected response shape');
+  });
+});
+
+describe('linked task modes', () => {
+  it('sends linked=keep or linked=cascade on delete', async () => {
+    await onDelete(4, 'keep');
+    expect(requestedUrl().pathname).toMatch(/\/del-task\/4$/);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'DELETE' });
+    expect(requestedParams().get('linked')).toBe('keep');
+    fetchMock.mockClear();
+    await onDelete(4, 'cascade');
+    expect(requestedParams().get('linked')).toBe('cascade');
+  });
+
+  it('sends linked on archive', async () => {
+    await archiveTask(4, 'keep');
+    expect(requestedUrl().pathname).toMatch(/\/archive-task\/4$/);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH' });
+    expect(requestedParams().get('linked')).toBe('keep');
+  });
+
+  it('leaves linked out when no mode is given, so the backend cascades as before', async () => {
+    await onDelete(4);
+    expect(requestedParams().has('linked')).toBe(false);
+    fetchMock.mockClear();
+    await archiveTask(4);
+    expect(requestedParams().has('linked')).toBe(false);
+  });
+
+  it('completes all with one with_linked=true status call', async () => {
+    await completeTaskWithLinked(4);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(requestedUrl().pathname).toMatch(/\/update-task-status\/4$/);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH' });
+    expect(requestedParams().get('with_linked')).toBe('true');
   });
 });
