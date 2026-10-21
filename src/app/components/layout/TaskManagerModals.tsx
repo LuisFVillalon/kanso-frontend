@@ -78,7 +78,7 @@ interface TaskManagerModalsProps {
 
   // Settings
   showSettings: boolean;
-  /** The tab Settings opens on; the profile tab when unset. */
+  /** The tab Settings opens on; when unset, Settings keeps the tab it showed last. */
   settingsSection?: SettingsSection;
   onCloseSettings: () => void;
   onAccountDeleted: () => void;
