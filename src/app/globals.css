@@ -59,6 +59,15 @@
   --sky-wash:            #62AEF0;
   --midnight-ink:        #02093A;
 
+  /* Mood scale, 1 Rough → 5 Great: coral → saffron → sky, from the feature
+     colors. The orange and blue ends stay apart under red/green color
+     blindness; the faces and labels carry the meaning too, never color alone. */
+  --tm-mood-1:           #E5432D;
+  --tm-mood-2:           #EC7A2A;
+  --tm-mood-3:           #D99A00;
+  --tm-mood-4:           #4E9DE0;
+  --tm-mood-5:           #1F6FC4;
+
   /* Radius — DESIGN.md scale */
   --tm-radius-small:     4px;
   --tm-radius-buttons:   8px;
@@ -111,6 +120,11 @@
     --tm-danger:           #E5534B;
     --tm-danger-subtle:    #3A211C;
     --tm-wire:             rgba(255, 255, 255, 0.18);
+    --tm-mood-1:           #FF6A52;
+    --tm-mood-2:           #FF9A4D;
+    --tm-mood-3:           #F2BE3A;
+    --tm-mood-4:           #7DBCF3;
+    --tm-mood-5:           #4A9DF0;
     --tm-shadow-nav:       0px 0.7px 1.462px 0px rgba(0, 0, 0, 0.2), 0px 3px 9px 0px rgba(0, 0, 0, 0.25);
     --tm-shadow-product:   0px 4px 12px rgba(0, 0, 0, 0.4);
     --tm-shadow-md:        0px 6px 16px rgba(0, 0, 0, 0.35);
@@ -144,6 +158,11 @@
   --tm-danger:           #E5534B;
   --tm-danger-subtle:    #3A211C;
   --tm-wire:             rgba(255, 255, 255, 0.18);
+  --tm-mood-1:           #FF6A52;
+  --tm-mood-2:           #FF9A4D;
+  --tm-mood-3:           #F2BE3A;
+  --tm-mood-4:           #7DBCF3;
+  --tm-mood-5:           #4A9DF0;
   --tm-shadow-nav:       0px 0.7px 1.462px 0px rgba(0, 0, 0, 0.2), 0px 3px 9px 0px rgba(0, 0, 0, 0.25);
   --tm-shadow-product:   0px 4px 12px rgba(0, 0, 0, 0.4);
   --tm-shadow-md:        0px 6px 16px rgba(0, 0, 0, 0.35);
@@ -202,6 +221,11 @@
   --color-mocha:            var(--mocha);
   --color-sky-wash:         var(--sky-wash);
   --color-midnight-ink:     var(--midnight-ink);
+  --color-mood-1:           var(--tm-mood-1);
+  --color-mood-2:           var(--tm-mood-2);
+  --color-mood-3:           var(--tm-mood-3);
+  --color-mood-4:           var(--tm-mood-4);
+  --color-mood-5:           var(--tm-mood-5);
 
   --color-background:       var(--tm-bg);
   --color-foreground:       var(--tm-text-primary);
@@ -618,6 +642,67 @@ html[data-page-style="blank"] body {
     font-weight: 500;
     line-height: 1;
     white-space: nowrap;
+  }
+
+  /* Mood check-in pickers (components/mood/). A face takes its mood color
+     from --mood-color, set inline per face. */
+  .mood-face {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.5rem 0.125rem 0.4rem;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    color: var(--tm-text-muted);
+    transition: background-color var(--tm-dur-fast), color var(--tm-dur-fast), border-color var(--tm-dur-fast), transform var(--tm-dur-fast);
+  }
+  .mood-face svg { width: 30px; height: 30px; }
+  .mood-face > span { font-size: 0.7rem; font-weight: 500; }
+  .mood-face:hover { background-color: var(--tm-surface-raised); color: var(--tm-text-secondary); }
+  .mood-face[aria-checked="true"] {
+    color: var(--mood-color);
+    background-color: color-mix(in srgb, var(--mood-color) 14%, transparent);
+    border-color: color-mix(in srgb, var(--mood-color) 55%, transparent);
+  }
+  .mood-face[aria-checked="true"] > span { color: var(--tm-text-primary); }
+  .mood-face:active { transform: scale(0.96); }
+  .mood-faces-compact .mood-face { padding: 0.35rem 0.1rem; }
+  .mood-faces-compact .mood-face svg { width: 26px; height: 26px; }
+
+  .mood-scale { display: flex; gap: 3px; }
+  .mood-scale > button {
+    flex: 1;
+    min-width: 0;
+    padding: 0.45rem 0.2rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--tm-text-secondary);
+    background-color: var(--tm-surface-raised);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background-color var(--tm-dur-fast), color var(--tm-dur-fast);
+  }
+  .mood-scale > button:first-child { border-radius: var(--tm-radius-buttons) 0 0 var(--tm-radius-buttons); }
+  .mood-scale > button:last-child { border-radius: 0 var(--tm-radius-buttons) var(--tm-radius-buttons) 0; }
+  .mood-scale > button:hover { color: var(--tm-text-primary); }
+  .mood-scale > button[aria-checked="true"] { background-color: var(--tm-accent); color: var(--tm-accent-text); }
+
+  .mood-tag {
+    border: 1px solid var(--tm-border);
+    background-color: var(--tm-surface);
+    color: var(--tm-text-secondary);
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+  }
+  .mood-tag:hover { color: var(--tm-text-primary); background-color: var(--tm-surface-raised); }
+  .mood-tag[aria-pressed="true"] {
+    background-color: var(--tm-accent-subtle);
+    color: var(--tm-accent);
+    border-color: color-mix(in srgb, var(--tm-accent) 40%, transparent);
   }
 
   /* Inputs */

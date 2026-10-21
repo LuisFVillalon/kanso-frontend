@@ -7,6 +7,7 @@ import { DEFAULT_ACCENT, getStoredThemeColor, setStoredThemeColor, resetThemeCol
 import { DEFAULT_PAGE_STYLE, getStoredPageStyle, setStoredPageStyle, resetPageStyle } from '@/app/lib/pageStyle';
 import { getStoredProfileAvatar, setStoredProfileAvatar } from '@/app/lib/avatar';
 import { DEFAULT_DAY_START, DEFAULT_DAY_END, loadStoredRestDays } from '@/app/lib/restDays';
+import { DEFAULT_MOOD_SETTINGS, type MoodCheckinSettings } from '@/app/types/mood';
 
 export interface ProfileFields {
   name: string;
@@ -22,6 +23,7 @@ export interface ProfileFields {
   dailyBriefCollapsed: boolean | null;
   dashboardView: string | null;
   notesViewMode: string | null;
+  moodCheckins: MoodCheckinSettings;
 }
 
 const readLocalDefaults = (): ProfileFields => ({
@@ -42,6 +44,7 @@ const readLocalDefaults = (): ProfileFields => ({
   dailyBriefCollapsed: null,
   dashboardView: null,
   notesViewMode: null,
+  moodCheckins: DEFAULT_MOOD_SETTINGS,
 });
 
 /**
@@ -59,6 +62,9 @@ const readLocalDefaults = (): ProfileFields => ({
 export function useProfile(user: User | null) {
   const [profile, setProfile] = useState<ProfileFields>(readLocalDefaults);
   const [loading, setLoading] = useState(false);
+  // Whether the first fetchProfile() has settled (either way), so anything
+  // timed off the profile (the mood nudge) doesn't act on the local defaults.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -82,6 +88,7 @@ export function useProfile(user: User | null) {
           dailyBriefCollapsed: p.daily_brief_collapsed ?? prev.dailyBriefCollapsed,
           dashboardView: p.dashboard_view ?? prev.dashboardView,
           notesViewMode: p.notes_view_mode ?? prev.notesViewMode,
+          moodCheckins: { ...DEFAULT_MOOD_SETTINGS, ...p.mood_checkins },
         }));
         localStorage.setItem('tm_profile_name', p.name);
         if (p.shutoff_time) localStorage.setItem('tm_call_it_a_day', p.shutoff_time);
@@ -94,6 +101,7 @@ export function useProfile(user: User | null) {
         // keep localStorage/default fallback
       } finally {
         setLoading(false);
+        setLoaded(true);
       }
     };
     load();
@@ -115,6 +123,7 @@ export function useProfile(user: User | null) {
         daily_brief_collapsed: next.dailyBriefCollapsed,
         dashboard_view: next.dashboardView,
         notes_view_mode: next.notesViewMode,
+        mood_checkins: next.moodCheckins,
       });
 
       localStorage.setItem('tm_profile_name', next.name);
@@ -134,5 +143,5 @@ export function useProfile(user: User | null) {
     }
   }, []);
 
-  return { profile, loading, saveProfile };
+  return { profile, loading, loaded, saveProfile };
 }

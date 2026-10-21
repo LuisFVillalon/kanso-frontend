@@ -32,6 +32,7 @@ import { PAGE_STYLES, applyPageStyle } from '@/app/lib/pageStyle';
 import { AVATAR_OPTIONS } from '@/app/lib/avatar';
 import ThemeAccentPicker from '@/app/components/settings/ThemeAccentPicker';
 import BigPictureSettingsSection, { type TermTrackerDraft } from '@/app/components/settings/BigPictureSettingsSection';
+import MoodCheckinSettingsSection from '@/app/components/settings/MoodCheckinSettingsSection';
 import Modal from '@/app/components/common/Modal';
 import NotificationPreferencesForm from '@/app/components/settings/NotificationPreferencesForm';
 import { useOptionalNotifications } from '@/app/context/NotificationsContextValue';
@@ -110,6 +111,7 @@ export default function SettingsModal({
   const [restDays, setRestDays] = useState<number[]>(profile.restDays);
   const [themeColor, setThemeColor] = useState(profile.themeAccent);
   const [pageStyle, setPageStyle] = useState(profile.pageStyle);
+  const [moodCheckins, setMoodCheckins] = useState(profile.moodCheckins);
   const toggleRestDay = (day: number) => {
     setRestDays(prev => (prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()));
   };
@@ -143,6 +145,7 @@ export default function SettingsModal({
     setRestDays(profile.restDays);
     setThemeColor(profile.themeAccent);
     setPageStyle(profile.pageStyle);
+    setMoodCheckins(profile.moodCheckins);
     setTermTracker(calendarSettings);
   }, [isOpen, profile, calendarSettings]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -213,6 +216,7 @@ export default function SettingsModal({
       dailyBriefCollapsed: profile.dailyBriefCollapsed,
       dashboardView: profile.dashboardView,
       notesViewMode: profile.notesViewMode,
+      moodCheckins,
     });
 
     let termTrackerError: string | null = null;
@@ -588,6 +592,13 @@ export default function SettingsModal({
                   On rest days, the daily work window timer won&apos;t run.
                 </p>
               </div>
+
+              <MoodCheckinSettingsSection
+                value={moodCheckins}
+                onChange={setMoodCheckins}
+                shutoffTime={callItADay}
+                loading={profileLoading}
+              />
 
               <BigPictureSettingsSection
                 value={termTracker}
