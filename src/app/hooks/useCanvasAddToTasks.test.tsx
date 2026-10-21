@@ -78,6 +78,7 @@ describe('Add to tasks on a Canvas item', () => {
       tags: [{ id: 3, name: 'CS 460', color: '#123456' }],
       canvas_assignment_id: 9876,
       canvas_html_url: `${HOST}/courses/1001/assignments/9876`,
+      canvas_due_at: item().due_at,
     }));
     expect(showToast).toHaveBeenCalledWith('Added "Problem Set 6" to your tasks.', 'success', expect.objectContaining({ label: 'Undo' }));
     showToast.mock.calls[0][2].onClick();

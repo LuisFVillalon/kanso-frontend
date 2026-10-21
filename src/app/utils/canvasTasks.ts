@@ -71,6 +71,7 @@ export function canvasTaskForm(
     created_date: now,
     canvas_assignment_id: assignmentId,
     canvas_html_url: item.html_url,
+    canvas_due_at: item.due_at,
   };
 }
 

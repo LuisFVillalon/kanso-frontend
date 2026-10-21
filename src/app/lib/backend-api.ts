@@ -172,6 +172,7 @@ export async function createTask(task: {
   reminder_minutes?: number | null;
   canvas_assignment_id?: number | null;
   canvas_html_url?: string | null;
+  canvas_due_at?: string | null;
 }) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/create-task`, {
@@ -222,6 +223,7 @@ export async function updateWholeTask(id: number, task: {
   parent_task_id?: number | null;
   /** Replaced like every other field: leaving it out resets the task to the user's default lead. */
   reminder_minutes?: number | null;
+  canvas_due_at?: string | null;
 }) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/update-task/${id}`, {

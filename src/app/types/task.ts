@@ -62,6 +62,8 @@ export interface Task {
   canvas_assignment_id?: number | null;
   /** That assignment's page on the school's Canvas. */
   canvas_html_url?: string | null;
+  /** The assignment's due_at as Canvas last gave it, so the backend can tell Canvas moving it from the user editing the date. */
+  canvas_due_at?: string | null;
 }
 
 export interface BaseTaskForm {
@@ -81,6 +83,7 @@ export interface BaseTaskForm {
   created_date: string | Date;
   canvas_assignment_id?: number | null;
   canvas_html_url?: string | null;
+  canvas_due_at?: string | null;
 }
 
 

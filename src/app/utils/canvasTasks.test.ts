@@ -97,7 +97,12 @@ describe('canvasTaskForm', () => {
       due_time: '23:59',
       canvas_assignment_id: 9876,
       canvas_html_url: `${HOST}/courses/1001/assignments/9876`,
+      canvas_due_at: item().due_at,
     });
+  });
+
+  it('sends no canvas_due_at for an item without a due date', () => {
+    expect(canvasTaskForm(item({ due_at: null }), 9876, null, []).canvas_due_at).toBeNull();
   });
 
   it('keeps the local day when due_at is already the next day in UTC', () => {
