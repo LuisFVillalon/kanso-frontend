@@ -447,24 +447,24 @@ const TaskManager: React.FC = () => {
             swallow clicks meant for the mode switcher.
           */}
         <div className="relative z-10 pointer-events-auto flex flex-wrap sm:flex-nowrap justify-between items-end gap-2 pb-2 sm:pb-3 mb-2 sm:mb-3 mt-2 sm:mt-3 border-b border-border-subtle">
-          <div className="w-full sm:w-auto">
-            <p className="flex items-center gap-2 text-[0.6875rem] sm:text-xs font-semibold uppercase tracking-wide text-text-muted">
-              <span>{todayLabel}</span>
+          <div className="w-full sm:w-auto min-w-0">
+            <p className="flex items-center gap-2 text-[0.6875rem] sm:text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-text-muted">
+              <span className="min-w-0 truncate">{todayLabel}</span>
               <span aria-hidden="true" className="text-text-muted/50">&middot;</span>
               <span>{currentTimeLabel}</span>
             </p>
             <h1 className="flex items-center gap-2 sm:gap-3 text-xl sm:text-2xl lg:text-3xl text-text-primary">
               <ProfileAvatar avatar={profile.avatar} name={profile.name} size={32} />
-              Welcome back{profile.name ? `, ${profile.name}` : ''}
+              <span className="min-w-0 truncate">Welcome back{profile.name ? `, ${profile.name}` : ''}</span>
             </h1>
           </div>
-          {/* Centre slot for the focus moment: only takes the row's free
-              space (-ml-2 cancels its extra gap), so the idle header lays
-              out exactly as without it. */}
-          <div className="@container relative order-last sm:order-none flex-1 min-w-0 sm:-ml-2 self-stretch">
+          {/* Centre slot for the focus moment: from sm up it always keeps
+              room for the key-only card (a long greeting truncates instead),
+              and -ml-2 cancels its extra gap. */}
+          <div className="@container relative order-last sm:order-none flex-1 min-w-0 sm:min-w-15 sm:-ml-2 self-stretch">
             <KeyPressMoment moment={keyPress} placement="header" onDone={clearKeyPress} />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-shrink-0 items-center gap-2">
             {showDoodleToolbar && (
               <div className={doodleMode ? 'animate-fade-in' : 'animate-fade-out'}>
                 <DoodleToolbar
