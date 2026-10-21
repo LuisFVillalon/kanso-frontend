@@ -512,15 +512,18 @@ export const analyseCorrelation = (points: Pick<MoodPoint, 'mood' | 'value'>[]):
   if (threshold === sorted[0]) threshold = sorted.find(v => v > threshold)!;
   const high = points.filter(q => q.value >= threshold).map(q => q.mood);
   const low = points.filter(q => q.value < threshold).map(q => q.mood);
+  const highAverage = mean(high);
+  const lowAverage = mean(low);
+  const splitSign = Math.sign(Math.round(highAverage * 10) - Math.round(lowAverage * 10));
 
   const strength = Math.abs(rho);
-  let level: CorrelationLevel = p > MAX_P || strength < MIN_RHO
+  let level: CorrelationLevel = p > MAX_P || strength < MIN_RHO || splitSign !== Math.sign(rho)
     ? 'none'
     : strength < 0.3 ? 'slight' : strength < 0.5 ? 'moderate' : 'strong';
   if (level !== 'none' && n < EARLY_SIGN_DAYS) level = 'early';
   else if (level === 'strong' && n < STRONG_MIN_DAYS) level = 'moderate';
 
-  return { n, level, rho, p, threshold, highAverage: mean(high), lowAverage: mean(low) };
+  return { n, level, rho, p, threshold, highAverage, lowAverage };
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

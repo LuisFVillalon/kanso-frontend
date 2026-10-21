@@ -418,6 +418,21 @@ describe('describeCorrelation', () => {
     );
   });
 
+  it('reads as no clear link when the split goes against the ranks', () => {
+    const humped = [
+      ...Array.from({ length: 24 }, () => ({ value: 0, mood: 1 })),
+      ...Array.from({ length: 32 }, () => ({ value: 1, mood: 5 })),
+      ...Array.from({ length: 64 }, () => ({ value: 2, mood: 3 })),
+    ];
+    const result = analyseCorrelation(humped);
+    expect(result.rho!).toBeGreaterThanOrEqual(0.15);
+    expect(result.p!).toBeLessThanOrEqual(0.1);
+    expect(result.level).toBe('none');
+    expect(describeCorrelation('tasks', result, 'this year')).toBe(
+      'No clear link this year: on days you completed 2 or more tasks your mood averaged 3.0, about the same as the 3.3 on other days.',
+    );
+  });
+
   it('hedges an early sign', () => {
     expect(describeSeries('habits', series(15, 'up'))).toBe(
       'Early sign this month: your mood seemed higher on days with more habits checked off. On days you checked off 2 or more habits it averaged 4.0, vs 1.5 on days with fewer. With only 15 days this could easily be chance — check back in a few weeks.',
