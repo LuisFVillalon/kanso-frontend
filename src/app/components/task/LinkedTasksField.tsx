@@ -3,12 +3,13 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Check, CornerDownRight, GripVertical, Info, Plus, Search, Timer, X,
 } from 'lucide-react';
 import { Task } from '@/app/types/task';
-import { formatDueDate, formatDueDateShort, getDueColor, toInkTone } from '@/app/utils/taskUtils';
+import { formatDueDate, formatDueDateShort, getDueStatus } from '@/app/utils/taskUtils';
 import { formatDuration } from '@/app/utils/duration';
 import {
   LINKED_TITLE_MAX, LinkCandidate, LinkedDraft, dueDateStr, linkCandidates, moveItem,
 } from '@/app/utils/linkedTasks';
 import { LinkedProgressBar } from './LinkedTasksList';
+import TaskStatusChip from './TaskStatusChip';
 
 interface LinkedTasksFieldProps {
   /** Every loaded (active) task. */
@@ -163,6 +164,7 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
 
   const renderOption = (c: LinkCandidate, index: number | null) => {
     const due = dueDateStr(c.task.due_date);
+    const dueStatus = getDueStatus(c.task);
     const selected = index !== null && index === activeIndex;
     return (
       <li
@@ -192,8 +194,10 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
             </span>
           )}
         </span>
-        {due && (
-          <span className={`flex-shrink-0 text-xs whitespace-nowrap ${toInkTone(getDueColor(due))}`}>
+        {dueStatus ? (
+          <TaskStatusChip status={dueStatus} size="sm" />
+        ) : due && (
+          <span className="flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
             {formatDueDate(due)}
           </span>
         )}
