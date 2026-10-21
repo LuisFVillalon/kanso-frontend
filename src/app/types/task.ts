@@ -54,6 +54,8 @@ export interface Task {
   user_id?: string | null;
   /** When the task was archived; null while active. */
   archived_at?: string | null;
+  /** Minutes before the due time to send its reminder; null uses the user's default. */
+  reminder_minutes?: number | null;
 }
 
 export interface BaseTaskForm {
@@ -69,6 +71,7 @@ export interface BaseTaskForm {
   category?: TaskCategory | null;
   estimated_time?: number | null;
   parent_task_id?: number | null;
+  reminder_minutes?: number | null;
   created_date: string | Date;
 }
 

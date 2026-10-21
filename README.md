@@ -23,6 +23,7 @@ This repository is the web app. kanso is three services, each in its own reposit
 - **Customizable dashboard**: drag-and-drop, resizable stats widgets; accent colors; notebook page styles; focus mode; and a doodle canvas.
 - **Archive**: archive tasks, notes, tags and habits to hide them from the dashboard, calendar, daily debrief and stats without deleting them. Archived tags disappear from pickers, filters and note folders but stay attached to their tasks and notes; archived habits keep their history. The Archive page lists everything archived, with Restore and Delete, and its Tasks and Notes tabs can be filtered by tag (including archived tags).
 - **Recently deleted**: deleting a task, note, tag or habit moves it to Recently deleted for 30 days, with an Undo on the confirmation toast. The Recently deleted page lists them newest first with the days left before each is deleted for good, filters by kind, and offers Restore (back where it was, or to the Archive if it was archived) and Delete forever.
+- **Notifications**: in-app alerts behind a bell in the dashboard header: a morning summary of tasks due today, a reminder before a task is due (2 hours by default, or a lead picked per task under "Remind me"), a final warning 30 minutes before, one overdue nudge, and an evening habit reminder before "Call it a day". The panel lists them newest first; opening one marks it read and opens its task or habit, and each can be dismissed. New ones arrive as a toast while the tab is open. Settings → Notifications switches each type on or off and sets quiet hours and the default reminder time. The backend computes alerts on demand, so the app polls about once a minute while visible, sending the browser's time zone.
 - **Accounts**: email/password (with a NIST-style password policy) or Google sign-in, plus account settings and account deletion.
 
 ## Architecture
@@ -70,8 +71,8 @@ src/app/
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
   components/            # Grouped by domain: task, notes, habit, calendar, stats, settings,
-                         # landing, doodle, tag, auth; plus common/ and layout/ (cross-domain)
-  context/               # Auth, Toast, and the Tasks/Tags/Habits/Notes data providers
+                         # landing, doodle, tag, auth, notifications; plus common/ and layout/ (cross-domain)
+  context/               # Auth, Toast, Notifications, and the Tasks/Tags/Habits/Notes data providers
   hooks/                 # Data hooks (useTasksAndTags, useNotes, useHabits, useProfile, ...)
   lib/backend-api.ts     # Every backend and AI-service request, with auth headers and typed errors
   lib/supabase.ts        # Supabase client (auth only)

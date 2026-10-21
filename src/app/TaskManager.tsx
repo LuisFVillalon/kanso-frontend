@@ -34,6 +34,7 @@ import PageSpinner from '@/app/components/common/PageSpinner';
 import DoodleCanvas, { DoodleCanvasHandle } from '@/app/components/doodle/DoodleCanvas';
 import DoodleToolbar from '@/app/components/doodle/DoodleToolbar';
 import ModeSwitcher, { AppMode } from '@/app/components/common/ModeSwitcher';
+import NotificationBell from '@/app/components/notifications/NotificationBell';
 import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 
 const TaskManager: React.FC = () => {
@@ -116,6 +117,17 @@ const TaskManager: React.FC = () => {
 
   const openEditTaskModal = (task: Task) => {
     state.setShowEditTaskModal({ status: true, task });
+  };
+
+  const openNotifiedTask = (taskId: number) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task) openEditTaskModal(task);
+    else showToast('That task is no longer in your list.', 'info');
+  };
+
+  const openNotifiedHabits = (habitIds: number[]) => {
+    if (habitIds.length === 1) state.setHistoryHabitId(habitIds[0]);
+    else state.setShowManageHabitsModal(true);
   };
 
   const handleEditTaskChange = (next: TaskFormData) => {
@@ -363,6 +375,7 @@ const TaskManager: React.FC = () => {
                 />
               </div>
             )}
+            <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} />
             <ModeSwitcher mode={mode} onChange={setMode} />
           </div>
         </div>

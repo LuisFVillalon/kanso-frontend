@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@/app/types/task';
-import { groupLinkedTasks, subtaskTreeIds } from './taskUtils';
+import { groupLinkedTasks, subtaskTreeIds, taskToEditForm } from './taskUtils';
 
 describe('subtaskTreeIds', () => {
   const tasks = [
@@ -86,5 +86,23 @@ describe('groupLinkedTasks', () => {
   it('keeps tasks in a parent loop top-level instead of hanging', () => {
     const loop = [task(1, 2), task(2, 1)];
     expect(shape(groupLinkedTasks(loop, loop)).map(g => g.id)).toEqual([1, 2]);
+  });
+});
+
+describe('taskToEditForm', () => {
+  const task: Task = {
+    id: 7, title: 'Essay', description: '', completed: false, priority: null,
+    due_date: '2026-10-21', due_time: '17:00', tags: [], created_date: '2026-10-01T00:00:00',
+    completed_date: null, reminder_minutes: 45,
+  };
+
+  // /update-task replaces every field, so a lead left out resets to the default.
+  it("carries the task's reminder lead into the update", () => {
+    expect(taskToEditForm(task).reminder_minutes).toBe(45);
+    expect(taskToEditForm(task, { priority: 2 }).reminder_minutes).toBe(45);
+  });
+
+  it('sends null for a task on the default lead', () => {
+    expect(taskToEditForm({ ...task, reminder_minutes: undefined }).reminder_minutes).toBeNull();
   });
 });

@@ -67,6 +67,7 @@ export const useTaskManagerState = () => {
     tags: [],
     category: null,
     estimated_time: 0,
+    reminder_minutes: null,
     created_date: '',
   });
   return {

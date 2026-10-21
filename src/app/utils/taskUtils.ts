@@ -133,6 +133,7 @@ export function taskToEditForm(task: Task, overrides: Partial<EditTaskForm> = {}
     created_date: task.created_date,
     estimated_time: task.estimated_time ?? null,
     parent_task_id: task.parent_task_id ?? null,
+    reminder_minutes: task.reminder_minutes ?? null,
     ...overrides,
   };
 }
