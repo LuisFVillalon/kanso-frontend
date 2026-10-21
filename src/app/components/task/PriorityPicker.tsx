@@ -21,6 +21,7 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
   const [open, setOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   // Viewport coords for the portaled menu. Task cards each form their own
   // stacking context (backdrop-filter) and sit in a scrolling panel, so an
@@ -68,6 +69,37 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !pos) return;
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    (items.find(item => item.dataset.priority === String(priority)) ?? items[0])?.focus();
+  }, [open, pos, priority]);
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      if (e.key === 'Escape') e.preventDefault();
+      triggerRef.current?.focus();
+      setOpen(false);
+      return;
+    }
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    let next: number;
+    if (e.key === 'ArrowDown') next = (current + 1) % items.length;
+    else if (e.key === 'ArrowUp') next = (current - 1 + items.length) % items.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = items.length - 1;
+    else return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
+
+  const handleMenuBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    const next = e.relatedTarget as Node | null;
+    if (next && (menuRef.current?.contains(next) || ref.current?.contains(next))) return;
+    setOpen(false);
+  };
+
   const handleSelect = async (p: number | null) => {
     setOpen(false);
     setUpdating(true);
@@ -81,6 +113,7 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
   return (
     <div ref={ref} className="relative flex-shrink-0">
       <button
+        ref={triggerRef}
         onClick={() => setOpen(v => !v)}
         disabled={updating}
         className={`chip font-bold flex items-center gap-1 transition-opacity hover:opacity-75 ${
@@ -95,6 +128,8 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
         }}
         title={updating ? 'Saving priority…' : 'Change priority'}
         aria-label="Change priority"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         {updating
           ? <Loader2 className={`animate-spin ${isSmall ? 'w-3 h-3' : 'w-4 h-4'}`} />
@@ -106,6 +141,8 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
         <div
           ref={menuRef}
           role="menu"
+          onKeyDown={handleMenuKeyDown}
+          onBlur={handleMenuBlur}
           className="fixed z-50 card p-1.5 flex flex-col gap-1 min-w-[72px]"
           style={{
             boxShadow: 'var(--tm-shadow-lg)',
@@ -128,6 +165,9 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
               return (
                 <button
                   key={p}
+                  role="menuitem"
+                  tabIndex={-1}
+                  data-priority={p}
                   onClick={() => handleSelect(p)}
                   className="chip text-[10px] font-bold flex items-center gap-1 w-full justify-center hover:opacity-80 transition-opacity"
                   style={{
@@ -146,6 +186,8 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
 
           {priority != null && (
             <button
+              role="menuitem"
+              tabIndex={-1}
               onClick={() => handleSelect(null)}
               className="text-[10px] font-medium text-text-muted hover:text-text-primary transition-colors text-center pt-0.5"
             >

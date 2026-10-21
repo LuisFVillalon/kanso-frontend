@@ -88,4 +88,38 @@ describe('PriorityPicker menu', () => {
     act(() => container.firstElementChild!.dispatchEvent(new Event('scroll')));
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
+
+  it('moves keyboard focus into the menu and lets arrow keys pick a level', async () => {
+    anchorAt(100, 120);
+    const onSelect = renderInTaskList();
+    const menu = openMenu();
+    const items = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLButtonElement[];
+    expect(document.activeElement).toBe(items.find(b => b.textContent === '2'));
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    expect(document.activeElement?.textContent).toBe('3');
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })));
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true })));
+    expect(document.activeElement?.textContent).toBe('1');
+    await act(async () => (document.activeElement as HTMLButtonElement).click());
+    expect(onSelect).toHaveBeenCalledWith(1);
+  });
+
+  it('closes on Escape and returns focus to the badge', () => {
+    anchorAt(100, 120);
+    renderInTaskList();
+    const menu = openMenu();
+    act(() => menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(container.querySelector('[aria-label="Change priority"]'));
+  });
+
+  it('closes when focus leaves the menu', () => {
+    anchorAt(100, 120);
+    renderInTaskList();
+    openMenu();
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    act(() => outside.focus());
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
 });
