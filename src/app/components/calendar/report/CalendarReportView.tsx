@@ -24,6 +24,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { useCalendarReport } from '@/app/hooks/useCalendarReport';
 import { useProfile } from '@/app/hooks/useProfile';
 import { useReportMood } from '@/app/hooks/useReportMood';
+import type { CalendarActivity } from '@/app/types/activity';
 import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate } from '@/app/utils/dateUtils';
 import {
@@ -256,12 +257,13 @@ interface ReportMood {
 interface ReportBodyProps {
   period: ReportPeriod;
   report: CalendarReport;
+  activity: CalendarActivity;
   /** Null when "Show mood in reports" is off. */
   mood: ReportMood | null;
   onSelectPeriod: (period: ReportPeriod) => void;
 }
 
-const ReportBody: React.FC<ReportBodyProps> = ({ period, report, mood, onSelectPeriod }) => {
+const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, onSelectPeriod }) => {
   const days = elapsedDays(period);
   const checkins = mood?.checkins;
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
@@ -320,6 +322,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, mood, onSelectP
         <ReportMoodSection
           period={period}
           report={report}
+          activity={activity}
           byDay={byDay}
           scope={scope}
           replaceDay={mood.replaceDay}
@@ -351,7 +354,7 @@ const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
-  const { report, loading, error, retry } = useCalendarReport(period);
+  const { report, activity, loading, error, retry } = useCalendarReport(period);
   const { user } = useAuth();
   const { profile, loaded: profileLoaded } = useProfile(user);
   // Until the profile loads we don't know whether mood is hidden, so it's fetched meanwhile.
@@ -427,7 +430,7 @@ const CalendarReportView: React.FC = () => {
             Try again
           </button>
         </div>
-      ) : loading || !report || !profileLoaded || mood.loading ? (
+      ) : loading || !report || !activity || !profileLoaded || mood.loading ? (
         <>
           <span className="sr-only" role="status">Loading report…</span>
           <ReportSkeleton tiles={moodHidden ? 5 : 6} />
@@ -436,6 +439,7 @@ const CalendarReportView: React.FC = () => {
         <ReportBody
           period={period}
           report={report}
+          activity={activity}
           mood={moodHidden ? null : mood}
           onSelectPeriod={setPeriod}
         />
