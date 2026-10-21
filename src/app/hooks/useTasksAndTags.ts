@@ -12,10 +12,11 @@ import {
   archiveTag as archiveTagApi,
   restoreTask as restoreTaskApi,
   updateLinkedTasks,
+  completeTaskWithLinked,
   describeError,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
-import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag, LinkedTaskRef } from '@/app/types/task';
+import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag, LinkedTaskRef, LinkedRemoveMode } from '@/app/types/task';
 import { toLocalISOString, toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 import { subtaskTreeIds } from '@/app/utils/taskUtils';
 import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
@@ -118,6 +119,36 @@ export const useTasks = (enabled: boolean) => {
     }
   };
 
+  // "Complete all" from a parent's banner: completes the task and its open
+  // linked tasks in one request, so they all share one completed_date.
+  const completeWithLinked = async (id: number): Promise<void> => {
+    const task = tasks.find(t => t.id === id);
+    if (!task || pendingRef.current.has(id)) return;
+    const openLinked = tasks.filter(t => t.parent_task_id === id && !t.completed);
+    const ids = new Set([id, ...openLinked.map(t => t.id)]);
+    const before = new Map([task, ...openLinked].map(t => [t.id, t]));
+    ids.forEach(i => pendingRef.current.add(i));
+    setPendingTaskIds(new Set(pendingRef.current));
+
+    const completedDate = toLocalISOString(new Date());
+    setTasks(prev => prev.map(t => ids.has(t.id) ? { ...t, completed: true, completed_date: completedDate, priority: null } : t));
+
+    try {
+      const updated = await completeTaskWithLinked(id);
+      setTasks(prev => prev.map(t =>
+        t.id === id ? updated : ids.has(t.id) ? { ...t, completed_date: updated.completed_date, priority: null } : t
+      ));
+      setCompletionSyncToken(v => v + 1);
+    } catch (err) {
+      console.error('Complete with linked tasks failed:', err);
+      showToast(describeError(err, "Couldn't complete the tasks. Please try again."));
+      setTasks(prev => prev.map(t => before.get(t.id) ?? t));
+    } finally {
+      ids.forEach(i => pendingRef.current.delete(i));
+      setPendingTaskIds(new Set(pendingRef.current));
+    }
+  };
+
   const addTask = async (newTask: BaseTaskForm): Promise<Task | false> => {
     try {
       const taskWithDates = {
@@ -147,42 +178,68 @@ export const useTasks = (enabled: boolean) => {
   };
 
   // Brings a just-deleted task back from the trash with the subtasks that
-  // went with it (server-side too), all as they were.
-  const undoDelete = async (rootId: number, removed: Task[]) => {
+  // went with it (server-side too), all as they were, re-linking the linked
+  // tasks a `keep` delete unlinked.
+  const undoDelete = async (rootId: number, removed: Task[], relink: LinkedTaskRef[]) => {
+    let restored: Task;
     try {
-      const restored = await restoreTaskApi(rootId);
-      restoreTasks([restored, ...removed.filter(t => t.id !== rootId)]);
-      showToast('Task restored.', 'success');
+      restored = await restoreTaskApi(rootId);
     } catch (err) {
       console.error('Undo delete failed:', err);
       showToast(describeError(err, "Couldn't restore the task. You can still restore it from Recently deleted."));
+      return;
+    }
+    restoreTasks([restored, ...removed.filter(t => t.id !== rootId)]);
+    try {
+      if (relink.length) await saveLinkedTasks(restored, relink);
+      showToast('Task restored.', 'success');
+    } catch (err) {
+      showToast(`Task restored, but its linked tasks couldn't be re-linked: ${(err as Error).message}`);
     }
   };
 
+  // Takes a deleted or archived task out of the list before the request
+  // lands: its whole subtree, or with `keep` just the task, its linked tasks
+  // staying behind unlinked. Returns what was removed and a rollback.
+  const removeFromList = (task: Task, linked?: LinkedRemoveMode) => {
+    const removedIds = linked === 'keep' ? new Set([task.id]) : subtaskTreeIds(tasks, task.id);
+    const removed = tasks.filter(t => removedIds.has(t.id));
+    const unlinked = new Map(
+      linked === 'keep' ? tasks.filter(t => t.parent_task_id === task.id).map(t => [t.id, t]) : [],
+    );
+    setTasks(prev => prev
+      .filter(t => !removedIds.has(t.id))
+      .map(t => unlinked.has(t.id) ? { ...t, parent_task_id: null, position: null } : t));
+    // Puts the subtree back (re-linking what was unlinked), sorted by id to preserve list order.
+    const rollback = () =>
+      setTasks(prev => [...prev.map(t => unlinked.get(t.id) ?? t), ...removed].sort((a, b) => b.id - a.id));
+    const unlinkedInOrder = [...unlinked.values()].sort((a, b) =>
+      (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER) || a.id - b.id);
+    return { removed, unlinked: unlinkedInOrder, rollback };
+  };
+
   // Deleting a task moves it and its subtasks to the trash (server-side), so
-  // the whole subtree leaves the list together.
-  const deleteTask = async (delTask: Task) => {
+  // the whole subtree leaves the list together. With `keep`, its linked tasks
+  // are unlinked instead and stay.
+  const deleteTask = async (delTask: Task, linked?: LinkedRemoveMode) => {
     if (pendingRef.current.has(delTask.id)) return false;
     pendingRef.current.add(delTask.id);
     setPendingTaskIds(new Set(pendingRef.current));
 
     // Optimistic update: remove immediately so the UI responds instantly.
-    const subtreeIds = subtaskTreeIds(tasks, delTask.id);
-    const removed = tasks.filter(t => subtreeIds.has(t.id));
-    setTasks(prev => prev.filter(t => !subtreeIds.has(t.id)));
+    const { removed, unlinked, rollback } = removeFromList(delTask, linked);
 
     try {
-      await onDelete(delTask.id);
+      await onDelete(delTask.id, linked);
       setCompletionSyncToken(v => v + 1);
       showToast('Task moved to Recently deleted. You can restore it for 30 days.', 'info', {
         label: 'Undo',
-        onClick: () => undoDelete(delTask.id, removed),
+        onClick: () => undoDelete(delTask.id, removed, unlinked.map(t => ({ id: t.id }))),
       });
       return true;
     } catch (err) {
-      // Rollback: put the subtree back, sorted by id to preserve list order.
       console.error('Delete failed:', err);
-      setTasks(prev => [...prev, ...removed].sort((a, b) => b.id - a.id));
+      rollback();
       showToast(describeError(err, "Couldn't delete the task, so it has been restored."));
       return false;
     } finally {
@@ -192,24 +249,23 @@ export const useTasks = (enabled: boolean) => {
   };
 
   // Archiving a task archives its subtasks too (server-side), so the whole
-  // subtree leaves the active list together.
-  const archiveTask = async (archTask: Task): Promise<boolean> => {
+  // subtree leaves the active list together. With `keep`, its linked tasks
+  // are unlinked instead and stay.
+  const archiveTask = async (archTask: Task, linked?: LinkedRemoveMode): Promise<boolean> => {
     if (pendingRef.current.has(archTask.id)) return false;
     pendingRef.current.add(archTask.id);
     setPendingTaskIds(new Set(pendingRef.current));
 
-    const subtreeIds = subtaskTreeIds(tasks, archTask.id);
-    const removed = tasks.filter(t => subtreeIds.has(t.id));
-    setTasks(prev => prev.filter(t => !subtreeIds.has(t.id)));
+    const { rollback } = removeFromList(archTask, linked);
 
     try {
-      await archiveTaskApi(archTask.id);
+      await archiveTaskApi(archTask.id, linked);
       setCompletionSyncToken(v => v + 1);
       showToast('Task archived. You can restore it from the Archive page.', 'info');
       return true;
     } catch (err) {
       console.error('Archive failed:', err);
-      setTasks(prev => [...prev, ...removed].sort((a, b) => b.id - a.id));
+      rollback();
       showToast(describeError(err, "Couldn't archive the task, so it has been restored."));
       return false;
     } finally {
@@ -270,6 +326,7 @@ export const useTasks = (enabled: boolean) => {
     tasks,
     isLoading,
     toggleComplete,
+    completeWithLinked,
     addTask,
     setTasks,
     deleteTask,

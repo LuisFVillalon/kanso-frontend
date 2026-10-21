@@ -9,7 +9,7 @@
  */
 
 import { Note, NoteSession } from "../types/notes";
-import { LinkedTaskRef, Tag, Task } from "../types/task";
+import { LinkedRemoveMode, LinkedTaskRef, Tag, Task } from "../types/task";
 import { CalendarSettings } from "../types/calendar";
 import { CalendarActivity } from "../types/activity";
 import { Habit, HabitHistoryEntry } from "../types/habit";
@@ -83,10 +83,10 @@ const localDateQuery = () => `?${new URLSearchParams({ local_date: toLocalDateSt
  * tags or habits via PATCH /archive-{kind}/{id} or /unarchive-{kind}/{id},
  * returning the updated record. Both directions are idempotent server-side.
  */
-async function setArchived<T>(kind: TrashKind, id: number, archived: boolean): Promise<T> {
+async function setArchived<T>(kind: TrashKind, id: number, archived: boolean, query = ""): Promise<T> {
   const headers = await getAuthHeaders();
   const action = archived ? "archive" : "unarchive";
-  const query = kind === "habit" ? localDateQuery() : "";
+  if (kind === "habit") query = localDateQuery();
   const res = await fetch(`${API_BASE_URL}/${action}-${kind}/${id}${query}`, {
     method: "PATCH",
     headers,
@@ -145,10 +145,17 @@ export async function createTask(task: {
   return res.json();
 }
 
-/** Moves a task and its subtasks to the trash, restorable for 30 days. Throws on any non-2xx response. */
-export async function onDelete(id: number): Promise<void> {
+/** `?linked=` for task delete and archive; left out, the backend cascades. */
+const linkedQuery = (linked?: LinkedRemoveMode) => (linked ? `?linked=${linked}` : "");
+
+/**
+ * Moves a task to the trash, restorable for 30 days. Its subtasks go with it,
+ * unless `linked` is `keep`, which unlinks them first so they stay in the
+ * list. Throws on any non-2xx response.
+ */
+export async function onDelete(id: number, linked?: LinkedRemoveMode): Promise<void> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/del-task/${id}`, {
+  const res = await fetch(`${API_BASE_URL}/del-task/${id}${linkedQuery(linked)}`, {
     method: "DELETE",
     headers,
   });
@@ -200,9 +207,27 @@ export async function updateLinkedTasks(id: number, children: LinkedTaskRef[]): 
   return res.json();
 }
 
-/** Archives a task (and, server-side, its subtasks). Returns the updated task. */
-export function archiveTask(id: number): Promise<Task> {
-  return setArchived<Task>("task", id, true);
+/**
+ * Archives a task (and, server-side, its subtasks, unless `linked` is `keep`,
+ * which unlinks them first). Returns the updated task.
+ */
+export function archiveTask(id: number, linked?: LinkedRemoveMode): Promise<Task> {
+  return setArchived<Task>("task", id, true, linkedQuery(linked));
+}
+
+/**
+ * "Complete all": completes a task and its open linked tasks in one
+ * transaction (PATCH /update-task-status/{id}?with_linked=true), all with the
+ * same completed_date. Returns the updated task itself.
+ */
+export async function completeTaskWithLinked(id: number): Promise<Task> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/update-task-status/${id}?with_linked=true`, {
+    method: "PATCH",
+    headers,
+  });
+  await assertOk(res, "completeTaskWithLinked");
+  return res.json();
 }
 
 /** Restores an archived task (and, server-side, its subtasks). Returns the updated task. */

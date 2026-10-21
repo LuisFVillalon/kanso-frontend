@@ -78,7 +78,7 @@ const TaskManager: React.FC = () => {
     router.replace('/login');
   };
 
-  const { tasks, isLoading, toggleComplete, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+  const { tasks, isLoading, toggleComplete, completeWithLinked, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
 
   // The key-press moment: plays when checking off a task settles today's
   // plan, and when the user switches into focus mode.
@@ -434,6 +434,7 @@ const TaskManager: React.FC = () => {
                   tags={tags}
                   taskGroups={taskGroups}
                   onToggleComplete={toggleComplete}
+                  onCompleteWithLinked={completeWithLinked}
                   onDeleteTask={deleteTask}
                   onArchiveTask={archiveTask}
                   onUpdatePriority={updatePriority}
