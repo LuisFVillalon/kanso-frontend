@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/app/context/ToastContext';
 import { deleteMoodCheckin, describeError, fetchMoodCheckins, saveMoodCheckin } from '@/app/lib/backend-api';
 import { checkinToSave, moodLabel, type MoodCheckin } from '@/app/types/mood';
-import { announceMoodCheckin, onMoodCheckin } from '@/app/utils/moodCheckinSync';
+import { announceMoodCheckin, isLatestMoodCheckin, onMoodCheckin } from '@/app/utils/moodCheckinSync';
 
 interface Loaded {
   date: string;
@@ -48,13 +48,9 @@ export function useDayMoodCheckin(date: string | null) {
  */
 export function useMoodCheckinSaved() {
   const showToast = useToast();
-  // The newest row saved per period, so an older toast's Undo can tell it has since changed.
-  const latestSaved = useRef(new Map<string, MoodCheckin>());
   const dismissSavedToast = useRef<(() => void) | null>(null);
 
   return useCallback((saved: MoodCheckin, previous: MoodCheckin | null) => {
-    const key = `${saved.period_kind}:${saved.period_start}`;
-    latestSaved.current.set(key, saved);
     announceMoodCheckin({ kind: saved.period_kind, start: saved.period_start, row: saved });
     dismissSavedToast.current?.();
     dismissSavedToast.current = null;
@@ -73,7 +69,7 @@ export function useMoodCheckinSaved() {
     dismissSavedToast.current = showToast(`Saved · ${moodLabel(saved.mood)}`, 'success', {
       label: 'Undo',
       onClick: () => {
-        if (latestSaved.current.get(key) !== saved) return;
+        if (!isLatestMoodCheckin(saved)) return;
         deleteMoodCheckin(saved.id)
           .then(() => announceMoodCheckin({ kind: saved.period_kind, start: saved.period_start, row: null }))
           .catch(err => showToast(describeError(err, "Couldn't undo. Please try again.")));

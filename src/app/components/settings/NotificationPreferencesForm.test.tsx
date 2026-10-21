@@ -188,6 +188,11 @@ describe('NotificationPreferencesForm', () => {
       await submit();
       expect(onSave).toHaveBeenCalledWith({ types: { mood_reminder: false } });
     });
+
+    it('has no lead choice when the server lists no mood reminder type', () => {
+      render(prefs({ types: { ...prefs().types, mood_missed: true }, mood_reminder_minutes: 60 }));
+      expect(document.body.textContent).not.toContain('1 hour before');
+    });
   });
 });
 

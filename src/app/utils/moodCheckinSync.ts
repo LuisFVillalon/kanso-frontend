@@ -17,9 +17,16 @@ export interface MoodCheckinChange {
 type Listener = (change: MoodCheckinChange) => void;
 
 const listeners = new Set<Listener>();
+const latest = new Map<string, MoodCheckin | null>();
 
 export function announceMoodCheckin(change: MoodCheckinChange): void {
+  latest.set(`${change.kind}:${change.start}`, change.row);
   listeners.forEach(listener => listener(change));
+}
+
+/** Whether `row` is still the newest one announced for its period. */
+export function isLatestMoodCheckin(row: MoodCheckin): boolean {
+  return latest.get(`${row.period_kind}:${row.period_start}`) === row;
 }
 
 /** Calls `listener` for every announced change; returns the unsubscribe. */

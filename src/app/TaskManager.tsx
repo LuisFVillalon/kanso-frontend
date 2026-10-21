@@ -37,6 +37,8 @@ import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
 import MoodNudge from '@/app/components/mood/MoodNudge';
 import { DayMoodCheckinModal, daySummaryFrom } from '@/app/components/mood/DayMoodCheckin';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { checkinDayAt } from '@/app/utils/moodNudge';
 import PageSpinner from '@/app/components/common/PageSpinner';
 import DoodleCanvas, { DoodleCanvasHandle } from '@/app/components/doodle/DoodleCanvas';
 import DoodleToolbar from '@/app/components/doodle/DoodleToolbar';
@@ -172,6 +174,8 @@ const TaskManager: React.FC = () => {
   // The day a mood notification opened the check-in form for.
   const [moodCheckinDate, setMoodCheckinDate] = useState<string | null>(null);
   const closeMoodCheckin = useCallback(() => setMoodCheckinDate(null), []);
+  const openMoodCheckin = (date?: string) =>
+    setMoodCheckinDate(date ?? toLocalDateStr(checkinDayAt(new Date(), profile.dayStartTime, profile.shutoffTime, 'shutoff').day));
 
   const handleEditTaskChange = (next: TaskFormData) => {
     state.setShowEditTaskModal(prev => prev.task ? { ...prev, task: { ...prev.task, ...next } as Task } : prev);
@@ -466,7 +470,7 @@ const TaskManager: React.FC = () => {
                 />
               </div>
             )}
-            <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} onOpenMoodCheckin={setMoodCheckinDate} />
+            <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} onOpenMoodCheckin={openMoodCheckin} />
             <ModeSwitcher mode={mode} onChange={handleModeChange} />
           </div>
         </div>

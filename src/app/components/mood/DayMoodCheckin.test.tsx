@@ -4,6 +4,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/app/context/ToastContext';
 import type { MoodCheckin } from '@/app/types/mood';
+import { announceMoodCheckin } from '@/app/utils/moodCheckinSync';
 
 const api = vi.hoisted(() => ({
   fetchMoodCheckins: vi.fn(),
@@ -73,6 +74,26 @@ describe('DayMoodCheckinModal', () => {
     expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_start: '2026-10-19', mood: 2 }));
     expect(onClose).toHaveBeenCalled();
     expect(document.body.textContent).toContain('Check-in updated.');
+  });
+
+  it('leaves a check-in edited elsewhere alone when the older "Saved" toast\'s Undo is clicked', async () => {
+    await render('2026-10-19');
+    await click(byText('Good'));
+    await click(byText('Save check-in'));
+    expect(document.body.textContent).toContain('Saved · Good');
+
+    act(() => announceMoodCheckin({ kind: 'day', start: '2026-10-19', row: checkin(5, '2026-10-19') }));
+    await click(byText('Undo'));
+    expect(api.deleteMoodCheckin).not.toHaveBeenCalled();
+  });
+
+  it("deletes a new check-in from the \"Saved\" toast's Undo", async () => {
+    api.deleteMoodCheckin.mockResolvedValue(undefined);
+    await render('2026-10-19');
+    await click(byText('Good'));
+    await click(byText('Save check-in'));
+    await click(byText('Undo'));
+    expect(api.deleteMoodCheckin).toHaveBeenCalledWith(3);
   });
 
   it("closes with a message when the day's check-in can't load", async () => {

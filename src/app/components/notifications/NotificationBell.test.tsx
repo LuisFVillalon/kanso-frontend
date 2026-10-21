@@ -92,11 +92,17 @@ describe('NotificationBell', () => {
     expect(onOpenMoodCheckin).toHaveBeenCalledWith('2026-10-19');
   });
 
-  it('only marks a missed-days notice read when it names no days', () => {
-    render([notification('x', { type: 'mood_missed', title: 'Unlogged' })]);
+  it("opens today's check-in for a mood notice that names no days", () => {
+    render([
+      notification('x', { type: 'mood_missed', title: 'Unlogged' }),
+      notification('m', { type: 'mood_reminder', title: 'How was today?' }),
+    ]);
     act(() => item('Unlogged').click());
-    expect(onOpenMoodCheckin).not.toHaveBeenCalled();
+    expect(onOpenMoodCheckin).toHaveBeenLastCalledWith(undefined);
     expect(ctx.markRead).toHaveBeenCalledWith(['x']);
+    act(() => item('How was today?').click());
+    expect(onOpenMoodCheckin).toHaveBeenCalledTimes(2);
+    expect(onOpenMoodCheckin).toHaveBeenLastCalledWith(undefined);
   });
 
   it('still routes task and habit notifications as before', () => {

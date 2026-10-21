@@ -9,7 +9,7 @@ import { useNotifications } from '@/app/context/NotificationsContextValue';
 import { useTasksContext } from '@/app/context/TasksContext';
 import type { AppNotification } from '@/app/types/notification';
 import { parseLocalDate } from '@/app/utils/dateUtils';
-import { formatRelativeTime, moodCheckinDates } from '@/app/utils/notifications';
+import { formatRelativeTime, isMoodType, moodCheckinDates } from '@/app/utils/notifications';
 
 const TYPE_ICON: Record<string, { icon: React.ElementType; color: string }> = {
   due_today:      { icon: Sun,           color: 'var(--tm-accent)' },
@@ -29,8 +29,8 @@ interface NotificationBellProps {
   onOpenTask: (taskId: number) => void;
   /** Opens the habits a reminder is about. */
   onOpenHabits: (habitIds: number[]) => void;
-  /** Opens the mood check-in form for a local day ("YYYY-MM-DD"). */
-  onOpenMoodCheckin: (date: string) => void;
+  /** Opens the mood check-in form for a local day ("YYYY-MM-DD"), or today's when none is given. */
+  onOpenMoodCheckin: (date?: string) => void;
 }
 
 const shortDay = (date: string) =>
@@ -78,16 +78,15 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenH
     onOpenTask(taskId);
   };
 
-  const openMoodCheckin = (n: AppNotification, date: string) => {
+  const openMoodCheckin = (n: AppNotification, date?: string) => {
     markRead([n.id]);
     setPanelOpen(false);
     onOpenMoodCheckin(date);
   };
 
   const openItem = (n: AppNotification) => {
-    // A mood reminder opens its day's check-in; missed days open the most recent.
-    const moodDates = moodCheckinDates(n);
-    if (moodDates.length > 0) return openMoodCheckin(n, moodDates[0]);
+    // A mood reminder opens its day's check-in; missed days open the most recent; neither names one, today's.
+    if (isMoodType(n.type)) return openMoodCheckin(n, moodCheckinDates(n)[0]);
     if (n.task_ids.length === 1) return openTask(n, n.task_ids[0]);
     markRead([n.id]);
     if (n.habit_ids.length > 0) {

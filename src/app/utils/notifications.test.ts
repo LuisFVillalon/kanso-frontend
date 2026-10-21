@@ -167,9 +167,9 @@ describe('moodCheckinDates', () => {
     expect(moodCheckinDates(notification('a', { type: 'mood_reminder', dates: ['2026-10-20'] }))).toEqual(['2026-10-20']);
   });
 
-  it('falls back to the local day a reminder fired when the server sends no dates', () => {
-    const fired = new Date(2026, 9, 20, 17, 0);
-    expect(moodCheckinDates(notification('a', { type: 'mood_reminder', fire_at: fired.toISOString() }))).toEqual(['2026-10-20']);
+  it('never makes up a day from when a reminder fired', () => {
+    const fired = new Date(2026, 9, 21, 0, 30);
+    expect(moodCheckinDates(notification('a', { type: 'mood_reminder', fire_at: fired.toISOString() }))).toEqual([]);
   });
 
   it('lists missed days newest first, without repeats or malformed dates', () => {

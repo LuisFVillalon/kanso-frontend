@@ -86,7 +86,6 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
   const moodLead = draft.mood_reminder_minutes === undefined
     ? null
     : MOOD_REMINDER_MINUTES.includes(draft.mood_reminder_minutes) ? draft.mood_reminder_minutes : DEFAULT_MOOD_REMINDER_MINUTES;
-  // Under its switch, or after the list if the server sends the choice without the type.
   const moodLeadChoice = moodLead !== null && (
     <div className="pl-4 border-l-2 border-border-subtle">
       <p id="mood-reminder-lead-label" className="text-xs font-medium text-text-muted mb-1">
@@ -170,7 +169,6 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
             </React.Fragment>
           );
         })}
-        {!types.includes('mood_reminder') && moodLeadChoice}
       </fieldset>
 
       <fieldset>
