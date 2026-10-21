@@ -3,6 +3,7 @@ import type { MoodCheckin } from '@/app/types/mood';
 import { periodContaining } from './calendarReport';
 import { toLocalDateStr } from './dateUtils';
 import {
+  hasMoodCheckins,
   indexDayCheckins,
   indexMonthCheckins,
   monthMood,
@@ -74,7 +75,10 @@ describe('trailing 4 weeks', () => {
     const week = moodFetchRange(periodContaining('week', now), now);
     expect([day(week.start), day(week.end)]).toEqual(['2026-09-24', '2026-10-25']);
     const month = moodFetchRange(periodContaining('month', now), now);
-    expect([day(month.start), day(month.end)]).toEqual(['2026-09-25', '2026-10-31']);
+    // October ends on a Saturday, so its last week runs to Sunday Nov 1.
+    expect([day(month.start), day(month.end)]).toEqual(['2026-09-25', '2026-11-01']);
+    const may = moodFetchRange(periodContaining('month', new Date(2026, 4, 10)), now); // ends on a Sunday
+    expect([day(may.start), day(may.end)]).toEqual(['2026-04-25', '2026-05-31']);
     const year = moodFetchRange(periodContaining('year', now), now);
     expect([day(year.start), day(year.end)]).toEqual(['2026-01-01', '2026-12-31']);
   });
@@ -240,5 +244,26 @@ describe('weekly and monthly check-ins', () => {
     const byMonth = indexMonthCheckins([month('2026-09-01', 2), week('2026-09-07'), month('2026-10-01', 5)]);
     expect([...byMonth.keys()]).toEqual(['2026-09', '2026-10']);
     expect(byMonth.get('2026-10')?.mood).toBe(5);
+  });
+});
+
+describe('hasMoodCheckins', () => {
+  const now = new Date(2026, 9, 21);
+  const week = periodContaining('week', now);
+  const year = periodContaining('year', now);
+  const has = (period: ReturnType<typeof periodContaining>, rows: MoodCheckin[]) =>
+    hasMoodCheckins(period, moodSummaryScope(period, now), indexDayCheckins(rows), rows);
+
+  it('counts weekly check-ins without any daily ones', () => {
+    expect(has(week, [])).toBe(false);
+    expect(has(week, [checkin('2026-10-19', 4, { period_kind: 'week' })])).toBe(true);
+    expect(has(week, [checkin('2026-10-12', 4, { period_kind: 'week' })])).toBe(false);
+  });
+
+  it('counts the year’s monthly check-ins in the Year view only', () => {
+    const sept = checkin('2026-09-01', 4, { period_kind: 'month' });
+    expect(has(year, [sept])).toBe(true);
+    expect(has(year, [checkin('2025-12-01', 4, { period_kind: 'month' })])).toBe(false);
+    expect(has(week, [sept])).toBe(false);
   });
 });

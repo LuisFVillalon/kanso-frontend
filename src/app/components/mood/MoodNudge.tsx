@@ -50,6 +50,8 @@ const writeStored = (key: string, value: unknown) => {
   }
 };
 
+type DismissalsPatch = Omit<MoodNudgeDismissals, 'date'>;
+
 const SNOOZE_MS = 60 * 60 * 1000;
 const PERIOD_KINDS: PeriodCheckinKind[] = ['week', 'month'];
 const SETTING: Record<PeriodCheckinKind, 'weekly' | 'monthly'> = { week: 'weekly', month: 'monthly' };
@@ -124,8 +126,11 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits, onS
   const checkin = rowFor('day', dayKey);
 
   const [dismissals, setDismissals] = useState<MoodNudgeDismissals | null>(() => readStored(DISMISSALS_KEY));
-  const updateDismissals = (patch: Omit<MoodNudgeDismissals, 'date'>, date = dayKey) => {
-    const next = { ...(dismissals?.date === date ? dismissals : { date }), ...patch };
+  const latestDismissals = useRef(dismissals);
+  const updateDismissals = (patch: DismissalsPatch | ((current: MoodNudgeDismissals) => DismissalsPatch), date = dayKey) => {
+    const current = latestDismissals.current?.date === date ? latestDismissals.current : { date };
+    const next = { ...current, ...(typeof patch === 'function' ? patch(current) : patch) };
+    latestDismissals.current = next;
     writeStored(DISMISSALS_KEY, next);
     setDismissals(next);
   };
@@ -258,11 +263,10 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits, onS
 
   const handleSkipPeriod = (kind: PeriodCheckinKind, date: string) => {
     setModal(null);
-    const skippedNow = dismissals?.date === date ? dismissals.periodsSkipped ?? [] : [];
-    updateDismissals({ periodsSkipped: [...skippedNow.filter(k => k !== kind), kind] }, date);
+    updateDismissals(current => ({ periodsSkipped: [...(current.periodsSkipped ?? []).filter(k => k !== kind), kind] }), date);
     showToast(`Skipped the ${SETTING[kind]} check-in. You can still log it until ${until}.`, 'info', {
       label: 'Undo',
-      onClick: () => updateDismissals({ periodsSkipped: skippedNow.filter(k => k !== kind) }, date),
+      onClick: () => updateDismissals(current => ({ periodsSkipped: (current.periodsSkipped ?? []).filter(k => k !== kind) }), date),
     });
   };
 

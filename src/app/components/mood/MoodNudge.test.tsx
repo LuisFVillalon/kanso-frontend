@@ -281,5 +281,18 @@ describe('MoodNudge', () => {
       expect(button('Start')).toBeUndefined();
       expect(button('Log this week')).toBeDefined();
     });
+
+    it('undoes only the weekly skip, keeping a "Not today" made since', async () => {
+      await render({ profile: sundayProfile() });
+      await click(button('Start'));
+      await click(button('Skip'));
+      await click(button('Not today'));
+      expect(nudgeShown()).toBe(false);
+
+      const weeklyToast = [...document.body.querySelectorAll('[role="status"]')].find(t => t.textContent?.includes('Skipped the weekly'))!;
+      await click([...weeklyToast.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Undo')!);
+      expect(nudgeShown()).toBe(false);
+      expect(button('Log today’s mood')).toBeDefined();
+    });
   });
 });

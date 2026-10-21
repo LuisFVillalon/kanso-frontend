@@ -13,6 +13,7 @@ import { checkinToSave, MOOD_LABELS, moodLabel, type MoodCheckin, type MoodCheck
 import { formatDateRange, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import { describePeriod, periodContaining, periodLength, type CalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
 import {
+  hasMoodCheckins,
   indexMonthCheckins,
   PATTERN_MIN_DAYS,
   summarizeMood,
@@ -46,35 +47,41 @@ const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: R
           Using 4 weeks — one week is too short
         </span>
       )}
-      <div className="flex items-center gap-3">
-        <span className="w-12 h-12 shrink-0" style={{ color: moodColor(mood) }}>
-          <MoodFace mood={mood} filled className="w-full h-full" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-2xl font-bold leading-none text-text-primary">
-            {moodLabel(mood)} <span className="text-base font-semibold text-text-muted">{average.toFixed(1)}</span>
-          </p>
-          <p className="text-xs text-text-secondary mt-1">
-            average · {summary.logged} of {summary.days} {summary.days === 1 ? 'day' : 'days'} logged
-            {scope.widened && <span className="text-text-muted"> · {formatDateRange(scope.start, scope.end)}</span>}
-          </p>
-        </div>
-      </div>
-
-      <div>
-        <div className="flex h-2.5 rounded-full overflow-hidden gap-px" role="img" aria-label={`Mood on logged days: ${summary.distribution.map((c, i) => `${c} ${MOOD_LABELS[i]}`).join(', ')}`}>
-          {summary.distribution.map((count, i) =>
-            count > 0 ? <div key={i} style={{ flexGrow: count, backgroundColor: moodColor(i + 1) }} title={`${MOOD_LABELS[i]}: ${count}`} /> : null,
-          )}
-        </div>
-        <div className="flex flex-wrap justify-between gap-x-2 mt-1.5" aria-hidden="true">
-          {summary.distribution.map((count, i) => (
-            <span key={i} className="text-[11px] text-text-muted">
-              <b className="text-text-secondary">{count}</b> {MOOD_LABELS[i]}
+      {summary.logged === 0 ? (
+        <p className="text-xs text-text-secondary">No daily check-ins {scopeName(period, scope)}.</p>
+      ) : (
+        <>
+          <div className="flex items-center gap-3">
+            <span className="w-12 h-12 shrink-0" style={{ color: moodColor(mood) }}>
+              <MoodFace mood={mood} filled className="w-full h-full" />
             </span>
-          ))}
-        </div>
-      </div>
+            <div className="min-w-0">
+              <p className="text-2xl font-bold leading-none text-text-primary">
+                {moodLabel(mood)} <span className="text-base font-semibold text-text-muted">{average.toFixed(1)}</span>
+              </p>
+              <p className="text-xs text-text-secondary mt-1">
+                average · {summary.logged} of {summary.days} {summary.days === 1 ? 'day' : 'days'} logged
+                {scope.widened && <span className="text-text-muted"> · {formatDateRange(scope.start, scope.end)}</span>}
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex h-2.5 rounded-full overflow-hidden gap-px" role="img" aria-label={`Mood on logged days: ${summary.distribution.map((c, i) => `${c} ${MOOD_LABELS[i]}`).join(', ')}`}>
+              {summary.distribution.map((count, i) =>
+                count > 0 ? <div key={i} style={{ flexGrow: count, backgroundColor: moodColor(i + 1) }} title={`${MOOD_LABELS[i]}: ${count}`} /> : null,
+              )}
+            </div>
+            <div className="flex flex-wrap justify-between gap-x-2 mt-1.5" aria-hidden="true">
+              {summary.distribution.map((count, i) => (
+                <span key={i} className="text-[11px] text-text-muted">
+                  <b className="text-text-secondary">{count}</b> {MOOD_LABELS[i]}
+                </span>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {children}
 
@@ -193,7 +200,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
         <span className="text-xs text-text-muted">from your check-ins</span>
       </div>
 
-      {summary.logged === 0 ? (
+      {!hasMoodCheckins(period, scope, byDay, checkins) ? (
         <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
           <span className="w-10 h-10 rounded-full flex items-center justify-center bg-surface-raised text-text-muted">
             <Smile className="w-5 h-5" aria-hidden="true" />

@@ -196,7 +196,7 @@ describe('CalendarReportView mood', () => {
       ]);
       await render();
       await click(buttonLabelled(/^Month$/));
-      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-10-31');
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-11-01');
 
       expect(buttonLabelled(/^Weekly check-in\. Week of Oct 12: Great · Too much workload · “Finished the proposal”\. Edit$/)).toBeDefined();
       expect(buttonLabelled(/^Weekly check-in\. Week of Sep 28: Low\. Edit$/)).toBeDefined();
@@ -213,6 +213,43 @@ describe('CalendarReportView mood', () => {
       await click(buttonLabelled(/^Weekly check-in$/));
       expect(buttonLabelled(/^Weekly check-in\. Week of Oct 12/)).toBeUndefined();
       expect(buttonLabelled(/^Week of Oct 12: Great/)).toBeDefined();
+    });
+
+    it('counts the days of a week that runs into the next month', async () => {
+      vi.setSystemTime(new Date(2026, 10, 3, 20, 0));
+      api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-27', 4), checkin('2026-11-01', 2), week('2026-10-26', 3)]);
+      await render();
+      await click(buttonLabelled(/^Month$/));
+      await click(buttonLabelled(/^Previous month$/));
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-11-01');
+      await click(buttonLabelled(/^Week of Oct 26: Okay/));
+      expect(text()).toContain('2 of 7');
+    });
+
+    it('keeps the Mood section for a weekly check-in with no daily ones', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([week('2026-10-19', 5, { highlight: 'Shipped it' })]);
+      await render();
+      expect(text()).not.toContain('Nothing recorded');
+      expect(text()).not.toContain('No mood check-ins');
+      expect(text()).toContain('Mood over time');
+      expect(text()).toContain('No daily check-ins in the last 4 weeks.');
+      expect(buttonLabelled(/^Week of Oct 19: Great · “Shipped it”\. Edit$/)).toBeDefined();
+    });
+
+    it('keeps the Year view’s Months in a word with only monthly check-ins', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([month('2026-09-01', 2, 'Grind')]);
+      await render();
+      await click(buttonLabelled(/^Year$/));
+      expect(text()).not.toContain('No mood check-ins');
+      expect(text()).toContain('Months in a word');
+      expect(buttonLabelled(/^September: Low, “Grind”\. Edit$/)).toBeDefined();
+    });
+
+    it('still shows the empty state with no check-ins of any kind', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([]);
+      await render();
+      await click(buttonLabelled(/^Month$/));
+      expect(text()).toContain('Nothing recorded');
     });
 
     it('replaces only the edited week, not the day that shares its Monday', async () => {

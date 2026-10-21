@@ -38,7 +38,7 @@ import {
   type ReportPeriod,
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
-import { indexDayCheckins, moodSummaryScope, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
+import { hasMoodCheckins, indexDayCheckins, moodSummaryScope, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportMoodSection from './ReportMoodSection';
 
@@ -270,10 +270,10 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
   const periodMood = checkins ? summarizeMood(byDay, period.start, period.end) : null;
   const scope = moodSummaryScope(period);
-  const scopeLogged = checkins && days > 0 ? summarizeMood(byDay, scope.start, scope.end).logged : 0;
+  const hasMood = !!checkins && days > 0 && hasMoodCheckins(period, scope, byDay, checkins);
   const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
-  if (isEmpty(report) && !scopeLogged && !mood?.error) {
+  if (isEmpty(report) && !hasMood && !mood?.error) {
     return (
       <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
         <CalendarRange className="w-8 h-8 text-text-muted" aria-hidden="true" />
