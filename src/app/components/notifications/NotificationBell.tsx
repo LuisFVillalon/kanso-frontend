@@ -2,13 +2,14 @@
 
 import React, { useEffect, useRef } from 'react';
 import {
-  AlarmClock, Bell, BellRing, CheckCheck, CircleDot, Loader2, Repeat, Sun, X,
+  AlarmClock, Bell, BellRing, CalendarX, CheckCheck, CircleDot, Loader2, Repeat, Smile, Sun, X,
 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNotifications } from '@/app/context/NotificationsContextValue';
 import { useTasksContext } from '@/app/context/TasksContext';
 import type { AppNotification } from '@/app/types/notification';
-import { formatRelativeTime } from '@/app/utils/notifications';
+import { parseLocalDate } from '@/app/utils/dateUtils';
+import { formatRelativeTime, moodCheckinDates } from '@/app/utils/notifications';
 
 const TYPE_ICON: Record<string, { icon: React.ElementType; color: string }> = {
   due_today:      { icon: Sun,           color: 'var(--tm-accent)' },
@@ -17,6 +18,9 @@ const TYPE_ICON: Record<string, { icon: React.ElementType; color: string }> = {
   // A slipped task gets the gentle amber dot, never red (brand/DESIGN.md).
   overdue:        { icon: CircleDot,     color: 'var(--tm-slipped-dot)' },
   habit_reminder: { icon: Repeat,        color: 'var(--tm-success-text)' },
+  mood_reminder:  { icon: Smile,         color: 'var(--tm-mood-4)' },
+  // Missed check-ins are a gentle nudge too, never an alarm.
+  mood_missed:    { icon: CalendarX,     color: 'var(--tm-slipped-dot)' },
 };
 const FALLBACK_ICON = { icon: Bell, color: 'var(--tm-accent)' };
 
@@ -25,14 +29,19 @@ interface NotificationBellProps {
   onOpenTask: (taskId: number) => void;
   /** Opens the habits a reminder is about. */
   onOpenHabits: (habitIds: number[]) => void;
+  /** Opens the mood check-in form for a local day ("YYYY-MM-DD"). */
+  onOpenMoodCheckin: (date: string) => void;
 }
+
+const shortDay = (date: string) =>
+  parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
 /**
  * Bell with an unread count; opens a panel listing notifications newest
  * first. Hidden while signed out and when the API refuses notifications
  * (see NotificationsStatus), so the demo can't break on it.
  */
-const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenHabits }) => {
+const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenHabits, onOpenMoodCheckin }) => {
   const { dataUserId } = useAuth();
   const {
     notifications, unreadCount, status, refresh, markRead, markAllRead, dismiss, panelOpen, setPanelOpen,
@@ -69,7 +78,16 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenH
     onOpenTask(taskId);
   };
 
+  const openMoodCheckin = (n: AppNotification, date: string) => {
+    markRead([n.id]);
+    setPanelOpen(false);
+    onOpenMoodCheckin(date);
+  };
+
   const openItem = (n: AppNotification) => {
+    // A mood reminder opens its day's check-in; missed days open the most recent.
+    const moodDates = moodCheckinDates(n);
+    if (moodDates.length > 0) return openMoodCheckin(n, moodDates[0]);
     if (n.task_ids.length === 1) return openTask(n, n.task_ids[0]);
     markRead([n.id]);
     if (n.habit_ids.length > 0) {
@@ -151,6 +169,8 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenH
                         return title ? [{ id, title }] : [];
                       })
                     : [];
+                  // Several missed days: one chip each, to log any of them.
+                  const moodDates = n.type === 'mood_missed' ? moodCheckinDates(n) : [];
                   return (
                     <li
                       key={n.id}
@@ -187,6 +207,22 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ onOpenTask, onOpenH
                                 style={{ backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)' }}
                               >
                                 <span className="truncate">{title}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {moodDates.length > 1 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {moodDates.map(date => (
+                              <button
+                                key={date}
+                                type="button"
+                                onClick={() => openMoodCheckin(n, date)}
+                                aria-label={`Log mood for ${parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}`}
+                                className="chip hover:underline"
+                                style={{ backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)' }}
+                              >
+                                {shortDay(date)}
                               </button>
                             ))}
                           </div>

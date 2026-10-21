@@ -82,6 +82,8 @@ const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, tod
 interface CurrentMonthWidgetProps {
   onExpand: () => void;
   dragHandleProps: DragHandleProps;
+  /** Shows the mood chip in a picked day's details. */
+  showMood?: boolean;
 }
 
 /**
@@ -90,7 +92,7 @@ interface CurrentMonthWidgetProps {
  * richer per-day cells, which are sized for the full page/overlay, not a
  * 168px-row tile. Clicking a day still opens the same DayDetailModal.
  */
-const CurrentMonthWidget: React.FC<CurrentMonthWidgetProps> = ({ onExpand, dragHandleProps }) => {
+const CurrentMonthWidget: React.FC<CurrentMonthWidgetProps> = ({ onExpand, dragHandleProps, showMood = false }) => {
   const { dayData, habits, loading } = useYearCalendarData();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -126,6 +128,7 @@ const CurrentMonthWidget: React.FC<CurrentMonthWidgetProps> = ({ onExpand, dragH
           allHabits={habits}
           dayData={dayData}
           onClose={() => setSelectedDate(null)}
+          showMood={showMood}
         />
       )}
     </CardShell>
@@ -136,10 +139,12 @@ interface CurrentMonthOverlayProps {
   /** Year/month to display; defaults to today's when omitted. */
   year?: number;
   month?: number;
+  /** Shows the mood chip in a picked day's details. */
+  showMood?: boolean;
 }
 
 /** Full-detail body rendered inside the shared expand overlay. Year/month are controlled by the overlay header's nav buttons in CalendarAndStats. */
-export const CurrentMonthOverlay: React.FC<CurrentMonthOverlayProps> = ({ year, month }) => {
+export const CurrentMonthOverlay: React.FC<CurrentMonthOverlayProps> = ({ year, month, showMood = false }) => {
   const { dayData, habits, loading } = useYearCalendarData();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -179,6 +184,7 @@ export const CurrentMonthOverlay: React.FC<CurrentMonthOverlayProps> = ({ year, 
           allHabits={habits}
           dayData={dayData}
           onClose={() => setSelectedDate(null)}
+          showMood={showMood}
         />
       )}
     </div>

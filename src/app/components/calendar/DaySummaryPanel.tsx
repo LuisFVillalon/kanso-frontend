@@ -6,6 +6,7 @@ import type { DayData } from '@/app/hooks/useYearCalendarData';
 import type { Habit } from '@/app/types/habit';
 import { getHolidays } from '@/app/lib/monthPersonality';
 import DaySummary from './DaySummary';
+import DayMoodChip from './DayMoodChip';
 
 interface DaySummaryPanelProps {
   date: Date | null;
@@ -15,12 +16,14 @@ interface DaySummaryPanelProps {
   dayData: Map<string, DayData>;
   /** 'widget' = compact dashboard-card layout; 'page' = full /calendar page layout. */
   variant?: 'page' | 'widget';
+  /** Shows the day's mood chip, to log or edit its check-in. */
+  showMood?: boolean;
 }
 
 // Right-hand pane of the month carousel — mirrors DayDetailModal's content
 // inline instead of as an overlay, so picking a day in the carousel doesn't
 // cover the calendar it was picked from.
-const DaySummaryPanel: React.FC<DaySummaryPanelProps> = ({ date, data, totalHabits, allHabits, dayData, variant = 'page' }) => {
+const DaySummaryPanel: React.FC<DaySummaryPanelProps> = ({ date, data, totalHabits, allHabits, dayData, variant = 'page', showMood = false }) => {
   const holidayName = date ? getHolidays(date.getFullYear())[date.getMonth()]?.[date.getDate()] : undefined;
 
   return (
@@ -40,6 +43,7 @@ const DaySummaryPanel: React.FC<DaySummaryPanelProps> = ({ date, data, totalHabi
                 {holidayName}
               </span>
             )}
+            {showMood && <DayMoodChip date={date} data={data} totalHabits={totalHabits} />}
           </div>
           <DaySummary date={date} data={data} totalHabits={totalHabits} allHabits={allHabits} dayData={dayData} variant={variant} />
         </>

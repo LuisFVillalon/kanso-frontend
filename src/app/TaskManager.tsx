@@ -36,6 +36,7 @@ import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
 import MoodNudge from '@/app/components/mood/MoodNudge';
+import { DayMoodCheckinModal, daySummaryFrom } from '@/app/components/mood/DayMoodCheckin';
 import PageSpinner from '@/app/components/common/PageSpinner';
 import DoodleCanvas, { DoodleCanvasHandle } from '@/app/components/doodle/DoodleCanvas';
 import DoodleToolbar from '@/app/components/doodle/DoodleToolbar';
@@ -167,6 +168,10 @@ const TaskManager: React.FC = () => {
     if (habitIds.length === 1) state.setHistoryHabitId(habitIds[0]);
     else state.setShowManageHabitsModal(true);
   };
+
+  // The day a mood notification opened the check-in form for.
+  const [moodCheckinDate, setMoodCheckinDate] = useState<string | null>(null);
+  const closeMoodCheckin = useCallback(() => setMoodCheckinDate(null), []);
 
   const handleEditTaskChange = (next: TaskFormData) => {
     state.setShowEditTaskModal(prev => prev.task ? { ...prev, task: { ...prev.task, ...next } as Task } : prev);
@@ -461,7 +466,7 @@ const TaskManager: React.FC = () => {
                 />
               </div>
             )}
-            <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} />
+            <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} onOpenMoodCheckin={setMoodCheckinDate} />
             <ModeSwitcher mode={mode} onChange={handleModeChange} />
           </div>
         </div>
@@ -472,7 +477,7 @@ const TaskManager: React.FC = () => {
               <div className={!doodleMode && !focusMode ? 'animate-fade-in' : 'animate-fade-out'}>
                 <MoodNudge profile={profile} profileLoaded={profileLoaded} tasks={tasks} habits={habits} onSaveProfile={saveProfile} />
 
-                <TaskDebriefPanel profile={profile} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
+                <TaskDebriefPanel profile={profile} profileLoaded={profileLoaded} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
 
                 <CalendarAndStats
                   habits={habits}
@@ -510,6 +515,15 @@ const TaskManager: React.FC = () => {
       </div>
       </div>
     </div>
+
+      {moodCheckinDate && (
+        <DayMoodCheckinModal
+          key={moodCheckinDate}
+          date={moodCheckinDate}
+          summary={daySummaryFrom(moodCheckinDate, tasks, habits)}
+          onClose={closeMoodCheckin}
+        />
+      )}
 
       <TaskManagerModals
         // New task

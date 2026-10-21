@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { CalendarRange, ChartColumn, ChevronLeft, GalleryHorizontal, LayoutGrid } from 'lucide-react';
+import { useAuth } from '@/app/context/AuthContext';
+import { useProfile } from '@/app/hooks/useProfile';
 import { useYearCalendarData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -15,6 +17,9 @@ import CalendarReportView from './report/CalendarReportView';
 
 const CalendarView: React.FC = () => {
   const { year, dayData, habits, loading } = useYearCalendarData();
+  const { user } = useAuth();
+  const { profile, loaded: profileLoaded } = useProfile(user);
+  const showMood = profileLoaded && profile.moodCheckins.daily;
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [carouselDate, setCarouselDate] = useState<Date | null>(() => new Date());
   const [viewMode, setViewMode] = useState<'week' | 'carousel' | 'all' | 'report'>('all');
@@ -116,6 +121,7 @@ const CalendarView: React.FC = () => {
                 totalHabits={habits.length}
                 allHabits={habits}
                 dayData={dayData}
+                showMood={showMood}
               />
             </div>
           </div>
@@ -143,6 +149,7 @@ const CalendarView: React.FC = () => {
           allHabits={habits}
           dayData={dayData}
           onClose={() => setSelectedDate(null)}
+          showMood={showMood}
         />
       )}
     </div>

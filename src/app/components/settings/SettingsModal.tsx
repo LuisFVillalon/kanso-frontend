@@ -466,6 +466,7 @@ export default function SettingsModal({
                 <NotificationPreferencesForm
                   preferences={notifications.preferences}
                   onSave={notifications.savePreferences}
+                  moodRemindersOff={profile.moodCheckins.remind === 'off'}
                 />
               ) : notifications.preferencesError ? (
                 <div className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>

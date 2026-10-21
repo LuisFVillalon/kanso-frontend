@@ -148,6 +148,47 @@ describe('NotificationPreferencesForm', () => {
     render(prefs({ types: { ...prefs().types, mood_check_in: true } }));
     expect(switchFor('Mood check in')).toBeTruthy();
   });
+
+  describe('mood reminders', () => {
+    const moodPrefs = (overrides: Partial<NotificationPreferences> = {}) =>
+      prefs({ types: { ...prefs().types, mood_reminder: true, mood_missed: true }, mood_reminder_minutes: 60, ...overrides });
+    const lead = (name: string) => byText<HTMLButtonElement>('button', name);
+
+    it('labels both mood switches and picks the saved lead', () => {
+      render(moodPrefs());
+      expect(switchFor('Mood check-in reminder').getAttribute('aria-checked')).toBe('true');
+      expect(switchFor('Missed mood check-ins').getAttribute('aria-checked')).toBe('true');
+      expect(lead('1 hour before').getAttribute('aria-pressed')).toBe('true');
+      expect(lead('30 minutes before').getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('saves the lead on its own', async () => {
+      const onSave = render(moodPrefs());
+      act(() => lead('30 minutes before').click());
+      await submit();
+      expect(onSave).toHaveBeenCalledWith({ mood_reminder_minutes: 30 });
+    });
+
+    it('greys out the lead while the reminder is off', () => {
+      render(moodPrefs());
+      act(() => switchFor('Mood check-in reminder').click());
+      expect(lead('1 hour before').disabled).toBe(true);
+    });
+
+    it('says the mood notifications are silenced while mood reminders are off', () => {
+      act(() => root.render(<NotificationPreferencesForm preferences={moodPrefs()} onSave={vi.fn()} moodRemindersOff />));
+      expect(document.body.textContent?.match(/Silenced while Profile → Mood check-ins/g)).toHaveLength(2);
+      expect(lead('1 hour before').disabled).toBe(true);
+    });
+
+    it('has no lead choice, and never sends one, when the server has no such preference', async () => {
+      const onSave = render(prefs({ types: { ...prefs().types, mood_reminder: true } }));
+      expect(document.body.textContent).not.toContain('1 hour before');
+      act(() => switchFor('Mood check-in reminder').click());
+      await submit();
+      expect(onSave).toHaveBeenCalledWith({ types: { mood_reminder: false } });
+    });
+  });
 });
 
 describe('preferenceChanges', () => {

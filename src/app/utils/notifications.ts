@@ -1,4 +1,5 @@
 import type { AppNotification } from '@/app/types/notification';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 /** The backend's cap on a task's (or the default) reminder lead: one week. */
 export const REMINDER_MINUTES_MAX = 7 * 24 * 60;
@@ -11,6 +12,24 @@ export const REMINDER_PRESETS = [15, 30, 60, 120, 24 * 60];
 
 /** The backend always sends a final warning this long before a task is due. */
 export const FINAL_WARNING_MINUTES = 30;
+
+/** The mood reminder's lead choices, in minutes before "Call it a day". */
+export const MOOD_REMINDER_MINUTES = [60, 30];
+export const DEFAULT_MOOD_REMINDER_MINUTES = 60;
+
+const isMoodType = (type: string) => type === 'mood_reminder' || type === 'mood_missed';
+
+/**
+ * The days a mood notification offers to check in for, newest first: its
+ * `dates`, or for a reminder from a server that sends none, the local day it
+ * fired. Empty for every other type.
+ */
+export function moodCheckinDates(n: AppNotification): string[] {
+  if (!isMoodType(n.type)) return [];
+  const dates = [...new Set((n.dates ?? []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort().reverse();
+  if (dates.length === 0 && n.type === 'mood_reminder') return [toLocalDateStr(new Date(n.fire_at))];
+  return dates;
+}
 
 /** "15 min", "1 h", "1 h 30 min", "1 day", "2 days 3 h". */
 export function formatLeadTime(minutes: number): string {

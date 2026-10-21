@@ -135,7 +135,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
   const overlayBody = (id: string) => {
     switch (id) {
       case 'calendar': return <BigPictureOverlay settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
-      case 'reserved': return <CurrentMonthOverlay year={monthViewYear} month={monthViewMonth} />;
+      case 'reserved': return <CurrentMonthOverlay year={monthViewYear} month={monthViewMonth} showMood={profile.moodCheckins.daily} />;
       case 'timers': return <TimersOverlay profile={profile} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'tasks': return <TasksOverlay {...tasksProps} />;
       case 'habits': return <HabitsOverlay habits={habits} onToggle={onToggleHabit} pendingHabitIds={pendingHabitIds} />;
@@ -158,7 +158,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
     };
     switch (id) {
       case 'calendar': return <BigPictureCalendar {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
-      case 'reserved': return <CurrentMonthWidget {...tools} />;
+      case 'reserved': return <CurrentMonthWidget {...tools} showMood={profile.moodCheckins.daily} />;
       case 'timers': return <TimersCard profile={profile} {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'tasks': return <TasksStatsCard {...tasksProps} {...tools} />;
       case 'habits': return (

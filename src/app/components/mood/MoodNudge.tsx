@@ -11,6 +11,7 @@ import type { Habit } from '@/app/types/habit';
 import { checkinToSave, moodLabel, type MoodCheckin, type MoodPeriodKind } from '@/app/types/mood';
 import type { Task } from '@/app/types/task';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
+import { announceMoodCheckin, onMoodCheckin } from '@/app/utils/moodCheckinSync';
 import { indexDayCheckins, summarizeMood } from '@/app/utils/moodReport';
 import {
   checkinDayAt,
@@ -213,13 +214,17 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits, onS
   const dismissSavedToast = useRef<(() => void) | null>(null);
   const setRow = (kind: MoodPeriodKind, start: string, row: MoodCheckin | null) => {
     latestSaved.current.set(rowKey(kind, start), row);
+    announceMoodCheckin({ kind, start, row });
+  };
+  // Saves from here and from elsewhere (the Daily Brief, the calendar, a notification) alike.
+  useEffect(() => onMoodCheckin(({ kind, start, row }) => {
     // Rows are looked up by kind and start, so one saved after the day rolled over is harmless here.
     setLoaded(prev => {
       if (!prev) return prev;
       const rest = prev.rows.filter(r => r.period_kind !== kind || r.period_start !== start);
       return { ...prev, rows: row ? [...rest, row] : rest };
     });
-  };
+  }), []);
 
   const restore = async (row: MoodCheckin) => {
     try {
