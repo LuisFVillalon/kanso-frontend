@@ -209,10 +209,9 @@ describe('CalendarReportView mood', () => {
       expect(text()).toContain('Week of Oct 12–18');
       await click(buttonLabelled(/^Cancel$/));
 
-      // Hiding the spans from the legend leaves the list.
-      await click(buttonLabelled(/^Weekly check-in$/));
-      expect(buttonLabelled(/^Weekly check-in\. Week of Oct 12/)).toBeUndefined();
-      expect(buttonLabelled(/^Week of Oct 12: Great/)).toBeDefined();
+      // The legend names the spans but is not a toggle; the spans stay drawn.
+      expect(buttonLabelled(/^Weekly check-in$/)).toBeUndefined();
+      expect(buttonLabelled(/^Weekly check-in\. Week of Oct 12/)).toBeDefined();
     });
 
     it('counts the days of a week that runs into the next month', async () => {

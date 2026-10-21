@@ -55,6 +55,13 @@ const LegendDiamond: React.FC<{ label: string }> = ({ label }) => (
   </span>
 );
 
+const LegendDash: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+    <span className="w-4 border-t-2 border-dashed" style={{ borderColor: moodColor(4) }} />
+    {label}
+  </span>
+);
+
 const shortDate = (dateStr: string) => parseLocalDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
 /** A weekly check-in in words: "Week of Oct 12: Good · About right workload · “…”". */
@@ -93,7 +100,6 @@ interface ReportMoodChartProps {
  */
 const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDay, weeks, months: monthCheckins, onDay, onWeek, onMonth }) => {
   const [series, setSeries] = useState<MoodSeries>('mood');
-  const [showWeeks, setShowWeeks] = useState(true);
   const { label: seriesLabel, names } = SERIES.find(s => s.series === series)!;
   const isYear = period.kind === 'year';
   const n = buckets.length;
@@ -108,7 +114,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
   const hasValues = values.some(v => v != null);
   const lowerName = seriesLabel.toLowerCase();
   const isMood = series === 'mood';
-  const weekSpans = !isYear && isMood && showWeeks
+  const weekSpans = !isYear && isMood
     ? weeks.flatMap(week => {
         const lastDay = parseLocalDate(week.period_start);
         lastDay.setDate(lastDay.getDate() + 6);
@@ -149,17 +155,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
             <>
               <LegendDot color={seriesColor(series, 4)} label="Daily check-in" />
               {period.kind === 'month' && <LegendLine label="7-day average" />}
-              {isMood && weeks.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowWeeks(s => !s)}
-                  aria-pressed={showWeeks}
-                  className={`inline-flex items-center gap-1.5 text-xs ${showWeeks ? 'text-text-secondary' : 'text-text-muted line-through'}`}
-                >
-                  <span className="w-4 border-t-2 border-dashed" style={{ borderColor: moodColor(4) }} />
-                  Weekly check-in
-                </button>
-              )}
+              {isMood && weeks.length > 0 && <LegendDash label="Weekly check-in" />}
             </>
           )}
         </div>
