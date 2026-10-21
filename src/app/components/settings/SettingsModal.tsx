@@ -455,7 +455,7 @@ export default function SettingsModal({
                           aria-current={active ? 'page' : undefined}
                           className={`w-full flex items-center gap-2.5 px-3 py-3 sm:py-2 sm:rounded-lg text-left text-sm transition-colors ${
                             active
-                              ? 'sm:bg-surface-raised text-text-primary font-semibold sm:shadow-[inset_3px_0_0_var(--tm-accent)]'
+                              ? 'sm:bg-surface-raised text-text-primary sm:font-semibold sm:shadow-[inset_3px_0_0_var(--tm-accent)]'
                               : 'text-text-secondary hover:text-text-primary sm:hover:bg-surface'
                           }`}
                         >

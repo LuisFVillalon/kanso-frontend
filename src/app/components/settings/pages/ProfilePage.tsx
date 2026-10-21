@@ -50,7 +50,7 @@ const ProfilePage: React.FC<Props> = ({ name, avatar, onNameChange, onAvatarChan
         disabled={loading}
         placeholder="What should kanso call you?"
         autoComplete="nickname"
-        className="input-field w-full text-sm disabled:opacity-60"
+        className="input-field w-full max-w-md text-sm disabled:opacity-60"
       />
     </div>
 

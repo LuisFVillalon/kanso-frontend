@@ -9,7 +9,6 @@
 import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 import ThemeAccentPicker from '@/app/components/settings/ThemeAccentPicker';
-import { THEME_ACCENT_COLORS } from '@/app/lib/theme';
 import { PAGE_STYLES } from '@/app/lib/pageStyle';
 import { setColorScheme, storedColorScheme, type ColorSchemeChoice } from '@/app/lib/colorScheme';
 
@@ -57,7 +56,6 @@ interface Props {
 
 const AppearancePage: React.FC<Props> = ({ themeAccent, pageStyle, onAccentChange, onPageStyleChange, onSchemeChange }) => {
   const [scheme, setScheme] = useState<ColorSchemeChoice>(storedColorScheme);
-  const accentName = THEME_ACCENT_COLORS.find(c => c.value.toLowerCase() === themeAccent.toLowerCase())?.label;
 
   const pickScheme = (choice: ColorSchemeChoice) => {
     setScheme(choice);
@@ -94,10 +92,10 @@ const AppearancePage: React.FC<Props> = ({ themeAccent, pageStyle, onAccentChang
       </div>
 
       <div>
-        <p className="block text-xs font-medium text-text-muted mb-2">
-          Accent color{accentName && <span className="font-normal text-text-primary"> · {accentName}</span>}
-        </p>
-        <ThemeAccentPicker value={themeAccent} onChange={onAccentChange} />
+        <p className="block text-xs font-medium text-text-muted mb-1">Accent color</p>
+        <div className="max-w-sm">
+          <ThemeAccentPicker value={themeAccent} onChange={onAccentChange} />
+        </div>
         <p className="text-xs mt-2" style={{ color: 'var(--tm-text-muted)' }}>
           Buttons, links and highlights. Paper and ink stay the same.
         </p>

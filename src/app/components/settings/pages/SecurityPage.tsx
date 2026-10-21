@@ -187,7 +187,7 @@ const SecurityPage: React.FC<Props> = ({ email, oauthProvider, providerLabel, on
           </p>
         )}
         {emailOpen && (
-          <form onSubmit={handleChangeEmail} className="basis-full space-y-3 pt-1">
+          <form onSubmit={handleChangeEmail} className="basis-full max-w-md space-y-3 pt-1">
             <div>
               <label htmlFor="settings-new-email" className="block text-xs font-medium text-text-muted mb-1">
                 {isOAuth ? 'New contact email' : 'New email'}
@@ -273,7 +273,7 @@ const SecurityPage: React.FC<Props> = ({ email, oauthProvider, providerLabel, on
             <p role="status" className="basis-full text-sm" style={{ color: 'var(--tm-success-text)' }}>Password updated.</p>
           )}
           {passwordOpen && (
-            <form onSubmit={handleChangePassword} className="basis-full space-y-3 pt-1">
+            <form onSubmit={handleChangePassword} className="basis-full max-w-md space-y-3 pt-1">
               <div>
                 <label htmlFor="settings-current-password" className="block text-xs font-medium text-text-muted mb-1">
                   Current password
