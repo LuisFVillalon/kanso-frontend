@@ -74,9 +74,10 @@ export type CanvasItemStatus = DueStatus | { kind: 'excused'; label: string };
 const SUBMITTABLE = new Set<CanvasItem['kind']>(['assignment', 'quiz', 'discussion']);
 
 /**
- * The chip an item shows, in the brand's status language: missed work is
- * "Slipped" (never red), handed-in work is done, and open work counts down
- * like a task ("Due today", "In 3 days"). Null when there's nothing to say.
+ * The chip an item shows, in the brand's status language: work Canvas
+ * marks missing is "Slipped" (never red), handed-in work is done, and open
+ * work counts down like a task ("Due today", "In 3 days"). Null when there's
+ * nothing to say, including past-due work Canvas doesn't call missing.
  */
 export function itemStatus(item: Pick<CanvasItem, 'kind' | 'due_at' | 'points_possible' | 'submission'>, now: Date): CanvasItemStatus | null {
   const sub = item.submission;
@@ -86,7 +87,8 @@ export function itemStatus(item: Pick<CanvasItem, 'kind' | 'due_at' | 'points_po
   if (sub?.late) return { kind: 'slipped', label: 'Late' };
   if (sub?.submitted) return { kind: 'done', label: 'Submitted' };
   if (!item.due_at || !SUBMITTABLE.has(item.kind)) return null;
-  return getDueStatus({ completed: false, due_date: toLocalDateStr(new Date(item.due_at)) }, now);
+  const status = getDueStatus({ completed: false, due_date: toLocalDateStr(new Date(item.due_at)) }, now);
+  return status?.kind === 'slipped' ? null : status;
 }
 
 /** "18/20", "A-" or "92%": the grade a graded item shows. */

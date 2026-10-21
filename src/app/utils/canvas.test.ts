@@ -54,6 +54,13 @@ describe('itemStatus', () => {
     expect(itemStatus(at({}), NOW)).toEqual({ kind: 'upcoming', label: 'In 2 days' });
   });
 
+  it('leaves past-due work unflagged unless Canvas marks it missing', () => {
+    const lastWeek = new Date(2026, 9, 14, 23, 59).toISOString();
+    expect(itemStatus(at({ due_at: lastWeek }), NOW)).toBeNull();
+    expect(itemStatus(at({ due_at: lastWeek, submission: submission({}) }), NOW)).toBeNull();
+    expect(itemStatus(at({ due_at: lastWeek, submission: submission({ missing: true }) }), NOW)).toEqual({ kind: 'slipped', label: 'Slipped' });
+  });
+
   it('gives events, pages and notes no countdown', () => {
     expect(itemStatus(at({ kind: 'event' }), NOW)).toBeNull();
     expect(itemStatus(at({ due_at: null }), NOW)).toBeNull();
