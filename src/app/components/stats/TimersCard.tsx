@@ -61,7 +61,10 @@ const COUNTDOWN_UNITS: { key: keyof CountdownParts; label: string; width: number
  * at seconds — and owns its own state so only this subtree re-renders.
  */
 const CountdownClock: React.FC<{ endDate: Date }> = ({ endDate }) => {
-  const target = useMemo(() => termEndInstant(endDate), [endDate]);
+  // Keyed on the timestamp, not the Date: callers rebuild `endDate` every
+  // render, and a fresh identity would reset the interval before it fires.
+  const endTime = endDate.getTime();
+  const target = useMemo(() => termEndInstant(new Date(endTime)), [endTime]);
   const [parts, setParts] = useState<CountdownParts>(() => diffParts(new Date(), target));
 
   useEffect(() => {
