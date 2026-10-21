@@ -471,7 +471,10 @@ export const CORRELATION_LABELS: Record<CorrelationLevel, string> = {
   strong: 'Strong link',
 };
 
-/** Above this p-value, or under MIN_RHO, a result reads as no clear link. */
+/**
+ * Above this p-value, or under MIN_RHO, a result reads as no clear link — as
+ * it does when the median split doesn't differ in the same direction as ρ.
+ */
 export const MAX_P = 0.1;
 export const MIN_RHO = 0.15;
 /** Under this many days any link is only an "early sign"… */

@@ -190,7 +190,8 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
                 </p>
                 <p>
                   Under {PATTERN_MIN_DAYS} days nothing is said. Weak or likely-chance results (ρ under {MIN_RHO}, or more than a
-                  1-in-{Math.round(1 / MAX_P)} chance of turning up in random data) read as “no clear link”. Otherwise under 0.3 is
+                  1-in-{Math.round(1 / MAX_P)} chance of turning up in random data) read as “no clear link”, as do results where
+                  days with more {info.label.toLowerCase()} didn’t actually average a different mood in that direction. Otherwise under 0.3 is
                   “slight”, under 0.5 “moderate” and above that “strong” — but under {EARLY_SIGN_DAYS} days anything is only an
                   “early sign”, and under {STRONG_MIN_DAYS} days nothing is called “strong”.
                 </p>
