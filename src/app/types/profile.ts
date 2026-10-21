@@ -1,3 +1,5 @@
+import type { MoodCheckinSettings } from './mood';
+
 /**
  * The authenticated user's profile record, backed by the `/get-profile` /
  * `/save-profile` endpoints. `name` is required; every other field is
@@ -31,4 +33,6 @@ export interface Profile {
   dashboard_view?: string | null;
   /** 'cards' | 'folders' — notes view-mode toggle in NotesPanel.tsx / NotesList.tsx. */
   notes_view_mode?: string | null;
+  /** Which mood check-ins the dashboard nudges for, and when — the backend fills in defaults. */
+  mood_checkins?: MoodCheckinSettings | null;
 }

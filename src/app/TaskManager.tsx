@@ -30,6 +30,7 @@ import NotesPanel from '@/app/components/notes/NotesPanel';
 import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
+import MoodNudge from '@/app/components/mood/MoodNudge';
 import PageSpinner from '@/app/components/common/PageSpinner';
 import DoodleCanvas, { DoodleCanvasHandle } from '@/app/components/doodle/DoodleCanvas';
 import DoodleToolbar from '@/app/components/doodle/DoodleToolbar';
@@ -45,7 +46,7 @@ const TaskManager: React.FC = () => {
   const [doodleColor, setDoodleColor] = useState(() => getStoredThemeColor() ?? DEFAULT_ACCENT);
   const [doodleErasing, setDoodleErasing] = useState(false);
 
-  const { profile, loading: profileLoading, saveProfile } = useProfile(user);
+  const { profile, loading: profileLoading, loaded: profileLoaded, saveProfile } = useProfile(user);
   const { calendarSettings, loading: calendarSettingsLoading, saveCalendarSettings } = useCalendarSettings(user);
   const [mode, setMode] = usePersistedPref<AppMode>(
     'tm-app-mode',
@@ -384,6 +385,8 @@ const TaskManager: React.FC = () => {
           <div className={doodleMode ? 'animate-fade-out' : 'animate-fade-in'}>
             {showDebriefPanels && (
               <div className={!doodleMode && !focusMode ? 'animate-fade-in' : 'animate-fade-out'}>
+                <MoodNudge profile={profile} profileLoaded={profileLoaded} tasks={tasks} habits={habits} />
+
                 <TaskDebriefPanel profile={profile} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
 
                 <CalendarAndStats

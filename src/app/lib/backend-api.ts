@@ -14,6 +14,7 @@ import { CalendarSettings } from "../types/calendar";
 import { CalendarActivity } from "../types/activity";
 import { Habit, HabitHistoryEntry } from "../types/habit";
 import { Profile } from "../types/profile";
+import { MoodCheckin, MoodCheckinSave, MoodCheckinSettings, MoodPeriodKind, MoodTags } from "../types/mood";
 import { Drawing } from "../types/drawing";
 import { DailyDebriefReport } from "../types/debrief";
 import { toLocalDateStr, toLocalTimeStr } from "../utils/dateUtils";
@@ -691,6 +692,8 @@ export async function saveProfile(profile: {
   daily_brief_collapsed?: boolean | null;
   dashboard_view?: string | null;
   notes_view_mode?: string | null;
+  /** Merges into the saved settings; a null field (or null for all) restores the default. */
+  mood_checkins?: Partial<MoodCheckinSettings> | null;
 }): Promise<Profile> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/save-profile`, {
@@ -764,6 +767,58 @@ export async function updateNotificationPreferences(
     body: JSON.stringify(changes),
   });
   await assertOk(res, "updateNotificationPreferences");
+  return res.json();
+}
+
+// ── Mood check-ins ───────────────────────────────────────────────────────────
+
+/**
+ * Fetches the user's check-ins whose period_start falls in [startDate,
+ * endDate] (local "YYYY-MM-DD", inclusive, up to 366 days), oldest first —
+ * only the `kinds` given, or all three by default.
+ */
+export async function fetchMoodCheckins(
+  startDate: string,
+  endDate: string,
+  kinds?: MoodPeriodKind[],
+): Promise<MoodCheckin[]> {
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  if (kinds) params.set("kinds", kinds.join(","));
+  const res = await fetch(`${API_BASE_URL}/get-mood-checkins?${params}`, { headers });
+  await assertOk(res, "fetchMoodCheckins");
+  return res.json();
+}
+
+/**
+ * Creates the period's check-in or replaces it in place (same id), so editing
+ * and backfilling are the same call. Takes the whole form: a field left out
+ * is cleared. Returns the saved check-in.
+ */
+export async function saveMoodCheckin(checkin: MoodCheckinSave): Promise<MoodCheckin> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/save-mood-checkin`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(checkin),
+  });
+  await assertOk(res, "saveMoodCheckin");
+  return res.json();
+}
+
+/** Deletes a check-in for good (no trash), returning it so Undo can save it again. */
+export async function deleteMoodCheckin(id: number): Promise<MoodCheckin> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/del-mood-checkin/${id}`, { method: "DELETE", headers });
+  await assertOk(res, "deleteMoodCheckin");
+  return res.json();
+}
+
+/** The mood-tag picker's suggestions: the default list plus the user's own tags. Separate from task tags. */
+export async function fetchMoodTags(): Promise<MoodTags> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-mood-tags`, { headers });
+  await assertOk(res, "fetchMoodTags");
   return res.json();
 }
 
