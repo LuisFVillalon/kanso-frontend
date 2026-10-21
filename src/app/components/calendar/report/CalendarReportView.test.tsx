@@ -81,6 +81,16 @@ describe('CalendarReportView mood', () => {
     expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
   });
 
+  it('keeps the Mood section for a week with check-ins only in the earlier weeks', async () => {
+    api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-15', 4), checkin('2026-10-01', 2)]);
+    await render();
+    expect(text()).not.toContain('Nothing recorded');
+    expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
+    expect(text()).toContain('Using 4 weeks — one week is too short');
+    expect(text()).toContain('2 of 28 days logged');
+    expect(text()).toContain('Mood over time');
+  });
+
   it('leaves mood out when "Show mood in reports" is off', async () => {
     showMood(false);
     api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({

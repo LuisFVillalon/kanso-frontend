@@ -266,9 +266,11 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, mood, onSelectP
   const checkins = mood?.checkins;
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
   const periodMood = checkins ? summarizeMood(byDay, period.start, period.end) : null;
+  const scope = moodSummaryScope(period);
+  const scopeLogged = checkins && days > 0 ? summarizeMood(byDay, scope.start, scope.end).logged : 0;
   const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
-  if (isEmpty(report) && !periodMood?.logged) {
+  if (isEmpty(report) && !scopeLogged) {
     return (
       <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
         <CalendarRange className="w-8 h-8 text-text-muted" aria-hidden="true" />
@@ -319,7 +321,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, mood, onSelectP
           period={period}
           report={report}
           byDay={byDay}
-          scope={moodSummaryScope(period)}
+          scope={scope}
           replaceDay={mood.replaceDay}
           onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
         />
