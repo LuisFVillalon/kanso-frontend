@@ -78,8 +78,8 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
   const checkin = loaded?.date === dayKey ? loaded.checkin : undefined;
 
   const [dismissals, setDismissals] = useState<MoodNudgeDismissals | null>(readDismissals);
-  const updateDismissals = (patch: Omit<MoodNudgeDismissals, 'date'>) => {
-    const next = { ...(dismissals?.date === dayKey ? dismissals : { date: dayKey }), ...patch };
+  const updateDismissals = (patch: Omit<MoodNudgeDismissals, 'date'>, date = dayKey) => {
+    const next = { ...(dismissals?.date === date ? dismissals : { date }), ...patch };
     writeDismissals(next);
     setDismissals(next);
   };
@@ -96,39 +96,47 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
         dismissals,
       });
 
-  const [modal, setModal] = useState<{ initialMood: number | null } | null>(null);
+  // The check-in stays on the day it was opened for, even if the clock rolls past it.
+  const [modal, setModal] = useState<{
+    initialMood: number | null;
+    day: Date;
+    dayKey: string;
+    existing: MoodCheckin | null;
+  } | null>(null);
+  const openModal = (initialMood: number | null) => setModal({ initialMood, day, dayKey, existing: checkin ?? null });
+  const modalDayKey = modal?.dayKey;
   const [noteSeconds, setNoteSeconds] = useState<{ date: string; seconds: number } | null>(null);
-  const modalOpen = modal != null;
   useEffect(() => {
-    if (!modalOpen) return;
+    if (!modalDayKey) return;
     let cancelled = false;
-    fetchNoteTimeSpentForRange(dayKey, dayKey)
+    fetchNoteTimeSpentForRange(modalDayKey, modalDayKey)
       .then(totals => {
-        if (!cancelled) setNoteSeconds({ date: dayKey, seconds: Object.values(totals).reduce((a, b) => a + b, 0) });
+        if (!cancelled) setNoteSeconds({ date: modalDayKey, seconds: Object.values(totals).reduce((a, b) => a + b, 0) });
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [modalOpen, dayKey]);
+  }, [modalDayKey]);
 
+  const modalIsToday = modalDayKey === toLocalDateStr(now);
   const summary: DaySummary = {
-    tasksDone: tasks.filter(t => t.completed && t.completed_date && toLocalDateStr(t.completed_date) === dayKey).length,
-    noteSeconds: noteSeconds?.date === dayKey ? noteSeconds.seconds : null,
+    tasksDone: tasks.filter(t => t.completed && t.completed_date && toLocalDateStr(t.completed_date) === modalDayKey).length,
+    noteSeconds: noteSeconds && noteSeconds.date === modalDayKey ? noteSeconds.seconds : null,
     // logged_today is about the calendar day, so only count habits for today's check-in.
-    habitsDone: isToday ? habits.filter(h => h.logged_today).length : 0,
-    habitsTotal: isToday ? habits.length : 0,
+    habitsDone: modalIsToday ? habits.filter(h => h.logged_today).length : 0,
+    habitsTotal: modalIsToday ? habits.length : 0,
   };
 
   // The newest row we saved, so an older "Saved" toast's Undo can tell it has since changed.
   const latestSaved = useRef<MoodCheckin | null>(null);
   const dismissSavedToast = useRef<(() => void) | null>(null);
-  const setCheckin = (row: MoodCheckin | null) => {
+  const setCheckin = (date: string, row: MoodCheckin | null) => {
     latestSaved.current = row;
-    setLoaded({ date: dayKey, checkin: row });
+    setLoaded(prev => (prev && prev.date !== date ? prev : { date, checkin: row }));
   };
 
   const restore = async (row: MoodCheckin) => {
     try {
-      setCheckin(await saveMoodCheckin(checkinToSave(row)));
+      setCheckin(row.period_start, await saveMoodCheckin(checkinToSave(row)));
     } catch (err) {
       showToast(describeError(err, "Couldn't undo. Please try again."));
     }
@@ -136,7 +144,7 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
 
   const handleSaved = (saved: MoodCheckin, previous: MoodCheckin | null) => {
     setModal(null);
-    setCheckin(saved);
+    setCheckin(saved.period_start, saved);
     if (previous) {
       dismissSavedToast.current?.();
       dismissSavedToast.current = null;
@@ -148,19 +156,19 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
       onClick: () => {
         if (latestSaved.current !== saved) return;
         deleteMoodCheckin(saved.id)
-          .then(() => setCheckin(null))
+          .then(() => setCheckin(saved.period_start, null))
           .catch(err => showToast(describeError(err, "Couldn't undo. Please try again.")));
       },
     });
   };
 
-  const handleSkip = () => {
+  const handleSkip = (date = dayKey) => {
     setModal(null);
-    updateDismissals({ skipped: true });
+    updateDismissals({ skipped: true }, date);
     const until = endsPastMidnight(profile.dayStartTime, profile.shutoffTime) ? 'your next day starts' : 'midnight';
     showToast(`Skipped for today. You can still log it until ${until}.`, 'info', {
       label: 'Undo',
-      onClick: () => updateDismissals({ skipped: false }),
+      onClick: () => updateDismissals({ skipped: false }, date),
     });
   };
 
@@ -188,13 +196,13 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
             </div>
             <MoodFacePicker
               value={null}
-              onChange={mood => setModal({ initialMood: mood })}
+              onChange={openModal}
               label={`How did ${dayName} feel?`}
               compact
               className="flex-1 max-w-md"
             />
             <div className="flex items-center gap-3 lg:ml-auto">
-              <button type="button" onClick={handleSkip} className="text-sm font-medium text-text-secondary hover:text-text-primary">
+              <button type="button" onClick={() => handleSkip()} className="text-sm font-medium text-text-secondary hover:text-text-primary">
                 Not today
               </button>
               <button
@@ -212,7 +220,7 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
 
       {state === 'chip' && (
         <div className="mb-4 sm:mb-6 flex justify-end">
-          <button type="button" onClick={() => setModal({ initialMood: null })} className="chip mood-tag">
+          <button type="button" onClick={() => openModal(null)} className="chip mood-tag">
             <Smile className="w-3.5 h-3.5" aria-hidden="true" />
             Log {isToday ? 'today' : dayName}&rsquo;s mood
           </button>
@@ -230,7 +238,7 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
           <p className="text-sm text-text-primary flex-1 min-w-0">
             Logged {isToday ? 'today' : dayName} as <b>{moodLabel(checkin.mood)}</b>. Enjoy your evening.
           </p>
-          <button type="button" onClick={() => setModal({ initialMood: null })} className="text-sm font-medium text-accent hover:underline">
+          <button type="button" onClick={() => openModal(null)} className="text-sm font-medium text-accent hover:underline">
             Edit
           </button>
         </div>
@@ -238,12 +246,12 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
 
       {modal && (
         <MoodCheckinModal
-          date={day}
-          existing={checkin ?? null}
+          date={modal.day}
+          existing={modal.existing}
           initialMood={modal.initialMood}
           summary={summary}
           onClose={() => setModal(null)}
-          onSkip={state === 'nudge' ? handleSkip : undefined}
+          onSkip={state === 'nudge' ? () => handleSkip(modal.dayKey) : undefined}
           onSaved={handleSaved}
         />
       )}

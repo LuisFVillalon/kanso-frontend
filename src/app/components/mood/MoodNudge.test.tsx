@@ -141,6 +141,16 @@ describe('MoodNudge', () => {
     expect(text()).toContain('Logged today as Great');
   });
 
+  it('saves to the day the check-in was opened for, even after midnight', async () => {
+    vi.setSystemTime(new Date(2026, 9, 20, 23, 59, 45));
+    await render();
+    await click(button('Good'));
+    await act(async () => { vi.advanceTimersByTime(30_000); });
+
+    await click(button('Save check-in'));
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_start: '2026-10-20', mood: 4 }));
+  });
+
   it('hides after "Not today", for the rest of the day, leaving the chip', async () => {
     await render();
     await click(button('Not today'));
