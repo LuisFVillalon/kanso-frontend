@@ -1,5 +1,6 @@
-import type { CanvasItem, CanvasSubmission } from '@/app/types/canvas';
+import type { CanvasItem } from '@/app/types/canvas';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { getDueStatus, type DueStatus } from '@/app/utils/taskUtils';
 
 const MINUTE_MS = 60 * 1000;
 
@@ -66,17 +67,26 @@ export function groupByDay(items: CanvasItem[], now: Date): CanvasDayGroup[] {
   return groups.sort((a, b) => (a.key === 'undated' ? 1 : b.key === 'undated' ? -1 : a.key.localeCompare(b.key)));
 }
 
-export type CanvasItemStatus = 'missing' | 'late' | 'excused' | 'graded' | 'submitted';
+/** A Canvas item's chip: the task status chips, plus "Excused", which has no task equivalent. */
+export type CanvasItemStatus = DueStatus | { kind: 'excused'; label: string };
 
-/** The badge an item's submission earns, most urgent first; null when there's nothing to say. */
-export function itemStatus(submission: CanvasSubmission | null): CanvasItemStatus | null {
-  if (!submission) return null;
-  if (submission.missing) return 'missing';
-  if (submission.late) return 'late';
-  if (submission.excused) return 'excused';
-  if (submission.graded) return 'graded';
-  if (submission.submitted) return 'submitted';
-  return null;
+// Kinds the user hands something in for; events, pages and notes only have a date.
+const SUBMITTABLE = new Set<CanvasItem['kind']>(['assignment', 'quiz', 'discussion']);
+
+/**
+ * The chip an item shows, in the brand's status language: missed work is
+ * "Slipped" (never red), handed-in work is done, and open work counts down
+ * like a task ("Due today", "In 3 days"). Null when there's nothing to say.
+ */
+export function itemStatus(item: Pick<CanvasItem, 'kind' | 'due_at' | 'points_possible' | 'submission'>, now: Date): CanvasItemStatus | null {
+  const sub = item.submission;
+  if (sub?.excused) return { kind: 'excused', label: 'Excused' };
+  if (sub?.missing) return { kind: 'slipped', label: 'Slipped' };
+  if (sub?.graded) return { kind: 'done', label: scoreLabel(item) ?? 'Graded' };
+  if (sub?.late) return { kind: 'slipped', label: 'Late' };
+  if (sub?.submitted) return { kind: 'done', label: 'Submitted' };
+  if (!item.due_at || !SUBMITTABLE.has(item.kind)) return null;
+  return getDueStatus({ completed: false, due_date: toLocalDateStr(new Date(item.due_at)) }, now);
 }
 
 /** "18/20", "A-" or "92%": the grade a graded item shows. */
@@ -92,8 +102,9 @@ export function scoreLabel(item: Pick<CanvasItem, 'points_possible' | 'submissio
 export const formatNumber = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 // Canvas sends no course colors through the API, so each course takes a
-// feature color by its place in the course list.
-const COURSE_COLORS = ['var(--tm-accent)', 'var(--marigold)', 'var(--tm-success)', 'var(--tm-accent-2)', 'var(--mocha)', 'var(--sky-wash)'];
+// color by its place in the course list. Never key red or coral: red is
+// brand-only, and kanso doesn't paint coursework red.
+const COURSE_COLORS = ['var(--tm-accent)', 'var(--tm-mood-4)', 'var(--tm-mood-3)', 'var(--tm-success)', 'var(--tm-pencil)', 'var(--tm-mood-5)'];
 
 /** A stable color for `courseId`, given the course ids in list order. */
 export function courseColor(courseId: number | null, courseIds: number[]): string {

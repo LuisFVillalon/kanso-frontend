@@ -345,9 +345,9 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
                   <span
                     className="text-[10px] font-bold px-1.5 rounded-full"
                     style={key === 'upcoming'
-                      ? { backgroundColor: 'var(--tm-danger)', color: '#fff' }
+                      ? { backgroundColor: 'var(--tm-slipped-subtle)', color: 'var(--tm-slipped-text)' }
                       : { backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)' }}
-                    aria-label={key === 'upcoming' ? `${count} missing` : `${count} unread`}
+                    aria-label={key === 'upcoming' ? `${count} slipped` : `${count} unread`}
                   >
                     {count}
                   </span>

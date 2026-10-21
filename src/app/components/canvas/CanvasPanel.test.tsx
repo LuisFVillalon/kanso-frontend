@@ -157,11 +157,14 @@ describe('CanvasPanel', () => {
     expect(panelStatus()).toBe('ready');
     expect(text()).toContain('sdsu.instructure.com');
     expect(text()).toContain('Synced 3 min ago');
-    expect(text()).toContain('Needs attention');
+    // Missed work is "Slipped", never red.
+    expect(text()).toContain('One thing slipped. Start with this one.');
     expect(text()).toContain('Lab 2');
     expect(text()).toContain('Tomorrow');
     expect(text()).toContain('Quiz 3: Paging');
-    expect(container.querySelector('[aria-label="1 missing"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="1 slipped"]')).not.toBeNull();
+    // Open work counts down like a task.
+    expect(text()).toContain('Due tomorrow');
     expect(api.fetchCanvasOverview).toHaveBeenCalledWith(false);
   });
 

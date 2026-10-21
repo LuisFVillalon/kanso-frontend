@@ -38,13 +38,25 @@ describe('groupByDay', () => {
 });
 
 describe('itemStatus', () => {
-  it('reports the most urgent state', () => {
-    expect(itemStatus(null)).toBeNull();
-    expect(itemStatus(submission({}))).toBeNull();
-    expect(itemStatus(submission({ missing: true, late: true }))).toBe('missing');
-    expect(itemStatus(submission({ late: true, submitted: true }))).toBe('late');
-    expect(itemStatus(submission({ graded: true, submitted: true }))).toBe('graded');
-    expect(itemStatus(submission({ submitted: true }))).toBe('submitted');
+  const at = (overrides: Partial<CanvasItem>) => ({ ...item(1, new Date(2026, 9, 23, 23, 59)), ...overrides });
+
+  it('says missed work slipped and handed-in work is done, never red', () => {
+    expect(itemStatus(at({ submission: submission({ missing: true, late: true }) }), NOW)).toEqual({ kind: 'slipped', label: 'Slipped' });
+    expect(itemStatus(at({ submission: submission({ late: true, submitted: true }) }), NOW)).toEqual({ kind: 'slipped', label: 'Late' });
+    expect(itemStatus(at({ submission: submission({ submitted: true }) }), NOW)).toEqual({ kind: 'done', label: 'Submitted' });
+    expect(itemStatus(at({ points_possible: 20, submission: submission({ graded: true, score: 18 }) }), NOW)).toEqual({ kind: 'done', label: '18/20' });
+    expect(itemStatus(at({ submission: submission({ excused: true, missing: true }) }), NOW)).toEqual({ kind: 'excused', label: 'Excused' });
+  });
+
+  it('counts open work down like a task', () => {
+    expect(itemStatus(at({ due_at: new Date(2026, 9, 21, 23, 0).toISOString() }), NOW)).toEqual({ kind: 'due', label: 'Due today' });
+    expect(itemStatus(at({ due_at: new Date(2026, 9, 22, 9, 0).toISOString() }), NOW)).toEqual({ kind: 'due', label: 'Due tomorrow' });
+    expect(itemStatus(at({}), NOW)).toEqual({ kind: 'upcoming', label: 'In 2 days' });
+  });
+
+  it('gives events, pages and notes no countdown', () => {
+    expect(itemStatus(at({ kind: 'event' }), NOW)).toBeNull();
+    expect(itemStatus(at({ due_at: null }), NOW)).toBeNull();
   });
 });
 

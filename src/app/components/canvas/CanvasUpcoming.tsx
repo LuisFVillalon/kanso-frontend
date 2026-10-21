@@ -1,5 +1,5 @@
 import React from 'react';
-import { Award, CalendarRange, CircleAlert } from 'lucide-react';
+import { Award, CalendarRange } from 'lucide-react';
 import type { CanvasOverview } from '@/app/types/canvas';
 import { groupByDay } from '@/app/utils/canvas';
 import CanvasItemRow, { type CourseLookup } from './CanvasItemRow';
@@ -9,6 +9,12 @@ export const SectionLabel: React.FC<{ icon: React.ElementType; children: React.R
     <Icon className="w-3 h-3" />
     {children}
   </div>
+);
+
+const SlippedDot: React.FC<{ className?: string }> = () => (
+  <span aria-hidden className="flex items-center justify-center w-3 h-3">
+    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--tm-slipped-dot)' }} />
+  </span>
 );
 
 interface CanvasUpcomingProps {
@@ -24,14 +30,17 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({ overview, course, now }
     <div className="space-y-4">
       {overview.missing.length > 0 && (
         <section>
-          <SectionLabel icon={CircleAlert}>Needs attention</SectionLabel>
+          {/* Missed work, said gently: a pencil box with an amber dot, never red. */}
+          <SectionLabel icon={SlippedDot}>Slipped</SectionLabel>
           <div
-            className="space-y-1.5 rounded-xl p-2.5"
-            style={{
-              border: '1px solid color-mix(in srgb, var(--tm-danger) 30%, transparent)',
-              backgroundColor: 'color-mix(in srgb, var(--tm-danger-subtle) 60%, var(--tm-surface))',
-            }}
+            className="space-y-1.5 rounded-xl p-2.5 border border-border"
+            style={{ backgroundColor: 'var(--tm-slipped-subtle)' }}
           >
+            <p className="text-xs text-text-secondary px-0.5 pb-0.5">
+              {overview.missing.length === 1
+                ? 'One thing slipped. Start with this one.'
+                : `${overview.missing.length} things slipped. Start with this one.`}
+            </p>
             {overview.missing.map(item => <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} />)}
           </div>
         </section>
@@ -61,7 +70,7 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({ overview, course, now }
           <SectionLabel icon={Award}>Recently graded</SectionLabel>
           <div className="space-y-1.5">
             {overview.recently_graded.map(item => (
-              <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} showScore />
+              <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} />
             ))}
           </div>
         </section>

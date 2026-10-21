@@ -6,7 +6,7 @@ import {
 import type { CanvasAssignment, CanvasCourseSummary, CanvasModule, CanvasModuleItem } from '@/app/types/canvas';
 import { useCanvasCourse, type CanvasCourseView } from '@/app/hooks/useCanvas';
 import { formatNumber, formatShortDate, scoreLabel } from '@/app/utils/canvas';
-import CanvasItemRow, { CanvasLink, StatusBadge, type CourseLookup } from './CanvasItemRow';
+import CanvasItemRow, { CanvasLink, CanvasStatusChip, type CourseLookup } from './CanvasItemRow';
 import { CourseGrade, GradeBar } from './CanvasCourses';
 
 type CourseTab = CanvasCourseView | 'grades';
@@ -103,7 +103,7 @@ const Assignments: React.FC<{ assignments: CanvasAssignment[]; course: CourseLoo
         <div key={group.label}>
           <div className="mt-3 mb-1.5 text-xs font-semibold text-text-primary">{group.label}</div>
           <div className="space-y-1.5">
-            {group.items.map(a => <CanvasItemRow key={a.id} item={a} course={course} now={now} showScore />)}
+            {group.items.map(a => <CanvasItemRow key={a.id} item={a} course={course} now={now} />)}
           </div>
         </div>
       ))}
@@ -134,7 +134,7 @@ const Grades: React.FC<{ assignments: CanvasAssignment[]; color: string }> = ({ 
                 <CanvasLink href={a.html_url} className="block text-[13px] font-semibold text-text-primary break-words">{a.title}</CanvasLink>
                 {score != null && a.points_possible ? <GradeBar pct={(score / a.points_possible) * 100} color={color} /> : null}
               </div>
-              <StatusBadge status="graded">{scoreLabel(a) ?? 'graded'}</StatusBadge>
+              <CanvasStatusChip status={{ kind: 'done', label: scoreLabel(a) ?? 'Graded' }} />
             </div>
           );
         })}

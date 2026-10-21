@@ -1,9 +1,10 @@
 import React from 'react';
 import {
-  BookOpen, CalendarDays, Clock, File, FileText, ListChecks, MessagesSquare, StickyNote, type LucideIcon,
+  BookOpen, CalendarDays, Clock, File, FileText, ListChecks, MessagesSquare, Minus, StickyNote, type LucideIcon,
 } from 'lucide-react';
+import TaskStatusChip from '@/app/components/task/TaskStatusChip';
 import type { CanvasItem, CanvasItemKind } from '@/app/types/canvas';
-import { dueLabel, formatNumber, itemStatus, scoreLabel, type CanvasItemStatus } from '@/app/utils/canvas';
+import { dueLabel, formatNumber, itemStatus, type CanvasItemStatus } from '@/app/utils/canvas';
 
 const KIND_ICONS: Record<CanvasItemKind, LucideIcon> = {
   assignment: FileText,
@@ -15,26 +16,22 @@ const KIND_ICONS: Record<CanvasItemKind, LucideIcon> = {
   other: File,
 };
 
-const STATUS_STYLES: Record<CanvasItemStatus, { bg: string; fg: string }> = {
-  missing: { bg: 'var(--tm-danger-subtle)', fg: 'var(--tm-danger)' },
-  late: { bg: 'var(--tm-warning-subtle)', fg: 'var(--tm-warning)' },
-  excused: { bg: 'var(--tm-surface-raised)', fg: 'var(--tm-text-muted)' },
-  graded: { bg: 'var(--tm-accent-subtle)', fg: 'var(--tm-accent)' },
-  submitted: { bg: 'var(--tm-success-subtle)', fg: 'var(--tm-success)' },
-};
-
 /** A course's short label and color, looked up from the course list. */
 export type CourseLookup = (courseId: number | null) => { label: string | null; color: string };
 
-export const StatusBadge: React.FC<{ status: CanvasItemStatus; children?: React.ReactNode }> = ({ status, children }) => (
-  <span
-    className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full whitespace-nowrap"
-    style={{ backgroundColor: STATUS_STYLES[status].bg, color: STATUS_STYLES[status].fg }}
-  >
-    {children ?? status}
-  </span>
-);
-
+/** An item's status chip: the task status chips, and a neutral one for excused work. */
+export const CanvasStatusChip: React.FC<{ status: CanvasItemStatus }> = ({ status }) =>
+  status.kind === 'excused' ? (
+    <span
+      className="chip flex-shrink-0 gap-1 px-2 py-0.5 text-[11px]"
+      style={{ backgroundColor: 'var(--tm-surface-raised)', color: 'var(--tm-text-secondary)' }}
+    >
+      <Minus className="w-3 h-3 flex-shrink-0" aria-hidden />
+      {status.label}
+    </span>
+  ) : (
+    <TaskStatusChip status={status} size="sm" />
+  );
 export const CourseDot: React.FC<{ label: string; color: string }> = ({ label, color }) => (
   <span className="inline-flex items-center gap-1.5 font-semibold text-text-secondary min-w-0">
     <span aria-hidden className="w-2 h-2 rounded-[2px] shrink-0" style={{ backgroundColor: color }} />
@@ -60,15 +57,12 @@ interface CanvasItemRowProps {
   item: CanvasItem;
   course: CourseLookup;
   now: Date;
-  /** Show the score instead of the status word on graded work. */
-  showScore?: boolean;
 }
 
-const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, showScore }) => {
+const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now }) => {
   const Icon = KIND_ICONS[item.kind] ?? File;
-  const status = itemStatus(item.submission);
+  const status = itemStatus(item, now);
   const { label: courseLabel, color } = course(item.course_id);
-  const score = showScore ? scoreLabel(item) : null;
   return (
     <div className="flex gap-2.5 items-start p-2.5 rounded-[10px] border border-border bg-surface">
       <span
@@ -98,7 +92,7 @@ const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, showSc
       </div>
       {status && (
         <div className="shrink-0">
-          <StatusBadge status={status}>{status === 'graded' && score ? score : undefined}</StatusBadge>
+          <CanvasStatusChip status={status} />
         </div>
       )}
     </div>
