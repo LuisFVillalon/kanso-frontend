@@ -110,7 +110,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   };
 
   return (
-    <div className="split-tasks flex flex-col space-y-2 sm:space-y-3">
+    <div className="flex flex-col space-y-2 sm:space-y-3">
       {taskGroups.length === 0 ? (
         <div className="card-glass p-6 sm:p-8 text-center mt-2">
           <div

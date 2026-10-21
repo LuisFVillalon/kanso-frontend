@@ -23,6 +23,7 @@ export interface ProfileFields {
   dailyBriefCollapsed: boolean | null;
   dashboardView: string | null;
   notesViewMode: string | null;
+  homePanels: string | null;
   moodCheckins: MoodCheckinSettings;
 }
 
@@ -44,6 +45,7 @@ const readLocalDefaults = (): ProfileFields => ({
   dailyBriefCollapsed: null,
   dashboardView: null,
   notesViewMode: null,
+  homePanels: null,
   moodCheckins: DEFAULT_MOOD_SETTINGS,
 });
 
@@ -88,6 +90,7 @@ export function useProfile(user: User | null) {
           dailyBriefCollapsed: p.daily_brief_collapsed ?? prev.dailyBriefCollapsed,
           dashboardView: p.dashboard_view ?? prev.dashboardView,
           notesViewMode: p.notes_view_mode ?? prev.notesViewMode,
+          homePanels: p.home_panels ?? prev.homePanels,
           moodCheckins: { ...DEFAULT_MOOD_SETTINGS, ...p.mood_checkins },
         }));
         localStorage.setItem('tm_profile_name', p.name);
@@ -123,6 +126,7 @@ export function useProfile(user: User | null) {
         daily_brief_collapsed: next.dailyBriefCollapsed,
         dashboard_view: next.dashboardView,
         notes_view_mode: next.notesViewMode,
+        home_panels: next.homePanels,
         mood_checkins: next.moodCheckins,
       });
 
