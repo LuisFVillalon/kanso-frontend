@@ -6,35 +6,13 @@ import { CalendarSettings } from '@/app/types/calendar';
 import { CardShell } from '@/app/components/stats/CardShell';
 import TileTools from '@/app/components/stats/TileTools';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
-import { parseLocalDate, formatLongDate, isWeekday, isWeekend } from '@/app/utils/dateUtils';
+import { parseLocalDate, formatLongDate } from '@/app/utils/dateUtils';
 import { useMidnightTick } from '@/app/hooks/useMidnightTick';
+import { computeTermProgress, type TermProgress } from '@/app/utils/termProgress';
 
-// Inclusive count of calendar days between `from` and `to` (dates only, time
-// ignored) whose day-of-week matches `predicate` — used to split the days
-// remaining in the range into weekdays vs. weekend days.
-const countDaysMatching = (from: Date, to: Date, predicate: (dayOfWeek: number) => boolean): number => {
-  let count = 0;
-  const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const endTime = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
-  while (cursor.getTime() <= endTime) {
-    if (predicate(cursor.getDay())) count++;
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return count;
-};
-
-interface Progress {
-  totalDays: number;
-  daysInto: number;
-  daysRemaining: number;
-  weekNumber: number;
-  totalWeeks: number;
-  pct: number;
+interface Progress extends TermProgress {
   start: Date;
   end: Date;
-  weeksRemaining: number;
-  businessDaysRemaining: number;
-  weekendDaysRemaining: number;
 }
 
 // ── Shared calc — used by both the compact tile and the overlay ─────────────
@@ -55,21 +33,8 @@ const useBigPictureCalendar = (settings: CalendarSettings, loading: boolean) => 
   const progress = useMemo<Progress | null>(() => {
     const start = parseLocalDate(settings.start_date);
     const end = parseLocalDate(settings.end_date);
-    const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-    if (today < start || today > end) return null;
-
-    const msDay = 1000 * 60 * 60 * 24;
-    const totalDays = Math.round((end.getTime() - start.getTime()) / msDay);
-    const daysInto = Math.floor((today.getTime() - start.getTime()) / msDay);
-    const weekNumber = Math.min(Math.floor(daysInto / 7) + 1, Math.ceil(totalDays / 7));
-    const totalWeeks = Math.ceil(totalDays / 7);
-    const pct = Math.round((daysInto / totalDays) * 100);
-    const businessDaysRemaining = countDaysMatching(today, end, isWeekday);
-    const weekendDaysRemaining = countDaysMatching(today, end, isWeekend);
-    const daysRemaining = businessDaysRemaining + weekendDaysRemaining;
-    const weeksRemaining = Math.ceil(daysRemaining / 7);
-
-    return { totalDays, daysInto, daysRemaining, weekNumber, totalWeeks, pct, start, end, weeksRemaining, businessDaysRemaining, weekendDaysRemaining };
+    const termProgress = computeTermProgress(start, end, currentDate);
+    return termProgress && { ...termProgress, start, end };
   }, [settings.start_date, settings.end_date, currentDate]);
 
   return { loading, fadeIn, cur: settings, progress, currentDate };
@@ -158,7 +123,7 @@ const BigPictureCalendar: React.FC<BigPictureCalendarProps> = ({ settings, setti
             <div className="flex-1 min-w-0 flex flex-col gap-1.5">
               <div className="flex items-baseline gap-2 flex-wrap">
                 <span className="text-[44px] font-bold leading-none" style={{ color: 'var(--tm-accent)' }}>{progress.daysRemaining}</span>
-                <span className="text-[13px] font-medium text-text-secondary">days left until {formatLongDate(progress.end)}</span>
+                <span className="text-[13px] font-medium text-text-secondary">{progress.daysRemaining === 1 ? 'day left' : 'days left'} until {formatLongDate(progress.end)}</span>
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary w-fit">
                 You&rsquo;re in

@@ -15,12 +15,15 @@ export function useMidnightTick(): Date {
     const midnight = new Date();
     midnight.setHours(24, 0, 0, 0);
     const timeUntilMidnight = midnight.getTime() - Date.now();
+    let interval: ReturnType<typeof setInterval> | undefined;
     const timeout = setTimeout(() => {
       update();
-      const interval = setInterval(update, 24 * 60 * 60 * 1000);
-      return () => clearInterval(interval);
+      interval = setInterval(update, 24 * 60 * 60 * 1000);
     }, timeUntilMidnight);
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
   }, []);
 
   return now;

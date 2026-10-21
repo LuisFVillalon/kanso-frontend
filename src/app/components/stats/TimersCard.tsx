@@ -1,14 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Bed, Blinds, Briefcase, Grid2x2, Hourglass, PartyPopper, Smile, Timer as TimerIcon } from 'lucide-react';
 import { CalendarSettings } from '@/app/types/calendar';
-import { fetchCalendarSettings } from '@/app/lib/backend-api';
 import { CardShell } from '@/app/components/stats/CardShell';
 import { parseLocalDate, formatLongDate, isWeekday, isWeekend } from '@/app/utils/dateUtils';
 import { useMidnightTick } from '@/app/hooks/useMidnightTick';
 import type { ProfileFields } from '@/app/hooks/useProfile';
-import { defaultTermSettings } from '@/app/hooks/useCalendarSettings';
+import { isInTerm, termEndInstant } from '@/app/utils/termProgress';
 import TileTools from './TileTools';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
 
@@ -55,11 +54,13 @@ const COUNTDOWN_UNITS: { key: keyof CountdownParts; label: string; width: number
 ];
 
 /**
- * Live-ticking countdown to `target`, broken into months/days/h/m/s.
+ * Live-ticking countdown to the close of `endDate` (the term's last day
+ * counts in full, matching the Term Tracker), broken into months/days/h/m/s.
  * Ticks once a second — no need for anything finer now the display stops
  * at seconds — and owns its own state so only this subtree re-renders.
  */
-const CountdownClock: React.FC<{ target: Date }> = ({ target }) => {
+const CountdownClock: React.FC<{ endDate: Date }> = ({ endDate }) => {
+  const target = useMemo(() => termEndInstant(endDate), [endDate]);
   const [parts, setParts] = useState<CountdownParts>(() => diffParts(new Date(), target));
 
   useEffect(() => {
@@ -77,7 +78,7 @@ const CountdownClock: React.FC<{ target: Date }> = ({ target }) => {
         style={{ color: 'var(--tm-accent)' }}
       >
         <Hourglass className="w-3.5 h-3.5" />
-        Countdown to {formatLongDate(target)}
+        Countdown to end of {formatLongDate(endDate)}
       </p>
       <div className="grid grid-cols-5 divide-x divide-border-subtle">
         {COUNTDOWN_UNITS.map(unit => (
@@ -408,28 +409,16 @@ const TimersOverlaySkeleton: React.FC = () => (
 
 // ── Shared session state ─────────────────────────────────────────────────────
 // Both the compact tile and the overlay need the same "is now inside the
-// configured range" fetch/check — the compact rows and the overlay's
-// CountdownClock/full blocks otherwise duplicate this fetch independently.
+// configured range" check. `settings` and `loading` come from TaskManager's
+// useCalendarSettings — the same source the Term Tracker card and Settings
+// use — so a term edited in Settings shows up here immediately.
 
-const useTimersSession = () => {
+const useTimersSession = (settings: CalendarSettings, loading: boolean) => {
   const currentDate = useMidnightTick();
-  const [settings, setSettings] = useState<CalendarSettings | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchCalendarSettings()
-      .then(data => { if (data !== null) setSettings(data); })
-      .catch(() => { /* network / auth error — keep showing defaults */ })
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Same placeholder range useCalendarSettings shows while settings load, so
-  // "in session" reads the same way in both cards.
-  const cur = settings ?? { ...defaultTermSettings(), title: '' };
-  const start = parseLocalDate(cur.start_date);
-  const end = parseLocalDate(cur.end_date);
+  const start = parseLocalDate(settings.start_date);
+  const end = parseLocalDate(settings.end_date);
   const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
-  const inSession = today >= start && today <= end;
+  const inSession = isInTerm(start, end, today);
 
   return { loading, inSession, end, today };
 };
@@ -448,18 +437,20 @@ const NotInSessionNotice: React.FC<{ today: Date; compact?: boolean }> = ({ toda
 
 // ── Component ─────────────────────────────────────────────────────────────────
 // Standalone, draggable sibling of BigPictureCalendar's other stat cards.
-// Reads the same CalendarSettings (start/end date) independently so it knows
-// whether "now" falls inside the configured range — the daily/weekly timers
+// Reads the shared CalendarSettings (start/end date) so it knows whether
+// "now" falls inside the configured range — the daily/weekly timers
 // and the countdown only make sense relative to that active window.
 
 interface TimersCardProps {
   profile: ProfileFields;
+  settings: CalendarSettings;
+  settingsLoading: boolean;
   onExpand: () => void;
   dragHandleProps: DragHandleProps;
 }
 
-const TimersCard: React.FC<TimersCardProps> = ({ profile, onExpand, dragHandleProps }) => {
-  const { loading, inSession, today } = useTimersSession();
+const TimersCard: React.FC<TimersCardProps> = ({ profile, settings, settingsLoading, onExpand, dragHandleProps }) => {
+  const { loading, inSession, today } = useTimersSession(settings, settingsLoading);
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -518,8 +509,8 @@ const TimersCard: React.FC<TimersCardProps> = ({ profile, onExpand, dragHandlePr
 };
 
 /** Full-detail body rendered inside the shared expand overlay. */
-export const TimersOverlay: React.FC<{ profile: ProfileFields }> = ({ profile }) => {
-  const { loading, inSession, end, today } = useTimersSession();
+export const TimersOverlay: React.FC<{ profile: ProfileFields; settings: CalendarSettings; settingsLoading: boolean }> = ({ profile, settings, settingsLoading }) => {
+  const { loading, inSession, end, today } = useTimersSession(settings, settingsLoading);
 
   if (loading) return <TimersOverlaySkeleton />;
 
@@ -529,7 +520,7 @@ export const TimersOverlay: React.FC<{ profile: ProfileFields }> = ({ profile })
         <>
           <DailyWindowTimer dayStart={profile.dayStartTime} dayEnd={profile.shutoffTime} restDays={profile.restDays} />
           <WeekPeriodTimers />
-          <CountdownClock key={end.getTime()} target={end} />
+          <CountdownClock key={end.getTime()} endDate={end} />
         </>
       ) : (
         <NotInSessionNotice today={today} />

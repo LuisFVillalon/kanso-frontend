@@ -136,7 +136,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
     switch (id) {
       case 'calendar': return <BigPictureOverlay settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'reserved': return <CurrentMonthOverlay year={monthViewYear} month={monthViewMonth} />;
-      case 'timers': return <TimersOverlay profile={profile} />;
+      case 'timers': return <TimersOverlay profile={profile} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'tasks': return <TasksOverlay {...tasksProps} />;
       case 'habits': return <HabitsOverlay habits={habits} onToggle={onToggleHabit} pendingHabitIds={pendingHabitIds} />;
       case 'notes': return <NotesOverlay notes={allNotes} noteTags={noteTags} />;
@@ -159,7 +159,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
     switch (id) {
       case 'calendar': return <BigPictureCalendar {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'reserved': return <CurrentMonthWidget {...tools} />;
-      case 'timers': return <TimersCard profile={profile} {...tools} />;
+      case 'timers': return <TimersCard profile={profile} {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'tasks': return <TasksStatsCard {...tasksProps} {...tools} />;
       case 'habits': return (
         <HabitsStatsCard
