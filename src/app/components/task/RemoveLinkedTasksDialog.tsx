@@ -51,7 +51,7 @@ const RemoveLinkedTasksDialog: React.FC<RemoveLinkedTasksDialogProps> = ({
   return (
     <Modal onClose={onClose} layer="top" panelClassName="modal-panel max-w-[420px] w-full p-[22px]">
       <div role="dialog" aria-modal="true" aria-labelledby="remove-linked-title">
-        <h3 id="remove-linked-title" className="text-lg font-semibold text-text-primary mb-1.5">
+        <h3 id="remove-linked-title" className="text-h3 text-text-primary mb-1.5">
           {Verb} &ldquo;{title}&rdquo;?
         </h3>
         <p className="text-sm text-text-secondary mb-3.5">

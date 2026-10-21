@@ -33,11 +33,14 @@ const LinkedTaskBanner: React.FC<LinkedTaskBannerProps> = ({
   return (
     <div
       role="status"
-      className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-[0.8125rem] text-text-primary"
+      className={`mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-[0.8125rem] ${
+        ok ? 'text-success-text' : 'text-text-primary'
+      }`}
       style={{ backgroundColor: ok ? 'var(--tm-success-subtle)' : 'var(--tm-warning-subtle)' }}
     >
+      {/* Leaf fill with its readable text for "all done", as the Done chip uses. */}
       {ok
-        ? <CircleCheck className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-success)' }} aria-hidden />
+        ? <CircleCheck className="w-4 h-4 flex-shrink-0" aria-hidden />
         : <TriangleAlert className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-warning)' }} aria-hidden />}
       {ok ? (
         <>
