@@ -72,6 +72,10 @@ export const DEFAULT_MOOD_SETTINGS: MoodCheckinSettings = {
 export const MOOD_LABELS = ['Rough', 'Low', 'Okay', 'Good', 'Great'] as const;
 export const ENERGY_LABELS = ['Drained', 'Low', 'Steady', 'Good', 'Charged'] as const;
 export const STRESS_LABELS = ['Calm', 'Mild', 'Some', 'High', 'Maxed'] as const;
+/** Week only, index = workload: 0 too light to 2 too much. */
+export const WORKLOAD_LABELS = ['Too light', 'About right', 'Too much'] as const;
+/** Month only, index = progress - 1. */
+export const PROGRESS_LABELS = ['None', 'A little', 'Some', 'Good', 'A lot'] as const;
 
 export const moodLabel = (mood: number): string => MOOD_LABELS[mood - 1] ?? '';
 
@@ -86,5 +90,7 @@ export const DEFAULT_MOOD_TAGS = [
 
 // The backend's input bounds (app/schemas/limits.py).
 export const MOOD_NOTE_MAX = 280;
+export const MOOD_HIGHLIGHT_MAX = 120;
+export const MOOD_WORD_MAX = 24;
 export const MOOD_TAG_MAX = 50;
 export const MOOD_TAGS_PER_CHECKIN_MAX = 20;

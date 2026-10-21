@@ -72,7 +72,7 @@ const click = async (el: Element) => { await act(async () => { (el as HTMLElemen
 describe('CalendarReportView mood', () => {
   it('adds the Mood tile and widens the week summary to 4 weeks', async () => {
     await render();
-    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-09-24', '2026-10-25', ['day']);
+    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-09-24', '2026-10-25');
     expect(text()).toContain('1 of 3 days logged');
     expect(text()).toContain('Using 4 weeks — one week is too short');
     // The Check-ins card averages Good and Low over the 28 days to today.
@@ -179,5 +179,93 @@ describe('CalendarReportView mood', () => {
     await click(buttonLabelled(/^Year$/));
     await click(buttonLabelled(/^October: average mood 3\.0/));
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
+  });
+
+  describe('weekly and monthly check-ins', () => {
+    const week = (period_start: string, mood: number, more: Partial<MoodCheckin> = {}): MoodCheckin =>
+      ({ ...checkin(period_start, mood), id: 20, period_kind: 'week', ...more });
+    const month = (period_start: string, mood: number, word: string | null): MoodCheckin =>
+      ({ ...checkin(period_start, mood), id: 30, period_kind: 'month', word });
+
+    it('draws each week as a dashed span on the month and lists it under Check-ins', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([
+        checkin('2026-10-20', 4),
+        checkin('2026-10-12', 4), // shares its Monday with the week below
+        week('2026-10-12', 5, { workload: 2, highlight: 'Finished the proposal' }),
+        week('2026-09-28', 2),
+      ]);
+      await render();
+      await click(buttonLabelled(/^Month$/));
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-10-31');
+
+      expect(buttonLabelled(/^Weekly check-in\. Week of Oct 12: Great · Too much workload · “Finished the proposal”\. Edit$/)).toBeDefined();
+      expect(buttonLabelled(/^Weekly check-in\. Week of Sep 28: Low\. Edit$/)).toBeDefined();
+      expect(text()).toContain('Weekly check-ins');
+      // Weekly check-ins never count as days.
+      expect(text()).toContain('2 of 21 days logged');
+
+      await click(buttonLabelled(/^Week of Oct 12: Great/));
+      expect(text()).toContain('Edit weekly check-in');
+      expect(text()).toContain('Week of Oct 12–18');
+      await click(buttonLabelled(/^Cancel$/));
+
+      // Hiding the spans from the legend leaves the list.
+      await click(buttonLabelled(/^Weekly check-in$/));
+      expect(buttonLabelled(/^Weekly check-in\. Week of Oct 12/)).toBeUndefined();
+      expect(buttonLabelled(/^Week of Oct 12: Great/)).toBeDefined();
+    });
+
+    it('replaces only the edited week, not the day that shares its Monday', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-12', 4), week('2026-10-12', 5)]);
+      api.saveMoodCheckin.mockImplementation(async (body: MoodCheckin) => ({ ...week('2026-10-12', body.mood), ...body }));
+      await render();
+      await click(buttonLabelled(/^Month$/));
+      await click(buttonLabelled(/^Week of Oct 12: Great/));
+      await click(buttonLabelled(/^Low$/));
+      await click(buttonLabelled(/^Save changes$/));
+
+      expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_kind: 'week', period_start: '2026-10-12', mood: 2 }));
+      expect(buttonLabelled(/^Week of Oct 12: Low/)).toBeDefined();
+      expect(buttonLabelled(/^Monday, October 12: Mood Good/)).toBeDefined();
+    });
+
+    it('marks monthly check-ins on the year and puts their words under Check-ins', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([
+        checkin('2026-10-20', 4),
+        checkin('2026-09-10', 3),
+        month('2026-09-01', 2, 'Grind'),
+        month('2026-10-01', 4, null),
+      ]);
+      await render();
+      await click(buttonLabelled(/^Year$/));
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-01-01', '2026-12-31');
+
+      expect(text()).toContain('Monthly check-in');
+      expect(buttonLabelled(/^September: average mood 3\.0 across 1 day\. Monthly check-in: Low · “Grind”\. Open September$/)).toBeDefined();
+      expect(text()).toContain('Months in a word');
+      expect(text()).not.toContain('Weekly check-ins');
+      expect(buttonLabelled(/^September: Low, “Grind”\. Edit$/)).toBeDefined();
+      expect(buttonLabelled(/^October: Good\. Edit$/)).toBeDefined();
+
+      await click(buttonLabelled(/^September: Low, “Grind”\. Edit$/));
+      expect(text()).toContain('Edit monthly check-in');
+      expect(text()).toContain('September 2026');
+    });
+
+    it('leaves the lists out while those check-ins are off and none exist', async () => {
+      await render();
+      expect(text()).not.toContain('Weekly check-ins');
+      await click(buttonLabelled(/^Year$/));
+      expect(text()).not.toContain('Months in a word');
+    });
+
+    it('offers to log the week when weekly check-ins are on', async () => {
+      api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { show_in_reports: true, weekly: true } });
+      await render();
+      expect(text()).toContain('No weekly check-in yet — it’s asked on Sunday.');
+      await click(buttonLabelled(/^Log it$/));
+      expect(text()).toContain('Weekly check-in');
+      expect(text()).toContain('Week of Oct 19–25');
+    });
   });
 });

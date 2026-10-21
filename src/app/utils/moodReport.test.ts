@@ -4,13 +4,16 @@ import { periodContaining } from './calendarReport';
 import { toLocalDateStr } from './dateUtils';
 import {
   indexDayCheckins,
+  indexMonthCheckins,
   monthMood,
   moodByTag,
   moodFetchRange,
   moodSummaryScope,
   periodRollingAverage,
+  quantile,
   rollingAverage,
   summarizeMood,
+  weekCheckinsIn,
 } from './moodReport';
 
 beforeAll(() => {
@@ -188,5 +191,54 @@ describe('moodByTag', () => {
   it('takes a lower bar when asked', () => {
     const rows = moodByTag(byDay, new Date(2026, 9, 1), new Date(2026, 9, 31), now, 2);
     expect(rows.map(r => [r.tag, r.days])).toEqual([['Exercised', 3], ['Social', 2], ['Tired', 3]]);
+  });
+});
+
+describe('interquartile range', () => {
+  it('interpolates between the values either side', () => {
+    // Positions (n-1)·q: 0.75 and 2.25 of [1, 2, 4, 5].
+    expect(quantile([1, 2, 4, 5], 0.25)).toBeCloseTo(1.75);
+    expect(quantile([1, 2, 4, 5], 0.75)).toBeCloseTo(4.25);
+    expect(quantile([1, 2, 4, 5], 0.5)).toBeCloseTo(3);
+  });
+
+  it('sorts first and leaves the input alone', () => {
+    const values = [5, 1, 4, 2];
+    expect(quantile(values, 0.25)).toBeCloseTo(1.75);
+    expect(values).toEqual([5, 1, 4, 2]);
+  });
+
+  it('collapses to the value for a single day or a steady month', () => {
+    expect([quantile([3], 0.25), quantile([3], 0.75)]).toEqual([3, 3]);
+    expect([quantile([4, 4, 4], 0.25), quantile([4, 4, 4], 0.75)]).toEqual([4, 4]);
+  });
+
+  it('spans a month of energy, leaving out days without it', () => {
+    const byDay = indexDayCheckins([
+      checkin('2026-06-01', 3, { energy: 2 }),
+      checkin('2026-06-02', 3, { energy: 5 }),
+      checkin('2026-06-03', 3),
+      checkin('2026-06-04', 3, { energy: 1 }),
+    ]);
+    const june = monthMood(byDay, '2026-06', 'energy');
+    expect(june.n).toBe(3);
+    expect([june.q1, june.q3]).toEqual([1.5, 3.5]);
+  });
+});
+
+describe('weekly and monthly check-ins', () => {
+  const week = (start: string, mood = 4) => checkin(start, mood, { period_kind: 'week' });
+  const month = (start: string, mood = 4) => checkin(start, mood, { period_kind: 'month' });
+
+  it("lists the weeks that overlap a month, including the one it starts in", () => {
+    const oct = periodContaining('month', new Date(2026, 9, 15));
+    const rows = [week('2026-11-02'), week('2026-10-26'), week('2026-09-28'), week('2026-09-21'), checkin('2026-10-05', 3), month('2026-10-01')];
+    expect(weekCheckinsIn(rows, oct.start, oct.end).map(r => r.period_start)).toEqual(['2026-09-28', '2026-10-26']);
+  });
+
+  it('indexes monthly check-ins by month', () => {
+    const byMonth = indexMonthCheckins([month('2026-09-01', 2), week('2026-09-07'), month('2026-10-01', 5)]);
+    expect([...byMonth.keys()]).toEqual(['2026-09', '2026-10']);
+    expect(byMonth.get('2026-10')?.mood).toBe(5);
   });
 });

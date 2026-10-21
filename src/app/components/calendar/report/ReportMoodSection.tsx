@@ -3,18 +3,26 @@
 import React, { useRef, useState } from 'react';
 import { Activity, Info, Smile } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
-import MoodCheckinModal, { type DaySummary } from '@/app/components/mood/MoodCheckinModal';
+import MoodCheckinModal, { type DaySummary, type PeriodSummary } from '@/app/components/mood/MoodCheckinModal';
 import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useToast } from '@/app/context/ToastContext';
 import { deleteMoodCheckin, describeError, saveMoodCheckin } from '@/app/lib/backend-api';
 import type { CalendarActivity } from '@/app/types/activity';
-import { checkinToSave, MOOD_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
+import { checkinToSave, MOOD_LABELS, moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
 import { formatDateRange, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
-import { describePeriod, type CalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
-import { PATTERN_MIN_DAYS, summarizeMood, type MoodScope, type MoodSummary } from '@/app/utils/moodReport';
+import { describePeriod, periodContaining, periodLength, type CalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
+import {
+  indexMonthCheckins,
+  PATTERN_MIN_DAYS,
+  summarizeMood,
+  weekCheckinsIn,
+  type MoodScope,
+  type MoodSummary,
+} from '@/app/utils/moodReport';
 import ReportMoodChart from './ReportMoodChart';
 import ReportMoodRelations from './ReportMoodRelations';
+import ReportPeriodCheckins from './ReportPeriodCheckins';
 
 /** How the Check-ins card and empty state name the days they cover. */
 const scopeName = (period: ReportPeriod, scope: MoodScope): string => {
@@ -27,7 +35,7 @@ const scopeName = (period: ReportPeriod, scope: MoodScope): string => {
   return name.startsWith('this ') || name.startsWith('last ') ? name : `in ${name}`;
 };
 
-const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: ReportPeriod }> = ({ summary, scope, period }) => {
+const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: ReportPeriod; children?: React.ReactNode }> = ({ summary, scope, period, children }) => {
   const average = summary.average ?? 3;
   const mood = Math.round(average);
   return (
@@ -68,6 +76,8 @@ const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: R
         </div>
       </div>
 
+      {children}
+
       {summary.logged < PATTERN_MIN_DAYS && (
         <div className="mt-auto flex flex-col gap-1.5 rounded-lg p-3 bg-surface-raised">
           <p className="text-xs text-text-secondary">
@@ -88,24 +98,30 @@ interface ReportMoodSectionProps {
   /** The report's calendar activity, which "Mood & your activity" compares mood against. */
   activity: CalendarActivity;
   byDay: Map<string, MoodCheckin>;
+  /** Every loaded check-in, for the weekly and monthly ones. */
+  checkins: MoodCheckin[];
+  settings: MoodCheckinSettings;
   scope: MoodScope;
-  /** Puts a saved check-in in place of its day's old one, or removes it (`saved` null). */
-  replaceDay: (date: string, saved: MoodCheckin | null) => void;
+  /** Puts a saved check-in in place of its period's old one, or removes it (`saved` null). */
+  replaceDay: (date: string, saved: MoodCheckin | null, kind?: MoodPeriodKind) => void;
   onSelectPeriod: (monthStart: Date) => void;
 }
 
 /**
  * The report's Mood section: "Mood over time" and the Check-ins summary,
  * then "Mood & your activity" and "Tags & mood", or an empty card with
- * "Log today". Any day dot opens its check-in to edit,
- * and a hollow one logs that day. A week's summary and correlations cover
- * the trailing 4 weeks, with a note saying so.
+ * "Log today". Any day dot opens its check-in to edit, and a hollow one logs
+ * that day; weekly and monthly check-ins open from their spans and the
+ * Check-ins list. A week's summary and correlations cover the trailing
+ * 4 weeks, with a note saying so.
  */
-const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, scope, replaceDay, onSelectPeriod }) => {
+const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, scope, replaceDay, onSelectPeriod }) => {
   const showToast = useToast();
   const { habits } = useHabitsContext();
-  const [modal, setModal] = useState<{ date: string; existing: MoodCheckin | null } | null>(null);
+  const [modal, setModal] = useState<{ kind: MoodPeriodKind; date: string; existing: MoodCheckin | null } | null>(null);
   const summary = summarizeMood(byDay, scope.start, scope.end);
+  const weeks = weekCheckinsIn(checkins, period.start, period.end);
+  const months = indexMonthCheckins(checkins);
 
   const todayStr = toLocalDateStr(new Date());
   const includesToday = todayStr >= toLocalDateStr(period.start) && todayStr <= toLocalDateStr(period.end);
@@ -121,17 +137,30 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
     };
   };
 
+  const periodSummary = (kind: 'week' | 'month', date: string): PeriodSummary => {
+    const target = periodContaining(kind, parseLocalDate(date));
+    const { average, logged, days } = summarizeMood(byDay, target.start, target.end);
+    // Tasks only when the report has the whole week or month: all its days, or the year's month.
+    const startStr = toLocalDateStr(target.start);
+    const endStr = toLocalDateStr(target.end);
+    const inside = period.kind === 'year'
+      ? report.buckets.filter(b => b.key === startStr.slice(0, 7))
+      : report.buckets.filter(b => b.key >= startStr && b.key <= endStr);
+    const covered = inside.length === (period.kind === 'year' ? 1 : periodLength(target));
+    return { average, logged, days, tasksDone: covered ? inside.reduce((n, b) => n + b.tasksCompleted, 0) : null };
+  };
+
   // The newest row we saved, so an older "Saved" toast's Undo can tell it has since changed.
   const latestSaved = useRef<MoodCheckin | null>(null);
   const dismissSavedToast = useRef<(() => void) | null>(null);
-  const setDay = (date: string, row: MoodCheckin | null) => {
+  const setDay = (date: string, row: MoodCheckin | null, kind: MoodPeriodKind = 'day') => {
     latestSaved.current = row;
-    replaceDay(date, row);
+    replaceDay(date, row, kind);
   };
 
   const restore = async (row: MoodCheckin) => {
     try {
-      setDay(row.period_start, await saveMoodCheckin(checkinToSave(row)));
+      setDay(row.period_start, await saveMoodCheckin(checkinToSave(row)), row.period_kind);
     } catch (err) {
       showToast(describeError(err, "Couldn't undo. Please try again."));
     }
@@ -139,7 +168,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
 
   const handleSaved = (saved: MoodCheckin, previous: MoodCheckin | null) => {
     setModal(null);
-    setDay(saved.period_start, saved);
+    setDay(saved.period_start, saved, saved.period_kind);
     dismissSavedToast.current?.();
     dismissSavedToast.current = null;
     if (previous) {
@@ -151,7 +180,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
       onClick: () => {
         if (latestSaved.current !== saved) return;
         deleteMoodCheckin(saved.id)
-          .then(() => setDay(saved.period_start, null))
+          .then(() => setDay(saved.period_start, null, saved.period_kind))
           .catch(err => showToast(describeError(err, "Couldn't undo. Please try again.")));
       },
     });
@@ -161,7 +190,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
     <>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mt-1">
         <h3 className="text-base sm:text-lg font-semibold text-text-primary">Mood</h3>
-        <span className="text-xs text-text-muted">from your daily check-ins</span>
+        <span className="text-xs text-text-muted">from your check-ins</span>
       </div>
 
       {summary.logged === 0 ? (
@@ -175,7 +204,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
             habits. Reminders are in Settings, under Mood check-ins.
           </p>
           {includesToday && (
-            <button type="button" onClick={() => setModal({ date: todayStr, existing: byDay.get(todayStr) ?? null })} className="btn btn-primary py-1.5 px-3 mt-2">
+            <button type="button" onClick={() => setModal({ kind: 'day', date: todayStr, existing: byDay.get(todayStr) ?? null })} className="btn btn-primary py-1.5 px-3 mt-2">
               Log today
             </button>
           )}
@@ -188,12 +217,23 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
                 period={period}
                 buckets={report.buckets}
                 byDay={byDay}
-                onDay={(date, existing) => setModal({ date, existing })}
+                weeks={weeks}
+                months={months}
+                onDay={(date, existing) => setModal({ kind: 'day', date, existing })}
+                onWeek={week => setModal({ kind: 'week', date: week.period_start, existing: week })}
                 onMonth={monthStart => onSelectPeriod(parseLocalDate(monthStart))}
               />
             </CardShell>
           </div>
-          <CheckinsCard summary={summary} scope={scope} period={period} />
+          <CheckinsCard summary={summary} scope={scope} period={period}>
+            <ReportPeriodCheckins
+              period={period}
+              weeks={weeks}
+              months={months}
+              settings={settings}
+              onOpen={(kind, date, existing) => setModal({ kind, date, existing })}
+            />
+          </CheckinsCard>
         </div>
       )}
 
@@ -210,9 +250,11 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
 
       {modal && (
         <MoodCheckinModal
+          kind={modal.kind}
           date={parseLocalDate(modal.date)}
           existing={modal.existing}
-          summary={daySummary(modal.date)}
+          summary={modal.kind === 'day' ? daySummary(modal.date) : null}
+          periodSummary={modal.kind === 'day' ? null : periodSummary(modal.kind, modal.date)}
           onClose={() => setModal(null)}
           onSaved={handleSaved}
         />

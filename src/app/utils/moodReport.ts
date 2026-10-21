@@ -2,7 +2,8 @@
  * The mood side of the calendar report: which days of check-ins a period
  * needs, and the averages, counts and rolling lines drawn from them. Only
  * daily check-ins feed these numbers, and a day without one is left out —
- * never counted as neutral.
+ * never counted as neutral. Weekly and monthly check-ins are shown beside
+ * them, never mixed in.
  */
 
 import type { MoodCheckin } from '@/app/types/mood';
@@ -203,3 +204,16 @@ export const monthMood = (byDay: Map<string, MoodCheckin>, monthKey: string, ser
     q3: quantile(values, 0.75),
   };
 };
+
+/** The weekly check-ins whose Mon–Sun week overlaps [start, end], oldest first. */
+export const weekCheckinsIn = (checkins: MoodCheckin[], start: Date, end: Date): MoodCheckin[] => {
+  const startStr = toLocalDateStr(addDays(start, -6));
+  const endStr = toLocalDateStr(end);
+  return checkins
+    .filter(c => c.period_kind === 'week' && c.period_start >= startStr && c.period_start <= endStr)
+    .sort((a, b) => a.period_start.localeCompare(b.period_start));
+};
+
+/** Monthly check-ins by their month, "YYYY-MM". */
+export const indexMonthCheckins = (checkins: MoodCheckin[]): Map<string, MoodCheckin> =>
+  new Map(checkins.filter(c => c.period_kind === 'month').map(c => [c.period_start.slice(0, 7), c]));

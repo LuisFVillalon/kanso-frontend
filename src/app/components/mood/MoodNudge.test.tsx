@@ -56,11 +56,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const saveProfile = vi.fn<(next: ProfileFields) => Promise<{ ok: boolean }>>(async () => ({ ok: true }));
+
 const render = async (props: Partial<React.ComponentProps<typeof MoodNudge>> = {}) => {
   await act(async () => {
     root.render(
       <ToastProvider>
-        <MoodNudge profile={profile} profileLoaded tasks={[]} habits={[]} {...props} />
+        <MoodNudge profile={profile} profileLoaded tasks={[]} habits={[]} onSaveProfile={saveProfile} {...props} />
       </ToastProvider>,
     );
   });
@@ -70,6 +72,8 @@ const text = () => container.textContent ?? '';
 const nudgeShown = () => text().includes('Calling it a day?');
 const button = (name: string) =>
   [...document.body.querySelectorAll('button')].find(b => b.textContent?.trim() === name || b.getAttribute('aria-label') === name)!;
+const inDialog = (name: string) =>
+  [...document.body.querySelector('[role="dialog"]')!.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === name)!;
 const click = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); };
 
 describe('MoodNudge', () => {
@@ -179,5 +183,103 @@ describe('MoodNudge', () => {
     expect(nudgeShown()).toBe(false);
     await act(async () => { vi.advanceTimersByTime(60 * 60 * 1000); });
     expect(nudgeShown()).toBe(true);
+  });
+
+  describe('on the day that ends a week or month', () => {
+    // Sunday Oct 25 ends the week of Mon Oct 19. Only Saturday rests here.
+    const sundayProfile = (moodCheckins = { ...DEFAULT_MOOD_SETTINGS, weekly: true }) =>
+      ({ ...profile, restDays: [6], moodCheckins }) as ProfileFields;
+    const weekRow = (mood: number): MoodCheckin => ({ ...checkin(mood), id: 2, period_kind: 'week', period_start: '2026-10-19' });
+
+    beforeEach(() => {
+      vi.setSystemTime(new Date(2026, 9, 25, 18, 4));
+      api.saveMoodCheckin.mockImplementation(async (body: MoodCheckin) => ({ ...checkin(body.mood), ...body, id: 9 }));
+    });
+
+    it('adds the weekly check-in to the same card, and saves it on the Monday', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([{ ...checkin(4), period_start: '2026-10-21' }]);
+      await render({ profile: sundayProfile() });
+      expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-19', '2026-10-25', ['day', 'week']);
+      expect(nudgeShown()).toBe(true);
+      expect(container.querySelectorAll('section')).toHaveLength(1);
+      expect(text()).toContain('Weekly check-in');
+
+      await click(button('Start'));
+      expect(document.body.textContent).toContain('Week of Oct 19–25');
+      expect(document.body.textContent).toContain('Your days averaged Good (4.0)');
+      await click(inDialog('Great'));
+      await click(button('Save check-in'));
+
+      expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_kind: 'week', period_start: '2026-10-19', mood: 5 }));
+      expect(text()).toContain('Weekly check-in logged as Great');
+      expect(nudgeShown()).toBe(true); // the day is still to log
+    });
+
+    it('shows the weekly check-in already logged', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([weekRow(2)]);
+      await render({ profile: sundayProfile() });
+      expect(text()).toContain('Weekly check-in logged as Low');
+      expect(button('Start')).toBeUndefined();
+    });
+
+    it('adds the monthly check-in on the last day of the month', async () => {
+      vi.setSystemTime(new Date(2026, 8, 30, 18, 4)); // Wednesday
+      await render({ profile: sundayProfile({ ...DEFAULT_MOOD_SETTINGS, weekly: true, monthly: true }) });
+      expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-09-01', '2026-09-30', ['day', 'month']);
+      expect(text()).toContain('Monthly check-in');
+      expect(text()).not.toContain('Weekly check-in');
+
+      await click(button('Start'));
+      await click(inDialog('Okay'));
+      await click(button('Save check-in'));
+      expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_kind: 'month', period_start: '2026-09-01', mood: 3 }));
+    });
+
+    it('does not nudge on a rest day, but offers logging the week by hand', async () => {
+      await render({ profile: { ...sundayProfile(), restDays: [0, 6] } });
+      expect(nudgeShown()).toBe(false);
+      expect(text()).not.toContain('Weekly check-in');
+      await click(button('Log this week'));
+      expect(document.body.textContent).toContain('Week of Oct 19–25');
+    });
+
+    it('offers the week alone when the daily check-in is off', async () => {
+      await render({ profile: sundayProfile({ ...DEFAULT_MOOD_SETTINGS, daily: false, weekly: true }) });
+      expect(nudgeShown()).toBe(false);
+      expect(button('Start')).toBeDefined();
+    });
+
+    it('hints once at turning weekly check-ins on, while they are off', async () => {
+      await render({ profile: sundayProfile(DEFAULT_MOOD_SETTINGS) });
+      expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-25', '2026-10-25', ['day']);
+      await click(button('Turn on weekly check-ins'));
+      expect(saveProfile).toHaveBeenCalledWith(expect.objectContaining({
+        moodCheckins: { ...DEFAULT_MOOD_SETTINGS, weekly: true },
+      }));
+
+      // Still there for the rest of the evening...
+      act(() => root.unmount());
+      root = createRoot(container);
+      await render({ profile: sundayProfile(DEFAULT_MOOD_SETTINGS) });
+      expect(text()).toContain('Turn on weekly check-ins');
+
+      // ...but never on a later Sunday.
+      act(() => root.unmount());
+      root = createRoot(container);
+      vi.setSystemTime(new Date(2026, 10, 1, 18, 4));
+      await render({ profile: sundayProfile(DEFAULT_MOOD_SETTINGS) });
+      expect(nudgeShown()).toBe(true);
+      expect(text()).not.toContain('Turn on weekly check-ins');
+    });
+
+    it('skips just the weekly check-in, leaving its chip', async () => {
+      await render({ profile: sundayProfile() });
+      await click(button('Start'));
+      await click(button('Skip'));
+      expect(api.saveMoodCheckin).not.toHaveBeenCalled();
+      expect(nudgeShown()).toBe(true);
+      expect(button('Start')).toBeUndefined();
+      expect(button('Log this week')).toBeDefined();
+    });
   });
 });

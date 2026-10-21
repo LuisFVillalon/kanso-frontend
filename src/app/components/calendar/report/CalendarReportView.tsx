@@ -25,7 +25,7 @@ import { useCalendarReport } from '@/app/hooks/useCalendarReport';
 import { useProfile } from '@/app/hooks/useProfile';
 import { useReportMood } from '@/app/hooks/useReportMood';
 import type { CalendarActivity } from '@/app/types/activity';
-import { moodLabel, type MoodCheckin } from '@/app/types/mood';
+import { moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate } from '@/app/utils/dateUtils';
 import {
   describePeriod,
@@ -251,7 +251,8 @@ interface ReportMood {
   checkins: MoodCheckin[] | null;
   error: string | null;
   retry: () => void;
-  replaceDay: (date: string, saved: MoodCheckin | null) => void;
+  replaceDay: (date: string, saved: MoodCheckin | null, kind?: MoodPeriodKind) => void;
+  settings: MoodCheckinSettings;
 }
 
 interface ReportBodyProps {
@@ -324,6 +325,8 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           report={report}
           activity={activity}
           byDay={byDay}
+          checkins={checkins ?? []}
+          settings={mood.settings}
           scope={scope}
           replaceDay={mood.replaceDay}
           onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
@@ -349,8 +352,8 @@ const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
 /**
  * Weekly / monthly / yearly report on the calendar page: tasks completed vs
  * planned, estimated hours, time in notes, habit check-ins and streaks, the
- * busiest days and an activity chart — plus mood from the daily check-ins,
- * unless "Show mood in reports" is off.
+ * busiest days and an activity chart — plus mood from the daily, weekly and
+ * monthly check-ins, unless "Show mood in reports" is off.
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
@@ -440,7 +443,7 @@ const CalendarReportView: React.FC = () => {
           period={period}
           report={report}
           activity={activity}
-          mood={moodHidden ? null : mood}
+          mood={moodHidden ? null : { ...mood, settings: profile.moodCheckins }}
           onSelectPeriod={setPeriod}
         />
       )}
