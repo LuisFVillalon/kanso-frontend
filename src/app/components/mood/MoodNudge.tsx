@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlarmClock, Moon, Smile } from 'lucide-react';
 import MoodCheckinModal, { type DaySummary } from '@/app/components/mood/MoodCheckinModal';
 import MoodFacePicker, { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
@@ -118,7 +118,13 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
     habitsTotal: isToday ? habits.length : 0,
   };
 
-  const setCheckin = (row: MoodCheckin | null) => setLoaded({ date: dayKey, checkin: row });
+  // The newest row we saved, so an older "Saved" toast's Undo can tell it has since changed.
+  const latestSaved = useRef<MoodCheckin | null>(null);
+  const dismissSavedToast = useRef<(() => void) | null>(null);
+  const setCheckin = (row: MoodCheckin | null) => {
+    latestSaved.current = row;
+    setLoaded({ date: dayKey, checkin: row });
+  };
 
   const restore = async (row: MoodCheckin) => {
     try {
@@ -132,12 +138,15 @@ const MoodNudge: React.FC<Props> = ({ profile, profileLoaded, tasks, habits }) =
     setModal(null);
     setCheckin(saved);
     if (previous) {
+      dismissSavedToast.current?.();
+      dismissSavedToast.current = null;
       showToast('Check-in updated.', 'success', { label: 'Undo', onClick: () => restore(previous) });
       return;
     }
-    showToast(`Saved · ${moodLabel(saved.mood)}`, 'success', {
+    dismissSavedToast.current = showToast(`Saved · ${moodLabel(saved.mood)}`, 'success', {
       label: 'Undo',
       onClick: () => {
+        if (latestSaved.current !== saved) return;
         deleteMoodCheckin(saved.id)
           .then(() => setCheckin(null))
           .catch(err => showToast(describeError(err, "Couldn't undo. Please try again.")));

@@ -18,7 +18,8 @@ interface Toast {
   action?: ToastAction;
 }
 
-type ShowToast = (message: string, variant?: ToastVariant, action?: ToastAction) => void;
+/** Shows a toast and returns a function that dismisses it early. */
+type ShowToast = (message: string, variant?: ToastVariant, action?: ToastAction) => () => void;
 
 const ToastContext = createContext<ShowToast | null>(null);
 
@@ -50,6 +51,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Keep the stack short: the newest three are plenty.
     setToasts(prev => [...prev.slice(-2), { id, message, variant, action }]);
     setTimeout(() => dismiss(id), action ? DISMISS_WITH_ACTION_AFTER_MS : DISMISS_AFTER_MS);
+    return () => dismiss(id);
   }, [dismiss]);
 
   return (

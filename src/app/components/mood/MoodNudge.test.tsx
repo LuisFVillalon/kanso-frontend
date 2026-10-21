@@ -124,6 +124,23 @@ describe('MoodNudge', () => {
     expect(text()).toContain('Logged today as Good');
   });
 
+  it('keeps an edited check-in when the older "Saved" toast\'s Undo would delete it', async () => {
+    await render();
+    await click(button('Low'));
+    await click(button('Save check-in'));
+    expect(document.body.textContent).toContain('Saved · Low');
+
+    await click(button('Edit'));
+    await click(button('Great'));
+    await click(button('Save changes'));
+    expect(document.body.textContent).toContain('Check-in updated.');
+
+    // The edit retires the stale "Saved" toast; had it stayed, its Undo would delete the edited row.
+    expect(document.body.textContent).not.toContain('Saved · Low');
+    expect(api.deleteMoodCheckin).not.toHaveBeenCalled();
+    expect(text()).toContain('Logged today as Great');
+  });
+
   it('hides after "Not today", for the rest of the day, leaving the chip', async () => {
     await render();
     await click(button('Not today'));
