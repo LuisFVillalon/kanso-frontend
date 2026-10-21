@@ -1,7 +1,8 @@
 // Light/dark mode — same mechanism as kanso-landing's lib/theme.ts. With
 // nothing saved, the OS setting applies (the prefers-color-scheme block in
-// globals.css). The toggle (components/common/ThemeToggle.tsx) pins a theme
-// by stamping data-theme on <html> and remembering it in localStorage.
+// globals.css). The toggle (components/common/ThemeToggle.tsx) and the
+// account menu's Appearance control pin a theme by stamping data-theme on
+// <html> and remembering it in localStorage.
 // Local-only: not synced to the backend profile.
 
 export type ColorScheme = 'light' | 'dark';
@@ -27,14 +28,7 @@ export function currentColorScheme(): ColorScheme {
 
 /** Flips between light and dark, overriding the OS setting, and remembers the choice. */
 export function toggleColorScheme(): void {
-  const next: ColorScheme = currentColorScheme() === 'dark' ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', COLOR_SCHEME_BG[next]));
-  try {
-    localStorage.setItem(COLOR_SCHEME_KEY, next);
-  } catch {
-    // Storage blocked (private mode): the choice lasts until reload.
-  }
+  setColorScheme(currentColorScheme() === 'dark' ? 'light' : 'dark');
 }
 
 /** Settings → Appearance's choice: a pinned theme, or 'system' to follow the OS. */

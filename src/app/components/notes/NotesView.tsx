@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { useNotesContext } from '@/app/context/NotesContext';
@@ -164,11 +163,6 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
   return (
     <div className="min-h-screen flex flex-col">
       <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-5 flex items-center gap-3">
-        <Link href="/" className="flex items-center gap-1 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors">
-          <ChevronLeft className="w-4 h-4" />
-          Home
-        </Link>
-        <span className="text-text-muted select-none">/</span>
         <h1 className="text-2xl sm:text-3xl text-text-primary">Notes</h1>
       </div>
       <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 pb-4 sm:pb-6 min-h-0">

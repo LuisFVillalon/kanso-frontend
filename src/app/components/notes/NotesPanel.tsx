@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { FileText, LayoutGrid, FolderClosed } from 'lucide-react';
+import { ArrowDownUp, FileText, LayoutGrid, FolderClosed } from 'lucide-react';
 import NoteCard from '@/app/components/notes/NoteCard';
 import NotesGridView from '@/app/components/notes/NotesGridView';
 import TagFolderOverlay from '@/app/components/notes/TagFolderOverlay';
@@ -27,7 +27,13 @@ interface NotesPanelProps {
   tagFilter?: Tag[];
   profile: ProfileFields;
   onSaveProfile: ReturnType<typeof useProfile>['saveProfile'];
+  /** Edit-recency order of `notes`, toggled from the panel header. */
+  noteOrder: NoteOrder;
+  onNoteOrderChange: (order: NoteOrder) => void;
 }
+
+export type NoteOrder = 'newest' | 'oldest';
+export const isNoteOrder = (c: unknown): c is NoteOrder => c === 'newest' || c === 'oldest';
 
 type ViewMode = 'cards' | 'folders';
 const isViewMode = (c: unknown): c is ViewMode => c === 'cards' || c === 'folders';
@@ -56,6 +62,8 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
   tagFilter,
   profile,
   onSaveProfile,
+  noteOrder,
+  onNoteOrderChange,
 }) => {
   const [activeNoteId, setActiveNoteId] = useState<number | null>(null);
   const [viewMode, setViewMode] = usePersistedPref<ViewMode>(
@@ -89,6 +97,19 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
         </div>
       ) : (
         <>
+          <div className="panel-header">
+            <button
+              type="button"
+              onClick={() => onNoteOrderChange(noteOrder === 'newest' ? 'oldest' : 'newest')}
+              aria-label={`Notes order: ${noteOrder === 'newest' ? 'newest' : 'oldest'} first. Switch to ${noteOrder === 'newest' ? 'oldest' : 'newest'} first`}
+              title="Flip the notes' order"
+              className="toolbar-control ml-auto gap-1.5"
+            >
+              <ArrowDownUp className="w-3.5 h-3.5" aria-hidden />
+              {noteOrder === 'newest' ? 'Newest first' : 'Oldest first'}
+            </button>
+          </div>
+
           {/* View toggle — cards (new) vs. folders (the original file/folder browser) */}
           <button
             type="button"

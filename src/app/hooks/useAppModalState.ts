@@ -1,35 +1,15 @@
 import { useState } from 'react';
-import { FilterType, Tag, EditTaskModalState, NewTag, BaseTaskForm, NewHabit } from '@/app/types/task';
+import { Tag, EditTaskModalState, NewTag, BaseTaskForm, NewHabit } from '@/app/types/task';
 import { DEFAULT_ACCENT } from '@/app/lib/theme';
 
 /**
- * All of TaskManager's UI state — filters/search, modal-open flags, and
- * in-progress form data — in one hook. Previously split across this hook
- * and a separate useTaskManagerUIState with no principled boundary between
- * them (e.g. showCreateHabitModal lived here while showManageHabitsModal
- * lived there); merged into one so "is this modal open" always has exactly
- * one place to look.
+ * The app shell's modal state — modal-open flags and in-progress form data —
+ * in one hook, so "is this modal open" always has exactly one place to look.
+ * AppShell owns it, which is what lets the rail's New menu and the account
+ * menu open these modals from every page. The home list's own view state
+ * (show/sort, search, tag filter) lives in TaskManager.
  */
-export const useTaskManagerState = () => {
-  const [sortOrder, setSortOrder] = useState<Record<FilterType, 'asc' | 'desc'>>({
-    all: 'asc',
-    active: 'asc',
-    completed: 'asc',
-    priority: 'asc',
-    created: 'asc',
-    duration: 'asc',
-  });
-
-  // Independent of the task filter/sort above — controls only the note
-  // list's edit-recency order, so toggling it never touches the active
-  // task filter or the tasks' own sort order.
-  const [noteSortOrder, setNoteSortOrder] = useState<'asc' | 'desc'>('asc');
-
-  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
-  const [showTagDropdown, setShowTagDropdown] = useState(false);
-  const [filter, setFilter] = useState<FilterType>('all');
-  const [searchTerm, setSearchTerm] = useState<string>('');
-
+export const useAppModalState = () => {
   // Modal states
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [showEditTaskModal, setShowEditTaskModal] = useState<EditTaskModalState>({
@@ -45,7 +25,6 @@ export const useTaskManagerState = () => {
   const [historyHabitId, setHistoryHabitId] = useState<number | null>(null);
   const [historyFromManageHabits, setHistoryFromManageHabits] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [taskSidebarOpen, setTaskSidebarOpen] = useState(false);
 
   // Form states
   const [newTag, setNewTag] = useState<NewTag>({
@@ -71,19 +50,6 @@ export const useTaskManagerState = () => {
     created_date: '',
   });
   return {
-    // State
-    sortOrder,
-    setSortOrder,
-    noteSortOrder,
-    setNoteSortOrder,
-    selectedTags,
-    setSelectedTags,
-    showTagDropdown,
-    setShowTagDropdown,
-    filter,
-    setFilter,
-    searchTerm,
-    setSearchTerm,
     showNewTaskModal,
     setShowNewTaskModal,
     showEditTaskModal,
@@ -106,8 +72,6 @@ export const useTaskManagerState = () => {
     setHistoryFromManageHabits,
     showSettings,
     setShowSettings,
-    taskSidebarOpen,
-    setTaskSidebarOpen,
     newTag,
     setNewTag,
     newHabit,

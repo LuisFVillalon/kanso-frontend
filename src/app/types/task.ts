@@ -6,7 +6,7 @@ Variables Summary:
 - EditTaskModalState: Interface for edit modal state with status and task.
 - Tag: Interface for tag objects with id, name, color.
 - Task: Interface for task objects with all properties.
-- FilterType: Union type for filter options.
+- TaskView: How the home Tasks list is shown (which tasks, sorted by what, which way).
 - BaseTaskForm: Base interface for task forms.
 - NewTaskForm: Interface for task creation form, extends BaseTaskForm.
 - EditTaskForm: Interface for task editing form, extends BaseTaskForm with completed.
@@ -32,7 +32,17 @@ export interface Tag {
   archived_at?: string | null;
 }
 
-export type FilterType = 'all' | 'active' | 'completed' | 'priority' | 'created' | 'duration';
+/** Which tasks the home Tasks list shows. */
+export type TaskShow = 'open' | 'done' | 'all';
+/** What the home Tasks list is sorted by. */
+export type TaskSortKey = 'due' | 'priority' | 'duration' | 'created';
+export type SortOrder = 'asc' | 'desc';
+
+export interface TaskView {
+  show: TaskShow;
+  sortKey: TaskSortKey;
+  sortOrder: SortOrder;
+}
 export type TaskCategory = 'homework' | 'test' | 'project' | 'interview' | 'skill';
 
 export interface Task {

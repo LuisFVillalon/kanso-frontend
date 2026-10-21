@@ -4,6 +4,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '@/app/types/task';
 import { groupLinkedTasks } from '@/app/utils/taskUtils';
+import { DEFAULT_TASK_VIEW } from '@/app/hooks/useTaskFiltering';
 import TasksPanel from './TasksPanel';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -53,6 +54,11 @@ const render = (tasks: Task[]) =>
       activeTaskCount={tasks.length}
       occupiedPriorities={[]}
       compact={false}
+      view={DEFAULT_TASK_VIEW}
+      onViewChange={vi.fn()}
+      selectedTags={[]}
+      onToggleTag={vi.fn()}
+      onClearTags={vi.fn()}
       {...handlers}
     />,
   ));
@@ -204,6 +210,11 @@ describe('TasksPanel tasks added from Canvas', () => {
         activeTaskCount={tasks.length}
         occupiedPriorities={[]}
         compact={false}
+        view={DEFAULT_TASK_VIEW}
+        onViewChange={vi.fn()}
+        selectedTags={[]}
+        onToggleTag={vi.fn()}
+        onClearTags={vi.fn()}
         canvasSubmitted={canvasSubmitted}
         {...handlers}
       />,
