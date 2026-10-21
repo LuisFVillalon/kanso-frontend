@@ -11,7 +11,6 @@ import {
   dismissNotifications,
   fetchNotificationPreferences,
   fetchNotifications,
-  markAllNotificationsRead,
   markNotificationsRead,
   updateNotificationPreferences,
 } from '@/app/lib/backend-api';
@@ -145,7 +144,7 @@ export const NotificationsProvider: React.FC<{ children: React.ReactNode }> = ({
     if (unread.length === 0) return;
     unread.forEach(id => locallyRead.current.add(id));
     setNotifications(prev => applyLocalState(prev));
-    markAllNotificationsRead().catch(err => {
+    markNotificationsRead(unread).catch(err => {
       console.error('Failed to mark all notifications read:', err);
       unread.forEach(id => locallyRead.current.delete(id));
       setNotifications(prev => prev.map(n => (unread.includes(n.id) ? { ...n, read: false } : n)));

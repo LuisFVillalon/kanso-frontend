@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => {
     ApiError,
     fetchNotifications: vi.fn(),
     markNotificationsRead: vi.fn(),
-    markAllNotificationsRead: vi.fn(),
     dismissNotifications: vi.fn(),
     fetchNotificationPreferences: vi.fn(),
     updateNotificationPreferences: vi.fn(),
@@ -31,7 +30,6 @@ vi.mock('@/app/lib/backend-api', () => ({
   describeError: (_err: unknown, fallback: string) => fallback,
   fetchNotifications: mocks.fetchNotifications,
   markNotificationsRead: mocks.markNotificationsRead,
-  markAllNotificationsRead: mocks.markAllNotificationsRead,
   dismissNotifications: mocks.dismissNotifications,
   fetchNotificationPreferences: mocks.fetchNotificationPreferences,
   updateNotificationPreferences: mocks.updateNotificationPreferences,
@@ -133,6 +131,24 @@ describe('NotificationsProvider polling and toasts', () => {
     await poll();
     expect(ctx.notifications[0].read).toBe(true);
     expect(mocks.markNotificationsRead).toHaveBeenCalledWith(['a']);
+  });
+
+  it('marks all read using only the notifications on screen', async () => {
+    mocks.fetchNotifications.mockResolvedValue([notification('a'), notification('b', { read: true }), notification('c')]);
+    await mount();
+    act(() => ctx.markAllRead());
+    expect(ctx.unreadCount).toBe(0);
+    expect(mocks.markNotificationsRead).toHaveBeenCalledWith(['a', 'c']);
+  });
+
+  it('puts notifications back to unread when marking all read fails', async () => {
+    mocks.fetchNotifications.mockResolvedValue([notification('a'), notification('b')]);
+    mocks.markNotificationsRead.mockRejectedValue(new Error('offline'));
+    await mount();
+    act(() => ctx.markAllRead());
+    await settle();
+    expect(ctx.unreadCount).toBe(2);
+    expect(toasts()).toContain("Couldn't mark your notifications read. Please try again.");
   });
 
   it('removes a dismissed notification and keeps it out of later polls', async () => {

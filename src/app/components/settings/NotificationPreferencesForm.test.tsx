@@ -126,6 +126,8 @@ describe('NotificationPreferencesForm', () => {
     act(() => typeInto(unit, 'days'));
     act(() => typeInto(amount, '8'));
     expect(document.body.textContent).toContain('from 1 minute up to 7 days');
+    await submit();
+    expect(onSave).not.toHaveBeenCalled();
     act(() => typeInto(unit, 'minutes'));
     act(() => typeInto(amount, '45'));
     await submit();

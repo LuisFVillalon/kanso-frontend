@@ -717,25 +717,21 @@ export async function fetchNotifications(): Promise<AppNotification[]> {
   return res.json();
 }
 
-/** Marks notifications read by id (at most 200 per call). */
+const MARK_READ_BATCH = 200;
+
+/** Marks notifications read by id, in batches of the backend's 200-per-call cap. */
 export async function markNotificationsRead(ids: string[]): Promise<void> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/mark-notifications-read`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ ids }),
-  });
-  await assertOk(res, "markNotificationsRead");
-}
-
-/** Marks every notification /get-notifications currently returns as read. */
-export async function markAllNotificationsRead(): Promise<void> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/mark-all-notifications-read${timeZoneQuery()}`, {
-    method: 'POST',
-    headers,
-  });
-  await assertOk(res, "markAllNotificationsRead");
+  const batches: string[][] = [];
+  for (let i = 0; i < ids.length; i += MARK_READ_BATCH) batches.push(ids.slice(i, i + MARK_READ_BATCH));
+  await Promise.all(batches.map(async batch => {
+    const res = await fetch(`${API_BASE_URL}/mark-notifications-read`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ids: batch }),
+    });
+    await assertOk(res, "markNotificationsRead");
+  }));
 }
 
 /** Dismisses notifications by id (at most 200 per call), so they leave the list for good. */
