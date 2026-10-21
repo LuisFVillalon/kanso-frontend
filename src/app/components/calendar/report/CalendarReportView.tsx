@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   CalendarRange,
   ChartColumn,
@@ -13,12 +13,18 @@ import {
   Hourglass,
   Percent,
   Repeat,
+  Smile,
   Star,
   Trophy,
 } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
 import { formatHours } from '@/app/components/stats/charts';
+import { moodColor } from '@/app/components/mood/MoodFacePicker';
+import { useAuth } from '@/app/context/AuthContext';
 import { useCalendarReport } from '@/app/hooks/useCalendarReport';
+import { useProfile } from '@/app/hooks/useProfile';
+import { useReportMood } from '@/app/hooks/useReportMood';
+import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate } from '@/app/utils/dateUtils';
 import {
   describePeriod,
@@ -31,7 +37,9 @@ import {
   type ReportPeriod,
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
+import { indexDayCheckins, moodSummaryScope, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
 import ReportActivityChart from './ReportActivityChart';
+import ReportMoodSection from './ReportMoodSection';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
   { kind: 'week', label: 'Week' },
@@ -46,7 +54,7 @@ const iconClass = 'w-3.5 h-3.5 sm:w-4 sm:h-4';
 interface StatTileProps {
   icon: React.ReactNode;
   title: string;
-  value: string;
+  value: React.ReactNode;
   detail: string;
   color: string;
   bg: string;
@@ -68,8 +76,32 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 const plannedDetail = (report: CalendarReport): string =>
   report.tasksPlanned === 0 ? 'No tasks due' : `${report.plannedCompleted} of ${plural(report.tasksPlanned, 'task')} due`;
 
-const StatTiles: React.FC<{ report: CalendarReport }> = ({ report }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+const MoodTile: React.FC<{ summary: MoodSummary | null; current: boolean }> = ({ summary, current }) => {
+  const mood = summary?.average != null ? Math.round(summary.average) : null;
+  const color = mood ? moodColor(mood) : 'var(--tm-text-muted)';
+  return (
+    <StatTile
+      icon={<Smile className={iconClass} />}
+      title="Mood"
+      value={summary?.average != null ? (
+        <>
+          {moodLabel(mood!)} <span className="text-sm font-semibold text-text-muted">{summary.average.toFixed(1)}</span>
+        </>
+      ) : '—'}
+      detail={!summary
+        ? 'Couldn’t load check-ins'
+        : summary.logged > 0
+          ? `${summary.logged} of ${plural(summary.days, 'day')} logged`
+          : current ? 'No check-ins yet' : 'No check-ins'}
+      color={color}
+      bg={`color-mix(in srgb, ${color} 10%, var(--tm-surface))`}
+    />
+  );
+};
+
+/** `mood` undefined hides the Mood tile ("Show mood in reports" is off); null means it failed to load. */
+const StatTiles: React.FC<{ report: CalendarReport; mood?: MoodSummary | null; current: boolean }> = ({ report, mood, current }) => (
+  <div className={`grid grid-cols-2 sm:grid-cols-3 ${mood === undefined ? 'lg:grid-cols-5' : 'lg:grid-cols-6'} gap-2 sm:gap-3`}>
     <StatTile
       icon={<CircleCheck className={iconClass} />}
       title="Completed"
@@ -110,6 +142,7 @@ const StatTiles: React.FC<{ report: CalendarReport }> = ({ report }) => (
       color="var(--tm-success)"
       bg="var(--tm-surface-raised)"
     />
+    {mood !== undefined && <MoodTile summary={mood} current={current} />}
   </div>
 );
 
@@ -212,15 +245,30 @@ const HabitList: React.FC<{ report: CalendarReport; days: number }> = ({ report,
 const isEmpty = (r: CalendarReport) =>
   r.tasksPlanned === 0 && r.tasksCompleted === 0 && r.noteSeconds === 0 && r.habitCheckIns === 0;
 
+interface ReportMood {
+  /** Null when they failed to load. */
+  checkins: MoodCheckin[] | null;
+  error: string | null;
+  retry: () => void;
+  replaceDay: (date: string, saved: MoodCheckin | null) => void;
+}
+
 interface ReportBodyProps {
   period: ReportPeriod;
   report: CalendarReport;
+  /** Null when "Show mood in reports" is off. */
+  mood: ReportMood | null;
+  onSelectPeriod: (period: ReportPeriod) => void;
 }
 
-const ReportBody: React.FC<ReportBodyProps> = ({ period, report }) => {
+const ReportBody: React.FC<ReportBodyProps> = ({ period, report, mood, onSelectPeriod }) => {
   const days = elapsedDays(period);
+  const checkins = mood?.checkins;
+  const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
+  const periodMood = checkins ? summarizeMood(byDay, period.start, period.end) : null;
+  const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
-  if (isEmpty(report)) {
+  if (isEmpty(report) && !periodMood?.logged) {
     return (
       <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
         <CalendarRange className="w-8 h-8 text-text-muted" aria-hidden="true" />
@@ -236,7 +284,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report }) => {
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      <StatTiles report={report} />
+      <StatTiles report={report} mood={mood ? periodMood : undefined} current={current} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <div className="lg:col-span-2">
@@ -260,14 +308,30 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report }) => {
           <HabitList report={report} days={days} />
         </CardShell>
       </div>
+
+      {mood && (mood.error ? (
+        <div className="card-glass p-4 flex flex-wrap items-center gap-3" role="alert">
+          <p className="text-sm text-text-primary flex-1 min-w-0">{mood.error}</p>
+          <button type="button" onClick={mood.retry} className="btn btn-secondary py-1.5 px-3">Try again</button>
+        </div>
+      ) : (
+        <ReportMoodSection
+          period={period}
+          report={report}
+          byDay={byDay}
+          scope={moodSummaryScope(period)}
+          replaceDay={mood.replaceDay}
+          onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
+        />
+      ))}
     </div>
   );
 };
 
-const ReportSkeleton: React.FC = () => (
+const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
   <div className="flex flex-col gap-3 sm:gap-4" aria-hidden="true">
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-      {Array.from({ length: 5 }, (_, i) => (
+    <div className={`grid grid-cols-2 sm:grid-cols-3 ${tiles === 6 ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-2 sm:gap-3`}>
+      {Array.from({ length: tiles }, (_, i) => (
         <div key={i} className="h-24 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--tm-surface-raised)' }} />
       ))}
     </div>
@@ -280,11 +344,17 @@ const ReportSkeleton: React.FC = () => (
 /**
  * Weekly / monthly / yearly report on the calendar page: tasks completed vs
  * planned, estimated hours, time in notes, habit check-ins and streaks, the
- * busiest days and an activity chart.
+ * busiest days and an activity chart — plus mood from the daily check-ins,
+ * unless "Show mood in reports" is off.
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
   const { report, loading, error, retry } = useCalendarReport(period);
+  const { user } = useAuth();
+  const { profile, loaded: profileLoaded } = useProfile(user);
+  // Until the profile loads we don't know whether mood is hidden, so it's fetched meanwhile.
+  const moodHidden = profileLoaded && !profile.moodCheckins.show_in_reports;
+  const mood = useReportMood(period, !moodHidden);
 
   const current = periodContaining(period.kind, new Date());
   const isCurrent = isSamePeriod(period, current);
@@ -355,17 +425,23 @@ const CalendarReportView: React.FC = () => {
             Try again
           </button>
         </div>
-      ) : loading || !report ? (
+      ) : loading || !report || !profileLoaded || mood.loading ? (
         <>
           <span className="sr-only" role="status">Loading report…</span>
-          <ReportSkeleton />
+          <ReportSkeleton tiles={moodHidden ? 5 : 6} />
         </>
       ) : (
-        <ReportBody period={period} report={report} />
+        <ReportBody
+          period={period}
+          report={report}
+          mood={moodHidden ? null : mood}
+          onSelectPeriod={setPeriod}
+        />
       )}
 
       <p className="text-[11px] sm:text-xs text-text-muted">
         Completions count by the day a task was checked off; tasks completed before completion times were recorded aren’t counted. Habit streaks are as of today.
+        {!moodHidden && ' Mood comes from your daily check-ins; days without one are left out of every mood number, never counted as neutral.'}
       </p>
     </section>
   );

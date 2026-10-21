@@ -20,7 +20,7 @@ interface ReportActivityChartProps {
 const showLabel = (kind: ReportPeriodKind, index: number) =>
   kind !== 'month' || index === 0 || (index + 1) % 5 === 0;
 
-const MetricButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+export const MetricButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
   <button
     type="button"
     onClick={onClick}
@@ -33,7 +33,7 @@ const MetricButton: React.FC<{ active: boolean; onClick: () => void; children: R
   </button>
 );
 
-const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
+export const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
   <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
     <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
     {label}

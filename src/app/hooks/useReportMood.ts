@@ -1,0 +1,67 @@
+import { useCallback, useEffect, useState } from 'react';
+import { fetchMoodCheckins } from '@/app/lib/backend-api';
+import type { MoodCheckin } from '@/app/types/mood';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
+import type { ReportPeriod } from '@/app/utils/calendarReport';
+import { moodFetchRange } from '@/app/utils/moodReport';
+
+interface Fetched {
+  key: string;
+  checkins: MoodCheckin[];
+}
+
+/**
+ * Loads the daily mood check-ins a report period needs (see moodFetchRange:
+ * a week also pulls in the 4 weeks before its end). `enabled` false skips
+ * the request — the "Show mood in reports" setting is off. Saving or
+ * deleting a check-in from the report patches the loaded list in place.
+ */
+export function useReportMood(period: ReportPeriod, enabled: boolean) {
+  const range = moodFetchRange(period);
+  const startStr = toLocalDateStr(range.start);
+  const endStr = toLocalDateStr(range.end);
+  const key = `${startStr}:${endStr}`;
+
+  const [fetched, setFetched] = useState<Fetched | null>(null);
+  const [error, setError] = useState<{ key: string; message: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    fetchMoodCheckins(startStr, endStr, ['day'])
+      .then(checkins => {
+        if (!cancelled) setFetched({ key, checkins });
+      })
+      .catch(err => {
+        console.error('[useReportMood] Failed to fetch mood check-ins:', err);
+        if (!cancelled) setError({ key, message: 'Couldn’t load your mood check-ins.' });
+      });
+    return () => {
+      cancelled = true;
+      setError(null);
+    };
+  }, [enabled, key, startStr, endStr, attempt]);
+
+  const ready = fetched?.key === key ? fetched.checkins : null;
+  const failed = !ready && error?.key === key ? error.message : null;
+
+  /** Puts a saved check-in in place of its day's old one, or removes a day's check-in (`saved` null). */
+  const replaceDay = useCallback((date: string, saved: MoodCheckin | null) => {
+    setFetched(prev => {
+      if (!prev) return prev;
+      const rest = prev.checkins.filter(c => c.period_start !== date);
+      return { ...prev, checkins: saved ? [...rest, saved] : rest };
+    });
+  }, []);
+
+  const retry = useCallback(() => setAttempt(a => a + 1), []);
+
+  return {
+    checkins: ready,
+    loading: enabled && !ready && !failed,
+    error: failed,
+    retry,
+    replaceDay,
+  };
+}
