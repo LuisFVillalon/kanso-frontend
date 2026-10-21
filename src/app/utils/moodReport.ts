@@ -99,6 +99,47 @@ export const summarizeMood = (
   return { average: logged > 0 ? total / logged : null, logged, days: days.length, distribution };
 };
 
+/** Tags on fewer days than this are left off the Tags & mood card. */
+export const TAG_MIN_DAYS = 3;
+
+export interface TagMood {
+  tag: string;
+  /** Logged days carrying the tag. */
+  days: number;
+  average: number;
+}
+
+/**
+ * Average mood on the days over [start, end], up to today, that carry each
+ * mood tag — tags used on at least `minDays` days, best average first. Only
+ * means and day counts: with this many tags any "significant" claim would
+ * be noise.
+ */
+export const moodByTag = (
+  byDay: Map<string, MoodCheckin>,
+  start: Date,
+  end: Date,
+  now: Date = new Date(),
+  minDays = TAG_MIN_DAYS,
+): TagMood[] => {
+  const today = startOfDay(now);
+  const tags = new Map<string, { days: number; total: number }>();
+  for (const day of eachDay(start, end < today ? end : today)) {
+    const checkin = byDay.get(day);
+    if (!checkin) continue;
+    for (const tag of new Set(checkin.tags)) {
+      const entry = tags.get(tag) ?? { days: 0, total: 0 };
+      entry.days++;
+      entry.total += checkin.mood;
+      tags.set(tag, entry);
+    }
+  }
+  return [...tags]
+    .filter(([, t]) => t.days >= minDays)
+    .map(([tag, t]) => ({ tag, days: t.days, average: t.total / t.days }))
+    .sort((a, b) => b.average - a.average || b.days - a.days || a.tag.localeCompare(b.tag));
+};
+
 /**
  * Each point's average over itself and the `window - 1` before it, skipping
  * gaps; null where fewer than `min` of them have a value.

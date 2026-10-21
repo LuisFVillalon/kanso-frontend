@@ -5,6 +5,7 @@ import { toLocalDateStr } from './dateUtils';
 import {
   indexDayCheckins,
   monthMood,
+  moodByTag,
   moodFetchRange,
   moodSummaryScope,
   periodRollingAverage,
@@ -156,5 +157,36 @@ describe('monthMood', () => {
     expect(oct.average).toBeCloseTo(3.4);
     expect([oct.q1, oct.q3]).toEqual([3, 4]);
     expect(monthMood(byDay, '2026-09', 'mood')).toEqual({ n: 0, average: null, q1: null, q3: null });
+  });
+});
+
+describe('moodByTag', () => {
+  const now = new Date(2026, 9, 21, 20);
+  const tagged = (date: string, mood: number, tags: string[]) => checkin(date, mood, { tags });
+  const byDay = indexDayCheckins([
+    tagged('2026-10-01', 5, ['Exercised', 'Social']),
+    tagged('2026-10-02', 4, ['Exercised']),
+    tagged('2026-10-03', 4, ['Exercised', 'Tired', 'Tired']),
+    tagged('2026-10-04', 2, ['Tired']),
+    tagged('2026-10-05', 1, ['Tired', 'Social']),
+    tagged('2026-10-06', 3, []),
+    // Outside the range, and in the future.
+    tagged('2026-09-30', 1, ['Exercised']),
+    tagged('2026-10-25', 1, ['Social']),
+  ]);
+
+  it('averages mood on the days with each tag, hiding tags used on fewer than 3 days', () => {
+    const rows = moodByTag(byDay, new Date(2026, 9, 1), new Date(2026, 9, 31), now);
+    expect(rows.map(r => r.tag)).toEqual(['Exercised', 'Tired']);
+    expect(rows[0]).toMatchObject({ days: 3 });
+    expect(rows[0].average).toBeCloseTo(13 / 3);
+    // A tag repeated on one check-in counts that day once.
+    expect(rows[1]).toMatchObject({ days: 3 });
+    expect(rows[1].average).toBeCloseTo(7 / 3);
+  });
+
+  it('takes a lower bar when asked', () => {
+    const rows = moodByTag(byDay, new Date(2026, 9, 1), new Date(2026, 9, 31), now, 2);
+    expect(rows.map(r => [r.tag, r.days])).toEqual([['Exercised', 3], ['Social', 2], ['Tired', 3]]);
   });
 });

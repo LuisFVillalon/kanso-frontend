@@ -1,14 +1,24 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import type { Habit } from '@/app/types/habit';
+import type { MoodCheckin } from '@/app/types/mood';
 import {
+  analyseCorrelation,
   buildCalendarReport,
+  dailyActivity,
+  describeCorrelation,
   describePeriod,
   elapsedDays,
   formatPeriodLabel,
+  moodActivityPoints,
   periodContaining,
   periodLength,
+  ranks,
+  rhoP,
   shiftPeriod,
+  spearman,
+  type CorrelationResult,
+  type MoodMetric,
 } from './calendarReport';
 import { toLocalDateStr } from './dateUtils';
 
@@ -132,6 +142,18 @@ describe('buildCalendarReport', () => {
     expect(byDay['2026-10-15']).toBe(1);
   });
 
+  it('only plans tasks due in the period, though a week loads 4 weeks of activity', () => {
+    const activity = {
+      ...emptyActivity('2026-09-21', '2026-10-18'),
+      scheduled_tasks: [task({ id: 1, due_date: '2026-09-30', completed: true }), task({ id: 2, due_date: '2026-10-13' })],
+      completed_tasks: [task({ id: 1, completed: true, completed_date: '2026-09-30T18:00:00Z' })],
+      habit_completions: [{ habit_id: 1, habit_title: 'Read', date: '2026-10-01', estimated_time: null }],
+    };
+    const report = buildCalendarReport(activity, week, [], now);
+    expect([report.tasksPlanned, report.plannedCompleted, report.tasksCompleted, report.habitCheckIns]).toEqual([1, 0, 0, 0]);
+    expect(report.activeDays).toBe(0);
+  });
+
   it('has no completion rate when nothing was due', () => {
     const report = buildCalendarReport(emptyActivity('2026-10-12', '2026-10-18'), week, [], now);
     expect(report.completionRate).toBeNull();
@@ -226,5 +248,226 @@ describe('buildCalendarReport', () => {
     expect(report.buckets[2]).toMatchObject({ key: '2026-03', tasksCompleted: 2, longLabel: 'March 2026' });
     expect(report.buckets[9]).toMatchObject({ key: '2026-10', habitsCompleted: 1, isCurrent: true });
     expect(report.buckets[10].isFuture).toBe(true);
+  });
+});
+
+let nextCheckinId = 1;
+const moodCheckin = (period_start: string, mood: number): MoodCheckin => ({
+  id: nextCheckinId++, period_kind: 'day', period_start, mood, energy: null, stress: null,
+  workload: null, highlight: null, progress: null, word: null, note: null, tags: [],
+  created_at: `${period_start}T20:00:00Z`, updated_at: `${period_start}T20:00:00Z`,
+});
+
+describe('daily activity and mood points', () => {
+  const activity: CalendarActivity = {
+    ...emptyActivity('2026-09-21', '2026-10-18'),
+    completed_tasks: [
+      task({ id: 1, completed: true, completed_date: '2026-09-30T18:00:00Z' }),
+      task({ id: 2, completed: true, completed_date: '2026-09-30T19:00:00Z' }),
+      task({ id: 3, completed: true, completed_date: '2026-10-20T19:00:00Z' }),
+    ],
+    habit_completions: [{ habit_id: 1, habit_title: 'Read', date: '2026-10-01', estimated_time: null }],
+    note_sessions: [
+      // Tue Sep 29 11:30pm → Wed Sep 30 12:45am local.
+      { id: 1, note_id: 7, note_title: 'Essay', started_at: '2026-09-30T06:30:00Z', ended_at: '2026-09-30T07:45:00Z', duration_seconds: 4500 },
+    ],
+  };
+
+  it('totals each day of a range, splitting note time at midnight', () => {
+    const days = dailyActivity(activity, new Date(2026, 8, 21), new Date(2026, 9, 18));
+    expect(days.get('2026-09-30')).toEqual({ dateStr: '2026-09-30', tasksCompleted: 2, habitsCompleted: 0, noteSeconds: 2700 });
+    expect(days.get('2026-09-29')?.noteSeconds).toBe(1800);
+    expect(days.get('2026-10-01')?.habitsCompleted).toBe(1);
+    expect(days.has('2026-10-20')).toBe(false);
+  });
+
+  it('keeps one point per checked-in day in range, up to today, with zeros for quiet days', () => {
+    const days = dailyActivity(activity, new Date(2026, 8, 21), new Date(2026, 9, 18));
+    const byDay = new Map([
+      ['2026-09-20', moodCheckin('2026-09-20', 5)],
+      ['2026-09-30', moodCheckin('2026-09-30', 4)],
+      ['2026-10-02', moodCheckin('2026-10-02', 2)],
+      ['2026-10-16', moodCheckin('2026-10-16', 3)],
+    ]);
+    const now = new Date(2026, 9, 15, 12);
+    const points = (metric: MoodMetric) =>
+      moodActivityPoints(byDay, days, new Date(2026, 8, 21), new Date(2026, 9, 18), metric, now);
+    expect(points('tasks')).toEqual([
+      { dateStr: '2026-09-30', mood: 4, value: 2 },
+      { dateStr: '2026-10-02', mood: 2, value: 0 },
+    ]);
+    // Note time is in whole minutes.
+    expect(points('notes').map(p => p.value)).toEqual([45, 0]);
+  });
+});
+
+describe('correlation stats', () => {
+  it('ranks with ties sharing their average rank', () => {
+    expect(ranks([10, 20, 30])).toEqual([1, 2, 3]);
+    expect(ranks([3, 1, 3, 2])).toEqual([3.5, 1, 3.5, 2]);
+    expect(ranks([5, 5, 5])).toEqual([2, 2, 2]);
+  });
+
+  it('computes Spearman’s rho, including with ties', () => {
+    expect(spearman([1, 2, 3, 4], [10, 40, 90, 160])).toBeCloseTo(1);
+    expect(spearman([1, 2, 3, 4], [4, 3, 2, 1])).toBeCloseTo(-1);
+    // Constant mood: nothing to rank against.
+    expect(spearman([1, 2, 3, 4], [3, 3, 3, 3])).toBe(0);
+    // Ranks x = [1, 2.5, 2.5, 4] and y = [1.5, 1.5, 3, 4] → r = 3.75 / 4.5.
+    expect(spearman([1, 2, 2, 3], [1, 1, 2, 3])).toBeCloseTo(5 / 6, 10);
+  });
+
+  it('gives a two-sided p-value by the Fisher z approximation', () => {
+    expect(rhoP(0, 30)).toBeCloseTo(1, 5);
+    // z = atanh(0.5) · √(27 / 1.06) ≈ 2.772 → p ≈ 0.0056.
+    expect(rhoP(0.5, 30)).toBeCloseTo(0.0056, 3);
+    expect(rhoP(-0.5, 30)).toBeCloseTo(rhoP(0.5, 30), 10);
+    expect(Number.isFinite(rhoP(1, 12))).toBe(true);
+  });
+});
+
+/** n days where mood follows the metric: values cycle 0–4, mood tracks them (or not, with `noise`). */
+const series = (n: number, relation: 'up' | 'down' | 'noise') =>
+  Array.from({ length: n }, (_, i) => {
+    const value = i % 5;
+    const mood = relation === 'up' ? value + 1 : relation === 'down' ? 5 - value : [3, 1, 4, 5, 2, 3, 2, 5, 1, 4, 4, 2, 3, 1, 5][i % 15];
+    return { value, mood };
+  });
+
+/** Mood follows the metric on all but the first `against` days, which go the other way. */
+const mixed = (n: number, against: number) =>
+  series(n, 'up').map((p, i) => (i < against ? { value: p.value, mood: 5 - p.value } : p));
+
+describe('analyseCorrelation', () => {
+  it('needs 10 days with a check-in', () => {
+    expect(analyseCorrelation(series(9, 'up'))).toMatchObject({ n: 9, level: 'insufficient', rho: null });
+    expect(analyseCorrelation(series(10, 'up')).level).not.toBe('insufficient');
+  });
+
+  it('needs at least 3 distinct metric values', () => {
+    const flat = Array.from({ length: 20 }, (_, i) => ({ value: i % 2, mood: (i % 5) + 1 }));
+    expect(analyseCorrelation(flat)).toMatchObject({ n: 20, level: 'flat', rho: null });
+  });
+
+  it('caps the wording by sample size', () => {
+    // A perfect link is only an early sign under 20 days…
+    expect(analyseCorrelation(series(15, 'up')).level).toBe('early');
+    // …moderate under 30…
+    expect(analyseCorrelation(series(25, 'up'))).toMatchObject({ level: 'moderate', rho: 1 });
+    // …and strong from 30.
+    expect(analyseCorrelation(series(30, 'up')).level).toBe('strong');
+    expect(analyseCorrelation(series(30, 'down'))).toMatchObject({ level: 'strong', rho: -1 });
+  });
+
+  it('reads weak or likely-chance results as no clear link', () => {
+    const result = analyseCorrelation(series(30, 'noise'));
+    expect(Math.abs(result.rho!)).toBeLessThan(0.15);
+    expect(result.level).toBe('none');
+  });
+
+  it('labels slight and moderate links by strength', () => {
+    const slight = analyseCorrelation(mixed(160, 60));
+    expect(Math.abs(slight.rho!)).toBeGreaterThanOrEqual(0.15);
+    expect(Math.abs(slight.rho!)).toBeLessThan(0.3);
+    expect(slight.level).toBe('slight');
+    const moderate = analyseCorrelation(mixed(100, 30));
+    expect(moderate.rho!).toBeGreaterThanOrEqual(0.3);
+    expect(moderate.rho!).toBeLessThan(0.5);
+    expect(moderate.level).toBe('moderate');
+  });
+
+  it('splits days at the median for the "on days you…" comparison', () => {
+    const result = analyseCorrelation(series(30, 'up'));
+    expect(result.threshold).toBe(2);
+    expect(result.highAverage).toBeCloseTo(4);
+    expect(result.lowAverage).toBeCloseTo(1.5);
+  });
+
+  it('moves the split up when the median is also the minimum', () => {
+    const mostlyZero = Array.from({ length: 12 }, (_, i) => ({ value: i < 8 ? 0 : i - 7, mood: i < 8 ? 2 : 4 }));
+    const result = analyseCorrelation(mostlyZero);
+    expect(result.threshold).toBe(1);
+    expect([result.highAverage, result.lowAverage]).toEqual([4, 2]);
+  });
+});
+
+describe('describeCorrelation', () => {
+  const describeSeries = (metric: MoodMetric, points: { value: number; mood: number }[], scope = 'this month') =>
+    describeCorrelation(metric, analyseCorrelation(points), scope);
+
+  it('asks for more days below 10 check-ins', () => {
+    expect(describeSeries('tasks', series(5, 'up'))).toBe(
+      'Patterns between mood and tasks show up after about 10 days with a check-in — 5 so far this month. Keep logging and this fills in.',
+    );
+  });
+
+  it('says when the metric barely varied', () => {
+    const flat = Array.from({ length: 12 }, (_, i) => ({ value: 0, mood: (i % 5) + 1 }));
+    expect(describeSeries('notes', flat)).toBe('Your time in notes barely changed from day to day this month, so there’s nothing to compare yet.');
+  });
+
+  it('compares the two halves when there is no clear link', () => {
+    // Every metric value gets moods 2 and 4 equally often.
+    const unrelated = Array.from({ length: 30 }, (_, i) => ({ value: i % 5, mood: 2 + 2 * (i % 2) }));
+    expect(describeSeries('habits', unrelated)).toBe(
+      'No clear link this month: on days you checked off 2 or more habits your mood averaged 3.0, about the same as the 3.0 on other days.',
+    );
+    // A gap in the split that the ranks don't back up isn't called the same.
+    expect(describeSeries('habits', series(30, 'noise'))).toBe(
+      'No clear link this month: on days you checked off 2 or more habits your mood averaged 3.3, vs 2.5 on other days, but not steadily enough to call it a pattern.',
+    );
+  });
+
+  it('reads as no clear link when the split goes against the ranks', () => {
+    const humped = [
+      ...Array.from({ length: 24 }, () => ({ value: 0, mood: 1 })),
+      ...Array.from({ length: 32 }, () => ({ value: 1, mood: 5 })),
+      ...Array.from({ length: 64 }, () => ({ value: 2, mood: 3 })),
+    ];
+    const result = analyseCorrelation(humped);
+    expect(result.rho!).toBeGreaterThanOrEqual(0.15);
+    expect(result.p!).toBeLessThanOrEqual(0.1);
+    expect(result.level).toBe('none');
+    expect(describeCorrelation('tasks', result, 'this year')).toBe(
+      'No clear link this year: on days you completed 2 or more tasks your mood averaged 3.0, about the same as the 3.3 on other days.',
+    );
+  });
+
+  it('hedges an early sign', () => {
+    expect(describeSeries('habits', series(15, 'up'))).toBe(
+      'Early sign this month: your mood seemed higher on days with more habits checked off. On days you checked off 2 or more habits it averaged 4.0, vs 1.5 on days with fewer. With only 15 days this could easily be chance — check back in a few weeks.',
+    );
+  });
+
+  it('calls a link under 30 days a hint, and never strong', () => {
+    expect(describeSeries('tasks', series(25, 'down'), 'in the last 4 weeks')).toBe(
+      'In the last 4 weeks, your mood tended to be lower on days with more tasks completed. On days you completed 2 or more tasks it averaged 2.0, vs 4.5 on days with fewer. Based on 25 days, so treat it as a hint.',
+    );
+  });
+
+  it('says "consistently" only for a strong link over 30 days or more', () => {
+    const notes = series(30, 'up').map(p => ({ ...p, value: p.value * 20 }));
+    expect(describeSeries('notes', notes, 'in 2026')).toBe(
+      'In 2026, your mood consistently tended to be higher on days with more time in notes. On days you spent 40m or more in notes it averaged 4.0, vs 1.5 on days with less.',
+    );
+  });
+
+  it('never claims a cause', () => {
+    const banned = /\b(because|causes?|caused|makes you|made you|boosts?|you should)\b/i;
+    const results: CorrelationResult[] = [];
+    for (const n of [5, 12, 15, 25, 30, 60, 160]) {
+      for (const relation of ['up', 'down', 'noise'] as const) results.push(analyseCorrelation(series(n, relation)));
+    }
+    results.push(analyseCorrelation(Array.from({ length: 12 }, () => ({ value: 1, mood: 3 }))));
+    results.push(analyseCorrelation(mixed(160, 60)), analyseCorrelation(mixed(100, 30)));
+    results.push(analyseCorrelation(Array.from({ length: 30 }, (_, i) => ({ value: i % 5, mood: 2 + 2 * (i % 2) }))));
+    expect(new Set(results.map(r => r.level))).toEqual(new Set(['insufficient', 'flat', 'none', 'early', 'slight', 'moderate', 'strong']));
+    for (const result of results) {
+      for (const metric of ['tasks', 'notes', 'habits'] as const) {
+        for (const scope of ['this week', 'in the last 4 weeks', 'in October 2026']) {
+          expect(describeCorrelation(metric, result, scope)).not.toMatch(banned);
+        }
+      }
+    }
   });
 });

@@ -4,6 +4,7 @@ import { useHabitsContext } from '@/app/context/HabitsContext';
 import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { buildCalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
+import { moodSummaryScope } from '@/app/utils/moodReport';
 
 interface FetchedReport {
   key: string;
@@ -17,6 +18,8 @@ const periodKey = (p: ReportPeriod) => `${p.kind}:${toLocalDateStr(p.start)}`;
  * and summarizes it. Archived tasks, notes and habits count too — the report
  * covers everything the user did, not just what's still active. Habit streaks
  * come from the shared habits list, since the activity endpoint doesn't carry them.
+ * A week loads the 4 weeks to its end, which its mood summary compares
+ * against; the report itself still covers only the week.
  */
 export function useCalendarReport(period: ReportPeriod) {
   const { habits } = useHabitsContext();
@@ -27,7 +30,8 @@ export function useCalendarReport(period: ReportPeriod) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchCalendarActivity(toLocalDateStr(period.start), toLocalDateStr(period.end), { includeArchived: true })
+    const start = period.kind === 'week' ? moodSummaryScope(period).start : period.start;
+    fetchCalendarActivity(toLocalDateStr(start), toLocalDateStr(period.end), { includeArchived: true })
       .then(activity => {
         if (!cancelled) setFetched({ key, activity });
       })
@@ -56,6 +60,7 @@ export function useCalendarReport(period: ReportPeriod) {
 
   return {
     report,
+    activity: ready?.activity ?? null,
     loading: !ready && !failed,
     error: failed,
     retry,

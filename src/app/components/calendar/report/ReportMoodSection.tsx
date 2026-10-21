@@ -8,11 +8,13 @@ import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useToast } from '@/app/context/ToastContext';
 import { deleteMoodCheckin, describeError, saveMoodCheckin } from '@/app/lib/backend-api';
+import type { CalendarActivity } from '@/app/types/activity';
 import { checkinToSave, MOOD_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDateRange, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import { describePeriod, type CalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
 import { PATTERN_MIN_DAYS, summarizeMood, type MoodScope, type MoodSummary } from '@/app/utils/moodReport';
 import ReportMoodChart from './ReportMoodChart';
+import ReportMoodRelations from './ReportMoodRelations';
 
 /** How the Check-ins card and empty state name the days they cover. */
 const scopeName = (period: ReportPeriod, scope: MoodScope): string => {
@@ -83,6 +85,8 @@ const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: R
 interface ReportMoodSectionProps {
   period: ReportPeriod;
   report: CalendarReport;
+  /** The report's calendar activity, which "Mood & your activity" compares mood against. */
+  activity: CalendarActivity;
   byDay: Map<string, MoodCheckin>;
   scope: MoodScope;
   /** Puts a saved check-in in place of its day's old one, or removes it (`saved` null). */
@@ -91,12 +95,13 @@ interface ReportMoodSectionProps {
 }
 
 /**
- * The report's Mood section: "Mood over time" and the Check-ins summary, or
- * an empty card with "Log today". Any day dot opens its check-in to edit,
- * and a hollow one logs that day. A week's summary covers the trailing 4
- * weeks, with a note saying so.
+ * The report's Mood section: "Mood over time" and the Check-ins summary,
+ * then "Mood & your activity" and "Tags & mood", or an empty card with
+ * "Log today". Any day dot opens its check-in to edit,
+ * and a hollow one logs that day. A week's summary and correlations cover
+ * the trailing 4 weeks, with a note saying so.
  */
-const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, byDay, scope, replaceDay, onSelectPeriod }) => {
+const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, scope, replaceDay, onSelectPeriod }) => {
   const showToast = useToast();
   const { habits } = useHabitsContext();
   const [modal, setModal] = useState<{ date: string; existing: MoodCheckin | null } | null>(null);
@@ -190,6 +195,17 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, b
           </div>
           <CheckinsCard summary={summary} scope={scope} period={period} />
         </div>
+      )}
+
+      {summary.average != null && (
+        <ReportMoodRelations
+          activity={activity}
+          byDay={byDay}
+          scope={scope}
+          scopeLabel={scopeName(period, scope)}
+          average={summary.average}
+          byWeek={period.kind === 'year'}
+        />
       )}
 
       {modal && (

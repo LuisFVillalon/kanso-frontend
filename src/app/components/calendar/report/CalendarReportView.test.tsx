@@ -113,6 +113,7 @@ describe('CalendarReportView mood', () => {
     await render();
     expect(text()).toContain('1 task finished');
     expect(text()).not.toContain('Mood over time');
+    expect(text()).not.toContain('Mood & your activity');
     expect(text()).not.toContain('days logged');
     expect(container.querySelector('.lg\\:grid-cols-6')).toBeNull();
     expect(container.querySelector('.lg\\:grid-cols-5')).not.toBeNull();
@@ -129,6 +130,48 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Monday, October 19');
     // Future days have no dot to click.
     expect(buttonLabelled(/^Thursday, October 22/)).toBeUndefined();
+  });
+
+  it('shows "Not enough data" for mood and activity below 10 check-ins', async () => {
+    await render();
+    // The week's activity reaches back over the same 4 weeks as its mood summary.
+    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-09-24', '2026-10-25', { includeArchived: true });
+    expect(text()).toContain('Mood & your activity');
+    expect(text()).toContain('Not enough data');
+    expect(text()).toContain('2 days with a check-in');
+    expect(text()).toContain('Patterns between mood and tasks show up after about 10 days with a check-in — 2 so far in the last 4 weeks.');
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
+    expect(text()).toContain('Tags & mood');
+  });
+
+  it('describes how mood moved with habits, and averages mood by tag', async () => {
+    // 20 check-ins over Oct 2–21: mood rises with the habits checked off that day.
+    const days = Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 2).padStart(2, '0')}`);
+    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, (i % 5) + 1), id: i + 1, tags: i % 5 >= 3 ? ['Exercised'] : [] })));
+    api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [],
+      habit_completions: days.flatMap((d, i) => Array.from({ length: i % 5 }, (_, h) => ({ habit_id: h + 1, habit_title: `Habit ${h}`, date: d, estimated_time: null }))),
+    }));
+    await render();
+    expect(text()).toContain('20 days with a check-in');
+    // Tasks never varied.
+    expect(text()).toContain('Your number of tasks completed barely changed');
+
+    await click(buttonLabelled(/^Habits$/));
+    expect(text()).toContain('In the last 4 weeks, your mood tended to be higher on days with more habits checked off.');
+    expect(text()).toContain('Based on 20 days, so treat it as a hint.');
+    expect(text()).toContain('Moderate link');
+    expect(text()).toContain('↑ together');
+    expect(text()).toContain('Shows what tends to move together — not what causes what.');
+    expect(text()).toContain('ρ = 1.00');
+
+    await click(buttonLabelled(/^Day by day$/));
+    expect(container.querySelector('svg[aria-label="Habits completed per day with mood"]')).not.toBeNull();
+
+    // Exercised is on the Good and Great days: 8 of them.
+    expect(text()).toContain('Exercised');
+    expect(text()).toContain('average mood 4.5');
+    expect(text()).toContain('8 days');
   });
 
   it('opens a month from the year chart', async () => {
