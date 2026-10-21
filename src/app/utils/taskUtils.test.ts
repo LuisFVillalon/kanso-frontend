@@ -76,9 +76,11 @@ describe('groupLinkedTasks', () => {
     expect(shape(groupLinkedTasks([orphan], [orphan]))).toEqual([{ id: 9, linked: [], done: 0, total: 0 }]);
   });
 
-  it('hangs a deeper tree off its topmost ancestor', () => {
-    const deep = [task(1), task(2, 1), task(3, 2)];
-    expect(shape(groupLinkedTasks(deep, [deep[2]]))).toEqual([{ id: 1, linked: [3], done: 0, total: 2 }]);
+  it('hangs a deeper tree off its topmost ancestor, counting only direct linked tasks', () => {
+    const deep = [task(1), task(2, 1), task(3, 2, true)];
+    const groups = groupLinkedTasks(deep, [deep[2]]);
+    expect(shape(groups)).toEqual([{ id: 1, linked: [3], done: 0, total: 1 }]);
+    expect(groups[0].linkedVia).toEqual({ 3: 'Task 2' });
   });
 
   it('keeps tasks in a parent loop top-level instead of hanging', () => {

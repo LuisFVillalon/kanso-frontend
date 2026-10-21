@@ -85,6 +85,15 @@ describe('TaskItem linked tasks', () => {
     expect(container.textContent).not.toContain('Mock interview');
   });
 
+  it('labels a deeper linked task with its own parent', () => {
+    const deeper = task(4, 'Practice questions', { parent_task_id: 3 });
+    render({ linkedTasks: [...linked, deeper], linkedVia: { 4: 'Mock interview' } });
+    const row = button('Edit Practice questions')!.closest('li')!;
+    expect(row.textContent).toContain('↳ Mock interview');
+    expect(button('Edit Mock interview')!.closest('li')!.textContent).not.toContain('↳');
+    expect(container.textContent).toContain('1 of 2 done');
+  });
+
   it('renders no linked section for a task without linked tasks', () => {
     render({ linkedTasks: [], linkedDone: 0, linkedTotal: 0 });
     expect(container.textContent).not.toContain('Linked tasks');

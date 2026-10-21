@@ -160,9 +160,11 @@ export interface TaskGroup {
   task: Task;
   /** Linked tasks to render under `task`, oldest first. */
   linked: Task[];
-  /** Progress over every linked task, including ones the filters hide. */
+  /** Progress over `task`'s direct linked tasks, including ones the filters hide. */
   linkedDone: number;
   linkedTotal: number;
+  /** For a linked task deeper than one level, its own parent's title, by task id. */
+  linkedVia: Record<number, string>;
 }
 
 /**
@@ -170,7 +172,8 @@ export interface TaskGroup {
  *
  * `matching` is the filtered, sorted list; `allTasks` is everything loaded.
  * The list is one level deep, so a deeper tree hangs every descendant off its
- * topmost loaded ancestor. A task whose parent isn't loaded, or whose chain
+ * topmost loaded ancestor, labelled with its own parent and counted only in
+ * that parent's progress. A task whose parent isn't loaded, or whose chain
  * loops, stays top-level.
  *
  * A group is shown when its parent or any of its linked tasks matches the
@@ -218,11 +221,17 @@ export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[
 
     const root = byId.get(rootId) ?? m;
     const allLinked = linkedByRoot.get(rootId) ?? [];
+    const direct = allLinked.filter(t => t.parent_task_id === rootId);
+    const linkedVia: Record<number, string> = {};
+    for (const t of allLinked) {
+      if (t.parent_task_id !== rootId) linkedVia[t.id] = byId.get(t.parent_task_id!)!.title;
+    }
     groups.push({
       task: root,
       linked: matchingIds.has(rootId) ? allLinked : allLinked.filter(t => matchingIds.has(t.id)),
-      linkedDone: allLinked.filter(t => t.completed).length,
-      linkedTotal: allLinked.length,
+      linkedDone: direct.filter(t => t.completed).length,
+      linkedTotal: direct.length,
+      linkedVia,
     });
   }
 

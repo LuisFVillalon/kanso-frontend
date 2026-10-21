@@ -55,7 +55,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
           className="flex flex-col gap-2 overflow-y-auto h-[50vh] lg:h-[600px] pl-2 pr-1 scrollbar-custom"
           style={heightPx ? { height: `${heightPx}px` } : undefined}
         >
-          {taskGroups.map(({ task, linked, linkedDone, linkedTotal }, index) => (
+          {taskGroups.map(({ task, linked, linkedDone, linkedTotal, linkedVia }, index) => (
             <TaskItem
               key={task.id}
               task={task}
@@ -63,6 +63,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
               linkedTasks={linked}
               linkedDone={linkedDone}
               linkedTotal={linkedTotal}
+              linkedVia={linkedVia}
               pendingTaskIds={pendingTaskIds}
               onToggleComplete={onToggleComplete}
               tags={tags}

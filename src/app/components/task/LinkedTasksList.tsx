@@ -10,6 +10,8 @@ interface LinkedTasksListProps {
   linkedTasks: Task[];
   linkedDone: number;
   linkedTotal: number;
+  /** Own parent's title for linked tasks nested deeper than one level. */
+  linkedVia?: Record<number, string>;
   expanded: boolean;
   onToggleExpanded: () => void;
   onToggleComplete?: (id: number) => void;
@@ -72,12 +74,13 @@ export const LinkedToggleButton: React.FC<{ expanded: boolean; onClick: () => vo
 
 const LinkedTaskRow: React.FC<{
   task: Task;
+  viaTitle?: string;
   compact: boolean;
   maxPriority: number;
   pending: boolean;
   onToggleComplete?: (id: number) => void;
   onEditTask?: (task: Task) => void;
-}> = ({ task, compact, maxPriority, pending, onToggleComplete, onEditTask }) => {
+}> = ({ task, viaTitle, compact, maxPriority, pending, onToggleComplete, onEditTask }) => {
   const dueDate = task.due_date instanceof Date ? toLocalDateStr(task.due_date) : task.due_date;
   const priorityStyle = task.priority != null ? getPriorityBadgeStyle(task.priority, maxPriority) : null;
 
@@ -108,6 +111,7 @@ const LinkedTaskRow: React.FC<{
         }`}
       >
         {task.title}
+        {viaTitle && <span className="ml-1.5 text-xs font-normal text-text-muted">↳ {viaTitle}</span>}
       </span>
 
       {priorityStyle && (
@@ -161,6 +165,7 @@ const LinkedTasksList: React.FC<LinkedTasksListProps> = ({
   linkedTasks,
   linkedDone,
   linkedTotal,
+  linkedVia,
   expanded,
   onToggleExpanded,
   onToggleComplete,
@@ -179,6 +184,7 @@ const LinkedTasksList: React.FC<LinkedTasksListProps> = ({
         <LinkedTaskRow
           key={t.id}
           task={t}
+          viaTitle={linkedVia?.[t.id]}
           compact={compact}
           maxPriority={maxPriority}
           pending={pendingTaskIds?.has(t.id) ?? false}

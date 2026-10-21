@@ -34,6 +34,7 @@ interface TaskItemProps {
   linkedTasks?: Task[];
   linkedDone?: number;
   linkedTotal?: number;
+  linkedVia?: Record<number, string>;
   /** In-flight ids, so a linked task's checkbox can show its own pending state. */
   pendingTaskIds?: Set<number>;
 }
@@ -54,6 +55,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
   linkedTasks = [],
   linkedDone = 0,
   linkedTotal = 0,
+  linkedVia,
   pendingTaskIds,
 }) => {
   const maxPriority = activeTaskCount ?? Object.keys(PRIORITY_COLORS).length;
@@ -75,6 +77,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
       linkedTasks={linkedTasks}
       linkedDone={linkedDone}
       linkedTotal={linkedTotal}
+      linkedVia={linkedVia}
       expanded={linkedExpanded}
       onToggleExpanded={() => setLinkedExpanded(v => !v)}
       onToggleComplete={onToggleComplete}
