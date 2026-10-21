@@ -18,6 +18,7 @@ This repository is the web app. kanso is three services, each in its own reposit
 - **Notes**: a Tiptap rich-text editor with tables, highlights, resizable images and text alignment, organized by tag folders in grid or list view. Notes export to PDF, and editing time is tracked per note.
 - **Learning resources (AI)**: from any note, get one video, one article and one exercise for going deeper. An LLM reads the note and plans the searches, then real search results are filtered, dead-link-checked and ranked by deterministic code, so the model never invents a link.
 - **Habits**: daily check-ins, current and best streaks, and a 30-day history you can edit retroactively.
+- **Mood check-ins**: once your "Call it a day" time passes on a non-rest day, a dashboard card asks how the day felt. Tap one of five faces (Rough to Great, or keys 1–5), optionally add energy, stress, tags and a short note, and save; Undo is on the toast. "Not today" leaves a small chip to log it later and "In 1 hour" snoozes it. Settings → Profile → Mood check-ins turns the nudge on or off and sets when it appears. Check-ins are private and never sent to the Daily Brief.
 - **Daily debrief**: overdue work, what's due today, whether today's plan fits your available hours, and a short "focus next" list. It's rule-based on the backend; no LLM is involved.
 - **Big-picture calendar**: a year and month view of tasks, habits and notes, a week view that lays out planned and completed tasks, note-editing time (nearby sessions of a note on the same day merge into one block showing the time actually worked) and habit check-ins on an hourly timeline (click an empty slot to create a task at that time), plus a term tracker with a countdown. Its Report view summarizes any week, month or year: tasks completed vs. planned, estimated hours, time in notes, habit check-ins and streaks, the busiest days and an activity chart.
 - **Customizable dashboard**: drag-and-drop, resizable stats widgets; accent colors; notebook page styles; focus mode; and a doodle canvas.
@@ -71,7 +72,7 @@ src/app/
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
   components/            # Grouped by domain: task, notes, habit, calendar, stats, settings,
-                         # landing, doodle, tag, auth, notifications; plus common/ and layout/ (cross-domain)
+                         # mood, landing, doodle, tag, auth, notifications; plus common/ and layout/ (cross-domain)
   context/               # Auth, Toast, Notifications, and the Tasks/Tags/Habits/Notes data providers
   hooks/                 # Data hooks (useTasksAndTags, useNotes, useHabits, useProfile, ...)
   lib/backend-api.ts     # Every backend and AI-service request, with auth headers and typed errors
