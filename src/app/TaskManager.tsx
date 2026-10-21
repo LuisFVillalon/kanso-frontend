@@ -44,7 +44,7 @@ import DoodleCanvas, { DoodleCanvasHandle } from '@/app/components/doodle/Doodle
 import DoodleToolbar from '@/app/components/doodle/DoodleToolbar';
 import ModeSwitcher, { AppMode } from '@/app/components/common/ModeSwitcher';
 import NotificationBell from '@/app/components/notifications/NotificationBell';
-import KeyPressMoment, { DAY_COMPLETE_COPY, FOCUS_MODE_COPY, type KeyPress } from '@/app/components/common/KeyPressMoment';
+import KeyPressMoment, { DAY_COMPLETE_COPY, FOCUS_MODE_COPY, type KeyPress, type KeyPressPlacement } from '@/app/components/common/KeyPressMoment';
 import { useDayComplete } from '@/app/hooks/useDayComplete';
 import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 
@@ -100,14 +100,14 @@ const TaskManager: React.FC = () => {
   // The key-press moment: plays when checking off a task settles today's
   // plan, and when the user switches into focus mode.
   const [keyPress, setKeyPress] = useState<KeyPress | null>(null);
-  const playKeyPress = useCallback((message: string) => {
-    setKeyPress(prev => ({ id: (prev?.id ?? 0) + 1, message }));
+  const playKeyPress = useCallback((message: string, placement: KeyPressPlacement) => {
+    setKeyPress(prev => ({ id: (prev?.id ?? 0) + 1, message, placement }));
   }, []);
   const clearKeyPress = useCallback(() => setKeyPress(null), []);
-  const playDayComplete = useCallback(() => playKeyPress(DAY_COMPLETE_COPY), [playKeyPress]);
+  const playDayComplete = useCallback(() => playKeyPress(DAY_COMPLETE_COPY, 'overlay'), [playKeyPress]);
   useDayComplete(tasks, isLoading, playDayComplete);
   const handleModeChange = (next: AppMode) => {
-    if (next === 'focus' && mode !== 'focus') playKeyPress(FOCUS_MODE_COPY);
+    if (next === 'focus' && mode !== 'focus') playKeyPress(FOCUS_MODE_COPY, 'header');
     setMode(next);
   };
   const { tags, tagsLoading, addTag, delTag, archiveTag, updateTag } = useTagsContext();
@@ -446,8 +446,8 @@ const TaskManager: React.FC = () => {
             plain non-positioned div regardless of DOM order and would
             swallow clicks meant for the mode switcher.
           */}
-        <div className="relative z-10 pointer-events-auto flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 pb-2 sm:pb-3 mb-2 sm:mb-3 mt-2 sm:mt-3 border-b border-border-subtle">
-          <div>
+        <div className="relative z-10 pointer-events-auto flex flex-wrap sm:flex-nowrap justify-between items-end gap-2 pb-2 sm:pb-3 mb-2 sm:mb-3 mt-2 sm:mt-3 border-b border-border-subtle">
+          <div className="w-full sm:w-auto">
             <p className="flex items-center gap-2 text-[0.6875rem] sm:text-xs font-semibold uppercase tracking-wide text-text-muted">
               <span>{todayLabel}</span>
               <span aria-hidden="true" className="text-text-muted/50">&middot;</span>
@@ -457,6 +457,9 @@ const TaskManager: React.FC = () => {
               <ProfileAvatar avatar={profile.avatar} name={profile.name} size={32} />
               Welcome back{profile.name ? `, ${profile.name}` : ''}
             </h1>
+          </div>
+          <div className="@container relative order-last sm:order-none flex-1 min-w-0 self-stretch">
+            <KeyPressMoment moment={keyPress} placement="header" onDone={clearKeyPress} />
           </div>
           <div className="flex items-center gap-2">
             {showDoodleToolbar && (
@@ -473,7 +476,6 @@ const TaskManager: React.FC = () => {
             <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} onOpenMoodCheckin={openMoodCheckin} />
             <ModeSwitcher mode={mode} onChange={handleModeChange} />
           </div>
-          <KeyPressMoment moment={keyPress} onDone={clearKeyPress} />
         </div>
 
         {showMainContent && (
@@ -612,6 +614,8 @@ const TaskManager: React.FC = () => {
         calendarSettingsLoading={calendarSettingsLoading}
         onSaveCalendarSettings={saveCalendarSettings}
       />
+
+      <KeyPressMoment moment={keyPress} placement="overlay" onDone={clearKeyPress} />
     </>
   );
 };
