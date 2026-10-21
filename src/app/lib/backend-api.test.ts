@@ -4,7 +4,10 @@ vi.mock('./supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: { access_token: 'token' } } }) } },
 }));
 
-import { ApiError, archiveTask, completeTaskWithLinked, fetchCalendarActivity, fetchCanvasCourses, fetchCanvasModules, fetchCanvasOverview, fetchCanvasPanelCourses, onDelete } from './backend-api';
+import {
+  ApiError, archiveTask, CanvasTaskExistsError, completeTaskWithLinked, createTask, fetchCalendarActivity, fetchCanvasCourses,
+  fetchCanvasModules, fetchCanvasOverview, fetchCanvasPanelCourses, onDelete, syncCanvasLinkedTasks,
+} from './backend-api';
 
 const fetchMock = vi.fn();
 
@@ -119,5 +122,68 @@ describe('Canvas panel reads', () => {
     const err = await fetchCanvasOverview().catch(e => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({ status: 409, detail: 'canvas_token_invalid' });
+  });
+});
+
+describe('createTask', () => {
+  const body = { title: 'Problem Set 6', tags: [], created_date: '2026-10-21T09:00:00', canvas_assignment_id: 9876 };
+
+  it('sends the Canvas link fields', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 1 }), { status: 200 }));
+    await createTask({ ...body, canvas_html_url: 'https://sdsu.instructure.com/courses/1/assignments/9876' });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+      canvas_assignment_id: 9876,
+      canvas_html_url: 'https://sdsu.instructure.com/courses/1/assignments/9876',
+    });
+  });
+
+  it("throws a CanvasTaskExistsError with the existing task's id on a duplicate", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({
+      detail: { code: 'canvas_task_exists', message: 'An open task already follows this Canvas assignment.', task_id: 42 },
+    }), { status: 409 }));
+    const err = await createTask(body).catch(e => e);
+    expect(err).toBeInstanceOf(CanvasTaskExistsError);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.taskId).toBe(42);
+  });
+
+  it('keeps any other 409 a plain ApiError', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: 'Priority 1 is taken.' }), { status: 409 }));
+    const err = await createTask(body).catch(e => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).not.toBeInstanceOf(CanvasTaskExistsError);
+    expect(err.detail).toBe('Priority 1 is taken.');
+  });
+});
+
+describe('syncCanvasLinkedTasks', () => {
+  const results = [
+    { task_id: 1, synced: true, submitted: true, due_at: '2026-10-23T06:59:00Z', due_changed: false },
+    { task_id: 2, synced: false },
+    { task_id: 'x' },
+  ];
+
+  it('POSTs with the time zone and reads the results', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ fetched_at: '2026-10-21T12:00:00Z', results }), { status: 200 }));
+    const synced = await syncCanvasLinkedTasks(true);
+    expect(requestedUrl().pathname).toMatch(/\/canvas\/linked-tasks\/sync$/);
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+    expect(requestedParams().get('tz')).toBeTruthy();
+    expect(requestedParams().get('refresh')).toBe('true');
+    expect(synced).toEqual([
+      { task_id: 1, synced: true, submitted: true, due_at: '2026-10-23T06:59:00Z', due_changed: false },
+      { task_id: 2, synced: false, submitted: false, due_at: null, due_changed: false },
+    ]);
+  });
+
+  it('also reads a bare list', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(results.slice(0, 1)), { status: 200 }));
+    expect(await syncCanvasLinkedTasks()).toHaveLength(1);
+    expect(requestedParams().has('refresh')).toBe(false);
+  });
+
+  it('throws when the route is missing', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404 }));
+    await expect(syncCanvasLinkedTasks()).rejects.toBeInstanceOf(ApiError);
   });
 });

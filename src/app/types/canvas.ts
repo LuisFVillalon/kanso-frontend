@@ -85,6 +85,8 @@ export interface CanvasItem {
   points_possible: number | null;
   html_url: string | null;
   submission: CanvasSubmission | null;
+  /** The Canvas assignment behind a planner quiz or discussion, when the backend sends it. */
+  assignment_id?: number | null;
 }
 
 /** A course's assignment; quizzes are assignments too, with kind "quiz". */
@@ -174,4 +176,16 @@ export interface CanvasAssignments extends CanvasReadMeta {
 
 export interface CanvasAnnouncements extends CanvasReadMeta {
   announcements: CanvasAnnouncement[];
+}
+
+/** One open task added from Canvas, after POST /canvas/linked-tasks/sync. */
+export interface CanvasLinkedTaskSync {
+  task_id: number;
+  /** False when Canvas couldn't be read for it, so the task was left alone. */
+  synced: boolean;
+  /** Canvas shows the assignment submitted: offer to complete the task. */
+  submitted: boolean;
+  due_at: string | null;
+  /** The backend moved the task's due date and time to due_at. */
+  due_changed: boolean;
 }

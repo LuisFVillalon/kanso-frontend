@@ -20,6 +20,8 @@ import { useCalendarSettings } from '@/app/hooks/useCalendarSettings';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import { useMountTransition } from '@/app/hooks/useMountTransition';
 import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
+import { useCanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
+import { useCanvasTaskSync } from '@/app/hooks/useCanvasTaskSync';
 import { Note } from '@/app/types/notes';
 import { taskToEditForm } from '@/app/utils/taskUtils';
 import DragHandle from '@/app/components/common/DragHandle';
@@ -50,7 +52,7 @@ import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 
 const TaskManager: React.FC = () => {
   const router = useRouter();
-  const { signOut, user } = useAuth();
+  const { signOut, user, isDemo } = useAuth();
   const showToast = useToast();
   const doodleCanvasRef = useRef<DoodleCanvasHandle>(null);
   const [doodleColor, setDoodleColor] = useState(() => getStoredThemeColor() ?? DEFAULT_ACCENT);
@@ -95,7 +97,9 @@ const TaskManager: React.FC = () => {
     router.replace('/login');
   };
 
-  const { tasks, isLoading, toggleComplete, completeWithLinked, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+  const { tasks, isLoading, toggleComplete, completeWithLinked, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, refreshTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+  // Tasks added from Canvas: synced on load and on a Canvas panel refresh.
+  const canvasTaskSync = useCanvasTaskSync({ enabled: !isLoading && !isDemo, tasks, refreshTasks });
 
   // The key-press moment: plays when checking off a task settles today's
   // plan, and when the user switches into focus mode.
@@ -165,6 +169,13 @@ const TaskManager: React.FC = () => {
     if (task) openEditTaskModal(task);
     else showToast('That task is no longer in your list.', 'info');
   };
+
+  // "Already in your tasks" from the Canvas panel: bring Tasks on screen and open the task.
+  const showCanvasTask = (taskId: number) => {
+    carouselRef.current?.show('tasks');
+    openNotifiedTask(taskId);
+  };
+  const canvasAddToTasks = useCanvasAddToTasks(showCanvasTask);
 
   const openNotifiedHabits = (habitIds: number[]) => {
     if (habitIds.length === 1) state.setHistoryHabitId(habitIds[0]);
@@ -357,6 +368,7 @@ const TaskManager: React.FC = () => {
           compact={widthPct < 40}
           heightPx={panelHeightPx}
           pendingTaskIds={pendingTaskIds}
+          canvasSubmitted={{ shows: canvasTaskSync.showsSubmitted, onNotYet: canvasTaskSync.dismiss }}
         />
       );
     }
@@ -379,7 +391,15 @@ const TaskManager: React.FC = () => {
         />
       );
     }
-    return <CanvasPanel heightPx={panelHeightPx} onOpenSettings={() => openSettings('integrations')} syncToken={canvasSyncToken} />;
+    return (
+      <CanvasPanel
+        heightPx={panelHeightPx}
+        onOpenSettings={() => openSettings('integrations')}
+        syncToken={canvasSyncToken}
+        addToTasks={isDemo ? undefined : canvasAddToTasks}
+        onRefresh={isDemo ? undefined : () => void canvasTaskSync.sync(true)}
+      />
+    );
   };
 
   if (isLoading || tagsLoading) return <PageSpinner size="lg" />;

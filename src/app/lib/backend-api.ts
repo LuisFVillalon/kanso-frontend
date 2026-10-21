@@ -27,6 +27,7 @@ import {
   CanvasConnection,
   CanvasCourse,
   CanvasCourses,
+  CanvasLinkedTaskSync,
   CanvasModules,
   CanvasOverview,
 } from "../types/canvas";
@@ -127,7 +128,34 @@ export async function fetchTasks(archived = false): Promise<Task[]> {
   return res.json();
 }
 
-/** Creates a new task and returns the persisted record. */
+/**
+ * Creating a task that follows a Canvas assignment an open task already
+ * follows: the backend's 409, carrying that task's id.
+ */
+export class CanvasTaskExistsError extends ApiError {
+  constructor(readonly taskId: number, detail: string) {
+    super(409, detail, "createTask");
+    this.name = "CanvasTaskExistsError";
+  }
+}
+
+/** The existing task's id from a duplicate-Canvas-task 409's detail, or null for any other error. */
+function existingCanvasTaskId(err: ApiError): number | null {
+  if (err.status !== 409) return null;
+  try {
+    const detail = JSON.parse(err.detail);
+    const id = detail?.task_id ?? detail?.existing_task_id;
+    return typeof id === "number" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Creates a new task and returns the persisted record. A task with a
+ * canvas_assignment_id an open task already follows throws a
+ * CanvasTaskExistsError.
+ */
 export async function createTask(task: {
   title: string;
   description?: string;
@@ -142,6 +170,9 @@ export async function createTask(task: {
   parent_task_id?: number | null;
   estimated_time?: number | null;
   reminder_minutes?: number | null;
+  canvas_assignment_id?: number | null;
+  canvas_html_url?: string | null;
+  canvas_due_at?: string | null;
 }) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/create-task`, {
@@ -149,7 +180,13 @@ export async function createTask(task: {
     headers,
     body: JSON.stringify(task),
   });
-  await assertOk(res, "createTask");
+  try {
+    await assertOk(res, "createTask");
+  } catch (err) {
+    const existingId = err instanceof ApiError ? existingCanvasTaskId(err) : null;
+    if (existingId != null) throw new CanvasTaskExistsError(existingId, (err as ApiError).detail);
+    throw err;
+  }
   return res.json();
 }
 
@@ -186,6 +223,7 @@ export async function updateWholeTask(id: number, task: {
   parent_task_id?: number | null;
   /** Replaced like every other field: leaving it out resets the task to the user's default lead. */
   reminder_minutes?: number | null;
+  canvas_due_at?: string | null;
 }) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/update-task/${id}`, {
@@ -947,6 +985,34 @@ export function fetchCanvasAssignments(courseId: number, refresh = false): Promi
 /** The last 14 days of announcements from the shown courses, newest first, as plain text. */
 export function fetchCanvasAnnouncements(refresh = false): Promise<CanvasAnnouncements> {
   return fetchCanvasRead(`announcements${canvasReadQuery(refresh)}`, "fetchCanvasAnnouncements");
+}
+
+/**
+ * Checks the user's open tasks added from Canvas against their assignments:
+ * which ones Canvas shows submitted, and which had their due date moved to
+ * the assignment's (the backend saves that move itself; it never completes a
+ * task). Reads `{ results }` or a bare list, so a response with or without
+ * the read routes' freshness fields both work.
+ */
+export async function syncCanvasLinkedTasks(refresh = false): Promise<CanvasLinkedTaskSync[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/linked-tasks/sync${canvasReadQuery(refresh)}`, {
+    method: "POST",
+    headers,
+  });
+  await assertOk(res, "syncCanvasLinkedTasks");
+  const body = await res.json();
+  const list: unknown = Array.isArray(body) ? body : body?.results;
+  if (!Array.isArray(list)) throw new Error("[syncCanvasLinkedTasks] unexpected response shape");
+  return list
+    .filter(r => typeof r?.task_id === "number")
+    .map(r => ({
+      task_id: r.task_id,
+      synced: r.synced !== false,
+      submitted: r.submitted === true,
+      due_at: typeof r.due_at === "string" ? r.due_at : null,
+      due_changed: r.due_changed === true,
+    }));
 }
 
 // ── Mood check-ins ───────────────────────────────────────────────────────────

@@ -104,3 +104,27 @@ describe('TaskItem linked tasks', () => {
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
   });
 });
+
+describe('TaskItem added from Canvas', () => {
+  const url = 'https://sdsu.instructure.com/courses/1001/assignments/9876';
+  afterEach(() => localStorage.clear());
+
+  it('links to the assignment, naming the course when the panel has listed it', () => {
+    localStorage.setItem('tm-canvas-course-labels', JSON.stringify({ 1001: 'CS 460' }));
+    render({ task: task(7, 'Problem Set 6', { canvas_assignment_id: 9876, canvas_html_url: url }), linkedTotal: 0 });
+    const link = container.querySelector<HTMLAnchorElement>('a[title="Open in Canvas"]');
+    expect(link?.href).toBe(url);
+    expect(link?.target).toBe('_blank');
+    expect(link?.textContent).toBe('From Canvas · CS 460');
+  });
+
+  it('says just "From Canvas" for an unknown course, in the compact card too', () => {
+    render({ task: task(7, 'Problem Set 6', { canvas_html_url: url }), linkedTotal: 0, compact: true });
+    expect(container.querySelector('a[title="Open in Canvas"]')?.textContent).toBe('From Canvas');
+  });
+
+  it('shows no link for other tasks or a link that is not https', () => {
+    render({ task: task(7, 'Laundry', { canvas_html_url: 'javascript:alert(1)' }), linkedTotal: 0 });
+    expect(container.querySelector('a[title="Open in Canvas"]')).toBeNull();
+  });
+});

@@ -253,6 +253,14 @@ describe('CanvasPanel', () => {
     expect(button('Refresh Canvas').disabled).toBe(false);
   });
 
+  it('asks for a linked-task sync when refreshed', async () => {
+    const onRefresh = vi.fn();
+    await act(async () => root.render(<CanvasPanel onOpenSettings={onOpenSettings} onRefresh={onRefresh} />));
+    expect(onRefresh).not.toHaveBeenCalled();
+    await click(button('Refresh Canvas'));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the data on screen when a refresh fails', async () => {
     await render();
     api.fetchCanvasOverview.mockRejectedValueOnce(apiError(502, 'canvas_unavailable'));

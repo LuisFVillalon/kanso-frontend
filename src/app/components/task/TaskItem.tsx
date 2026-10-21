@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Archive, Check, Timer, Trash2, Calendar, SquarePen } from 'lucide-react';
+import { Archive, Check, Timer, Trash2, Calendar, SquarePen, GraduationCap, ExternalLink } from 'lucide-react';
 import { Task } from '@/app/types/task';
 import {
   getDueStatus,
@@ -11,10 +11,29 @@ import {
 } from '@/app/utils/taskUtils';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
+import { canvasCourseLabel } from '@/app/utils/canvasTasks';
 import PriorityPicker from './PriorityPicker';
 import TaskTags from './TaskTags';
 import TaskStatusChip from './TaskStatusChip';
 import LinkedTasksList, { LinkedCountPill, LinkedToggleButton } from './LinkedTasksList';
+
+/** "From Canvas · CS 460 ↗": opens the assignment a task added from Canvas follows. */
+const FromCanvasLink: React.FC<{ url: string; className?: string }> = ({ url, className = '' }) => {
+  const course = canvasCourseLabel(url);
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Open in Canvas"
+      className={`inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline min-w-0 ${className}`}
+    >
+      <GraduationCap className="w-3 h-3 flex-shrink-0" aria-hidden />
+      <span className="truncate">From Canvas{course ? ` · ${course}` : ''}</span>
+      <ExternalLink className="w-3 h-3 flex-shrink-0" aria-hidden />
+    </a>
+  );
+};
 
 interface TaskItemProps {
   task: Task;
@@ -121,6 +140,9 @@ const TaskItem: React.FC<TaskItemProps> = ({
   const normalizedDueTime: string | null =
     task.due_time instanceof Date ? toLocalTimeStr(task.due_time) : (task.due_time ?? null);
 
+  // The backend only stores https links; anything else isn't rendered as a link.
+  const canvasUrl = task.canvas_html_url?.startsWith('https://') ? task.canvas_html_url : null;
+
   const dueStatus = getDueStatus(task);
   const actualDueDateText = normalizedDueDate ? formatDueDateShort(normalizedDueDate) : null;
 
@@ -200,6 +222,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
         </div>
 
         <TaskTags tags={task.tags} allTags={tags} className={`mt-1.5 ${hasLinked ? 'pl-12' : 'pl-6'}`} />
+        {canvasUrl && <FromCanvasLink url={canvasUrl} className={`mt-1.5 ${hasLinked ? 'ml-12' : 'ml-6'}`} />}
         {linkedList}
         {banner}
       </div>
@@ -329,7 +352,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
 
           <TaskTags tags={task.tags} allTags={tags} className="mb-3" />
 
-          <div className="pt-3 border-t border-border-subtle flex items-center gap-5 text-xs sm:text-sm">
+          <div className="pt-3 border-t border-border-subtle flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs sm:text-sm">
             <div className="flex items-center gap-1.5 flex-wrap">
               {dueStatus ? (
                 <TaskStatusChip status={dueStatus} />
@@ -358,6 +381,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
                 </span>
               </div>
             )}
+
+            {canvasUrl && <FromCanvasLink url={canvasUrl} />}
           </div>
 
           {linkedList}

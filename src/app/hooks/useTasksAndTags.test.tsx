@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   archiveTask: vi.fn(),
   completeTaskWithLinked: vi.fn(),
   restoreTask: vi.fn(),
+  createTask: vi.fn(),
 }));
 const showToast = vi.hoisted(() => vi.fn());
 vi.mock('@/app/lib/backend-api', () => ({
@@ -84,6 +85,26 @@ describe('useTasks.saveLinkedTasks', () => {
     expect(err).toBeInstanceOf(LinkedTasksSaveError);
     expect(err).toMatchObject({ task: parent, message: 'Task 7 is archived; restore it before linking it' });
     expect(hook.tasks).toEqual(before);
+  });
+});
+
+describe('useTasks.addTask', () => {
+  it('sends the Canvas link and due_at of a task added from Canvas', async () => {
+    const dueAt = '2026-10-24T06:59:00Z';
+    api.createTask.mockResolvedValue(task(50, 'Problem Set 6', { canvas_assignment_id: 9876, canvas_due_at: dueAt }));
+
+    await act(() => hook.addTask({
+      id: 0, title: 'Problem Set 6', description: '', priority: null, due_date: '2026-10-23', due_time: '23:59',
+      tags: [], created_date: new Date(), canvas_assignment_id: 9876,
+      canvas_html_url: 'https://sdsu.instructure.com/courses/1001/assignments/9876', canvas_due_at: dueAt,
+    }));
+
+    expect(api.createTask).toHaveBeenCalledWith(expect.objectContaining({
+      canvas_assignment_id: 9876,
+      canvas_html_url: 'https://sdsu.instructure.com/courses/1001/assignments/9876',
+      canvas_due_at: dueAt,
+    }));
+    expect(hook.tasks[0]).toMatchObject({ id: 50, canvas_due_at: dueAt });
   });
 });
 

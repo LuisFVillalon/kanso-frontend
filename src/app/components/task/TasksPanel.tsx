@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Filter } from 'lucide-react';
 import TaskItem from './TaskItem';
 import LinkedTaskBanner, { LinkedBannerKind } from './LinkedTaskBanner';
+import CanvasSubmittedBanner from './CanvasSubmittedBanner';
 import RemoveLinkedTasksDialog from './RemoveLinkedTasksDialog';
 import { LinkedRemoveMode, Tag, Task } from '@/app/types/task';
 import { TaskGroup } from '@/app/utils/taskUtils';
@@ -26,6 +27,11 @@ interface TasksPanelProps {
   /** User-adjustable scroll-area height in px (overrides the default responsive height). */
   heightPx?: number | null;
   pendingTaskIds?: Set<number>;
+  /** Tasks added from Canvas whose assignment Canvas shows submitted (see useCanvasTaskSync). */
+  canvasSubmitted?: {
+    shows: (task: Task) => boolean;
+    onNotYet: (id: number) => void;
+  };
 }
 
 const TasksPanel: React.FC<TasksPanelProps> = ({
@@ -42,6 +48,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   compact,
   heightPx,
   pendingTaskIds,
+  canvasSubmitted,
 }) => {
   // The completion question each parent card is asking, by parent id.
   const [banners, setBanners] = useState<Record<number, LinkedBannerKind>>({});
@@ -92,11 +99,21 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   };
 
   // A banner shows only while its question still applies (a failed toggle
-  // rolls the list back, which quietly drops it).
+  // rolls the list back, which quietly drops it). A linked-task question
+  // comes before Canvas's.
   const bannerFor = ({ task, linkedDone, linkedTotal }: TaskGroup) => {
     const kind = banners[task.id];
     const applies = !task.completed && linkedTotal > 0 && (kind === 'open' ? linkedDone < linkedTotal : linkedDone === linkedTotal);
-    if (!kind || !applies) return null;
+    if (!kind || !applies) {
+      if (!canvasSubmitted?.shows(task)) return null;
+      return (
+        <CanvasSubmittedBanner
+          title={task.title}
+          onComplete={() => handleToggleComplete(task.id)}
+          onNotYet={() => canvasSubmitted.onNotYet(task.id)}
+        />
+      );
+    }
     return (
       <LinkedTaskBanner
         kind={kind}

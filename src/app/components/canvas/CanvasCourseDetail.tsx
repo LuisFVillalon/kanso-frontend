@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import type { CanvasAssignment, CanvasCourseSummary, CanvasModule, CanvasModuleItem } from '@/app/types/canvas';
 import { useCanvasCourse, type CanvasCourseView } from '@/app/hooks/useCanvas';
+import type { CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { formatNumber, formatShortDate, scoreLabel } from '@/app/utils/canvas';
 import CanvasItemRow, { CanvasLink, CanvasStatusChip, type CourseLookup } from './CanvasItemRow';
 import { CourseGrade, GradeBar } from './CanvasCourses';
@@ -90,7 +91,12 @@ const ModuleRow: React.FC<{ module: CanvasModule }> = ({ module }) => {
   );
 };
 
-const Assignments: React.FC<{ assignments: CanvasAssignment[]; course: CourseLookup; now: Date }> = ({ assignments, course, now }) => {
+const Assignments: React.FC<{
+  assignments: CanvasAssignment[];
+  course: CourseLookup;
+  now: Date;
+  addToTasks?: CanvasAddToTasks;
+}> = ({ assignments, course, now, addToTasks }) => {
   const isPast = (a: CanvasAssignment) => !!a.due_at && new Date(a.due_at) < now;
   const groups = [
     { label: 'Upcoming', items: assignments.filter(a => !isPast(a)) },
@@ -103,7 +109,7 @@ const Assignments: React.FC<{ assignments: CanvasAssignment[]; course: CourseLoo
         <div key={group.label}>
           <div className="mt-3 mb-1.5 text-xs font-semibold text-text-primary">{group.label}</div>
           <div className="space-y-1.5">
-            {group.items.map(a => <CanvasItemRow key={a.id} item={a} course={course} now={now} />)}
+            {group.items.map(a => <CanvasItemRow key={a.id} item={a} course={course} now={now} addToTasks={addToTasks} />)}
           </div>
         </div>
       ))}
@@ -151,10 +157,13 @@ interface CanvasCourseDetailProps {
   refreshNonce: number;
   onFail: (err: unknown) => void;
   onBack: () => void;
+  addToTasks?: CanvasAddToTasks;
 }
 
 /** One course opened from the Courses tab: grade, then Modules, Assignments & quizzes, and Grades. */
-const CanvasCourseDetail: React.FC<CanvasCourseDetailProps> = ({ course, color, lookup, now, refreshNonce, onFail, onBack }) => {
+const CanvasCourseDetail: React.FC<CanvasCourseDetailProps> = ({
+  course, color, lookup, now, refreshNonce, onFail, onBack, addToTasks,
+}) => {
   const [tab, setTab] = useState<CourseTab>('modules');
   const { modules, assignments, error } = useCanvasCourse(course.id, tab === 'modules' ? 'modules' : 'assignments', {
     onFail,
@@ -217,7 +226,7 @@ const CanvasCourseDetail: React.FC<CanvasCourseDetailProps> = ({ course, color, 
           ? <p className="text-sm text-text-secondary">This course has no modules.</p>
           : <div className="space-y-1.5">{modules!.modules.map(m => <ModuleRow key={m.id} module={m} />)}</div>
       ) : tab === 'assignments' ? (
-        <Assignments assignments={assignments!.assignments} course={lookup} now={now} />
+        <Assignments assignments={assignments!.assignments} course={lookup} now={now} addToTasks={addToTasks} />
       ) : (
         <Grades assignments={assignments!.assignments} color={color} />
       )}
