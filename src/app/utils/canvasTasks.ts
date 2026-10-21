@@ -37,9 +37,13 @@ export function canvasAssignmentId(item: CanvasItem): number | null {
   return item.kind === 'assignment' ? item.id : null;
 }
 
-/** Work already handed in, graded or excused has nothing left to do. */
-export const isCanvasItemDone = (item: CanvasItem) =>
-  !!(item.submission?.submitted || item.submission?.graded || item.submission?.excused);
+/**
+ * Work excused, or handed in or graded and not missing, has nothing left to
+ * do; missing work stays open even with a grade (a 0 for work never handed
+ * in), as the panel shows it "Slipped".
+ */
+export const isCanvasItemDone = ({ submission: sub }: CanvasItem) =>
+  !!(sub?.excused || (!sub?.missing && (sub?.submitted || sub?.graded)));
 
 /**
  * The task an item becomes: its title, its due date and time in local time,

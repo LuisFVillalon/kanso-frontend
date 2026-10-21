@@ -49,7 +49,7 @@ import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 
 const TaskManager: React.FC = () => {
   const router = useRouter();
-  const { signOut, user } = useAuth();
+  const { signOut, user, isDemo } = useAuth();
   const showToast = useToast();
   const doodleCanvasRef = useRef<DoodleCanvasHandle>(null);
   const [doodleColor, setDoodleColor] = useState(() => getStoredThemeColor() ?? DEFAULT_ACCENT);
@@ -96,7 +96,7 @@ const TaskManager: React.FC = () => {
 
   const { tasks, isLoading, toggleComplete, completeWithLinked, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, refreshTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
   // Tasks added from Canvas: synced on load and on a Canvas panel refresh.
-  const canvasTaskSync = useCanvasTaskSync({ enabled: !isLoading, tasks, refreshTasks });
+  const canvasTaskSync = useCanvasTaskSync({ enabled: !isLoading && !isDemo, tasks, refreshTasks });
 
   // The key-press moment: plays when checking off a task settles today's
   // plan, and when the user switches into focus mode.
@@ -387,8 +387,8 @@ const TaskManager: React.FC = () => {
         heightPx={panelHeightPx}
         onOpenSettings={() => openSettings('integrations')}
         syncToken={canvasSyncToken}
-        addToTasks={canvasAddToTasks}
-        onRefresh={() => void canvasTaskSync.sync(true)}
+        addToTasks={isDemo ? undefined : canvasAddToTasks}
+        onRefresh={isDemo ? undefined : () => void canvasTaskSync.sync(true)}
       />
     );
   };

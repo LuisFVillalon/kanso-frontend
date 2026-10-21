@@ -77,6 +77,11 @@ describe('isCanvasItemDone', () => {
     expect(isCanvasItemDone(item({ submission: sub({ graded: true }) }))).toBe(true);
     expect(isCanvasItemDone(item({ submission: sub({ excused: true }) }))).toBe(true);
   });
+
+  it('keeps missing work open even when graded, unless excused', () => {
+    expect(isCanvasItemDone(item({ submission: sub({ missing: true, graded: true, score: 0 }) }))).toBe(false);
+    expect(isCanvasItemDone(item({ submission: sub({ missing: true, excused: true }) }))).toBe(true);
+  });
 });
 
 describe('canvasTaskForm', () => {
