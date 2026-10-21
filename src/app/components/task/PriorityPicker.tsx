@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Siren, Loader2 } from 'lucide-react';
 import { getPriorityBadgeStyle } from '@/app/utils/taskUtils';
 
@@ -20,18 +21,51 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
   const [open, setOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Viewport coords for the portaled menu. Task cards each form their own
+  // stacking context (backdrop-filter) and sit in a scrolling panel, so an
+  // in-card absolute menu ends up under the next card or clipped.
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const style = getPriorityBadgeStyle(priority, maxPriority);
   const isSmall = size === 'sm';
 
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (ref.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
+    // Fixed coords go stale once anything scrolls; close like a native select.
+    const handleScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const handleResize = () => setOpen(false);
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [open]);
+
+  // Place the menu below the badge, flipping above when it won't fit.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const anchor = ref.current?.getBoundingClientRect();
+    if (!anchor) return;
+    const menuHeight = menuRef.current?.offsetHeight ?? 0;
+    const gap = 4;
+    const right = window.innerWidth - anchor.right;
+    const roomBelow = window.innerHeight - anchor.bottom - gap;
+    if (menuHeight > roomBelow && anchor.top - gap > roomBelow) {
+      setPos({ bottom: window.innerHeight - anchor.top + gap, right });
+    } else {
+      setPos({ top: anchor.bottom + gap, right });
+    }
   }, [open]);
 
   const handleSelect = async (p: number | null) => {
@@ -68,10 +102,19 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
         {priority ?? '—'}
       </button>
 
-      {open && (
+      {open && typeof document !== 'undefined' && createPortal(
         <div
-          className="absolute z-50 top-full mt-1 right-0 card p-1.5 flex flex-col gap-1 min-w-[72px]"
-          style={{ boxShadow: 'var(--tm-shadow-lg)' }}
+          ref={menuRef}
+          role="menu"
+          className="fixed z-50 card p-1.5 flex flex-col gap-1 min-w-[72px]"
+          style={{
+            boxShadow: 'var(--tm-shadow-lg)',
+            top: pos?.top,
+            bottom: pos?.bottom,
+            right: pos?.right,
+            // Hidden until measured so it never flashes at the wrong spot.
+            visibility: pos ? undefined : 'hidden',
+          }}
         >
           <div
             className={`flex flex-col gap-1 ${
@@ -109,7 +152,8 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
               Clear
             </button>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
