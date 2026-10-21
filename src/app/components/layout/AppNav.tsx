@@ -321,7 +321,6 @@ const AppNav: React.FC<AppNavProps> = ({
 
       {sheet === 'more' && (
         <Sheet label="More" onClose={closeSheet}>
-          <Who profileName={profileName} profileAvatar={profileAvatar} email={email} isDemo={isDemo} />
           <SheetRow icon={ARCHIVE.icon} label={ARCHIVE.label} href={ARCHIVE.href} current={isActivePath(pathname, ARCHIVE.href)} onClick={closeSheet} />
           <SheetRow icon={TRASH.icon} label={TRASH.label} href={TRASH.href} current={isActivePath(pathname, TRASH.href)} onClick={closeSheet} />
           <SheetRow icon={Blocks} label="Manage habits" onClick={fromSheet(onManageHabits)} />

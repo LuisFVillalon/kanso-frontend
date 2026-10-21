@@ -5,10 +5,9 @@ import { useSearchParams } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { useNotesContext } from '@/app/context/NotesContext';
 import { useTagsContext } from '@/app/context/TagsContext';
-import { useAuth } from '@/app/context/AuthContext';
 import { Note } from '@/app/types/notes';
 import { useResizableSplit } from '@/app/hooks/useResizableSplit';
-import { useProfile } from '@/app/hooks/useProfile';
+import { useAppShell } from '@/app/context/AppShellContext';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import NotesList, { ViewMode } from './NotesList';
 import NoteEditor from './NoteEditor';
@@ -27,8 +26,7 @@ const DEFAULT_SIDE = 288;
 
 const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
   const { notes, isLoading: notesLoading, addNote, updateNote, deleteNote, archiveNote, discardDraft, pendingNoteIds } = useNotesContext();
-  const { user } = useAuth();
-  const { profile, saveProfile } = useProfile(user);
+  const { profile, saveProfile } = useAppShell().profileState;
   const [viewMode, setViewMode] = usePersistedPref<ViewMode>(
     'tm-notes-view-mode',
     'cards',

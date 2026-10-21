@@ -3,6 +3,8 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/app/context/ToastContext';
+import { AppShellContext, type AppShellValue } from '@/app/context/AppShellContext';
+import { useProfile } from '@/app/hooks/useProfile';
 import type { MoodCheckin } from '@/app/types/mood';
 
 const api = vi.hoisted(() => ({
@@ -58,9 +60,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const ProfileShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const profileState = useProfile(auth.user as Parameters<typeof useProfile>[0]);
+  return <AppShellContext.Provider value={{ profileState } as AppShellValue}>{children}</AppShellContext.Provider>;
+};
+
 const render = async () => {
   await act(async () => {
-    root.render(<ToastProvider><CalendarReportView /></ToastProvider>);
+    root.render(<ToastProvider><ProfileShell><CalendarReportView /></ProfileShell></ToastProvider>);
   });
 };
 

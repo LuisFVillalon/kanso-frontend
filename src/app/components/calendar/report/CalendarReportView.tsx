@@ -20,9 +20,8 @@ import {
 import { CardShell } from '@/app/components/stats/CardShell';
 import { formatHours } from '@/app/components/stats/charts';
 import { moodColor } from '@/app/components/mood/MoodFacePicker';
-import { useAuth } from '@/app/context/AuthContext';
+import { useAppShell } from '@/app/context/AppShellContext';
 import { useCalendarReport } from '@/app/hooks/useCalendarReport';
-import { useProfile } from '@/app/hooks/useProfile';
 import { useReportMood } from '@/app/hooks/useReportMood';
 import type { CalendarActivity } from '@/app/types/activity';
 import { moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
@@ -358,8 +357,7 @@ const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
   const { report, activity, loading, error, retry } = useCalendarReport(period);
-  const { user } = useAuth();
-  const { profile, loaded: profileLoaded } = useProfile(user);
+  const { profile, loaded: profileLoaded } = useAppShell().profileState;
   // Until the profile loads we don't know whether mood is hidden, so it's fetched meanwhile.
   const moodHidden = profileLoaded && !profile.moodCheckins.show_in_reports;
   const mood = useReportMood(period, !moodHidden);
