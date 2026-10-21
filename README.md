@@ -72,9 +72,11 @@ A few decisions worth calling out:
 
 ```
 src/app/
-  page.tsx               # Landing page when signed out, dashboard (TaskManager) when signed in
+  (app)/                 # Route group sharing the signed-in app shell (navigation rail, global modals)
+    layout.tsx           # Wraps every page below in AppShell
+    page.tsx             # Landing page when signed out, dashboard (TaskManager) when signed in
+    notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
   TaskManager.tsx        # The dashboard
-  notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
   fonts.ts               # Fraunces (display) and M PLUS Rounded 1c (body), via next/font
