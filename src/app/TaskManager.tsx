@@ -458,7 +458,7 @@ const TaskManager: React.FC = () => {
               Welcome back{profile.name ? `, ${profile.name}` : ''}
             </h1>
           </div>
-          <div className="@container relative order-last sm:order-none flex-1 min-w-0 self-stretch">
+          <div className="@container relative order-last sm:order-none flex-1 min-w-0 sm:min-w-14 self-stretch">
             <KeyPressMoment moment={keyPress} placement="header" onDone={clearKeyPress} />
           </div>
           <div className="flex items-center gap-2">
