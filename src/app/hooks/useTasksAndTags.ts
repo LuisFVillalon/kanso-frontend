@@ -131,12 +131,12 @@ export const useTasks = (enabled: boolean) => {
     setPendingTaskIds(new Set(pendingRef.current));
 
     const completedDate = toLocalISOString(new Date());
-    setTasks(prev => prev.map(t => ids.has(t.id) ? { ...t, completed: true, completed_date: completedDate } : t));
+    setTasks(prev => prev.map(t => ids.has(t.id) ? { ...t, completed: true, completed_date: completedDate, priority: null } : t));
 
     try {
       const updated = await completeTaskWithLinked(id);
       setTasks(prev => prev.map(t =>
-        t.id === id ? updated : ids.has(t.id) ? { ...t, completed_date: updated.completed_date } : t
+        t.id === id ? updated : ids.has(t.id) ? { ...t, completed_date: updated.completed_date, priority: null } : t
       ));
       setCompletionSyncToken(v => v + 1);
     } catch (err) {
@@ -178,15 +178,23 @@ export const useTasks = (enabled: boolean) => {
   };
 
   // Brings a just-deleted task back from the trash with the subtasks that
-  // went with it (server-side too), all as they were.
-  const undoDelete = async (rootId: number, removed: Task[]) => {
+  // went with it (server-side too), all as they were, re-linking the linked
+  // tasks a `keep` delete unlinked.
+  const undoDelete = async (rootId: number, removed: Task[], relink: LinkedTaskRef[]) => {
+    let restored: Task;
     try {
-      const restored = await restoreTaskApi(rootId);
-      restoreTasks([restored, ...removed.filter(t => t.id !== rootId)]);
-      showToast('Task restored.', 'success');
+      restored = await restoreTaskApi(rootId);
     } catch (err) {
       console.error('Undo delete failed:', err);
       showToast(describeError(err, "Couldn't restore the task. You can still restore it from Recently deleted."));
+      return;
+    }
+    restoreTasks([restored, ...removed.filter(t => t.id !== rootId)]);
+    try {
+      if (relink.length) await saveLinkedTasks(restored, relink);
+      showToast('Task restored.', 'success');
+    } catch (err) {
+      showToast(`Task restored, but its linked tasks couldn't be re-linked: ${(err as Error).message}`);
     }
   };
 
@@ -205,7 +213,9 @@ export const useTasks = (enabled: boolean) => {
     // Puts the subtree back (re-linking what was unlinked), sorted by id to preserve list order.
     const rollback = () =>
       setTasks(prev => [...prev.map(t => unlinked.get(t.id) ?? t), ...removed].sort((a, b) => b.id - a.id));
-    return { removed, rollback };
+    const unlinkedInOrder = [...unlinked.values()].sort((a, b) =>
+      (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER) || a.id - b.id);
+    return { removed, unlinked: unlinkedInOrder, rollback };
   };
 
   // Deleting a task moves it and its subtasks to the trash (server-side), so
@@ -217,14 +227,14 @@ export const useTasks = (enabled: boolean) => {
     setPendingTaskIds(new Set(pendingRef.current));
 
     // Optimistic update: remove immediately so the UI responds instantly.
-    const { removed, rollback } = removeFromList(delTask, linked);
+    const { removed, unlinked, rollback } = removeFromList(delTask, linked);
 
     try {
       await onDelete(delTask.id, linked);
       setCompletionSyncToken(v => v + 1);
       showToast('Task moved to Recently deleted. You can restore it for 30 days.', 'info', {
         label: 'Undo',
-        onClick: () => undoDelete(delTask.id, removed),
+        onClick: () => undoDelete(delTask.id, removed, unlinked.map(t => ({ id: t.id }))),
       });
       return true;
     } catch (err) {

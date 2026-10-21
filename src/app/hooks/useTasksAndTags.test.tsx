@@ -9,13 +9,15 @@ const api = vi.hoisted(() => ({
   onDelete: vi.fn(),
   archiveTask: vi.fn(),
   completeTaskWithLinked: vi.fn(),
+  restoreTask: vi.fn(),
 }));
+const showToast = vi.hoisted(() => vi.fn());
 vi.mock('@/app/lib/backend-api', () => ({
   ...api,
   describeError: (err: unknown, fallback: string) =>
     err instanceof Error && err.message.startsWith('400:') ? err.message.slice(4) : fallback,
 }));
-vi.mock('@/app/context/ToastContext', () => ({ useToast: () => vi.fn() }));
+vi.mock('@/app/context/ToastContext', () => ({ useToast: () => showToast }));
 
 import { useTasks } from './useTasksAndTags';
 import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
@@ -35,7 +37,7 @@ const Probe: React.FC<{ onResult: (r: typeof hook) => void }> = ({ onResult }) =
 
 let root: Root;
 beforeEach(() => {
-  Object.values(api).forEach(fn => fn.mockReset());
+  [...Object.values(api), showToast].forEach(fn => fn.mockReset());
   root = createRoot(document.createElement('div'));
   act(() => root.render(<Probe onResult={r => { hook = r; }} />));
 });
@@ -89,7 +91,7 @@ describe('useTasks linked task lifecycle', () => {
   const family = () => [
     task(1, 'Apply'),
     task(2, 'Résumé', { parent_task_id: 1, position: 0, completed: true, completed_date: '2026-10-02T10:00:00' }),
-    task(3, 'Mock interview', { parent_task_id: 1, position: 1 }),
+    task(3, 'Mock interview', { parent_task_id: 1, position: 1, priority: 2 }),
     task(5, 'Unrelated'),
   ];
 
@@ -103,7 +105,7 @@ describe('useTasks linked task lifecycle', () => {
     expect(api.completeTaskWithLinked).toHaveBeenCalledWith(1);
     const byId = new Map(hook.tasks.map(t => [t.id, t]));
     expect(byId.get(1)).toMatchObject({ completed: true, completed_date: '2026-10-21T09:00:00' });
-    expect(byId.get(3)).toMatchObject({ completed: true, completed_date: '2026-10-21T09:00:00' });
+    expect(byId.get(3)).toMatchObject({ completed: true, completed_date: '2026-10-21T09:00:00', priority: null });
     expect(byId.get(2)).toMatchObject({ completed: true, completed_date: '2026-10-02T10:00:00' });
     expect(byId.get(5)).toMatchObject({ completed: false });
   });
@@ -127,6 +129,33 @@ describe('useTasks linked task lifecycle', () => {
     expect(api.onDelete).toHaveBeenCalledWith(1, 'keep');
     expect(hook.tasks.map(t => t.id)).toEqual([2, 3, 5]);
     expect(hook.tasks.filter(t => t.id !== 5).every(t => t.parent_task_id === null && t.position === null)).toBe(true);
+  });
+
+  it('undoes a keep delete: restores the parent and re-links its linked tasks in their original order', async () => {
+    const tasks = [task(1, 'Apply'), task(3, 'Mock interview', { parent_task_id: 1, position: 1 }),
+      task(2, 'Résumé', { parent_task_id: 1, position: 0 }), task(5, 'Unrelated')];
+    act(() => hook.setTasks(tasks));
+    api.onDelete.mockResolvedValue(undefined);
+    api.restoreTask.mockResolvedValue(tasks[0]);
+    api.updateLinkedTasks.mockResolvedValue({
+      parent: tasks[0],
+      children: [
+        task(2, 'Résumé', { parent_task_id: 1, position: 0 }),
+        task(3, 'Mock interview', { parent_task_id: 1, position: 1 }),
+      ],
+    });
+
+    await act(() => hook.deleteTask(tasks[0], 'keep'));
+    const undo = showToast.mock.calls.find(([, , action]) => action?.label === 'Undo')![2];
+    await act(() => undo.onClick());
+
+    expect(api.restoreTask).toHaveBeenCalledWith(1);
+    expect(api.updateLinkedTasks).toHaveBeenCalledWith(1, [{ id: 2 }, { id: 3 }]);
+    const byId = new Map(hook.tasks.map(t => [t.id, t]));
+    expect(hook.tasks).toHaveLength(4);
+    expect(byId.get(1)).toBeDefined();
+    expect(byId.get(2)).toMatchObject({ parent_task_id: 1, position: 0 });
+    expect(byId.get(3)).toMatchObject({ parent_task_id: 1, position: 1 });
   });
 
   it('archives with cascade: the parent and its linked tasks leave together', async () => {
