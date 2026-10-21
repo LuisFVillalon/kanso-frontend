@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { Task, Tag } from '@/app/types/task';
+import { LinkedTaskRef, Task, Tag } from '@/app/types/task';
 import TaskFormFields, { TaskFormData } from './TaskFormFields';
+import LinkedTasksField, { LeadsUpToField, LinkedDepthNote } from './LinkedTasksField';
 import Modal from '@/app/components/common/Modal';
+import {
+  LinkedDraft, LinkedTasksSaveError, linkedDraftsChanged, linkedDraftsFor, linkedSaveMessage, toLinkedRefs,
+} from '@/app/utils/linkedTasks';
 
 interface EditTaskModalProps {
   isOpen: boolean;
@@ -11,24 +15,54 @@ interface EditTaskModalProps {
   onTaskChange: (task: TaskFormData) => void;
   tags: Tag[];
   onToggleTag: (tag: Tag) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  /** Saves the task, then saves `linked` as its linked tasks when given (only when they changed). */
+  onSubmit: (e: React.FormEvent, linked?: LinkedTaskRef[]) => void | Promise<void>;
   activeTaskCount: number;
   usedPriorityLevels: number[];
+  /** Every loaded task. When given, the form gets a Linked tasks section. */
+  allTasks?: Task[];
 }
 
-const EditTaskModal: React.FC<EditTaskModalProps> = ({
-  isOpen, task, onClose, onTaskChange, tags, onToggleTag,
-  onSubmit, activeTaskCount, usedPriorityLevels,
+const EditTaskModal: React.FC<EditTaskModalProps> = props => {
+  if (!props.isOpen || !props.task) return null;
+  return <EditTaskForm key={props.task.id} {...props} task={props.task} />;
+};
+
+/** The open modal's body, mounted fresh for each task so its linked-task rows start from that task's. */
+const EditTaskForm: React.FC<EditTaskModalProps & { task: Task }> = ({
+  task, onClose, onTaskChange, tags, onToggleTag,
+  onSubmit, activeTaskCount, usedPriorityLevels, allTasks,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [savedLinked] = useState<LinkedDraft[]>(() => linkedDraftsFor(allTasks ?? [], task.id));
+  const [linked, setLinked] = useState<LinkedDraft[]>(savedLinked);
+  const [linkedError, setLinkedError] = useState<string | null>(null);
+  // The task's parent when the modal opened, so an unsaved Unlink can be undone.
+  const [originalParentId] = useState(task.parent_task_id ?? null);
 
-  if (!isOpen || !task) return null;
+  const parentId = task.parent_task_id ?? null;
+  const parentTitle = (id: number | null) => allTasks?.find(t => t.id === id)?.title ?? null;
+  const showLinkedField = !!allTasks && parentId == null;
+
+  const setParent = (parent_task_id: number | null) =>
+    onTaskChange({ ...(task as TaskFormData), parent_task_id });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLinkedError(null);
+    if (showLinkedField && linked.some(d => d.kind === 'new' && !d.title.trim())) {
+      setLinkedError('Give each new linked task a title, or remove it.');
+      return;
+    }
+    const refs = showLinkedField && linkedDraftsChanged(savedLinked, linked)
+      ? toLinkedRefs(linked, allTasks!)
+      : undefined;
     setIsLoading(true);
     try {
-      await onSubmit(e);
+      await onSubmit(e, refs);
+    } catch (err) {
+      if (!(err instanceof LinkedTasksSaveError)) throw err;
+      setLinkedError(linkedSaveMessage(err, allTasks ?? [], "The task was saved, but its linked tasks weren't"));
     } finally {
       setIsLoading(false);
     }
@@ -37,7 +71,7 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
   return (
     <Modal onClose={onClose} panelClassName="modal-panel max-w-lg w-full max-h-[90vh] overflow-y-auto scrollbar-custom">
       <div
-        className="sticky top-0 px-6 py-4 flex items-center justify-between border-b border-border-subtle"
+        className="sticky top-0 z-30 px-6 py-4 flex items-center justify-between border-b border-border-subtle"
         style={{ backgroundColor: 'var(--tm-surface)' }}
       >
         <h2 className="text-xl font-bold text-text-primary">Edit Task</h2>
@@ -55,7 +89,38 @@ const EditTaskModal: React.FC<EditTaskModalProps> = ({
           onToggleTag={onToggleTag}
           activeTaskCount={activeTaskCount}
           usedPriorityLevels={usedPriorityLevels}
+          afterTitle={allTasks && originalParentId != null && (
+            <LeadsUpToField
+              parentTitle={parentTitle(originalParentId)}
+              unlinked={parentId == null}
+              onUnlink={() => setParent(null)}
+              onUndo={() => setParent(originalParentId)}
+            />
+          )}
         />
+
+        {allTasks && (
+          <div>
+            {/* .perf zeroes its own margins, so the gap below it lives on this wrapper's second child. */}
+            <hr className="perf" />
+            <div className="mt-5">
+              {showLinkedField ? (
+                <LinkedTasksField
+                  allTasks={allTasks}
+                  parentId={task.id}
+                  parentOfParent={parentId}
+                  parentDueDate={task.due_date}
+                  drafts={linked}
+                  onChange={setLinked}
+                  mode="edit"
+                  error={linkedError}
+                />
+              ) : (
+                <LinkedDepthNote parentTitle={parentTitle(parentId)} />
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-2">
           <button type="button" onClick={onClose} disabled={isLoading} className="btn btn-secondary flex-1 py-2.5">

@@ -8,14 +8,14 @@ import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useToast } from '@/app/context/ToastContext';
 import { useWeekActivity } from '@/app/hooks/useWeekActivity';
-import type { BaseTaskForm, Tag, Task } from '@/app/types/task';
+import type { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
 import NewTaskModal from '@/app/components/task/NewTaskModal';
 import EditTaskModal from '@/app/components/task/EditTaskModal';
 import HabitHistoryModal from '@/app/components/habit/HabitHistoryModal';
 import { DEFAULT_DAY_START } from '@/app/lib/restDays';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
-import { taskToEditForm } from '@/app/utils/taskUtils';
+import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import {
   addDays,
   buildWeekEvents,
@@ -80,7 +80,7 @@ const WeekView: React.FC = () => {
   const router = useRouter();
   const showToast = useToast();
   const now = useMinuteClock();
-  const { tasks, addTask, updateTask } = useTasksContext();
+  const { tasks, addTask, updateTask, saveLinkedTasks } = useTasksContext();
   const { tags } = useTagsContext();
   const { habits, toggleDate: toggleHabitDate } = useHabitsContext();
 
@@ -132,13 +132,17 @@ const WeekView: React.FC = () => {
     setShowNewTask(true);
   };
 
-  const handleCreateTask = async (e: React.FormEvent) => {
+  const handleCreateTask = async (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task) => {
     e.preventDefault();
     if (!newTask.title.trim()) {
       showToast('Give the task a title first.', 'info');
       return;
     }
-    if (await addTask(newTask)) {
+    const task = created
+      ? (await updateTask(created.id, applyNewTaskForm(created, newTask))) && created
+      : await addTask(newTask);
+    if (task) {
+      if (linked) await saveLinkedTasks(task, linked);
       setShowNewTask(false);
       setNewTask(emptyTaskForm());
     }
@@ -149,10 +153,12 @@ const WeekView: React.FC = () => {
     if (task) setEditingTask(task);
   };
 
-  const handleEditTask = async (e: React.FormEvent) => {
+  const handleEditTask = async (e: React.FormEvent, linked?: LinkedTaskRef[]) => {
     e.preventDefault();
     if (!editingTask) return;
-    if (await updateTask(editingTask.id, taskToEditForm(editingTask))) setEditingTask(null);
+    if (!(await updateTask(editingTask.id, taskToEditForm(editingTask)))) return;
+    if (linked) await saveLinkedTasks(editingTask, linked);
+    setEditingTask(null);
   };
 
   const handleToggleHabitDate = async (habitId: number, date: string) => {
@@ -228,6 +234,7 @@ const WeekView: React.FC = () => {
         onSubmit={handleCreateTask}
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
+        allTasks={tasks}
       />
 
       <EditTaskModal
@@ -240,6 +247,7 @@ const WeekView: React.FC = () => {
         onSubmit={handleEditTask}
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
+        allTasks={tasks}
       />
 
       <HabitHistoryModal

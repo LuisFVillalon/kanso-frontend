@@ -50,6 +50,8 @@ export interface Task {
   completed_date: string | Date | null;
   estimated_time?: number | null;
   parent_task_id?: number | null;
+  /** Order among its parent's linked tasks; null for top-level tasks and links saved before ordering existed. */
+  position?: number | null;
   /** Supabase Auth UUID — set server-side, never supplied by the client. */
   user_id?: string | null;
   /** When the task was archived; null while active. */
@@ -80,6 +82,9 @@ export interface EditTaskForm extends BaseTaskForm {
   completed: boolean;
   completed_date: string | Date | null;
 }
+
+/** One linked task in a PUT /update-linked-tasks body: an existing task by id, or a new one by title. */
+export type LinkedTaskRef = { id: number } | { title: string };
 
 export type NewTag = Omit<Tag, "id">;
 

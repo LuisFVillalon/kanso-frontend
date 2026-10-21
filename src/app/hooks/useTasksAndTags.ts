@@ -11,12 +11,14 @@ import {
   archiveTask as archiveTaskApi,
   archiveTag as archiveTagApi,
   restoreTask as restoreTaskApi,
+  updateLinkedTasks,
   describeError,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
-import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag } from '@/app/types/task';
+import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag, LinkedTaskRef } from '@/app/types/task';
 import { toLocalISOString, toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 import { subtaskTreeIds } from '@/app/utils/taskUtils';
+import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
 
 /**
  * Manages task state and CRUD operations.
@@ -238,6 +240,32 @@ export const useTasks = (enabled: boolean) => {
     }
   };
 
+  // Saves a task's whole linked-task list (order included) and merges the
+  // result: the parent and its linked tasks as saved, new ones added, and the
+  // ones left out unlinked. Throws a LinkedTasksSaveError without a toast,
+  // so the form can show the reason next to the list.
+  const saveLinkedTasks = async (parent: Task, children: LinkedTaskRef[]): Promise<void> => {
+    const parentId = parent.id;
+    let saved: Awaited<ReturnType<typeof updateLinkedTasks>>;
+    try {
+      saved = await updateLinkedTasks(parentId, children);
+    } catch (err) {
+      console.error('Saving linked tasks failed:', err);
+      throw new LinkedTasksSaveError(parent, describeError(err, 'Something went wrong. Please try again.'));
+    }
+    const byId = new Map([saved.parent, ...saved.children].map(t => [t.id, t]));
+    setTasks(prev => {
+      const next = prev.map(t => {
+        const fresh = byId.get(t.id);
+        if (fresh) return fresh;
+        return t.parent_task_id === parentId ? { ...t, parent_task_id: null, position: null } : t;
+      });
+      const known = new Set(prev.map(t => t.id));
+      const created = saved.children.filter(t => !known.has(t.id));
+      return created.length ? [...created.reverse(), ...next] : next;
+    });
+  };
+
   return {
     tasks,
     isLoading,
@@ -248,6 +276,7 @@ export const useTasks = (enabled: boolean) => {
     archiveTask,
     restoreTasks,
     updateTask,
+    saveLinkedTasks,
     pendingTaskIds,
     completionSyncToken,
   };

@@ -9,7 +9,7 @@
  */
 
 import { Note, NoteSession } from "../types/notes";
-import { Tag, Task } from "../types/task";
+import { LinkedTaskRef, Tag, Task } from "../types/task";
 import { CalendarSettings } from "../types/calendar";
 import { CalendarActivity } from "../types/activity";
 import { Habit, HabitHistoryEntry } from "../types/habit";
@@ -177,6 +177,24 @@ export async function updateWholeTask(id: number, task: {
     body: JSON.stringify(task),
   });
   await assertOk(res, "updateWholeTask");
+  return res.json();
+}
+
+/**
+ * Saves all of a task's linked tasks in one transaction, in the order given:
+ * existing tasks are linked (moved from another parent if they had one), new
+ * titles are created with the parent's tags, and active linked tasks left out
+ * are unlinked. Returns the parent and its linked tasks in order. Throws an
+ * ApiError (400 with a readable detail) when a link breaks the rules.
+ */
+export async function updateLinkedTasks(id: number, children: LinkedTaskRef[]): Promise<{ parent: Task; children: Task[] }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/update-linked-tasks/${id}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ children }),
+  });
+  await assertOk(res, "updateLinkedTasks");
   return res.json();
 }
 
