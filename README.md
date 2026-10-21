@@ -14,7 +14,7 @@ This repository is the web app. kanso is three services, each in its own reposit
 
 ## Features
 
-- **Tasks**: due dates and times, priorities, tags, time estimates, and a filterable, sortable list.
+- **Tasks**: due dates and times, priorities, tags, time estimates, and a filterable, sortable list. Linked tasks (tasks that lead up to a parent task) nest under their parent in a collapsible block with "x of y done" progress, and a linked task that matches a filter still shows under its parent.
 - **Notes**: a Tiptap rich-text editor with tables, highlights, resizable images and text alignment, organized by tag folders in grid or list view. Notes export to PDF, and editing time is tracked per note.
 - **Learning resources (AI)**: from any note, get one video, one article and one exercise for going deeper. An LLM reads the note and plans the searches, then real search results are filtered, dead-link-checked and ranked by deterministic code, so the model never invents a link.
 - **Habits**: daily check-ins, current and best streaks, and a 30-day history you can edit retroactively.
