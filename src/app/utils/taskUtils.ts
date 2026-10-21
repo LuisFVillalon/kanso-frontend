@@ -1,4 +1,5 @@
-import { EditTaskForm, Task } from '@/app/types/task';
+import { BaseTaskForm, EditTaskForm, Task } from '@/app/types/task';
+import { compareLinkedOrder } from '@/app/utils/linkedTasks';
 
 // ── Priority (static badge colors for levels 1–10) ────────────────────────────
 
@@ -138,6 +139,14 @@ export function taskToEditForm(task: Task, overrides: Partial<EditTaskForm> = {}
   };
 }
 
+/** `task` with a new-task form's fields applied, for re-saving a task an earlier try already created. */
+export function applyNewTaskForm(task: Task, form: BaseTaskForm): EditTaskForm {
+  const { title, description, priority, due_date, due_time, tags, category, estimated_time, reminder_minutes } = form;
+  return taskToEditForm(task, {
+    title, description, priority, due_date, due_time, tags, category, estimated_time, reminder_minutes,
+  });
+}
+
 /** Ids of `rootId` and every task nested under it (subtasks, their subtasks, …). */
 export function subtaskTreeIds(tasks: Pick<Task, 'id' | 'parent_task_id'>[], rootId: number): Set<number> {
   const ids = new Set([rootId]);
@@ -159,7 +168,7 @@ export function subtaskTreeIds(tasks: Pick<Task, 'id' | 'parent_task_id'>[], roo
 /** A top-level task in the list, with the linked tasks shown under it. */
 export interface TaskGroup {
   task: Task;
-  /** Linked tasks to render under `task`, oldest first. */
+  /** Linked tasks to render under `task`, in their saved order (`position`, then id). */
   linked: Task[];
   /** Progress over `task`'s direct linked tasks, including ones the filters hide. */
   linkedDone: number;
@@ -207,7 +216,7 @@ export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[
     list.push(t);
     linkedByRoot.set(root, list);
   }
-  for (const list of linkedByRoot.values()) list.sort((a, b) => a.id - b.id);
+  for (const list of linkedByRoot.values()) list.sort(compareLinkedOrder);
 
   const matchingIds = new Set(matching.map(t => t.id));
   const groups: TaskGroup[] = [];

@@ -16,6 +16,7 @@ export interface TaskFormData {
   category?: string | null;
   estimated_time?: number | null;
   reminder_minutes?: number | null;
+  parent_task_id?: number | null;
 }
 
 interface TaskFormFieldsProps {
@@ -25,6 +26,8 @@ interface TaskFormFieldsProps {
   onToggleTag: (tag: Tag) => void;
   activeTaskCount: number;
   usedPriorityLevels: number[];
+  /** Extra field rendered right after the title (e.g. a linked task's "Leads up to"). */
+  afterTitle?: React.ReactNode;
 }
 
 const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
@@ -34,6 +37,7 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
   onToggleTag,
   activeTaskCount,
   usedPriorityLevels,
+  afterTitle,
 }) => {
   const occupiedPriorities = new Set(
     usedPriorityLevels.filter(p => p !== values.priority),
@@ -79,6 +83,8 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
           className="input-field"
         />
       </div>
+
+      {afterTitle}
 
       {/* Priority */}
       <div>

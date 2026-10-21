@@ -76,7 +76,7 @@ const TaskManager: React.FC = () => {
     router.replace('/login');
   };
 
-  const { tasks, isLoading, toggleComplete, addTask, deleteTask, archiveTask, updateTask, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+  const { tasks, isLoading, toggleComplete, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
   const { tags, tagsLoading, addTag, delTag, archiveTag, updateTag } = useTagsContext();
 
   const updatePriority = async (taskId: number, priority: number | null) => {
@@ -153,6 +153,7 @@ const TaskManager: React.FC = () => {
     filter: state.filter,
     addTask,
     updateTask,
+    saveLinkedTasks,
     addTag,
     updateTag,
     delTag,
@@ -466,6 +467,7 @@ const TaskManager: React.FC = () => {
         activeTaskCount={activeTaskCount}
         occupiedPriorityLevels={occupiedPriorityLevels}
         tags={tags}
+        allTasks={tasks}
         // Edit task
         showEditTaskModal={state.showEditTaskModal.status}
         editTask={state.showEditTaskModal.task}

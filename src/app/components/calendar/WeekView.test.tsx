@@ -4,6 +4,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalendarActivity } from '@/app/types/activity';
 import type { BaseTaskForm, Task } from '@/app/types/task';
+import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   tasks: [] as Task[],
   addTask: vi.fn(),
   updateTask: vi.fn(),
+  saveLinkedTasks: vi.fn(),
   fetchCalendarActivity: vi.fn(),
   push: vi.fn(),
 }));
@@ -21,13 +23,20 @@ vi.mock('@/app/lib/backend-api', () => ({
   fetchHabitHistory: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('@/app/context/TasksContext', () => ({
-  useTasksContext: () => ({ tasks: mocks.tasks, addTask: mocks.addTask, updateTask: mocks.updateTask, completionSyncToken: 0 }),
+  useTasksContext: () => ({
+    tasks: mocks.tasks, addTask: mocks.addTask, updateTask: mocks.updateTask,
+    saveLinkedTasks: mocks.saveLinkedTasks, completionSyncToken: 0,
+  }),
 }));
 vi.mock('@/app/context/TagsContext', () => ({ useTagsContext: () => ({ tags: [] }) }));
 vi.mock('@/app/context/HabitsContext', () => ({
   useHabitsContext: () => ({ habits: [{ id: 5, title: 'Run' }], toggleDate: vi.fn() }),
 }));
 vi.mock('@/app/context/ToastContext', () => ({ useToast: () => vi.fn() }));
+vi.mock('@/app/context/NotificationsContextValue', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/app/context/NotificationsContextValue')>()),
+  useOptionalNotifications: () => ({ status: 'ready', preferences: { default_reminder_minutes: 60 } }),
+}));
 
 import WeekView from './WeekView';
 
@@ -68,6 +77,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 9, 21, 12, 0)); // Wed 21 Oct 2026
   mocks.tasks = [];
   mocks.addTask.mockReset();
+  mocks.updateTask.mockReset();
+  mocks.saveLinkedTasks.mockReset();
   mocks.push.mockReset();
   mocks.fetchCalendarActivity.mockReset().mockImplementation(async (start: string, end: string) => activityFor(start, end));
   container = document.createElement('div');
@@ -122,6 +133,49 @@ describe('WeekView', () => {
     expect(mocks.addTask).toHaveBeenCalledWith(expect.objectContaining({ title: 'Study group', due_date: '2026-10-22', due_time: '09:30' }));
     await render();
     expect(button('Planned task: Study group, 9:30 AM – 10:00 AM')).toBeTruthy();
+  });
+
+  it('creates a task with linked tasks, and keeps the modal open to retry when they fail to save', async () => {
+    mocks.tasks = [task({ id: 7, title: 'Read the posting' })];
+    await render();
+    await act(async () => button('Create task on Thursday, October 22 at 9:30 AM').click());
+    const created = task({ id: 99, title: 'Apply' });
+    mocks.addTask.mockResolvedValue(created);
+    mocks.updateTask.mockResolvedValue(true);
+    mocks.saveLinkedTasks
+      .mockRejectedValueOnce(new LinkedTasksSaveError(created, 'Something went wrong. Please try again.'))
+      .mockResolvedValueOnce(undefined);
+
+    const d = container.ownerDocument;
+    const setValue = async (input: HTMLInputElement, value: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await setValue(d.querySelector<HTMLInputElement>('input[placeholder="Enter task title"]')!, 'Apply');
+    const newTitle = d.querySelector<HTMLInputElement>('input[aria-labelledby="linked-new-label"]')!;
+    await setValue(newTitle, 'Draft cover letter');
+    await act(async () => { newTitle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    const submit = () => act(async () => {
+      d.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    await submit();
+    expect(mocks.addTask).toHaveBeenCalledTimes(1);
+    expect(mocks.saveLinkedTasks).toHaveBeenCalledWith(created, [{ title: 'Draft cover letter' }]);
+    expect(d.querySelector('[role="alert"]')?.textContent).toContain("The task was created, but its linked tasks weren't saved");
+
+    const reminder = d.querySelector<HTMLSelectElement>('select[aria-labelledby="remind-me-label"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(reminder, '15');
+      reminder.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await submit();
+    expect(mocks.addTask).toHaveBeenCalledTimes(1);
+    expect(mocks.updateTask).toHaveBeenCalledWith(
+      99, expect.objectContaining({ title: 'Apply', due_date: '2026-10-22', reminder_minutes: 15 }),
+    );
+    expect(mocks.saveLinkedTasks).toHaveBeenCalledTimes(2);
+    expect(d.querySelector('form')).toBeNull();
   });
 
   it('opens a note session in the notes page', async () => {

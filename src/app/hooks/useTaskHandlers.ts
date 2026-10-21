@@ -1,6 +1,6 @@
 import React from 'react';
-import { FilterType, EditTaskForm, Tag, EditTaskModalState, NewTag, BaseTaskForm, Task } from '@/app/types/task';
-import { taskToEditForm } from '@/app/utils/taskUtils';
+import { FilterType, EditTaskForm, Tag, EditTaskModalState, NewTag, BaseTaskForm, Task, LinkedTaskRef } from '@/app/types/task';
+import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import { useToast } from '@/app/context/ToastContext';
 
 interface UseTaskHandlersProps {
@@ -26,6 +26,7 @@ interface UseTaskHandlersProps {
   // API functions
   addTask: (task: BaseTaskForm) => Promise<Task | false>;
   updateTask: (id: number, task: EditTaskForm) => Promise<boolean>;
+  saveLinkedTasks: (parent: Task, children: LinkedTaskRef[]) => Promise<void>;
   addTag: (tag: { name: string; color: string }) => Promise<Tag | false>;
   updateTag: (tag: Tag) => Promise<number | null>;
   delTag: (tag: Tag) => Promise<number | null>;
@@ -55,6 +56,7 @@ export const useTaskHandlers = ({
   filter,
   addTask,
   updateTask,
+  saveLinkedTasks,
   addTag,
   updateTag,
   delTag,
@@ -65,14 +67,21 @@ export const useTaskHandlers = ({
     setSelectedTags(prev => toggleById(prev, tag));
   };
 
-  const handleCreateTask = async (e: React.FormEvent) => {
+  // `linked` is saved as the new task's linked tasks once it exists; a
+  // failure there throws a LinkedTasksSaveError and leaves the modal open.
+  // `created` is the task an earlier try already created, which is updated
+  // instead of creating it again.
+  const handleCreateTask = async (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task) => {
     e.preventDefault();
     if (!newTask.title.trim()) {
       showToast('Give the task a title first.', 'info');
       return;
     }
-    const success = await addTask(newTask);
-    if (success) {
+    const task = created
+      ? (await updateTask(created.id, applyNewTaskForm(created, newTask))) && created
+      : await addTask(newTask);
+    if (task) {
+      if (linked) await saveLinkedTasks(task, linked);
       setShowNewTaskModal(false);
       setNewTask({
         id: 0,
@@ -90,7 +99,9 @@ export const useTaskHandlers = ({
     }
   };
 
-  const handleEditTask = async (e: React.FormEvent) => {
+  // `linked`, when given, is saved as the task's linked tasks after the task
+  // itself; a failure there throws a LinkedTasksSaveError and leaves the modal open.
+  const handleEditTask = async (e: React.FormEvent, linked?: LinkedTaskRef[]) => {
     e.preventDefault();
 
     if (!showEditTaskModal.task) return;
@@ -98,6 +109,7 @@ export const useTaskHandlers = ({
 
     const success = await updateTask(showEditTaskModal.task.id, taskData);
     if (success) {
+      if (linked) await saveLinkedTasks(showEditTaskModal.task, linked);
       setShowEditTaskModal({status: false, task: null});
     }
   };

@@ -10,7 +10,7 @@ import CreateHabitModal from '@/app/components/habit/CreateHabitModal';
 import ManageHabitsModal from '@/app/components/habit/ManageHabitsModal';
 import HabitHistoryModal from '@/app/components/habit/HabitHistoryModal';
 import SettingsModal from '@/app/components/settings/SettingsModal';
-import { Tag, BaseTaskForm, NewTag, NewHabit, Task } from '@/app/types/task';
+import { Tag, BaseTaskForm, NewTag, NewHabit, Task, LinkedTaskRef } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { CalendarSettings } from '@/app/types/calendar';
@@ -22,10 +22,12 @@ interface TaskManagerModalsProps {
   newTask: BaseTaskForm;
   onTaskChange: (task: BaseTaskForm) => void;
   onToggleTag: (tag: Tag) => void;
-  onSubmitTask: (e: React.FormEvent) => void;
+  onSubmitTask: (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task) => void | Promise<void>;
   activeTaskCount: number;
   occupiedPriorityLevels: number[];
   tags: Tag[];
+  /** Every loaded task, for the task forms' Linked tasks section. */
+  allTasks: Task[];
 
   // Edit task
   showEditTaskModal: boolean;
@@ -33,7 +35,7 @@ interface TaskManagerModalsProps {
   onCloseEditTaskModal: () => void;
   onEditTaskChange: (task: TaskFormData) => void;
   onToggleEditTag: (tag: Tag) => void;
-  onSubmitEditTask: (e: React.FormEvent) => void;
+  onSubmitEditTask: (e: React.FormEvent, linked?: LinkedTaskRef[]) => void | Promise<void>;
 
   // Create tag
   showCreateTagModal: boolean;
@@ -88,7 +90,7 @@ interface TaskManagerModalsProps {
 
 const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   showNewTaskModal, onCloseNewTaskModal, newTask, onTaskChange, onToggleTag,
-  onSubmitTask, activeTaskCount, occupiedPriorityLevels, tags,
+  onSubmitTask, activeTaskCount, occupiedPriorityLevels, tags, allTasks,
   showEditTaskModal, editTask, onCloseEditTaskModal, onEditTaskChange, onToggleEditTag, onSubmitEditTask,
   showCreateTagModal, onCloseCreateTagModal, newTag, onTagChange, onSubmitTag,
   editingTag, showEditTagModal, onCloseEditTagModal, onDeleteTag, onArchiveTag, onEditTag, onOpenCreateTag,
@@ -111,6 +113,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         onSubmit={onSubmitTask}
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
+        allTasks={allTasks}
       />
 
       <EditTaskModal
@@ -123,6 +126,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         onSubmit={onSubmitEditTask}
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
+        allTasks={allTasks}
       />
 
       <CreateTagModal
