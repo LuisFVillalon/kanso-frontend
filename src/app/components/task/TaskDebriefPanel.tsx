@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Newspaper, RefreshCw, AlertTriangle, CalendarCheck, Gauge,
+  Newspaper, RefreshCw, CircleAlert, Gauge,
   ChevronDown, ChevronUp, Siren, TrendingUp, Moon, Clock,
 } from 'lucide-react';
 import { fetchTaskDebrief } from '@/app/lib/backend-api';
@@ -16,6 +16,7 @@ import { bucketByTag } from '@/app/utils/tagBucketing';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
 import type { DebriefTag } from '@/app/types/debrief';
+import { DAY_COMPLETE_COPY } from '@/app/components/common/KeyPressMoment';
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
 
@@ -115,7 +116,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, onSaveProf
           className="flex items-center gap-2 flex-1"
         >
           <Newspaper className="w-5 h-5" style={{ color: 'var(--tm-accent)' }} />
-          <h2 className="text-base font-semibold text-text-primary">Daily Brief</h2>
+          <h2 className="text-lg text-text-primary">Daily brief</h2>
         </button>
         <div className="flex items-center gap-2">
           {(status === 'done' || status === 'error') && (
@@ -139,7 +140,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, onSaveProf
 
           {status === 'idle' && (
             <p className="text-sm text-text-secondary text-center py-3">
-              See what&apos;s overdue, due today, and next on deck — plus today&apos;s workload capacity and how your time breaks down by tag.
+              See what slipped, what&apos;s due today and what&apos;s next, plus today&apos;s workload and how your time breaks down by tag.
             </p>
           )}
 
@@ -165,21 +166,26 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, onSaveProf
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <SectionCard
-                  icon={<AlertTriangle className="w-4 h-4" />}
-                  title="Overdue Tasks"
-                  accentColor="var(--tm-danger)"
+                  icon={<SlippedDot />}
+                  title="Slipped"
+                  accentColor="var(--tm-slipped-text)"
                   isEmpty={debrief.overdue_tasks.length === 0}
-                  emptyText="Nothing overdue."
+                  emptyText="Nothing slipped."
+                  lead={debrief.overdue_tasks.length > 0 ? slippedLead(debrief.overdue_tasks.length) : undefined}
                 >
                   {debrief.overdue_tasks.map(task => <TaskRow key={task.id} task={task} />)}
                 </SectionCard>
 
                 <SectionCard
-                  icon={<CalendarCheck className="w-4 h-4" />}
-                  title="Due Today"
-                  accentColor="var(--tm-success)"
+                  icon={<CircleAlert className="w-4 h-4" />}
+                  title="Due today"
+                  accentColor="var(--tm-due-text)"
                   isEmpty={debrief.due_today_tasks.length === 0}
-                  emptyText="Nothing due today."
+                  emptyText={
+                    debrief.overdue_tasks.length === 0 && debrief.completed_today_tasks.length > 0
+                      ? DAY_COMPLETE_COPY
+                      : 'Nothing due today.'
+                  }
                 >
                   {debrief.due_today_tasks.map(task => <TaskRow key={task.id} task={task} />)}
                 </SectionCard>
@@ -223,14 +229,29 @@ function SkeletonBar({ tall = false }: { tall?: boolean }) {
   );
 }
 
+/** The gentle overdue marker: an amber dot, never red. */
+function SlippedDot() {
+  return (
+    <span aria-hidden className="flex items-center justify-center w-4 h-4">
+      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--tm-slipped-dot)' }} />
+    </span>
+  );
+}
+
+function slippedLead(count: number): string {
+  return `${count === 1 ? '1 thing' : `${count} things`} slipped. Start with this one.`;
+}
+
 function SectionCard({
-  icon, title, accentColor, isEmpty, emptyText, children,
+  icon, title, accentColor, isEmpty, emptyText, lead, children,
 }: {
   icon: React.ReactNode;
   title: string;
   accentColor: string;
   isEmpty: boolean;
   emptyText: string;
+  /** A short line above the list. */
+  lead?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -245,7 +266,10 @@ function SectionCard({
       {isEmpty ? (
         <p className="text-xs text-text-muted py-1">{emptyText}</p>
       ) : (
-        <ul>{children}</ul>
+        <>
+          {lead && <p className="text-xs text-text-secondary mb-1">{lead}</p>}
+          <ul>{children}</ul>
+        </>
       )}
     </div>
   );
@@ -520,6 +544,12 @@ function FocusNextCard({ items }: { items: FocusNextItem[] }) {
   );
 }
 
+/** "due Oct 28", "due Today", or just "slipped" once the date has passed. */
+function dueLabel(dueDate: string): string {
+  const label = formatDueDate(dueDate);
+  return label === 'Slipped' ? 'slipped' : `due ${label}`;
+}
+
 function FocusNextRow({ item }: { item: FocusNextItem }) {
   const style = getPriorityStyle(item.priority);
   const isHighPriority = item.reason === 'high_priority';
@@ -548,7 +578,7 @@ function FocusNextRow({ item }: { item: FocusNextItem }) {
             {isHighPriority ? 'High priority' : 'Plan ahead'}
           </span>
           {item.due_date && (
-            <span className="text-[10px] text-text-muted">· due {formatDueDate(item.due_date)}</span>
+            <span className="text-[10px] text-text-muted">· {dueLabel(item.due_date)}</span>
           )}
           {item.estimated_time != null && (
             <span className="text-[10px] text-text-muted">· {formatDuration(item.estimated_time)}</span>

@@ -147,7 +147,7 @@ const TrashView: React.FC = () => {
           Home
         </Link>
         <span className="text-text-muted select-none">/</span>
-        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Recently deleted</h1>
+        <h1 className="text-2xl sm:text-3xl text-text-primary">Recently deleted</h1>
         <Link
           href="/archive"
           className="ml-auto flex items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
@@ -207,7 +207,7 @@ const TrashView: React.FC = () => {
             >
               <Inbox className="w-6 h-6 text-text-muted" />
             </div>
-            <h2 className="text-base font-semibold text-text-primary mb-1">
+            <h2 className="text-base text-text-primary mb-1">
               {filter === 'all' ? 'Nothing recently deleted' : `No deleted ${KINDS[filter].plural.toLowerCase()}`}
             </h2>
             <p className="text-sm text-text-secondary">

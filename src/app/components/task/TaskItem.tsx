@@ -2,10 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Archive, Check, Timer, Trash2, Calendar, SquarePen } from 'lucide-react';
 import { Task } from '@/app/types/task';
 import {
-  getDueColor,
+  getDueStatus,
   getDurationColor,
   formatTime12Hour,
-  formatDueDate,
   formatDueDateShort,
   PRIORITY_COLORS,
   toInkTone,
@@ -14,6 +13,7 @@ import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
 import PriorityPicker from './PriorityPicker';
 import TaskTags from './TaskTags';
+import TaskStatusChip from './TaskStatusChip';
 import LinkedTasksList, { LinkedCountPill, LinkedToggleButton } from './LinkedTasksList';
 
 interface TaskItemProps {
@@ -118,8 +118,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
   const normalizedDueTime: string | null =
     task.due_time instanceof Date ? toLocalTimeStr(task.due_time) : (task.due_time ?? null);
 
-  const dueDateLabel = formatDueDate(normalizedDueDate, normalizedDueTime ?? undefined);
-  const isRelativeDueLabel = dueDateLabel === 'Overdue' || dueDateLabel === 'Today' || dueDateLabel === 'Tomorrow';
+  const dueStatus = getDueStatus(task);
   const actualDueDateText = normalizedDueDate ? formatDueDateShort(normalizedDueDate) : null;
 
   if (compact) {
@@ -140,11 +139,11 @@ const TaskItem: React.FC<TaskItemProps> = ({
             style={{ opacity: pending ? 0.5 : 1, cursor: pending ? 'wait' : 'pointer' }}
             className={`flex-shrink-0 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all active:scale-90 ${
               task.completed
-                ? 'border-[var(--tm-success)] bg-[var(--tm-success)]'
+                ? 'border-[var(--tm-success)] bg-[var(--tm-success-subtle)]'
                 : 'border-border hover:border-accent'
             }`}
           >
-            {task.completed && <Check className="w-2.5 h-2.5 text-white" />}
+            {task.completed && <Check className="w-2.5 h-2.5 text-success-text" strokeWidth={3} />}
           </button>
 
           <span
@@ -216,11 +215,11 @@ const TaskItem: React.FC<TaskItemProps> = ({
           style={{ opacity: pending ? 0.5 : 1, cursor: pending ? 'wait' : 'pointer' }}
           className={`mt-0.5 sm:mt-1 flex-shrink-0 w-5 h-5 sm:w-6 sm:h-6 rounded-sm border-2 flex items-center justify-center transition-all active:scale-90 ${
             task.completed
-              ? 'border-[var(--tm-success)] bg-[var(--tm-success)]'
+              ? 'border-[var(--tm-success)] bg-[var(--tm-success-subtle)]'
               : 'border-border hover:border-accent'
           }`}
         >
-          {task.completed && <Check className="w-3 h-3 sm:w-4 sm:h-4 text-white" />}
+          {task.completed && <Check className="w-3 h-3 sm:w-4 sm:h-4 text-success-text" strokeWidth={3} />}
         </button>
 
         <div className="flex-1 min-w-0">
@@ -327,20 +326,24 @@ const TaskItem: React.FC<TaskItemProps> = ({
           <TaskTags tags={task.tags} allTags={tags} className="mb-3" />
 
           <div className="pt-3 border-t border-border-subtle flex items-center gap-5 text-xs sm:text-sm">
-            <div className="flex items-center gap-1.5">
-              <Calendar className={`w-3.5 h-3.5 ${toInkTone(getDueColor(task.due_date))}`} />
-              <span className={toInkTone(getDueColor(task.due_date))}>
-                {dueDateLabel}
-                {isRelativeDueLabel && actualDueDateText && (
-                  <span className="text-text-muted"> ({actualDueDateText})</span>
-                )}
-                {normalizedDueTime && (
-                  <span className="text-text-muted">
-                    {' · '}
-                    {formatTime12Hour(typeof task.due_time === 'string' ? task.due_time : null)}
-                  </span>
-                )}
-              </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {dueStatus ? (
+                <TaskStatusChip status={dueStatus} />
+              ) : (
+                <span className="flex items-center gap-1.5 text-text-muted">
+                  <Calendar className="w-3.5 h-3.5" aria-hidden />
+                  {actualDueDateText ?? 'No date'}
+                </span>
+              )}
+              {dueStatus && actualDueDateText && (
+                <span className="text-text-muted">{actualDueDateText}</span>
+              )}
+              {normalizedDueTime && (
+                <span className="text-text-muted">
+                  {'· '}
+                  {formatTime12Hour(typeof task.due_time === 'string' ? task.due_time : null)}
+                </span>
+              )}
             </div>
 
             {task.estimated_time != null && (

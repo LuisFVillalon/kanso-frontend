@@ -169,7 +169,7 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
           Home
         </Link>
         <span className="text-text-muted select-none">/</span>
-        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Notes</h1>
+        <h1 className="text-2xl sm:text-3xl text-text-primary">Notes</h1>
       </div>
       <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 pb-4 sm:pb-6 min-h-0">
         {panel}

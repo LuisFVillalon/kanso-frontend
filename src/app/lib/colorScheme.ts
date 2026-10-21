@@ -10,7 +10,7 @@ export type ColorScheme = 'light' | 'dark';
 export const COLOR_SCHEME_KEY = 'tm_theme';
 
 /** Browser chrome color per theme; matches --tm-bg in globals.css. */
-export const COLOR_SCHEME_BG: Record<ColorScheme, string> = { light: '#F6F5F4', dark: '#191817' };
+export const COLOR_SCHEME_BG: Record<ColorScheme, string> = { light: '#F4EFE4', dark: '#191817' };
 
 /**
  * Anti-flash script: applies the saved theme to <html> before first paint.

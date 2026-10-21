@@ -335,9 +335,10 @@ export default function SettingsModal({
         {/* ── Profile save/error toast — floats above everything, doesn't shift layout ── */}
         {section === 'profile' && (profileSaved || profileError) && (
           <div
-            className="absolute -top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-white pointer-events-none"
+            className="absolute -top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold pointer-events-none"
             style={{
-              backgroundColor: profileError ? 'var(--tm-danger)' : 'var(--tm-success)',
+              backgroundColor: profileError ? 'var(--tm-danger)' : 'var(--tm-success-subtle)',
+              color: profileError ? '#FFFFFF' : 'var(--tm-success-text)',
               boxShadow: 'var(--tm-shadow-lg)',
             }}
           >
@@ -352,7 +353,7 @@ export default function SettingsModal({
           style={{ borderColor: 'var(--tm-border)' }}
         >
           <div>
-            <h2 className="text-lg font-bold text-text-primary">Account Settings</h2>
+            <h2 className="text-lg text-text-primary">Account settings</h2>
             {user?.email && (
               <p className="text-xs mt-0.5" style={{ color: 'var(--tm-text-muted)' }}>
                 {user.email}, aka {profileName}
@@ -763,7 +764,7 @@ export default function SettingsModal({
 
                 {pwError && <p className="text-sm" style={{ color: 'var(--tm-danger)' }}>{pwError}</p>}
                 {pwStatus === 'done' && (
-                  <p className="text-sm" style={{ color: 'var(--tm-success)' }}>Password updated successfully.</p>
+                  <p className="text-sm" style={{ color: 'var(--tm-success-text)' }}>Password updated successfully.</p>
                 )}
 
                 <button
@@ -818,7 +819,7 @@ export default function SettingsModal({
 
               {emailError && <p className="text-sm" style={{ color: 'var(--tm-danger)' }}>{emailError}</p>}
               {emailStatus === 'done' && (
-                <p className="text-sm" style={{ color: 'var(--tm-success)' }}>
+                <p className="text-sm" style={{ color: 'var(--tm-success-text)' }}>
                   {isOAuth
                     ? 'Contact email updated.'
                     : 'Confirmation sent — check your new inbox to complete the change.'}

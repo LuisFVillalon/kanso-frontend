@@ -31,7 +31,7 @@ const CalendarView: React.FC = () => {
           Home
         </Link>
         <span className="text-text-muted select-none">/</span>
-        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Calendar</h1>
+        <h1 className="text-2xl sm:text-3xl text-text-primary">Calendar</h1>
         {viewMode !== 'week' && <span className="text-sm text-text-muted ml-1">{year}</span>}
 
         <div className="ml-auto flex items-center gap-1 p-1 rounded-lg bg-surface border border-border">

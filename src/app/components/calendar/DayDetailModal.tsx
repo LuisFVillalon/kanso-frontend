@@ -27,7 +27,7 @@ const DayDetailModal: React.FC<DayDetailModalProps> = ({ date, data, totalHabits
         style={{ backgroundColor: 'var(--tm-surface)' }}
       >
         <div className="flex items-center gap-2 flex-wrap">
-          <h2 className="text-base sm:text-lg font-bold text-text-primary">
+          <h2 className="text-base sm:text-lg text-text-primary">
             {date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
           </h2>
           {holidayName && (

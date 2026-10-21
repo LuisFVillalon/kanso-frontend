@@ -37,14 +37,14 @@ export const MONTH_NAMES = [
 ] as const;
 
 interface MonthInfo {
-  /** Accent hue — one of the documented DESIGN.md accents only. */
+  /** Accent hue — one of the feature colors listed below. */
   hue: string;
   icon: LucideIcon;
   /** Mid-month daylight hours for San Diego (32.7°N). */
   daylightHours: number;
 }
 
-// Hues are the documented DESIGN.md accents only (marigold, coral, sky wash,
+// Hues come from one fixed set of feature colors (marigold, coral, sky wash,
 // signal blue, saffron, vermillion, mocha, midnight) — no new colors.
 export const MONTHS: MonthInfo[] = [
   { hue: '#62aef0', icon: Snowflake, daylightHours: 10.12 }, // January — Sky Wash

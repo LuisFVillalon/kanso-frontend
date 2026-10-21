@@ -106,7 +106,7 @@ const NotesList: React.FC<NotesListProps> = ({
         className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-border-subtle"
         style={{ backgroundColor: 'var(--tm-surface)' }}
       >
-        <h2 className="text-lg font-bold text-text-primary">Notes</h2>
+        <h2 className="text-lg text-text-primary">Notes</h2>
         <button
           onClick={handleNewNoteClick}
           disabled={creatingNote}

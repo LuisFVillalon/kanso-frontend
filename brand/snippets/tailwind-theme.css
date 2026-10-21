@@ -1,0 +1,36 @@
+/* Tailwind v4: expose the brand tokens as utilities (bg-paper, text-ink, font-display, …).
+   Put this after the tokens.css import in globals.css. If the project is on Tailwind v3,
+   map the same variables under theme.extend in tailwind.config instead. */
+@theme inline {
+  --color-paper: var(--tm-bg);
+  --color-surface: var(--tm-surface);
+  --color-surface-raised: var(--tm-surface-raised);
+  --color-ink: var(--tm-text-primary);
+  --color-ink-secondary: var(--tm-text-secondary);
+  --color-ink-muted: var(--tm-text-muted);
+  --color-pencil: var(--tm-pencil);
+  --color-rule: var(--tm-rule);
+  --color-line: var(--tm-border);
+  --color-key: var(--kanso-key);
+  --color-key-side: var(--kanso-key-side);
+
+  --color-done: var(--tm-success);
+  --color-done-subtle: var(--tm-success-subtle);
+  --color-done-text: var(--tm-success-text);
+  --color-upcoming: var(--tm-upcoming);
+  --color-upcoming-subtle: var(--tm-upcoming-subtle);
+  --color-upcoming-text: var(--tm-upcoming-text);
+  --color-due: var(--tm-due);
+  --color-due-subtle: var(--tm-due-subtle);
+  --color-due-text: var(--tm-due-text);
+  --color-slipped: var(--tm-slipped-dot);
+  --color-slipped-subtle: var(--tm-slipped-subtle);
+  --color-slipped-text: var(--tm-slipped-text);
+
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-mplus-rounded), system-ui, sans-serif;
+
+  --radius-sm: 4px;
+  --radius-btn: 8px;
+  --radius-card: 12px;
+}

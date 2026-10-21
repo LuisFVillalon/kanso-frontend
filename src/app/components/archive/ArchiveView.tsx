@@ -340,7 +340,7 @@ const ArchiveView: React.FC = () => {
           Home
         </Link>
         <span className="text-text-muted select-none">/</span>
-        <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">Archive</h1>
+        <h1 className="text-2xl sm:text-3xl text-text-primary">Archive</h1>
         <Link
           href="/trash"
           className="ml-auto flex items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
@@ -407,7 +407,7 @@ const ArchiveView: React.FC = () => {
               >
                 <Archive className="w-6 h-6 text-text-muted" />
               </div>
-              <h2 className="text-base font-semibold text-text-primary mb-1">No archived {activeTab.label.toLowerCase()}</h2>
+              <h2 className="text-base text-text-primary mb-1">No archived {activeTab.label.toLowerCase()}</h2>
               <p className="text-sm text-text-secondary">{activeTab.empty}</p>
             </div>
           ) : visibleCount === 0 ? (
@@ -418,7 +418,7 @@ const ArchiveView: React.FC = () => {
               >
                 <Filter className="w-6 h-6 text-text-muted" />
               </div>
-              <h2 className="text-base font-semibold text-text-primary mb-1">
+              <h2 className="text-base text-text-primary mb-1">
                 No archived {activeTab.label.toLowerCase()} with {activeTagIds.size === 1 ? 'this tag' : 'these tags'}
               </h2>
               <button type="button" onClick={clearTagFilter} className="btn btn-secondary px-3 py-1.5 text-sm mt-3">

@@ -402,7 +402,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           className="btn flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium disabled:cursor-wait"
           style={saveStatus === 'saved' ? {
             backgroundColor: 'var(--tm-success-subtle)',
-            color: 'var(--tm-success)',
+            color: 'var(--tm-success-text)',
           } : saveStatus === 'error' ? {
             backgroundColor: 'var(--tm-danger-subtle)',
             color: 'var(--tm-danger)',

@@ -28,7 +28,7 @@ const NoteEditorOverlay: React.FC<NoteEditorOverlayProps> = ({
     <Modal onClose={onClose} layer="top" panelClassName="modal-panel w-full max-w-2xl h-[85vh] flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--tm-border)] shrink-0">
-        <h2 className="text-sm font-semibold text-[var(--tm-text-primary)] truncate">
+        <h2 className="text-sm text-[var(--tm-text-primary)] truncate">
           {note.title || 'Untitled'}
         </h2>
         <div className="flex items-center gap-1 shrink-0">

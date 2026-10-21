@@ -2,7 +2,6 @@ import React from 'react';
 import Logo from '@/app/components/common/Logo';
 
 interface AuthPageCardProps {
-  /** Display headline; wrap one word in <span className="highlight"> for the marigold pill. */
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
   children: React.ReactNode;
@@ -10,7 +9,7 @@ interface AuthPageCardProps {
 
 /**
  * Shell for the signed-out pages, styled after kanso-landing: a hairline top bar
- * with the logo, then a white card bound by the notebook coil.
+ * with the logo, then a paper card bound by the notebook coil.
  */
 const AuthPageCard: React.FC<AuthPageCardProps> = ({ title, subtitle, children }) => (
   <div className="min-h-screen flex flex-col">
@@ -29,7 +28,7 @@ const AuthPageCard: React.FC<AuthPageCardProps> = ({ title, subtitle, children }
           <div aria-hidden className="coil absolute inset-x-0 top-0" />
           {title && (
             <div className="mb-8 text-center">
-              <h1 className="text-[32px] leading-[1.15] font-medium tracking-[-0.03em] text-text-primary">
+              <h1 className="text-[32px] leading-[40px] text-text-primary">
                 {title}
               </h1>
               {subtitle && <p className="mt-3 text-base leading-6 text-text-secondary">{subtitle}</p>}
@@ -37,7 +36,7 @@ const AuthPageCard: React.FC<AuthPageCardProps> = ({ title, subtitle, children }
           )}
           {children}
         </div>
-        <p className="mt-6 text-center text-[13px] leading-5 text-text-muted">kanso · clarity on the go</p>
+        <p className="mt-6 text-center font-display text-[15px] italic leading-5 text-text-muted">Keep it kanso.</p>
       </div>
     </main>
   </div>

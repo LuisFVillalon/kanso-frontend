@@ -77,7 +77,7 @@ const NewTaskForm: React.FC<NewTaskModalProps> = ({
         className="sticky top-0 z-30 px-6 py-4 flex items-center justify-between border-b border-border-subtle"
         style={{ backgroundColor: 'var(--tm-surface)' }}
       >
-        <h2 className="text-xl font-bold text-text-primary">Create New Task</h2>
+        <h2 className="text-xl text-text-primary">Create new task</h2>
         <button onClick={onClose} className="btn btn-ghost" aria-label="Close">
           <X className="w-5 h-5" />
         </button>

@@ -251,7 +251,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
           <div className="flex items-center mb-4">
             {expandedId === 'reserved' ? (
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-text-primary">{monthViewYear}</h2>
+                <h2 className="text-xl text-text-primary">{monthViewYear}</h2>
                 <button
                   type="button"
                   onClick={goPrevMonth}
@@ -272,7 +272,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
                 </button>
               </div>
             ) : (
-              <h2 className="text-xl font-bold text-text-primary">
+              <h2 className="text-xl text-text-primary">
                 {expandedId === 'calendar' && calendarSettings.title
                   ? `Term Tracker: ${calendarSettings.title}`
                   : TITLES[expandedId]}

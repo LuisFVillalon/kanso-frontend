@@ -107,7 +107,7 @@ const HabitHistoryModal: React.FC<HabitHistoryModalProps> = ({ habit, showBackBu
       </div>
 
       {/* Live streak summary — updates instantly when parent habit state changes */}
-      <div className="px-5 py-3 flex items-center gap-5 border-b border-border-subtle">
+      <div className="px-5 py-3 flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-border-subtle">
         <div className="flex items-center gap-1.5">
           <Flame className="w-4 h-4" style={{ color: '#F97316' }} />
           <span className="text-sm font-bold" style={{ color: '#F97316' }}>{habit.current_streak}</span>
@@ -118,6 +118,10 @@ const HabitHistoryModal: React.FC<HabitHistoryModalProps> = ({ habit, showBackBu
           <span className="text-sm font-bold" style={{ color: '#EAB308' }}>{habit.max_streak}</span>
           <span className="text-xs text-text-muted">best</span>
         </div>
+        {/* A broken streak gets a fresh start, never a guilt trip (brand voice). */}
+        {habit.current_streak === 0 && habit.max_streak > 0 && (
+          <p className="basis-full text-xs text-text-secondary">Fresh page. Pick up where it feels easy.</p>
+        )}
       </div>
 
       {/* Calendar */}

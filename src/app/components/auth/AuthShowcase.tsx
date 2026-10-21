@@ -1,10 +1,12 @@
 import React from 'react';
 import { Check, Flame } from 'lucide-react';
+import TaskStatusChip from '@/app/components/task/TaskStatusChip';
+import type { DueStatus } from '@/app/utils/taskUtils';
 
-const TASKS = [
-  { title: 'Finish the lab report', chip: 'Due today', chipClass: 'bg-accent-2-subtle text-accent-2', done: false },
-  { title: 'Review lecture 6 notes', chip: 'Study', chipClass: 'bg-accent-subtle text-accent', done: false },
-  { title: 'Email the project group', chip: 'Done', chipClass: 'bg-success-subtle text-success', done: true },
+const TASKS: { title: string; status: DueStatus; done: boolean }[] = [
+  { title: 'Finish the lab report', status: { kind: 'due', label: 'Due today' }, done: false },
+  { title: 'Review lecture 6 notes', status: { kind: 'upcoming', label: 'In 3 days' }, done: false },
+  { title: 'Email the project group', status: { kind: 'done', label: 'Done' }, done: true },
 ];
 
 // One week of a habit streak: filled = logged.
@@ -18,26 +20,26 @@ const STREAK = [true, true, true, true, true, false, true];
 const AuthShowcase: React.FC = () => (
   <aside
     aria-hidden
-    className="relative m-3 hidden overflow-hidden rounded-lg bg-sky-wash lg:flex lg:flex-col lg:justify-center lg:px-14 lg:py-16"
+    className="relative m-3 hidden overflow-hidden rounded-lg border border-border bg-surface lg:flex lg:flex-col lg:justify-center lg:px-14 lg:py-16"
   >
-    <p className="max-w-[440px] text-[32px] leading-[1.15] font-medium tracking-[-0.03em] text-midnight-ink">
+    <p className="max-w-[440px] font-display text-h1 text-text-primary">
       Plan the day, keep the notes, build the streak.
     </p>
 
     <div className="relative mt-10 w-full max-w-[400px]">
-      {/* Sticky note peeking out from behind the notebook card; only where the panel is wide enough */}
-      <div className="absolute top-12 left-[340px] hidden w-60 rotate-[4deg] rounded-lg bg-marigold py-4 pr-4 pl-[76px] text-black shadow-product min-[1360px]:block">
-        <p className="text-xs font-medium uppercase tracking-[0.08em] opacity-70">Note</p>
+      {/* Note card peeking out from behind the notebook card; only where the panel is wide enough */}
+      <div className="absolute top-12 left-[340px] hidden w-60 rotate-[4deg] rounded-lg border border-border bg-surface-raised py-4 pr-4 pl-[76px] text-text-primary shadow-product min-[1360px]:block">
+        <p className="text-xs font-medium uppercase tracking-[0.08em] text-text-muted">Note</p>
         <p className="mt-1.5 font-semibold">Recursion, week 6</p>
-        <p className="mt-1 text-sm leading-5 opacity-80">Base case first, then shrink the problem.</p>
-        <span className="chip mt-3 bg-black/10 text-black">cs-310</span>
+        <p className="mt-1 text-sm leading-5 text-text-secondary">Base case first, then shrink the problem.</p>
+        <span className="chip mt-3 bg-accent-subtle text-accent">cs-310</span>
       </div>
 
       <div className="card relative overflow-hidden shadow-product">
         <div className="coil" />
         <div className="p-5">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-muted">Daily debrief</span>
+            <span className="text-xs font-medium uppercase tracking-[0.08em] text-text-muted">Daily brief</span>
             <span className="chip bg-accent-subtle text-accent">2 due today</span>
           </div>
           <p className="mt-2 text-lg font-semibold tracking-tight text-text-primary">Start with the lab report.</p>
@@ -48,7 +50,7 @@ const AuthShowcase: React.FC = () => (
               <li key={t.title} className="flex items-center gap-3 py-2.5">
                 <span
                   className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm border ${
-                    t.done ? 'border-success bg-success text-white' : 'border-[var(--tm-wire)]'
+                    t.done ? 'border-success bg-success-subtle text-success-text' : 'border-[var(--tm-wire)]'
                   }`}
                 >
                   {t.done && <Check className="h-3 w-3" strokeWidth={3} />}
@@ -56,17 +58,17 @@ const AuthShowcase: React.FC = () => (
                 <span className={`flex-1 text-sm ${t.done ? 'text-text-muted line-through' : 'text-text-primary'}`}>
                   {t.title}
                 </span>
-                <span className={`chip ${t.chipClass}`}>{t.chip}</span>
+                <TaskStatusChip status={t.status} />
               </li>
             ))}
           </ul>
 
           <div className="mt-4 flex items-center gap-3">
-            <Flame className="h-4 w-4 text-saffron" />
+            <Flame className="h-4 w-4 text-due" />
             <span className="flex-1 text-sm text-text-primary">Morning run</span>
             <span className="flex gap-1">
               {STREAK.map((on, i) => (
-                <span key={i} className={`h-2.5 w-2.5 rounded-full ${on ? 'bg-marigold' : 'bg-surface-raised'}`} />
+                <span key={i} className={`h-2.5 w-2.5 rounded-full ${on ? 'bg-upcoming' : 'bg-border'}`} />
               ))}
             </span>
           </div>

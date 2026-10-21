@@ -180,7 +180,7 @@ const WeekView: React.FC = () => {
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
-        <h2 className="text-base sm:text-lg font-semibold text-text-primary" aria-live="polite">
+        <h2 className="text-base sm:text-lg text-text-primary" aria-live="polite">
           {formatDateRange(days[0], days[6])}, {days[6].getFullYear()}
         </h2>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-text-muted" aria-label="Loading week activity" />}
