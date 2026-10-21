@@ -122,4 +122,12 @@ describe('PriorityPicker menu', () => {
     act(() => outside.focus());
     expect(document.querySelector('[role="menu"]')).toBeNull();
   });
+
+  it('stays open when focus is dropped without a new target, as when clicking the badge in Safari', () => {
+    anchorAt(100, 120);
+    renderInTaskList();
+    openMenu();
+    act(() => (document.activeElement as HTMLElement).blur());
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
 });

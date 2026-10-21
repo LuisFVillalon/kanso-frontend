@@ -96,7 +96,7 @@ const PriorityPicker: React.FC<PriorityPickerProps> = ({
 
   const handleMenuBlur = (e: React.FocusEvent<HTMLDivElement>) => {
     const next = e.relatedTarget as Node | null;
-    if (next && (menuRef.current?.contains(next) || ref.current?.contains(next))) return;
+    if (!next || menuRef.current?.contains(next) || ref.current?.contains(next)) return;
     setOpen(false);
   };
 
