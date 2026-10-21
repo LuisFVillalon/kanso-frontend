@@ -473,6 +473,7 @@ const TaskManager: React.FC = () => {
             <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} onOpenMoodCheckin={openMoodCheckin} />
             <ModeSwitcher mode={mode} onChange={handleModeChange} />
           </div>
+          <KeyPressMoment moment={keyPress} onDone={clearKeyPress} />
         </div>
 
         {showMainContent && (
@@ -611,8 +612,6 @@ const TaskManager: React.FC = () => {
         calendarSettingsLoading={calendarSettingsLoading}
         onSaveCalendarSettings={saveCalendarSettings}
       />
-
-      <KeyPressMoment moment={keyPress} onDone={clearKeyPress} />
     </>
   );
 };
