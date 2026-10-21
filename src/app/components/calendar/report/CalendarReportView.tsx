@@ -270,7 +270,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, mood, onSelectP
   const scopeLogged = checkins && days > 0 ? summarizeMood(byDay, scope.start, scope.end).logged : 0;
   const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
-  if (isEmpty(report) && !scopeLogged) {
+  if (isEmpty(report) && !scopeLogged && !mood?.error) {
     return (
       <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
         <CalendarRange className="w-8 h-8 text-text-muted" aria-hidden="true" />

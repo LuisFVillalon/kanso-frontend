@@ -91,6 +91,16 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Mood over time');
   });
 
+  it('shows the mood error instead of the empty state when check-ins fail to load', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    api.fetchMoodCheckins.mockRejectedValue(new Error('offline'));
+    await render();
+    expect(text()).not.toContain('Nothing recorded');
+    expect(text()).toContain('Couldn’t load check-ins');
+    expect(text()).toContain('Couldn’t load your mood check-ins.');
+    expect(buttonLabelled(/^Try again$/)).toBeDefined();
+  });
+
   it('leaves mood out when "Show mood in reports" is off', async () => {
     showMood(false);
     api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
