@@ -25,7 +25,7 @@ import { useCalendarReport } from '@/app/hooks/useCalendarReport';
 import { useProfile } from '@/app/hooks/useProfile';
 import { useReportMood } from '@/app/hooks/useReportMood';
 import type { CalendarActivity } from '@/app/types/activity';
-import { moodLabel, type MoodCheckin } from '@/app/types/mood';
+import { moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate } from '@/app/utils/dateUtils';
 import {
   describePeriod,
@@ -38,7 +38,7 @@ import {
   type ReportPeriod,
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
-import { indexDayCheckins, moodSummaryScope, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
+import { hasMoodCheckins, indexDayCheckins, moodSummaryScope, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportMoodSection from './ReportMoodSection';
 
@@ -251,7 +251,8 @@ interface ReportMood {
   checkins: MoodCheckin[] | null;
   error: string | null;
   retry: () => void;
-  replaceDay: (date: string, saved: MoodCheckin | null) => void;
+  replaceDay: (date: string, saved: MoodCheckin | null, kind?: MoodPeriodKind) => void;
+  settings: MoodCheckinSettings;
 }
 
 interface ReportBodyProps {
@@ -269,10 +270,10 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
   const periodMood = checkins ? summarizeMood(byDay, period.start, period.end) : null;
   const scope = moodSummaryScope(period);
-  const scopeLogged = checkins && days > 0 ? summarizeMood(byDay, scope.start, scope.end).logged : 0;
+  const hasMood = !!checkins && days > 0 && hasMoodCheckins(period, scope, byDay, checkins);
   const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
-  if (isEmpty(report) && !scopeLogged && !mood?.error) {
+  if (isEmpty(report) && !hasMood && !mood?.error) {
     return (
       <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
         <CalendarRange className="w-8 h-8 text-text-muted" aria-hidden="true" />
@@ -324,6 +325,8 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           report={report}
           activity={activity}
           byDay={byDay}
+          checkins={checkins ?? []}
+          settings={mood.settings}
           scope={scope}
           replaceDay={mood.replaceDay}
           onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
@@ -349,8 +352,8 @@ const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
 /**
  * Weekly / monthly / yearly report on the calendar page: tasks completed vs
  * planned, estimated hours, time in notes, habit check-ins and streaks, the
- * busiest days and an activity chart — plus mood from the daily check-ins,
- * unless "Show mood in reports" is off.
+ * busiest days and an activity chart — plus mood from the daily, weekly and
+ * monthly check-ins, unless "Show mood in reports" is off.
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
@@ -440,7 +443,7 @@ const CalendarReportView: React.FC = () => {
           period={period}
           report={report}
           activity={activity}
-          mood={moodHidden ? null : mood}
+          mood={moodHidden ? null : { ...mood, settings: profile.moodCheckins }}
           onSelectPeriod={setPeriod}
         />
       )}

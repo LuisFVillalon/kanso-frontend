@@ -402,7 +402,7 @@ const TaskManager: React.FC = () => {
           <div className={doodleMode ? 'animate-fade-out' : 'animate-fade-in'}>
             {showDebriefPanels && (
               <div className={!doodleMode && !focusMode ? 'animate-fade-in' : 'animate-fade-out'}>
-                <MoodNudge profile={profile} profileLoaded={profileLoaded} tasks={tasks} habits={habits} />
+                <MoodNudge profile={profile} profileLoaded={profileLoaded} tasks={tasks} habits={habits} onSaveProfile={saveProfile} />
 
                 <TaskDebriefPanel profile={profile} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
 

@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { moodColor } from '@/app/components/mood/MoodFacePicker';
-import { ENERGY_LABELS, MOOD_LABELS, STRESS_LABELS, type MoodCheckin } from '@/app/types/mood';
+import { ENERGY_LABELS, MOOD_LABELS, STRESS_LABELS, WORKLOAD_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
 import type { ReportBucket, ReportPeriod } from '@/app/utils/calendarReport';
+import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import { monthMood, periodRollingAverage, seriesValue, type MoodSeries } from '@/app/utils/moodReport';
 import { LegendDot, MetricButton } from './ReportActivityChart';
 
@@ -47,13 +48,43 @@ const LegendLine: React.FC<{ label: string }> = ({ label }) => (
   </span>
 );
 
+const LegendDiamond: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+    <span className="w-2 h-2 rotate-45 border-[1.6px]" style={{ borderColor: moodColor(4) }} />
+    {label}
+  </span>
+);
+
+const LegendDash: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+    <span className="w-4 border-t-2 border-dashed" style={{ borderColor: moodColor(4) }} />
+    {label}
+  </span>
+);
+
+const shortDate = (dateStr: string) => parseLocalDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+/** A weekly check-in in words: "Week of Oct 12: Good · About right workload · “…”". */
+export const describeWeekCheckin = (week: MoodCheckin): string => {
+  const parts = [moodLabel(week.mood)];
+  if (week.workload != null) parts.push(`${WORKLOAD_LABELS[week.workload]} workload`);
+  if (week.highlight) parts.push(`“${week.highlight}”`);
+  return `Week of ${shortDate(week.period_start)}: ${parts.join(' · ')}`;
+};
+
 interface ReportMoodChartProps {
   period: ReportPeriod;
   /** The activity report's buckets — days for a week or month, months for a year. */
   buckets: ReportBucket[];
   byDay: Map<string, MoodCheckin>;
+  /** Weekly check-ins whose week overlaps the period, drawn as dashed spans on the mood series. */
+  weeks: MoodCheckin[];
+  /** Monthly check-ins by "YYYY-MM", drawn as ◇ on the year's mood series. */
+  months: Map<string, MoodCheckin>;
   /** A day's dot was clicked: edit its check-in, or log one for it. */
   onDay: (dateStr: string, checkin: MoodCheckin | null) => void;
+  /** A weekly check-in's span was clicked: edit it. */
+  onWeek: (week: MoodCheckin) => void;
   /** A month of the year was clicked: open that month's report. */
   onMonth: (monthStart: string) => void;
 }
@@ -61,12 +92,13 @@ interface ReportMoodChartProps {
 /**
  * "Mood over time": for a week or month, one dot per daily check-in coloured
  * by its value, with hollow dots on the axis for days without one (a month
- * adds a 7-day rolling average); for a year, each month's average with its
- * interquartile range. Mood, energy and stress share the 1–5 scale. Dots and
- * labels are HTML positioned over a stretched SVG of lines, so nothing
- * distorts at narrow widths.
+ * adds a 7-day rolling average) and each weekly check-in as a dashed span
+ * across its week; for a year, each month's average with its interquartile
+ * range and a ◇ for the monthly check-in. Mood, energy and stress share the
+ * 1–5 scale. Dots and labels are HTML positioned over a stretched SVG of
+ * lines, so nothing distorts at narrow widths.
  */
-const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDay, onDay, onMonth }) => {
+const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDay, weeks, months: monthCheckins, onDay, onWeek, onMonth }) => {
   const [series, setSeries] = useState<MoodSeries>('mood');
   const { label: seriesLabel, names } = SERIES.find(s => s.series === series)!;
   const isYear = period.kind === 'year';
@@ -81,6 +113,17 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       : values;
   const hasValues = values.some(v => v != null);
   const lowerName = seriesLabel.toLowerCase();
+  const isMood = series === 'mood';
+  const weekSpans = !isYear && isMood
+    ? weeks.flatMap(week => {
+        const lastDay = parseLocalDate(week.period_start);
+        lastDay.setDate(lastDay.getDate() + 6);
+        const last = toLocalDateStr(lastDay);
+        const from = buckets.findIndex(b => b.key >= week.period_start);
+        const to = buckets.findLastIndex(b => b.key <= last);
+        return from >= 0 && to >= from ? [{ week, from, to }] : [];
+      })
+    : [];
 
   const dotSize = period.kind === 'week' ? 'w-3.5 h-3.5' : isYear ? 'w-3 h-3' : 'w-2 h-2 sm:w-2.5 sm:h-2.5';
   const hollowSize = period.kind === 'week' ? 'w-3 h-3' : 'w-2.5 h-2.5';
@@ -104,11 +147,15 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-3">
           {isYear ? (
-            <LegendLine label="Monthly average" />
+            <>
+              <LegendLine label="Monthly average" />
+              {isMood && monthCheckins.size > 0 && <LegendDiamond label="Monthly check-in" />}
+            </>
           ) : (
             <>
               <LegendDot color={seriesColor(series, 4)} label="Daily check-in" />
               {period.kind === 'month' && <LegendLine label="7-day average" />}
+              {isMood && weeks.length > 0 && <LegendDash label="Weekly check-in" />}
             </>
           )}
         </div>
@@ -182,6 +229,35 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
               />
             </svg>
 
+            {weekSpans.map(({ week, from, to }) => {
+              const label = describeWeekCheckin(week);
+              return (
+                <button
+                  key={`week-${week.period_start}`}
+                  type="button"
+                  onClick={() => onWeek(week)}
+                  className="absolute h-3 -translate-y-1/2 flex items-center rounded focus-visible:outline-2 focus-visible:outline-accent"
+                  style={{ left: `${((from + 0.1) / n) * 100}%`, width: `${((to - from + 0.8) / n) * 100}%`, top: `${yOf(week.mood)}%` }}
+                  aria-label={`Weekly check-in. ${label}. Edit`}
+                  title={`Weekly check-in\n${label}`}
+                >
+                  <span className="block w-full opacity-60" style={{ borderTop: `2.5px dashed ${moodColor(week.mood)}` }} />
+                </button>
+              );
+            })}
+
+            {isYear && isMood && buckets.map((b, i) => {
+              const checkin = monthCheckins.get(b.key);
+              return checkin ? (
+                <span
+                  key={`diamond-${b.key}`}
+                  className="absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-[1.6px] pointer-events-none"
+                  style={{ left: `${xOf(i, n)}%`, top: `${yOf(checkin.mood)}%`, borderColor: moodColor(checkin.mood) }}
+                  aria-hidden="true"
+                />
+              ) : null;
+            })}
+
             {buckets.map((b, i) => {
               if (b.isFuture) return null;
               const left = `${(i / n) * 100}%`;
@@ -191,6 +267,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
               if (isYear) {
                 const m = months[i];
                 const monthName = b.longLabel.split(' ')[0];
+                const checkin = isMood ? monthCheckins.get(b.key) : undefined;
+                const monthly = checkin ? `Monthly check-in: ${moodLabel(checkin.mood)}${checkin.word ? ` · “${checkin.word}”` : ''}` : '';
                 return (
                   <button
                     key={b.key}
@@ -198,12 +276,12 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
                     onClick={() => onMonth(b.dateStr)}
                     className={buttonClass}
                     style={{ left, width, top: `${m.average != null ? yOf(m.average) : AXIS_Y}%` }}
-                    aria-label={m.average != null
-                      ? `${monthName}: average ${lowerName} ${m.average.toFixed(1)} across ${m.n} ${m.n === 1 ? 'day' : 'days'}. Open ${monthName}`
-                      : `${monthName}: no ${lowerName} recorded. Open ${monthName}`}
-                    title={m.average != null && m.q1 != null && m.q3 != null
+                    aria-label={`${m.average != null
+                      ? `${monthName}: average ${lowerName} ${m.average.toFixed(1)} across ${m.n} ${m.n === 1 ? 'day' : 'days'}.`
+                      : `${monthName}: no ${lowerName} recorded.`}${monthly ? ` ${monthly}.` : ''} Open ${monthName}`}
+                    title={`${m.average != null && m.q1 != null && m.q3 != null
                       ? `${b.longLabel}\nAverage ${m.average.toFixed(1)} across ${m.n} ${m.n === 1 ? 'day' : 'days'}\nMiddle half of days: ${m.q1.toFixed(1)}–${m.q3.toFixed(1)}`
-                      : `${b.longLabel}: no ${lowerName} recorded`}
+                      : `${b.longLabel}: no ${lowerName} recorded`}${monthly ? `\n${monthly}` : ''}`}
                   >
                     <MoodDot size={m.average != null ? dotSize : hollowSize} color={m.average != null ? seriesColor(series, m.average) : null} />
                   </button>
@@ -256,8 +334,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
       <p className="text-[11px] text-text-muted">
         {isYear
-          ? 'Dots are each month’s average; the shaded bar covers the middle half of its days. Click a month to open it.'
-          : 'Click a dot to edit that day’s check-in. Hollow dots are days without one — click to log it.'}
+          ? `Dots are each month’s average; the shaded bar covers the middle half of its days${isMood && monthCheckins.size > 0 ? ', and ◇ marks the monthly check-in' : ''}. Click a month to open it.`
+          : `Click a dot to edit that day’s check-in. Hollow dots are days without one — click to log it.${weekSpans.length > 0 ? ' Dashed lines are weekly check-ins.' : ''}`}
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchMoodCheckins } from '@/app/lib/backend-api';
-import type { MoodCheckin } from '@/app/types/mood';
+import type { MoodCheckin, MoodPeriodKind } from '@/app/types/mood';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import type { ReportPeriod } from '@/app/utils/calendarReport';
 import { moodFetchRange } from '@/app/utils/moodReport';
@@ -11,9 +11,10 @@ interface Fetched {
 }
 
 /**
- * Loads the daily mood check-ins a report period needs (see moodFetchRange:
- * a week also pulls in the 4 weeks before its end). `enabled` false skips
- * the request — the "Show mood in reports" setting is off. Saving or
+ * Loads the mood check-ins a report period needs — daily, weekly and
+ * monthly — whose first day falls in moodFetchRange (a week also pulls in
+ * the 4 weeks before its end, a month the week before it). `enabled` false
+ * skips the request — the "Show mood in reports" setting is off. Saving or
  * deleting a check-in from the report patches the loaded list in place.
  */
 export function useReportMood(period: ReportPeriod, enabled: boolean) {
@@ -29,7 +30,7 @@ export function useReportMood(period: ReportPeriod, enabled: boolean) {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    fetchMoodCheckins(startStr, endStr, ['day'])
+    fetchMoodCheckins(startStr, endStr)
       .then(checkins => {
         if (!cancelled) setFetched({ key, checkins });
       })
@@ -46,11 +47,15 @@ export function useReportMood(period: ReportPeriod, enabled: boolean) {
   const ready = fetched?.key === key ? fetched.checkins : null;
   const failed = !ready && error?.key === key ? error.message : null;
 
-  /** Puts a saved check-in in place of its day's old one, or removes a day's check-in (`saved` null). */
-  const replaceDay = useCallback((date: string, saved: MoodCheckin | null) => {
+  /**
+   * Puts a saved check-in in place of its period's old one, or removes the
+   * period's check-in (`saved` null). A week shares its Monday with that
+   * day's check-in, so the kind is part of the key.
+   */
+  const replaceDay = useCallback((date: string, saved: MoodCheckin | null, kind: MoodPeriodKind = 'day') => {
     setFetched(prev => {
       if (!prev) return prev;
-      const rest = prev.checkins.filter(c => c.period_start !== date);
+      const rest = prev.checkins.filter(c => c.period_kind !== kind || c.period_start !== date);
       return { ...prev, checkins: saved ? [...rest, saved] : rest };
     });
   }, []);

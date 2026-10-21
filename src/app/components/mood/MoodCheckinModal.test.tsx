@@ -124,3 +124,80 @@ describe('MoodCheckinModal', () => {
     expect(saveButton().disabled).toBe(false);
   });
 });
+
+describe('MoodCheckinModal for a week or month', () => {
+  const inGroup = (group: string, name: string) =>
+    [...document.body.querySelector(`[role="radiogroup"][aria-label="${group}"]`)!.querySelectorAll('button')]
+      .find(b => b.textContent?.trim() === name || b.getAttribute('aria-label') === name)!;
+  const type = async (el: HTMLInputElement, value: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
+  it('saves a week check-in on its Monday, whichever day it was opened from', async () => {
+    await render({ kind: 'week', date: new Date(2026, 9, 25) }); // Sunday
+    expect(document.body.textContent).toContain('Weekly check-in');
+    expect(document.body.textContent).toContain('Week of Oct 19–25');
+
+    await click(inGroup('How was your week overall?', 'Good'));
+    await click(inGroup('Workload felt', 'Too much'));
+    await type(document.body.querySelector<HTMLInputElement>('#mood-checkin-highlight')!, '  Shipped the portfolio  ');
+    await click(button('Focused'));
+    await click(saveButton());
+
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith({
+      period_kind: 'week',
+      period_start: '2026-10-19',
+      mood: 4,
+      workload: 2,
+      highlight: 'Shipped the portfolio',
+      tags: ['Focused'],
+      note: null,
+    });
+  });
+
+  it('saves a month check-in on the 1st, with no day or week fields', async () => {
+    await render({ kind: 'month', date: new Date(2026, 9, 31) });
+    expect(document.body.textContent).toContain('October 2026');
+    expect(api.fetchMoodTags).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[aria-label="Energy"]')).toBeNull();
+    expect(document.body.querySelector('[aria-label="Workload felt"]')).toBeNull();
+
+    await click(inGroup('How was October?', 'Okay'));
+    await click(inGroup('Progress on what matters to you', 'A lot'));
+    await type(document.body.querySelector<HTMLInputElement>('#mood-checkin-word')!, 'Momentum');
+    await click(saveButton());
+
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith({
+      period_kind: 'month',
+      period_start: '2026-10-01',
+      mood: 3,
+      progress: 5,
+      word: 'Momentum',
+      note: null,
+      tags: [],
+    });
+  });
+
+  it('suggests a mood from the days but never picks it', async () => {
+    await render({ kind: 'week', date: new Date(2026, 9, 25), periodSummary: { average: 3.7, logged: 6, days: 7, tasksDone: 23 } });
+    expect(document.body.textContent).toContain('Your days averaged Good (3.7)');
+    expect(document.body.textContent).toContain('6 of 7 days logged');
+    expect(saveButton().disabled).toBe(true);
+    expect(inGroup('How was your week overall?', 'Good').getAttribute('aria-checked')).toBe('false');
+
+    const suggestion = [...document.body.querySelectorAll('p button')].find(b => b.textContent === 'Good')!;
+    await click(suggestion);
+    expect(inGroup('How was your week overall?', 'Good').getAttribute('aria-checked')).toBe('true');
+    expect(saveButton().disabled).toBe(false);
+  });
+
+  it('keeps the fields its form leaves out when editing', async () => {
+    const existing: MoodCheckin = { ...saved, period_kind: 'week', period_start: '2026-10-19', stress: null, workload: 1, highlight: 'Hike', note: 'kept', tags: ['Outdoors'] };
+    await render({ kind: 'week', date: new Date(2026, 9, 19), existing });
+    await click(button('Save changes'));
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_start: '2026-10-19', workload: 1, highlight: 'Hike', note: 'kept', tags: ['Outdoors'] }));
+  });
+});
