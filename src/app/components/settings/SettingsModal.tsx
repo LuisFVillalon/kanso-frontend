@@ -130,7 +130,7 @@ export default function SettingsModal({
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  // ── Term Tracker (Big Picture Calendar) ─────────────────────────────────
+  // ── Term Tracker ─────────────────────────────────
   // Lives in its own backend table (calendar_settings), not on `profile`, so
   // it's a separate prop (see hooks/useCalendarSettings.ts) — but the draft is
   // only persisted (onSaveCalendarSettings) from handleSaveProfile below,
