@@ -28,7 +28,7 @@ const DaySummaryPanel: React.FC<DaySummaryPanelProps> = ({ date, data, totalHabi
       {date ? (
         <>
           <div className="flex items-center gap-2 flex-wrap mb-4">
-            <h2 className="text-base sm:text-lg font-bold text-text-primary">
+            <h2 className="text-base sm:text-lg text-text-primary">
               {date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
             </h2>
             {holidayName && (

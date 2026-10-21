@@ -1,14 +1,13 @@
-// Lets the user pick the app's accent color from a curated palette, while
-// keeping the Notion-style warm paper look (Notion Blue default, everything
-// else in globals.css untouched). The chosen color only overrides
-// --tm-accent and the values derived from it; surfaces, borders, and ink
+// Lets the user pick the app's accent color (buttons, links, active states)
+// from a curated palette. The chosen color only overrides --tm-accent and the
+// values derived from it; the brand paper, ink and key red in globals.css
 // stay fixed.
 
 import { ColorOption } from './colorOptions';
 
 const THEME_ACCENT_STORAGE_KEY = 'tm_theme_accent';
 
-// Notion Blue, defined in globals.css — offered as the "reset" option.
+// The default accent, defined in globals.css — offered as the "reset" option.
 export const DEFAULT_ACCENT = '#006BCB';
 
 // The app's curated color palette — used both for the theme accent color
@@ -64,7 +63,7 @@ export function applyThemeColor(hex: string): void {
   // A gentle shift toward the ink on hover: darker in light mode (matches the
   // default #006BCB → #005DB0), lighter in dark mode.
   root.setProperty('--tm-accent-hover', `color-mix(in srgb, ${hex} 88%, var(--tm-text-primary))`);
-  // A flat tinted wash over the card surface for ghost fills, à la the Sky Tint token.
+  // A flat tinted wash over the card surface for ghost fills.
   root.setProperty('--tm-accent-subtle', `color-mix(in srgb, ${hex} 12%, var(--tm-surface))`);
   root.setProperty('--tm-accent-text', relativeLuminance(hex) > 0.45 ? '#171717' : '#FFFFFF');
 }

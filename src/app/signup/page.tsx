@@ -64,11 +64,11 @@ export default function SignupPage() {
   if (confirmed) {
     return (
       <AuthLayout
-        title={<>Check your <span className="highlight">email</span></>}
+        title="Check your email"
         subtitle={<>We sent a confirmation link to <strong className="font-semibold text-text-primary">{email}</strong>.</>}
       >
         <div className="flex items-start gap-3 rounded-lg border border-border bg-surface p-4">
-          <MailCheck aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+          <MailCheck aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-success-text" />
           <p className="text-sm leading-6 text-text-secondary">
             Open the link to activate your account, then come back and sign in.
             It can take a minute to arrive, so check your spam folder too.
@@ -83,7 +83,7 @@ export default function SignupPage() {
 
   return (
     <AuthLayout
-      title={<>Create your <span className="highlight">account</span></>}
+      title="Create your account"
       subtitle="Tasks, notes and habits in one calm place."
     >
       <GoogleAuthButton label="Continue with Google" loading={googleLoading} onClick={handleGoogleSignup} />

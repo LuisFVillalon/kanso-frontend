@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@/app/types/task';
-import { groupLinkedTasks, subtaskTreeIds, taskToEditForm } from './taskUtils';
+import { getDueStatus, groupLinkedTasks, subtaskTreeIds, taskToEditForm, todayPlanProgress } from './taskUtils';
 
 describe('subtaskTreeIds', () => {
   const tasks = [
@@ -104,5 +104,55 @@ describe('taskToEditForm', () => {
 
   it('sends null for a task on the default lead', () => {
     expect(taskToEditForm({ ...task, reminder_minutes: undefined }).reminder_minutes).toBeNull();
+  });
+});
+
+describe('getDueStatus', () => {
+  const now = new Date(2026, 9, 20, 15, 0);
+  const status = (due_date: string | null, completed = false) => getDueStatus({ due_date, completed }, now);
+
+  it('shows Done for a completed task, whatever its due date', () => {
+    expect(status('2026-10-01', true)).toEqual({ kind: 'done', label: 'Done' });
+    expect(status(null, true)).toEqual({ kind: 'done', label: 'Done' });
+  });
+
+  it('calls a past due date Slipped, never overdue', () => {
+    expect(status('2026-10-19')).toEqual({ kind: 'slipped', label: 'Slipped' });
+  });
+
+  it('marks today and tomorrow as due', () => {
+    expect(status('2026-10-20')).toEqual({ kind: 'due', label: 'Due today' });
+    expect(status('2026-10-21')).toEqual({ kind: 'due', label: 'Due tomorrow' });
+  });
+
+  it('counts down the coming week, then falls back to the date', () => {
+    expect(status('2026-10-23')).toEqual({ kind: 'upcoming', label: 'In 3 days' });
+    expect(status('2026-10-27')).toEqual({ kind: 'upcoming', label: 'In 7 days' });
+    expect(status('2026-10-28')).toEqual({ kind: 'later', label: 'Oct 28' });
+  });
+
+  it('has no status for an open task without a due date', () => {
+    expect(status(null)).toBeNull();
+  });
+});
+
+describe('todayPlanProgress', () => {
+  const now = new Date(2026, 9, 20, 9, 0);
+  const t = (due_date: string | null, completed: boolean, archived_at: string | null = null) =>
+    ({ due_date, completed, archived_at });
+
+  it('counts tasks due today or earlier, skipping future, undated and archived ones', () => {
+    expect(todayPlanProgress([
+      t('2026-10-20', true),
+      t('2026-10-20', false),
+      t('2026-10-18', false),
+      t('2026-10-21', false),
+      t(null, false),
+      t('2026-10-20', false, '2026-10-19T12:00:00Z'),
+    ], now)).toEqual({ open: 2, done: 1 });
+  });
+
+  it('is settled once nothing in the plan is left open', () => {
+    expect(todayPlanProgress([t('2026-10-20', true), t('2026-10-19', true)], now)).toEqual({ open: 0, done: 2 });
   });
 });

@@ -17,8 +17,8 @@ interface StreakBadgeProps {
   title: string;
 }
 
-// A flat-fill pill tinted from its own icon color (per the DESIGN.md Pill Tag
-// spec) — used for the current/best streak counts on each habit row.
+// A flat-fill pill tinted from its own icon color — used for the
+// current/best streak counts on each habit row.
 const StreakBadge: React.FC<StreakBadgeProps> = ({ icon, value, color, title }) => (
   <div
     className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full flex-shrink-0"
@@ -71,12 +71,12 @@ const HabitRow: React.FC<HabitRowProps> = ({ habit, onToggle, onSelectHeatmap, h
           }}
           disabled={pending}
           className={`flex-shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-all active:scale-90 ${
-            done ? 'border-[var(--tm-success)] bg-[var(--tm-success)]' : 'border-border hover:border-accent'
+            done ? 'border-[var(--tm-success)] bg-[var(--tm-success-subtle)]' : 'border-border hover:border-accent'
           }`}
           style={{ opacity: pending ? 0.5 : 1, cursor: pending ? 'wait' : 'pointer' }}
           aria-label={done ? `Unmark ${habit.title}` : `Mark ${habit.title} done`}
         >
-          {done && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+          {done && <Check className="w-3 h-3 text-success-text" strokeWidth={3} />}
         </button>
         <span className="flex-1 flex items-center gap-1.5 min-w-0">
           {habit.tags.length > 0 && (
@@ -355,7 +355,7 @@ const CompactHabitRow: React.FC<CompactHabitRowProps> = ({ habit, onToggle, week
         disabled={pending}
         className={`mt-0.5 flex-shrink-0 w-[15px] h-[15px] rounded-sm border-2 flex items-center justify-center transition-all active:scale-90 ${
           done
-            ? 'border-[var(--tm-success)] bg-[var(--tm-success)]'
+            ? 'border-[var(--tm-success)] bg-[var(--tm-success-subtle)]'
             : 'border-border hover:border-accent'
         }`}
         style={{
@@ -367,7 +367,7 @@ const CompactHabitRow: React.FC<CompactHabitRowProps> = ({ habit, onToggle, week
         }
       >
         {done && (
-          <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+          <Check className="w-2.5 h-2.5 text-success-text" strokeWidth={3} />
         )}
       </button>
 
@@ -431,7 +431,7 @@ const HabitsStatsCard: React.FC<HabitsStatsCardProps> = ({
   const doneToday = habits.filter(h => h.logged_today).length;
 
   const badge = habits.length > 0 && (
-    <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: 'var(--tm-success)' }}>
+    <span className="text-[11px] font-semibold flex-shrink-0" style={{ color: 'var(--tm-success-text)' }}>
       {doneToday} / {habits.length} today
     </span>
   );

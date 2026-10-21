@@ -361,7 +361,7 @@ const TotalHoursFooter: React.FC<{ categories: DonutCategory[] }> = ({ categorie
 // parenthesized percentage for its share of the chart's own total (the sum
 // of every category's count, mirroring how CategoryDonut computes its own
 // share). Both ride the app's standard caption scale (text-xs sm:text-sm,
-// Stone/--tm-text-muted per DESIGN.md) rather than a one-off tiny size, so
+// --tm-text-muted) rather than a one-off tiny size, so
 // the percentage reads as easily as the count it's paired with.
 export const CategoryCount: React.FC<CategoryCountProps> = ({ count, pct }) => (
   <span className="flex-shrink-0 text-right whitespace-nowrap" style={{ width: '4.5rem' }}>

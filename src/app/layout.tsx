@@ -1,21 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { fraunces, geistMono, mplusRounded } from "./fonts";
 import { AuthProvider } from "./context/AuthContext";
 import { AppDataProvider } from "./context/AppDataProvider";
 import { ToastProvider } from "./context/ToastContext";
 import { COLOR_SCHEME_BG, COLOR_SCHEME_SCRIPT } from "./lib/colorScheme";
-
-const inter = Inter({
-  variable: "--font-heading",
-  weight: ["400", "500", "600", "700"],
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://kanso-web-app.vercel.app";
 const DESCRIPTION =
@@ -25,7 +14,7 @@ const DESCRIPTION =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "kanso · clarity on the go",
+    default: "kanso · Keep it kanso.",
     template: "%s · kanso",
   },
   description: DESCRIPTION,
@@ -33,13 +22,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "kanso",
-    title: "kanso · clarity on the go",
+    title: "kanso · Keep it kanso.",
     description: DESCRIPTION,
     url: "/",
   },
   twitter: {
     card: "summary_large_image",
-    title: "kanso · clarity on the go",
+    title: "kanso · Keep it kanso.",
     description: DESCRIPTION,
   },
 };
@@ -63,8 +52,12 @@ export default function RootLayout({
      * before React hydrates, causing a mismatch between server-rendered HTML
      * and the client DOM.
      */
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
+    <html
+      lang="en"
+      className={`${fraunces.variable} ${mplusRounded.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="antialiased">
         {/*
          * Anti-flash script — runs synchronously before the first paint.
          * Applies a light/dark theme pinned with the theme toggle by setting

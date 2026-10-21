@@ -1,0 +1,78 @@
+/* kanso brand tokens · v3 (October 2026)
+ * Drop into globals.css (or @import it) in kanso-frontend and the landing site.
+ * Names keep the existing --tm-* scheme so current components pick up the new look.
+ * --tm-accent* stay user-overridable (Settings → Appearance). --kanso-key* are brand-only.
+ */
+
+:root {
+  /* Paper and ink */
+  --tm-bg: #F4EFE4;              /* Paper: page canvas, the home state */
+  --tm-surface: #FBF8F1;         /* Cards, panels */
+  --tm-surface-raised: #FFFDF8;  /* Menus, modals */
+  --tm-border: #E3DCCD;          /* Hairlines between cards */
+  --tm-border-strong: #CFC6B4;
+  --tm-text-primary: #191817;    /* Ink: headings, key copy, wordmark (15.5:1 on paper) */
+  --tm-text-secondary: #4A4640;  /* Body text (8.2:1 on paper) */
+  --tm-text-muted: #6B655C;      /* Helper text, meta (5.0:1 on paper) */
+  --tm-pencil: #8A847A;          /* Icons, dividers. Not for text. */
+  --tm-rule: #D6DEE3;            /* Notebook ruling, grid lines, calm highlights */
+
+  /* Brand: the k key. Logo, marketing and the "day complete" key press only.
+     Never for errors, buttons or small text. */
+  --kanso-key: #C8402F;
+  --kanso-key-side: #8E2A1F;
+  --kanso-key-deep: #A33224;     /* Use if red text is ever unavoidable (6.0:1 on paper) */
+
+  /* Status: always pair with an icon and a word */
+  --tm-success: #7FB069;         /* Leaf: done */
+  --tm-success-subtle: #E4F0DC;
+  --tm-success-text: #2F5A22;
+  --tm-upcoming: #E6B422;        /* Highlighter: due in a few days */
+  --tm-upcoming-subtle: #FAEFC8;
+  --tm-upcoming-text: #5C4300;
+  --tm-due: #E0813A;             /* Marker orange: due today or tomorrow (most urgent state) */
+  --tm-due-subtle: #FBE1CE;
+  --tm-due-text: #7A3510;
+  --tm-slipped-dot: #D9A441;     /* Overdue, gently: pencil chip + amber dot. Never red. */
+  --tm-slipped-subtle: #ECE7DD;
+  --tm-slipped-text: #4A4640;
+
+  /* Type */
+  --font-display: var(--font-fraunces), Georgia, serif;          /* Headings, wordmark */
+  --font-sans: var(--font-mplus-rounded), system-ui, sans-serif; /* Body, UI, labels */
+  --font-display-settings: "SOFT" 100, "WONK" 0;
+
+  /* Shape */
+  --tm-radius-small: 4px;
+  --tm-radius-buttons: 8px;
+  --tm-radius-cards: 12px;
+  --tm-radius-pills: 999px;
+}
+
+.dark {
+  --tm-bg: #191817;              /* Ink page at night */
+  --tm-surface: #24221F;
+  --tm-surface-raised: #2C2A26;
+  --tm-border: rgba(237, 230, 214, 0.12);
+  --tm-border-strong: rgba(237, 230, 214, 0.22);
+  --tm-text-primary: #EDE6D6;    /* 14.3:1 */
+  --tm-text-secondary: #CFC7B8;
+  --tm-text-muted: #B5AEA2;      /* 8.1:1 */
+  --tm-pencil: #8A847A;
+  --tm-rule: rgba(214, 222, 227, 0.10);
+
+  --kanso-key: #D4533F;          /* Lifted so the key stays warm on ink */
+  --kanso-key-side: #9E3426;
+
+  --tm-success-subtle: rgba(127, 176, 105, 0.18);
+  --tm-success-text: #B9DCA8;
+  --tm-upcoming-subtle: rgba(230, 180, 34, 0.18);
+  --tm-upcoming-text: #F2D27A;
+  --tm-due-subtle: rgba(224, 129, 58, 0.20);
+  --tm-due-text: #F5B98A;
+  --tm-slipped-subtle: rgba(237, 230, 214, 0.08);
+  --tm-slipped-text: #CFC7B8;
+}
+
+/* Wordmark and display headings */
+.font-display { font-family: var(--font-display); font-variation-settings: var(--font-display-settings); }

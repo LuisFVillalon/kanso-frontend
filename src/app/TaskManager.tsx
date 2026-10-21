@@ -36,6 +36,8 @@ import DoodleCanvas, { DoodleCanvasHandle } from '@/app/components/doodle/Doodle
 import DoodleToolbar from '@/app/components/doodle/DoodleToolbar';
 import ModeSwitcher, { AppMode } from '@/app/components/common/ModeSwitcher';
 import NotificationBell from '@/app/components/notifications/NotificationBell';
+import KeyPressMoment, { DAY_COMPLETE_COPY, FOCUS_MODE_COPY, type KeyPress } from '@/app/components/common/KeyPressMoment';
+import { useDayComplete } from '@/app/hooks/useDayComplete';
 import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 
 const TaskManager: React.FC = () => {
@@ -77,6 +79,20 @@ const TaskManager: React.FC = () => {
   };
 
   const { tasks, isLoading, toggleComplete, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+
+  // The key-press moment: plays when checking off a task settles today's
+  // plan, and when the user switches into focus mode.
+  const [keyPress, setKeyPress] = useState<KeyPress | null>(null);
+  const playKeyPress = useCallback((message: string) => {
+    setKeyPress(prev => ({ id: (prev?.id ?? 0) + 1, message }));
+  }, []);
+  const clearKeyPress = useCallback(() => setKeyPress(null), []);
+  const playDayComplete = useCallback(() => playKeyPress(DAY_COMPLETE_COPY), [playKeyPress]);
+  useDayComplete(tasks, isLoading, playDayComplete);
+  const handleModeChange = (next: AppMode) => {
+    if (next === 'focus' && mode !== 'focus') playKeyPress(FOCUS_MODE_COPY);
+    setMode(next);
+  };
   const { tags, tagsLoading, addTag, delTag, archiveTag, updateTag } = useTagsContext();
 
   const updatePriority = async (taskId: number, priority: number | null) => {
@@ -360,7 +376,7 @@ const TaskManager: React.FC = () => {
               <span aria-hidden="true" className="text-text-muted/50">&middot;</span>
               <span>{currentTimeLabel}</span>
             </p>
-            <h1 className="flex items-center gap-2 sm:gap-3 text-xl sm:text-2xl lg:text-3xl font-bold text-text-primary">
+            <h1 className="flex items-center gap-2 sm:gap-3 text-xl sm:text-2xl lg:text-3xl text-text-primary">
               <ProfileAvatar avatar={profile.avatar} name={profile.name} size={32} />
               Welcome back{profile.name ? `, ${profile.name}` : ''}
             </h1>
@@ -378,7 +394,7 @@ const TaskManager: React.FC = () => {
               </div>
             )}
             <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} />
-            <ModeSwitcher mode={mode} onChange={setMode} />
+            <ModeSwitcher mode={mode} onChange={handleModeChange} />
           </div>
         </div>
 
@@ -537,6 +553,8 @@ const TaskManager: React.FC = () => {
         calendarSettingsLoading={calendarSettingsLoading}
         onSaveCalendarSettings={saveCalendarSettings}
       />
+
+      <KeyPressMoment moment={keyPress} onDone={clearKeyPress} />
     </>
   );
 };

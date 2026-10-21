@@ -1,9 +1,9 @@
 import React from 'react';
 import { Check, ChevronDown, ChevronRight, SquarePen } from 'lucide-react';
 import { Task } from '@/app/types/task';
-import { formatDueDate, getDueColor, getPriorityBadgeStyle, toInkTone } from '@/app/utils/taskUtils';
-import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { getDueStatus, getPriorityBadgeStyle } from '@/app/utils/taskUtils';
 import { formatDuration } from '@/app/utils/duration';
+import TaskStatusChip from './TaskStatusChip';
 
 interface LinkedTasksListProps {
   /** The linked tasks to render (may be a filtered subset of the total). */
@@ -50,7 +50,7 @@ export const LinkedCountPill: React.FC<{ done: number; total: number }> = ({ don
       className="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
       style={{
         backgroundColor: allDone ? 'var(--tm-success-subtle)' : 'var(--tm-surface-raised)',
-        color: allDone ? 'var(--tm-success)' : 'var(--tm-text-secondary)',
+        color: allDone ? 'var(--tm-success-text)' : 'var(--tm-text-secondary)',
       }}
       title={`${done} of ${total} linked tasks done`}
     >
@@ -81,7 +81,7 @@ const LinkedTaskRow: React.FC<{
   onToggleComplete?: (id: number) => void;
   onEditTask?: (task: Task) => void;
 }> = ({ task, viaTitle, compact, maxPriority, pending, onToggleComplete, onEditTask }) => {
-  const dueDate = task.due_date instanceof Date ? toLocalDateStr(task.due_date) : task.due_date;
+  const dueStatus = getDueStatus(task);
   const priorityStyle = task.priority != null ? getPriorityBadgeStyle(task.priority, maxPriority) : null;
 
   return (
@@ -98,11 +98,11 @@ const LinkedTaskRow: React.FC<{
         style={{ opacity: pending ? 0.5 : 1, cursor: pending ? 'wait' : 'pointer' }}
         className={`flex-shrink-0 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all active:scale-90 ${
           task.completed
-            ? 'border-[var(--tm-success)] bg-[var(--tm-success)]'
+            ? 'border-[var(--tm-success)] bg-[var(--tm-success-subtle)]'
             : 'border-border hover:border-accent'
         }`}
       >
-        {task.completed && <Check className="w-2.5 h-2.5 text-white" />}
+        {task.completed && <Check className="w-2.5 h-2.5 text-success-text" strokeWidth={3} />}
       </button>
 
       <span
@@ -130,11 +130,7 @@ const LinkedTaskRow: React.FC<{
         </span>
       )}
 
-      {!compact && !task.completed && dueDate && (
-        <span className={`flex-shrink-0 text-xs whitespace-nowrap ${toInkTone(getDueColor(dueDate))}`}>
-          {formatDueDate(dueDate)}
-        </span>
-      )}
+      {!compact && !task.completed && dueStatus && <TaskStatusChip status={dueStatus} size="sm" />}
 
       {!compact && !task.completed && task.estimated_time != null && (
         <span className="hidden sm:inline flex-shrink-0 text-xs whitespace-nowrap text-text-muted">

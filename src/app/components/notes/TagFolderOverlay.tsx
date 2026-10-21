@@ -84,7 +84,7 @@ const TagFolderOverlay: React.FC<TagFolderOverlayProps> = ({
               style={{ backgroundColor: tag.color }}
             />
           )}
-          <h2 className="text-sm font-semibold text-[var(--tm-text-primary)]">
+          <h2 className="text-sm text-[var(--tm-text-primary)]">
             {isEditorView ? selectedNote.title || 'Untitled' : tag.name}
           </h2>
           {!isEditorView && (

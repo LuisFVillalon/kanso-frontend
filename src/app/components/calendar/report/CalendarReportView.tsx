@@ -390,7 +390,7 @@ const CalendarReportView: React.FC = () => {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <h2 id="calendar-report-heading" className="text-base sm:text-lg font-semibold text-text-primary text-center min-w-0" aria-live="polite">
+          <h2 id="calendar-report-heading" className="text-base sm:text-lg text-text-primary text-center min-w-0" aria-live="polite">
             {label}
           </h2>
           <button

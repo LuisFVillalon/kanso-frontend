@@ -1,5 +1,6 @@
 import { BaseTaskForm, EditTaskForm, Task } from '@/app/types/task';
 import { compareLinkedOrder } from '@/app/utils/linkedTasks';
+import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 
 // ── Priority (static badge colors for levels 1–10) ────────────────────────────
 
@@ -67,7 +68,7 @@ export const formatDueDate = (
     (dueDateOnly.getTime() - nowDateOnly.getTime()) / (1000 * 60 * 60 * 24)
   );
 
-  if (diffDays < 0) return "Overdue";
+  if (diffDays < 0) return "Slipped";
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Tomorrow";
 
@@ -266,27 +267,67 @@ export const countTasksByTag = (tasks: Task[]) => {
   return Object.values(map);
 };
 
-// Returns Tailwind utility classes — use for badge/chip backgrounds.
-// Note: string dates are parsed as local midnight to prevent UTC-offset drift.
-export const getDueColor = (dueDate?: string | Date | null) => {
-  if (!dueDate) return "text-gray-400 bg-gray-50";
+// ── Due status (the four status chips in brand/DESIGN.md) ───────────────────
 
-  const now = new Date();
-  const due = typeof dueDate === 'string' ? new Date(dueDate + 'T00:00:00') : new Date(dueDate);
-  const diffDays = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+/**
+ * done: completed. slipped: past its due date (never shown in red). due: due
+ * today or tomorrow. upcoming: due within UPCOMING_DAYS. later: further out.
+ */
+export type DueStatusKind = 'done' | 'slipped' | 'due' | 'upcoming' | 'later';
 
-  if (diffDays < 0) return "text-red-700 bg-red-50";
-  if (diffDays <= 3) return "text-yellow-700 bg-yellow-50";
-  return "text-green-700 bg-green-50";
-};
+export interface DueStatus {
+  kind: DueStatusKind;
+  label: string;
+}
 
-// Recolor the semantic status classes above into the notebook's ink palette
-// instead of raw tailwind red/green/yellow, which clash with the kraft/cream
-// theme.
+/** How far ahead a due date still counts as "In N days" rather than a plain date. */
+const UPCOMING_DAYS = 7;
+
+/** Whole calendar days from `now` to the due date: 0 today, negative once it has passed. */
+function daysUntilDue(dueDate: string | Date, now: Date): number {
+  const due = parseLocalDate(toLocalDateStr(dueDate));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/** The chip state for a task, or null for an open task with no due date. */
+export function getDueStatus(
+  task: Pick<Task, 'completed' | 'due_date'>,
+  now: Date = new Date(),
+): DueStatus | null {
+  if (task.completed) return { kind: 'done', label: 'Done' };
+  if (!task.due_date) return null;
+  const days = daysUntilDue(task.due_date, now);
+  if (days < 0) return { kind: 'slipped', label: 'Slipped' };
+  if (days === 0) return { kind: 'due', label: 'Due today' };
+  if (days === 1) return { kind: 'due', label: 'Due tomorrow' };
+  if (days <= UPCOMING_DAYS) return { kind: 'upcoming', label: `In ${days} days` };
+  return { kind: 'later', label: formatDueDateShort(toLocalDateStr(task.due_date)) ?? '' };
+}
+
+/**
+ * Today's plan is every task due today or earlier. `open` counts the ones
+ * still to do; the plan is settled once `open` reaches 0.
+ */
+export function todayPlanProgress(
+  tasks: Pick<Task, 'completed' | 'due_date' | 'archived_at'>[],
+  now: Date = new Date(),
+): { open: number; done: number } {
+  let open = 0;
+  let done = 0;
+  for (const t of tasks) {
+    if (!t.due_date || t.archived_at || daysUntilDue(t.due_date, now) > 0) continue;
+    if (t.completed) done += 1;
+    else open += 1;
+  }
+  return { open, done };
+}
+
+// Ink tone for the duration indicator's semantic color classes below.
 export const toInkTone = (classes: string) => {
   if (classes.includes('red')) return 'text-[var(--tm-accent-2)]';
   if (classes.includes('yellow')) return 'text-[var(--tm-accent)]';
-  if (classes.includes('green')) return 'text-[var(--tm-success)]';
+  if (classes.includes('green')) return 'text-[var(--tm-success-text)]';
   return 'text-text-muted';
 };
 

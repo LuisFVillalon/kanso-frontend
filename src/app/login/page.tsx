@@ -40,7 +40,7 @@ export default function LoginPage() {
 
   return (
     <AuthLayout
-      title={<>Welcome <span className="highlight">back</span></>}
+      title="Welcome back"
       subtitle="Sign in to pick up where you left off."
     >
       <GoogleAuthButton label="Continue with Google" loading={googleLoading} onClick={handleGoogleLogin} />

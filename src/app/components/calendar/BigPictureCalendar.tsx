@@ -201,7 +201,7 @@ export const BigPictureOverlay: React.FC<{ settings: CalendarSettings; settingsL
         <div className="p-5 rounded-lg border border-border-subtle flex items-start gap-3" style={{ backgroundColor: 'var(--tm-surface-raised)' }}>
           <AlertCircle className="w-5 h-5 text-text-muted flex-shrink-0 mt-0.5" />
           <div>
-            <h2 className="text-base font-bold text-text-primary mb-0.5">Not Currently In Session</h2>
+            <h2 className="text-base text-text-primary mb-0.5">Not currently in session</h2>
             <p className="text-sm text-text-muted">
               Today ({formatLongDate(currentDate)}) is outside the configured date range. Adjust the range in Settings.
             </p>

@@ -1,6 +1,9 @@
-# kanso
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/logo/kanso-lockup-horizontal-dark.svg">
+  <img src="brand/logo/kanso-lockup-horizontal.svg" alt="kanso" height="56">
+</picture>
 
-**Tasks, notes and habits in one calm place.** kanso (簡素, "simplicity") plans your day, keeps your notes, tracks your streaks, and tells you what to focus on next.
+**Keep it kanso.** Tasks, notes and habits in one calm place. kanso plans your day, keeps your notes, tracks your streaks, and tells you what to focus on next.
 
 **Live app: [kanso-web-app.vercel.app](https://kanso-web-app.vercel.app)**. Click **Try the demo** to open a private sandbox with sample data. No signup needed.
 
@@ -72,6 +75,8 @@ src/app/
   notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
+  fonts.ts               # Fraunces (display) and M PLUS Rounded 1c (body), via next/font
+  favicon.ico icon.svg apple-icon.png manifest.webmanifest  # App icons and web manifest
   components/            # Grouped by domain: task, notes, habit, calendar, stats, settings,
                          # mood, landing, doodle, tag, auth, notifications; plus common/ and layout/ (cross-domain)
   context/               # Auth, Toast, Notifications, and the Tasks/Tags/Habits/Notes data providers
@@ -79,6 +84,9 @@ src/app/
   lib/backend-api.ts     # Every backend and AI-service request, with auth headers and typed errors
   lib/supabase.ts        # Supabase client (auth only)
   utils/                 # Date helpers, note-content extraction for the AI service, ...
+brand/                   # The brand kit: DESIGN.md (source of truth for look and voice),
+                         # tokens, logo, icons and snippets
+public/                  # Web-manifest icons
 ```
 
 ## Running locally
