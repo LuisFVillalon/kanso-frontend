@@ -28,6 +28,23 @@ interface TrendLineChartProps {
 
 const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}` : hours.toFixed(1));
 
+// Y-axis steps in hours. One label per hour crowded the axis on busy weeks
+// (0h-13h), so the axis uses the smallest step that keeps it to at most four
+// intervals (five labels), with the top rounded up to a whole step.
+const Y_STEPS = [0.5, 1, 2, 3, 4, 6, 12, 24];
+const MAX_Y_INTERVALS = 4;
+
+/** Evenly spaced y-axis tick values from 0 up to a clean top at or above `maxHours`. */
+export const niceHourTicks = (maxHours: number): number[] => {
+  const max = Math.max(maxHours, 0.5);
+  // Half-hour steps only for sub-hour ranges; 0-2h reads best as 0/1/2.
+  const candidates = max <= 1 ? Y_STEPS : Y_STEPS.filter(s => s >= 1);
+  const step =
+    candidates.find(s => Math.ceil(max / s) <= MAX_Y_INTERVALS) ?? 24 * Math.ceil(max / (24 * MAX_Y_INTERVALS));
+  const intervals = Math.ceil(max / step);
+  return Array.from({ length: intervals + 1 }, (_, i) => i * step);
+};
+
 /**
  * Just the SVG line/area chart — callers own their own header text and empty
  * "no data" copy (both already varied between the two original call sites),
@@ -54,7 +71,8 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({ days, svgClassNa
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const maxHours = Math.max(...days.map(d => d.hours), 1);
-  const axisMax = Math.max(Math.ceil(maxHours), 1);
+  const tickValues = niceHourTicks(maxHours);
+  const axisMax = tickValues[tickValues.length - 1];
   const stepX = days.length > 1 ? plotW / (days.length - 1) : 0;
 
   const points = days.map((d, i) => ({
@@ -63,10 +81,7 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({ days, svgClassNa
     y: padT + plotH - (d.hours / axisMax) * plotH,
   }));
 
-  const yTicks = Array.from({ length: axisMax + 1 }, (_, i) => {
-    const value = i;
-    return { value, y: padT + plotH - (value / axisMax) * plotH };
-  });
+  const yTicks = tickValues.map(value => ({ value, y: padT + plotH - (value / axisMax) * plotH }));
 
   const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
   const areaPath = `${linePath} L ${points[points.length - 1].x} ${padT + plotH} L ${points[0].x} ${padT + plotH} Z`;
