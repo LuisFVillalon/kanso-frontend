@@ -20,7 +20,7 @@ const TABPANEL_ID = 'home-widgets-tabpanel';
 
 /**
  * The home page's widgets section: the widget grid, or the week calendar in
- * its place, switched by the tabs at its top. The choice is remembered on
+ * its place, switched by the tabs at its top right. The choice is remembered on
  * this device, per user.
  */
 const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
@@ -29,14 +29,16 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
 
   return (
     <section aria-label="Widgets" className="space-y-2">
-      <SegmentedTabs
-        label="Widgets or week calendar"
-        tabs={TABS}
-        value={view}
-        onChange={setView}
-        idBase={TABS_ID}
-        panelId={TABPANEL_ID}
-      />
+      <div className="flex justify-end">
+        <SegmentedTabs
+          label="Widgets or week calendar"
+          tabs={TABS}
+          value={view}
+          onChange={setView}
+          idBase={TABS_ID}
+          panelId={TABPANEL_ID}
+        />
+      </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>
         {view === 'widgets' ? widgets : <div className="mb-4 sm:mb-6"><WeekView /></div>}
       </div>
