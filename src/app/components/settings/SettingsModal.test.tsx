@@ -169,7 +169,7 @@ describe('SettingsModal navigation', () => {
     render('mood');
     expect(heading()).toBe('Notifications');
     expect(navItem('Mood check-ins')).toBeUndefined();
-    expect(document.querySelector('[role="switch"][aria-labelledby="mood-setting-daily"]')).toBeTruthy();
+    expect(document.querySelector('[role="switch"][aria-labelledby="mood-setting-weekly"]')).toBeTruthy();
   });
 
   it('drills into a page from the menu list on a phone, with a back arrow', async () => {
@@ -240,17 +240,17 @@ describe('SettingsModal autosave', () => {
     const finishes: (() => void)[] = [];
     onSaveProfileField.mockImplementation(() => new Promise<void>(resolve => { finishes.push(resolve); }));
     render('mood');
-    const daily = () => document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="mood-setting-daily"]')!;
-    const flipped = { ...DEFAULT_MOOD_SETTINGS, daily: !DEFAULT_MOOD_SETTINGS.daily };
-    await click(daily());
-    await click(daily());
+    const weekly = () => document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="mood-setting-weekly"]')!;
+    const flipped = { ...DEFAULT_MOOD_SETTINGS, weekly: !DEFAULT_MOOD_SETTINGS.weekly };
+    await click(weekly());
+    await click(weekly());
     expect(onSaveProfileField).toHaveBeenCalledOnce();
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: flipped });
     await act(async () => { finishes[0](); });
     expect(onSaveProfileField).toHaveBeenCalledTimes(2);
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: DEFAULT_MOOD_SETTINGS });
     await act(async () => { finishes[1](); });
-    expect(daily().getAttribute('aria-checked')).toBe(String(DEFAULT_MOOD_SETTINGS.daily));
+    expect(weekly().getAttribute('aria-checked')).toBe(String(DEFAULT_MOOD_SETTINGS.weekly));
   });
 
   it("says when a save failed and retries it", async () => {
@@ -286,9 +286,10 @@ describe('SettingsModal autosave', () => {
 
   it('offers Undo for a mood check-in switch', async () => {
     render('mood');
-    const daily = document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="mood-setting-daily"]')!;
-    await click(daily);
-    expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: { ...DEFAULT_MOOD_SETTINGS, daily: !DEFAULT_MOOD_SETTINGS.daily } });
+    const monthly = document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="mood-setting-monthly"]')!;
+    await click(monthly);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: { ...DEFAULT_MOOD_SETTINGS, monthly: !DEFAULT_MOOD_SETTINGS.monthly } });
+    expect(document.body.textContent).toContain('Monthly check-in turned on.');
     await click(button('Undo'));
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: DEFAULT_MOOD_SETTINGS });
   });
@@ -311,8 +312,12 @@ describe('SettingsModal notifications page', () => {
     render('notifications');
     expect(groupTitles()).toEqual(['Reminders', 'Mood check-ins', 'Quiet hours']);
     const mood = document.querySelector('section[aria-labelledby="notif-group-mood"]')!;
-    expect(mood.querySelector('[aria-labelledby="mood-setting-daily"]')).toBeTruthy();
+    // Daily check-ins follow the mood check-in reminder switch; only weekly and monthly have their own.
+    expect(mood.querySelector('[aria-labelledby="mood-setting-daily"]')).toBeNull();
+    expect([...mood.querySelectorAll('[aria-labelledby^="mood-setting-"]')].map(s => s.getAttribute('aria-labelledby')))
+      .toEqual(['mood-setting-weekly', 'mood-setting-monthly']);
     expect(mood.querySelector('[aria-labelledby="notif-type-mood_reminder"]')).toBeTruthy();
+    expect(mood.textContent).toContain("Log your mood each day; reminds you before you call it a day if it isn't logged yet.");
     expect(mood.querySelector('select[aria-labelledby="mood-reminder-lead-label"]')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/Dashboard nudge|Show mood in reports|Morning summary/);
 

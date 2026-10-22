@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/app/context/ToastContext';
+import { NotificationsContext, type NotificationsContextValue } from '@/app/context/NotificationsContextValue';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { DailyDebriefReport } from '@/app/types/debrief';
 import { DEFAULT_MOOD_SETTINGS, type MoodCheckin } from '@/app/types/mood';
@@ -69,19 +70,31 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const render = async (props: Partial<React.ComponentProps<typeof TaskDebriefPanel>> = {}) => {
+/** The notification settings as far as daily mood reads them; null renders outside the provider. */
+const notificationsWith = (
+  preferences: { types: Record<string, boolean> } | null,
+  status: NotificationsContextValue['status'] = 'ready',
+) => ({ status, preferences, preferencesError: false }) as unknown as NotificationsContextValue;
+
+const render = async (
+  props: Partial<React.ComponentProps<typeof TaskDebriefPanel>> = {},
+  notifications: NotificationsContextValue | null = null,
+) => {
+  const panel = (
+    <TaskDebriefPanel
+      profile={profile}
+      profileLoaded
+      onSaveProfile={vi.fn(async () => ({ ok: true }))}
+      tasks={[]}
+      habits={[]}
+      completionSyncToken={0}
+      {...props}
+    />
+  );
   await act(async () => {
     root.render(
       <ToastProvider>
-        <TaskDebriefPanel
-          profile={profile}
-          profileLoaded
-          onSaveProfile={vi.fn(async () => ({ ok: true }))}
-          tasks={[]}
-          habits={[]}
-          completionSyncToken={0}
-          {...props}
-        />
+        {notifications ? <NotificationsContext.Provider value={notifications}>{panel}</NotificationsContext.Provider> : panel}
       </ToastProvider>,
     );
   });
@@ -186,12 +199,16 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(activityLogCard()?.contains(button('Log today’s mood'))).toBe(true);
   });
 
-  it('is hidden while daily check-ins are off, and until the profile loads', async () => {
-    await render({ profile: { ...profile, moodCheckins: { ...DEFAULT_MOOD_SETTINGS, daily: false } } });
+  it('is hidden while the mood check-in reminder is off, and until it and the profile load', async () => {
+    await render({}, notificationsWith({ types: { mood_reminder: false } }));
+    expect(button('Log today’s mood')).toBeUndefined();
+    await render({}, notificationsWith(null, 'loading'));
     expect(button('Log today’s mood')).toBeUndefined();
     await render({ profileLoaded: false });
     expect(button('Log today’s mood')).toBeUndefined();
     expect(api.fetchMoodCheckins).not.toHaveBeenCalled();
+    await render({}, notificationsWith({ types: { mood_reminder: true } }));
+    expect(button('Log today’s mood')).toBeDefined();
   });
 
   it('shows nothing it could act on when the check-in fails to load', async () => {

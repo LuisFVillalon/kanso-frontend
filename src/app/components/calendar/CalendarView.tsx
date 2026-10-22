@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { CalendarRange, ChevronLeft, ChevronRight, GalleryHorizontal, LayoutGrid, Loader2 } from 'lucide-react';
-import { useAppShell } from '@/app/context/AppShellContext';
 import { useCalendarViewMode } from '@/app/hooks/useCalendarViewMode';
+import { useDailyMood } from '@/app/hooks/useDailyMood';
 import { useYearCalendarData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -20,8 +20,7 @@ const CalendarView: React.FC = () => {
   const [year, setYear] = useState(() => today.getFullYear());
   const [carouselMonth, setCarouselMonth] = useState(() => today.getMonth());
   const { dayData, habits, loading, yearLoading } = useYearCalendarData(year);
-  const { profile, loaded: profileLoaded } = useAppShell().profileState;
-  const showMood = profileLoaded && profile.moodCheckins.daily;
+  const showMood = useDailyMood() === true;
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [carouselDate, setCarouselDate] = useState<Date | null>(() => new Date());
   const [viewMode, setViewMode] = useCalendarViewMode();

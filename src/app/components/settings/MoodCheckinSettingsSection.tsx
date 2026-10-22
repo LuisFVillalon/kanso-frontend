@@ -22,10 +22,9 @@ export const MOOD_GROUP = {
   description: 'A few seconds at the end of the day. Check-ins are private to you and aren’t sent to the Daily Brief.',
 };
 
-export type MoodToggle = 'daily' | 'weekly' | 'monthly';
+export type MoodToggle = 'weekly' | 'monthly';
 
 export const MOOD_TOGGLES: { key: MoodToggle; label: string; hint: string }[] = [
-  { key: 'daily', label: 'Daily check-in', hint: 'Log how each day felt, from the Daily Brief or the calendar.' },
   { key: 'weekly', label: 'Weekly check-in', hint: 'Off by default. Offered on Sunday, the end of your Mon–Sun week.' },
   { key: 'monthly', label: 'Monthly check-in', hint: 'Off by default. Offered on the last day of the month.' },
 ];

@@ -7,9 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const auth = vi.hoisted(() => ({ user: { id: 'user-1' } as { id: string } | null }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
-vi.mock('@/app/context/AppShellContext', () => ({
-  useAppShell: () => ({ profileState: { profile: { moodCheckins: { daily: false } }, loaded: true } }),
-}));
+vi.mock('@/app/hooks/useDailyMood', () => ({ useDailyMood: () => false }));
 const yearData = vi.hoisted(() => vi.fn());
 vi.mock('@/app/hooks/useYearCalendarData', () => ({ useYearCalendarData: yearData }));
 vi.mock('./WeekView', () => ({ default: () => <p>week view</p> }));

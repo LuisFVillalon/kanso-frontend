@@ -11,7 +11,7 @@ import { MOOD_REMINDER_MINUTES_MAX, MOOD_REMINDER_PRESETS } from '@/app/utils/no
 /** Switch labels, in the order the day runs within each group. Other types the server lists aren't offered. */
 const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
   task_reminder:  { label: 'Reminder before a task is due', hint: "At each task's reminder time." },
-  mood_reminder:  { label: 'Mood check-in reminder', hint: "Before you call it a day, if today's mood isn't logged yet." },
+  mood_reminder:  { label: 'Mood check-in reminder', hint: "Log your mood each day; reminds you before you call it a day if it isn't logged yet." },
   mood_missed:    { label: 'Missed mood check-ins', hint: 'When days go by without a mood check-in.' },
 };
 const REMINDER_TYPES = ['task_reminder'];

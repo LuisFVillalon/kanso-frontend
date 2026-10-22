@@ -6,6 +6,7 @@ import type { ModalLayer } from '@/app/components/common/Modal';
 import MoodCheckinModal, { type DaySummary } from '@/app/components/mood/MoodCheckinModal';
 import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import { useToast } from '@/app/context/ToastContext';
+import { useDailyMood } from '@/app/hooks/useDailyMood';
 import { useDayMoodCheckin, useMoodCheckinSaved } from '@/app/hooks/useDayMoodCheckin';
 import type { Habit } from '@/app/types/habit';
 import { moodLabel, type MoodCheckin } from '@/app/types/mood';
@@ -133,11 +134,12 @@ export const BriefMoodLine: React.FC<{ profile: ProfileFields; tasks: Task[]; ha
  * The dashboard's reminder above the Daily Brief: once the check-in day is
  * called off (past Call it a day) and its mood isn't logged, a calm line with
  * a way to log it. Gone as soon as it's logged, and never before the day is
- * called off or while daily check-ins are off.
+ * called off or while the mood check-in reminder (daily check-ins) is off.
  */
 export const DayClosedMoodReminder: React.FC<{ profile: ProfileFields; profileLoaded: boolean; tasks: Task[]; habits: Habit[] }> = ({ profile, profileLoaded, tasks, habits }) => {
   const now = useMinuteClock();
-  const closed = profileLoaded && profile.moodCheckins.daily && dayCalledOffAt(now, profile.dayStartTime, profile.shutoffTime);
+  const dailyMood = useDailyMood();
+  const closed = profileLoaded && dailyMood && dayCalledOffAt(now, profile.dayStartTime, profile.shutoffTime);
   const date = closed ? toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime)) : null;
   const { checkin } = useDayMoodCheckin(date);
   const onSaved = useMoodCheckinSaved();
