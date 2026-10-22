@@ -169,7 +169,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
             <p className="text-sm py-2" style={{ color: 'var(--tm-danger)' }}>{error}</p>
           )}
 
-          {status !== 'error' && debrief && (
+          {debrief && (
             <div className="space-y-3">
               <WorkloadCard debrief={debrief} />
 

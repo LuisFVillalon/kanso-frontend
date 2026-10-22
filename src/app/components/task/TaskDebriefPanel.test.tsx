@@ -158,6 +158,18 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
   });
 
+  it('keeps the last brief and an open check-in form when a refresh fails', async () => {
+    await render();
+    await click(button('Log today’s mood'));
+    await click(button('Good'));
+    api.fetchTaskDebrief.mockRejectedValue(new Error('Brief unavailable'));
+    await render({ completionSyncToken: 1 });
+    expect(text()).toContain('Brief unavailable');
+    expect(dialogTitle()).toBe('Daily check-in');
+    expect(document.querySelector('[role="radio"][aria-label="Good"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
+  });
+
   it('is hidden while daily check-ins are off, and until the profile loads', async () => {
     await render({ profile: { ...profile, moodCheckins: { ...DEFAULT_MOOD_SETTINGS, daily: false } } });
     expect(button('Log today’s mood')).toBeUndefined();
