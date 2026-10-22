@@ -45,6 +45,7 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
     if (habitsLoading) return;
 
     if (habits.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing to fetch; record this year's empty result
       setHabitLogs({ year, logged: new Map() });
       return;
     }
