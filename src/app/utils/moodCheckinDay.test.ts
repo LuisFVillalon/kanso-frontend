@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkinDayAt, endsPeriod, periodStartOf } from './moodCheckinDay';
+import { checkinDayAt, dayCalledOffAt, endsPeriod, periodStartOf } from './moodCheckinDay';
 import { toLocalDateStr } from './dateUtils';
 
 // Tuesday, Oct 20 2026.
@@ -18,6 +18,29 @@ describe('checkinDayAt', () => {
     expect(dayAt(at(8, 59, 21), '09:00', '00:30')).toBe('2026-10-20');
     // Once the next day starts it's that day's.
     expect(dayAt(at(9, 0, 21), '09:00', '00:30')).toBe('2026-10-21');
+  });
+});
+
+describe('dayCalledOffAt', () => {
+  it('closes at the shutoff for a day that ends before midnight, until midnight', () => {
+    expect(dayCalledOffAt(at(21, 59), '08:00', '22:00')).toBe(false);
+    expect(dayCalledOffAt(at(22, 0), '08:00', '22:00')).toBe(true);
+    expect(dayCalledOffAt(at(23, 59), '08:00', '22:00')).toBe(true);
+    // After midnight it's the next day's check-in, still open.
+    expect(dayCalledOffAt(at(1, 0, 21), '08:00', '22:00')).toBe(false);
+  });
+
+  it('closes in the small hours for a day that runs past midnight', () => {
+    expect(dayCalledOffAt(at(23, 0), '09:00', '00:30')).toBe(false);
+    expect(dayCalledOffAt(at(0, 15, 21), '09:00', '00:30')).toBe(false);
+    expect(dayCalledOffAt(at(0, 30, 21), '09:00', '00:30')).toBe(true);
+    expect(dayCalledOffAt(at(8, 59, 21), '09:00', '00:30')).toBe(true);
+    expect(dayCalledOffAt(at(9, 0, 21), '09:00', '00:30')).toBe(false);
+  });
+
+  it('never closes a day whose shutoff is its start', () => {
+    expect(dayCalledOffAt(at(8, 0), '08:00', '08:00')).toBe(false);
+    expect(dayCalledOffAt(at(23, 0), '08:00', '08:00')).toBe(false);
   });
 });
 

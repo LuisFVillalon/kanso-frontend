@@ -171,7 +171,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
 
           {debrief && (
             <div className="space-y-3">
-              <WorkloadCard debrief={debrief} />
+              <WorkloadCard debrief={debrief} mood={mood} />
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <SectionCard
@@ -199,7 +199,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
                   {debrief.due_today_tasks.map(task => <TaskRow key={task.id} task={task} />)}
                 </SectionCard>
 
-                <FocusNextCard items={debrief.focus_next} mood={mood} />
+                <FocusNextCard items={debrief.focus_next} />
               </div>
 
               <TimeByTagCard tasks={tasks} habits={habits} />
@@ -401,18 +401,22 @@ function buildContributorsByTag<T extends { tags: { name: string }[] }>(
   return contributorsByTag;
 }
 
-function WorkloadCard({ debrief }: { debrief: DailyDebriefReport }) {
+/** Today's Activity Log, with the day's mood chip (if any) in its upper right corner. */
+function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: React.ReactNode }) {
   const { workload } = debrief;
 
   if (workload.is_rest_day) {
     return (
       <div
-        className="rounded-md p-3 flex items-center gap-2"
+        className="rounded-md p-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5"
         style={{ backgroundColor: 'var(--tm-accent-subtle)', border: '1px solid var(--tm-border)' }}
       >
-        <Moon className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />
-        <span className="text-xs font-semibold text-text-primary">Rest day</span>
-        <span className="text-xs text-text-secondary">— no workload scheduled today.</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Moon className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />
+          <span className="text-xs font-semibold text-text-primary">Rest day</span>
+          <span className="text-xs text-text-secondary">— no workload scheduled today.</span>
+        </div>
+        {mood}
       </div>
     );
   }
@@ -439,18 +443,23 @@ function WorkloadCard({ debrief }: { debrief: DailyDebriefReport }) {
       className="rounded-md p-3"
       style={{ backgroundColor: 'var(--tm-surface-raised)', border: '1px solid var(--tm-border)' }}
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 mb-2">
         <div className="flex items-center gap-1.5" style={{ color: overCap ? 'var(--tm-danger)' : 'var(--tm-text-primary)' }}>
           <Gauge className="w-4 h-4" />
           <span className="text-xs font-semibold uppercase tracking-wide">Today&apos;s Activity Log</span>
         </div>
-        {overCap && (
-          <span
-            className="chip text-[10px] font-bold"
-            style={{ backgroundColor: 'var(--tm-danger-subtle)', color: 'var(--tm-danger)' }}
-          >
-            Overcommitted
-          </span>
+        {(overCap || mood) && (
+          <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+            {overCap && (
+              <span
+                className="chip text-[10px] font-bold"
+                style={{ backgroundColor: 'var(--tm-danger-subtle)', color: 'var(--tm-danger)' }}
+              >
+                Overcommitted
+              </span>
+            )}
+            {mood}
+          </div>
         )}
       </div>
       <div className="flex items-center gap-3">
@@ -532,18 +541,15 @@ function WorkloadCard({ debrief }: { debrief: DailyDebriefReport }) {
   );
 }
 
-function FocusNextCard({ items, mood }: { items: FocusNextItem[]; mood?: React.ReactNode }) {
+function FocusNextCard({ items }: { items: FocusNextItem[] }) {
   return (
     <div
       className="rounded-md p-3"
       style={{ backgroundColor: 'var(--tm-surface-raised)', border: '1px solid var(--tm-border)' }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 mb-2">
-        <div className="flex items-center gap-1.5" style={{ color: 'var(--tm-accent)' }}>
-          <TrendingUp className="w-4 h-4" />
-          <span className="text-xs font-semibold uppercase tracking-wide">Focus Next</span>
-        </div>
-        {mood}
+      <div className="flex items-center gap-1.5 mb-2" style={{ color: 'var(--tm-accent)' }}>
+        <TrendingUp className="w-4 h-4" />
+        <span className="text-xs font-semibold uppercase tracking-wide">Focus Next</span>
       </div>
       {items.length === 0 ? (
         <p className="text-xs text-text-muted py-1">Nothing urgent — you&apos;re on top of it.</p>

@@ -81,8 +81,12 @@ vi.mock('@/app/components/notes/NotesPanel', () => ({
 }));
 vi.mock('@/app/components/layout/CalendarAndStats', () => ({ default: Empty }));
 vi.mock('@/app/components/calendar/WeekView', () => ({ default: Empty }));
-vi.mock('@/app/components/task/TaskDebriefPanel', () => ({ default: Empty }));
+vi.mock('@/app/components/task/TaskDebriefPanel', () => ({ default: () => <div data-testid="daily-brief" /> }));
 vi.mock('@/app/components/mood/PeriodMoodCheckins', () => ({ default: Empty }));
+vi.mock('@/app/components/mood/DayMoodCheckin', async importOriginal => ({
+  ...(await importOriginal<object>()),
+  DayClosedMoodReminder: ({ profileLoaded }: { profileLoaded: boolean }) => <div data-testid="mood-reminder" data-loaded={String(profileLoaded)} />,
+}));
 vi.mock('@/app/components/doodle/DoodleCanvas', () => ({ default: Empty }));
 vi.mock('@/app/components/doodle/DoodleToolbar', () => ({ default: Empty }));
 vi.mock('@/app/components/common/ModeSwitcher', () => ({ default: Empty }));
@@ -179,5 +183,14 @@ describe('TaskManager widgets area', () => {
     await act(async () => (tab('Week calendar') as HTMLElement).click());
     expect(tab('Week calendar').getAttribute('aria-selected')).toBe('true');
     expect(localStorage.getItem('tm-home-widgets-view:u1')).toBe('"week"');
+  });
+});
+
+describe('TaskManager mood reminder', () => {
+  it('sits directly above the Daily Brief', async () => {
+    await render();
+    const reminder = container.querySelector('[data-testid="mood-reminder"]')!;
+    expect(reminder.getAttribute('data-loaded')).toBe('true');
+    expect(reminder.nextElementSibling).toBe(container.querySelector('[data-testid="daily-brief"]'));
   });
 });

@@ -32,6 +32,20 @@ export function checkinDayAt(now: Date, dayStartTime: string, shutoffTime: strin
   return addDays(now, pastMidnight ? -1 : 0);
 }
 
+/**
+ * Whether the check-in day (checkinDayAt) has been called off at `now`: past
+ * the shutoff time, or, for a day that ends past midnight, in the small hours
+ * between the shutoff and the next day's start. A day whose shutoff equals
+ * its start never closes.
+ */
+export function dayCalledOffAt(now: Date, dayStartTime: string, shutoffTime: string): boolean {
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const shutoff = toMinutes(shutoffTime);
+  return endsPastMidnight(dayStartTime, shutoffTime)
+    ? nowMinutes >= shutoff && nowMinutes < toMinutes(dayStartTime)
+    : nowMinutes >= shutoff;
+}
+
 /** The check-ins offered on the last day of their period. */
 export type PeriodCheckinKind = Exclude<MoodPeriodKind, 'day'>;
 

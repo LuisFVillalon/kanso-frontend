@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Smile } from 'lucide-react';
+import { Moon, Smile } from 'lucide-react';
 import type { ModalLayer } from '@/app/components/common/Modal';
 import MoodCheckinModal, { type DaySummary } from '@/app/components/mood/MoodCheckinModal';
 import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
@@ -11,7 +11,7 @@ import type { Habit } from '@/app/types/habit';
 import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import type { Task } from '@/app/types/task';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
-import { checkinDayAt } from '@/app/utils/moodCheckinDay';
+import { checkinDayAt, dayCalledOffAt } from '@/app/utils/moodCheckinDay';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 
 /**
@@ -32,8 +32,8 @@ interface Props {
   /** The local day, "YYYY-MM-DD". */
   date: string;
   /**
-   * - `brief`: the Daily Brief's chip beside Focus Next, named for the
-   *   check-in day ("Log today's mood").
+   * - `brief`: the Daily Brief's chip in Today's Activity Log, named for
+   *   the check-in day ("Log today's mood").
    * - `chip`: the calendar day panel's chip, named for the full date.
    *
    * Both show "Log mood", or the day's mood with Edit.
@@ -108,19 +108,74 @@ const DayMoodCheckin: React.FC<Props> = ({ date, variant, summary = null, classN
 
 export default DayMoodCheckin;
 
+/** The current time, ticking each minute. */
+function useMinuteClock(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
 /**
  * The Daily Brief's mood chip: the check-in day's mood, logged or edited at
  * any time. A day called off past midnight keeps its check-in until the next
  * day starts.
  */
 export const BriefMoodLine: React.FC<{ profile: ProfileFields; tasks: Task[]; habits: Habit[]; className?: string }> = ({ profile, tasks, habits, className }) => {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useMinuteClock();
   const date = toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime));
   return <DayMoodCheckin date={date} variant="brief" summary={daySummaryFrom(date, tasks, habits)} className={className} />;
+};
+
+/**
+ * The dashboard's reminder above the Daily Brief: once the check-in day is
+ * called off (past Call it a day) and its mood isn't logged, a calm line with
+ * a way to log it. Gone as soon as it's logged, and never before the day is
+ * called off or while daily check-ins are off.
+ */
+export const DayClosedMoodReminder: React.FC<{ profile: ProfileFields; profileLoaded: boolean; tasks: Task[]; habits: Habit[] }> = ({ profile, profileLoaded, tasks, habits }) => {
+  const now = useMinuteClock();
+  const closed = profileLoaded && profile.moodCheckins.daily && dayCalledOffAt(now, profile.dayStartTime, profile.shutoffTime);
+  const date = closed ? toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime)) : null;
+  const { checkin } = useDayMoodCheckin(date);
+  const onSaved = useMoodCheckinSaved();
+  // The form stays on the day it was opened for, even if the clock rolls past it.
+  const [modalDate, setModalDate] = useState<string | null>(null);
+
+  const dayName = date === toLocalDateStr(now) ? 'today' : date && parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'long' });
+
+  return (
+    <>
+      {date && checkin === null && (
+        <div role="status" className="card-glass mb-4 sm:mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:px-5">
+          <Moon className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden="true" />
+          <p className="flex-1 min-w-[180px] text-sm text-text-primary">
+            You&rsquo;ve called it a day.{' '}
+            <span className="text-text-secondary">How did {dayName} feel?</span>
+          </p>
+          <button type="button" onClick={() => setModalDate(date)} aria-label={`Log ${dayName}’s mood now`} className="btn btn-primary text-xs px-2.5 py-1 gap-1.5">
+            <Smile className="w-3.5 h-3.5" aria-hidden="true" />
+            Log mood
+          </button>
+        </div>
+      )}
+
+      {modalDate && (
+        <MoodCheckinModal
+          date={parseLocalDate(modalDate)}
+          existing={null}
+          summary={daySummaryFrom(modalDate, tasks, habits)}
+          onClose={() => setModalDate(null)}
+          onSaved={(saved, previous) => {
+            setModalDate(null);
+            onSaved(saved, previous);
+          }}
+        />
+      )}
+    </>
+  );
 };
 
 /**
