@@ -191,6 +191,52 @@ describe('NotificationPreferencesForm', () => {
   it('lists a type this build has no label for', () => {
     render(prefs({ types: { ...prefs().types, mood_check_in: true } }));
     expect(switchFor('Mood check in')).toBeTruthy();
+    expect(switchFor('Mood check in').closest('section')!.getAttribute('aria-labelledby')).toBe('notif-group-alerts');
+  });
+
+  describe('groups', () => {
+    const allPrefs = () =>
+      prefs({ types: { ...prefs().types, mood_reminder: true, mood_missed: true }, mood_reminder_minutes: 60 });
+    const groupOf = (el: Element) => el.closest('section')!.querySelector('h3')!.textContent;
+
+    it('orders the page as Reminders, Mood check-ins, Quiet hours, Other alerts', () => {
+      render(allPrefs());
+      expect([...document.querySelectorAll('h3')].map(h => h.textContent))
+        .toEqual(['Reminders', 'Mood check-ins', 'Quiet hours', 'Other alerts']);
+      expect(groupOf(switchFor('Reminder before a task is due'))).toBe('Reminders');
+      expect(groupOf(switchFor('Final warning'))).toBe('Reminders');
+      expect(groupOf(switchFor('Mood check-in reminder'))).toBe('Mood check-ins');
+      expect(groupOf(switchFor('Missed mood check-ins'))).toBe('Mood check-ins');
+      expect(groupOf(input('quiet-start'))).toBe('Quiet hours');
+      expect(groupOf(switchFor('Morning summary'))).toBe('Other alerts');
+    });
+
+    it('puts the default reminder time right under the task reminder switch, explaining how it differs from the mood lead', () => {
+      render(allPrefs());
+      const taskRow = switchFor('Reminder before a task is due').parentElement!;
+      expect(taskRow.nextElementSibling!.contains(select('default-reminder-label'))).toBe(true);
+      expect(document.body.textContent).toContain("How long before a task’s due time its reminder arrives.");
+      const moodRow = switchFor('Mood check-in reminder').parentElement!;
+      expect(moodRow.nextElementSibling!.textContent).toContain('1 hour before');
+      expect(moodRow.nextElementSibling!.textContent).toContain('not from a task’s due time');
+    });
+
+    it('shows the mood check-in settings it is given at the top of the Mood check-ins group', () => {
+      act(() => root.render(
+        <NotificationPreferencesForm preferences={allPrefs()} onSave={vi.fn()} track={track} moodCheckins={<p>Mood settings</p>} />,
+      ));
+      const group = byText('p', 'Mood settings').closest('section')!;
+      expect(group.getAttribute('aria-labelledby')).toBe('notif-group-mood');
+      expect(group.querySelector('h3')!.textContent).toBe('Mood check-ins');
+      expect(byText('p', 'Mood settings').compareDocumentPosition(switchFor('Mood check-in reminder')))
+        .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('keeps the default reminder time when the server lists no reminder switch', () => {
+      render(prefs({ types: { due_today: true } }));
+      expect(select('default-reminder-label')).toBeTruthy();
+      expect(document.body.textContent).not.toContain('Mood check-ins');
+    });
   });
 
   describe('mood reminders', () => {
@@ -220,7 +266,7 @@ describe('NotificationPreferencesForm', () => {
 
     it('says the mood notifications are silenced while mood reminders are off', () => {
       act(() => root.render(<NotificationPreferencesForm preferences={moodPrefs()} onSave={vi.fn()} track={track} moodRemindersOff />));
-      expect(document.body.textContent?.match(/Silenced while Mood check-ins → Remind me/g)).toHaveLength(2);
+      expect(document.body.textContent?.match(/Silenced while the dashboard nudge/g)).toHaveLength(2);
       expect(lead('1 hour before').disabled).toBe(true);
     });
 
