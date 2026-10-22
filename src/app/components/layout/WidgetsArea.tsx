@@ -6,7 +6,6 @@ import { useAuth } from '@/app/context/AuthContext';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/components/common/SegmentedTabs';
 import WeekView from '@/app/components/calendar/WeekView';
-import { WEEK_GRID_HEIGHT } from '@/app/components/calendar/WeekGrid';
 
 export type WidgetsView = 'widgets' | 'week';
 export const isWidgetsView = (c: unknown): c is WidgetsView => c === 'widgets' || c === 'week';
@@ -41,17 +40,17 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
         />
       </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>
-        {/* Both views share one grid cell, and the area always reserves the week calendar's
-            height with room for a wrapped toolbar, so switching doesn't shift the page. */}
-        <div
-          className="grid grid-cols-1 min-h-[calc(var(--week-grid-h)+9rem)] sm:min-h-[calc(var(--week-grid-h)+7.5rem)]"
-          style={{ '--week-grid-h': WEEK_GRID_HEIGHT } as React.CSSProperties}
-        >
+        {/* Both views share one grid cell. The widgets set its height and the week calendar
+            fills that same box, so switching doesn't shift the page or leave blank space.
+            The minimum keeps the week calendar usable when there are only a few widgets. */}
+        <div className="grid grid-cols-1 min-h-[20rem]">
           <div className={`[grid-area:1/1] ${view === 'week' ? 'invisible' : ''}`} inert={view === 'week'} aria-hidden={view === 'week' || undefined}>
             {widgets}
           </div>
           {view === 'week' && (
-            <div className="[grid-area:1/1] mb-4 sm:mb-6"><WeekView /></div>
+            <div className="[grid-area:1/1] relative mb-4 sm:mb-6">
+              <div className="absolute inset-0"><WeekView fill /></div>
+            </div>
           )}
         </div>
       </div>

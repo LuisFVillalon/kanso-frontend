@@ -82,8 +82,11 @@ const toggleById = (tags: Tag[], tag: Tag): Tag[] =>
  * scheduled_tasks, so a task created or edited here moves on the grid the
  * moment the save succeeds, without waiting on a refetch. Completions, note
  * sessions and habit completions come from GET /get-calendar-activity.
+ *
+ * With `fill`, the view takes its parent's height and the hour grid scrolls in
+ * whatever room the toolbar leaves.
  */
-const WeekView: React.FC = () => {
+const WeekView: React.FC<{ fill?: boolean }> = ({ fill = false }) => {
   const router = useRouter();
   const showToast = useToast();
   const now = useMinuteClock();
@@ -174,7 +177,7 @@ const WeekView: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={`flex flex-col gap-3 ${fill ? 'h-full min-h-0' : ''}`}>
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => goToWeek(-1)} className="btn btn-ghost p-2" aria-label="Previous week" title="Previous week">
@@ -229,6 +232,7 @@ const WeekView: React.FC = () => {
         onOpenTask={openTask}
         onOpenNote={noteId => router.push(`/notes?id=${noteId}`)}
         onOpenHabit={setHistoryHabitId}
+        fill={fill}
       />
 
       <NewTaskModal
