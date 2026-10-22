@@ -3,6 +3,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Tag, NewHabit } from '@/app/types/task';
 import Modal from '@/app/components/common/Modal';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
+import HabitTimeGoalField from './HabitTimeGoalField';
 
 interface CreateHabitModalProps {
   isOpen: boolean;
@@ -72,24 +73,11 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({
           />
         </div>
 
-        {/* Estimated Time */}
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-1">Estimated Time (hours, optional)</label>
-          <input
-            type="number"
-            min={0}
-            step={0.5}
-            value={newHabit.estimated_time ?? ''}
-            onChange={(e) =>
-              onHabitChange({
-                ...newHabit,
-                estimated_time: e.target.value === '' ? null : Number(e.target.value),
-              })
-            }
-            placeholder="e.g. 0.5"
-            className="input-field"
-          />
-        </div>
+        {/* Daily time goal (stored as estimated_time, in hours) */}
+        <HabitTimeGoalField
+          value={newHabit.estimated_time}
+          onChange={hours => onHabitChange({ ...newHabit, estimated_time: hours })}
+        />
 
         {/* Tags */}
         {availableTags.length > 0 && (

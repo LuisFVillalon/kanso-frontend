@@ -4,6 +4,14 @@ import { Habit } from '@/app/types/habit';
 import { Tag } from '@/app/types/task';
 import Modal from '@/app/components/common/Modal';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
+import HabitTimeGoalField from './HabitTimeGoalField';
+import {
+  BEST_STREAK_HINT,
+  CURRENT_STREAK_HINT,
+  bestStreakLabel,
+  currentStreakLabel,
+  formatHabitGoal,
+} from '@/app/utils/habitLabels';
 
 interface ManageHabitsModalProps {
   isOpen: boolean;
@@ -123,21 +131,16 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
                       type="text"
                       value={editTitle}
                       onChange={e => setEditTitle(e.target.value)}
+                      aria-label="Habit name"
                       className="input-field w-full text-sm"
                       autoFocus
                     />
-                    <div>
-                      <label className="block text-xs font-medium text-text-muted mb-1">Estimated Time (hours, optional)</label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.5}
-                        value={editEstimatedTime ?? ''}
-                        onChange={e => setEditEstimatedTime(e.target.value === '' ? null : Number(e.target.value))}
-                        placeholder="e.g. 0.5"
-                        className="input-field w-full text-sm"
-                      />
-                    </div>
+                    <HabitTimeGoalField
+                      value={editEstimatedTime}
+                      onChange={setEditEstimatedTime}
+                      labelClassName="block text-xs font-medium text-text-muted mb-1"
+                      inputClassName="input-field text-sm"
+                    />
                     {availableTags.length > 0 && (
                       <TagMultiSelect
                         tags={availableTags}
@@ -174,23 +177,6 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <span className="font-medium text-text-primary text-sm leading-snug">{habit.title}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {habit.estimated_time != null && (
-                          <span className="text-xs font-semibold text-text-muted" title="Estimated time">
-                            {Number.isInteger(habit.estimated_time) ? habit.estimated_time : habit.estimated_time.toFixed(1)}h
-                          </span>
-                        )}
-                        <div className="flex items-center gap-1" title="Current streak">
-                          <Flame className="w-4 h-4" style={{ color: '#F97316' }} />
-                          <span className="text-sm font-semibold" style={{ color: '#F97316' }}>
-                            {habit.current_streak}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1" title="Best streak">
-                          <Star className="w-4 h-4" style={{ color: '#EAB308' }} />
-                          <span className="text-sm font-semibold" style={{ color: '#EAB308' }}>
-                            {habit.max_streak}
-                          </span>
-                        </div>
                         {onViewHistory && (
                           <button
                             onClick={() => onViewHistory(habit.id)}
@@ -247,13 +233,26 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
                         ))}
                       </div>
                     )}
-                    <div className="flex gap-4 mt-2">
-                      <span className="text-xs text-text-muted">
-                        Current streak: <span className="font-medium" style={{ color: '#F97316' }}>{habit.current_streak} day{habit.current_streak !== 1 ? 's' : ''}</span>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs">
+                      <span
+                        className="flex items-center gap-1 font-medium"
+                        style={{ color: '#F97316' }}
+                        title={CURRENT_STREAK_HINT}
+                      >
+                        <Flame className="w-3.5 h-3.5" aria-hidden="true" />
+                        {currentStreakLabel(habit.current_streak)}
                       </span>
-                      <span className="text-xs text-text-muted">
-                        Best: <span className="font-medium" style={{ color: '#EAB308' }}>{habit.max_streak} day{habit.max_streak !== 1 ? 's' : ''}</span>
+                      <span
+                        className="flex items-center gap-1 font-medium"
+                        style={{ color: '#EAB308' }}
+                        title={BEST_STREAK_HINT}
+                      >
+                        <Star className="w-3.5 h-3.5" aria-hidden="true" />
+                        {bestStreakLabel(habit.max_streak)}
                       </span>
+                      {formatHabitGoal(habit.estimated_time) && (
+                        <span className="text-text-muted">{formatHabitGoal(habit.estimated_time)}</span>
+                      )}
                     </div>
                   </>
                 )}
