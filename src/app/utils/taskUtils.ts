@@ -178,6 +178,8 @@ export interface TaskGroup {
   /** Progress over `task`'s direct linked tasks, including ones the filters hide. */
   linkedDone: number;
   linkedTotal: number;
+  /** Open tasks anywhere under `task` (linked tasks, theirs, …), including hidden ones. */
+  openInTree: number;
 }
 
 /**
@@ -232,6 +234,9 @@ export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[
     return found;
   };
 
+  const openUnder = (task: Task): number =>
+    (childrenOf.get(task.id) ?? []).reduce((n, c) => n + (c.completed ? 0 : 1) + openUnder(c), 0);
+
   const build = (task: Task, showAll: boolean): TaskGroup => {
     const children = childrenOf.get(task.id) ?? [];
     const all = showAll || matchingIds.has(task.id);
@@ -240,6 +245,7 @@ export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[
       linked: children.filter(c => all || hasMatch(c)).map(c => build(c, all)),
       linkedDone: children.filter(c => c.completed).length,
       linkedTotal: children.length,
+      openInTree: openUnder(task),
     };
   };
 

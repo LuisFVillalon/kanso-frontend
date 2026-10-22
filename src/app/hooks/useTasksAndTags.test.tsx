@@ -249,7 +249,7 @@ describe('useTasks with linked tasks nested deeper', () => {
     expect(hook.tasks.find(t => t.id === 6)).toMatchObject({ parent_task_id: 4 });
   });
 
-  it('completes all on a nested task: it and its own open linked tasks, nothing above it', async () => {
+  it('completes all on a nested task: its whole subtree, nothing above it', async () => {
     act(() => hook.setTasks(tree()));
     api.completeTaskWithLinked.mockResolvedValue(task(3, 'Mock interview', {
       parent_task_id: 1, position: 0, completed: true, completed_date: '2026-10-21T09:00:00',
@@ -261,6 +261,8 @@ describe('useTasks with linked tasks nested deeper', () => {
     const byId = new Map(hook.tasks.map(t => [t.id, t]));
     expect(byId.get(3)).toMatchObject({ completed: true, parent_task_id: 1 });
     expect(byId.get(4)).toMatchObject({ completed: true, completed_date: '2026-10-21T09:00:00' });
+    expect(byId.get(6)).toMatchObject({ completed: true, completed_date: '2026-10-21T09:00:00', priority: null });
+    expect(byId.get(7)).toMatchObject({ completed: true, completed_date: null });
     expect(byId.get(1)).toMatchObject({ completed: false });
   });
 

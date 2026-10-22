@@ -492,17 +492,16 @@ const Callout: React.FC<{ tone: 'warning' | 'danger' | 'info'; role?: string; ch
 
 /**
  * "Leads up to [parent trail] [Unlink]" on the edit form of a linked task:
- * every task above it, from the topmost down to its own parent, each opening
- * that task when `onOpen` is given. Unlinking turns it back into a standalone
+ * every task above it, from the topmost down to its own parent, as plain
+ * text. Unlinking turns it back into a standalone
  * task when the form is saved; until then it can be undone.
  */
 export const LeadsUpToField: React.FC<{
   chain: ParentSummary[];
-  onOpen?: (id: number) => void;
   unlinked: boolean;
   onUnlink: () => void;
   onUndo: () => void;
-}> = ({ chain, onOpen, unlinked, onUnlink, onUndo }) => (
+}> = ({ chain, unlinked, onUnlink, onUndo }) => (
   <div>
     <span className="block text-sm font-medium text-text-secondary mb-2">Leads up to</span>
     <div
@@ -511,7 +510,7 @@ export const LeadsUpToField: React.FC<{
     >
       <span className={`flex-1 min-w-0 flex text-sm ${unlinked ? 'line-through' : ''}`}>
         {chain.length > 0
-          ? <ParentTrail chain={chain} onOpen={unlinked ? undefined : onOpen} variant="field" />
+          ? <ParentTrail chain={chain} variant="field" />
           : <span className="text-text-muted">Another task</span>}
       </span>
       <button type="button" onClick={unlinked ? onUndo : onUnlink} className="btn btn-outline px-3 py-1 text-sm">

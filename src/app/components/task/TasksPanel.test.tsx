@@ -168,6 +168,12 @@ describe('TasksPanel with linked tasks nested deeper', () => {
     expect(container.textContent).not.toContain('still open');
   });
 
+  it('counts open tasks at every depth in the card\'s banner', () => {
+    render([parent, done, open, practice, room]);
+    act(() => parentCheckbox().click());
+    expect(container.textContent).toContain('2 linked tasks are still open.');
+  });
+
   it("suggests completing the nested parent, not the card, when its last open linked task is done", () => {
     render([parent, done, open, practice, room]);
     click('Mark complete: Practice questions');

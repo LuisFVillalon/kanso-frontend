@@ -15,7 +15,7 @@ interface TasksPanelProps {
   /** Filtered, sorted top-level tasks, each with its linked tasks nested under it. */
   taskGroups: TaskGroup[];
   onToggleComplete: (id: number) => void;
-  /** "Complete all": completes a task and its open linked tasks together. */
+  /** "Complete all": completes a task and every open task under it together. */
   onCompleteWithLinked: (id: number) => void;
   /** `linked` is passed only for a task with linked tasks, as picked in the dialog. */
   onDeleteTask: (task: Task, linked?: LinkedRemoveMode) => void;
@@ -123,7 +123,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   // A banner shows only while its question still applies (a failed toggle
   // rolls the list back, which quietly drops it). A linked-task question
   // comes before Canvas's. Nested tasks get theirs under their own row.
-  const bannerFor = ({ task, linkedDone, linkedTotal }: TaskGroup) => {
+  const bannerFor = ({ task, linkedDone, linkedTotal, openInTree }: TaskGroup) => {
     const kind = banners[task.id];
     const applies = !task.completed && linkedTotal > 0 && (kind === 'open' ? linkedDone < linkedTotal : linkedDone === linkedTotal);
     if (!kind || !applies) {
@@ -140,7 +140,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
       <LinkedTaskBanner
         kind={kind}
         title={task.title}
-        openCount={linkedTotal - linkedDone}
+        openCount={openInTree}
         onCompleteAll={() => { setBanner(task.id, null); onCompleteWithLinked(task.id); }}
         onCompleteOne={() => { setBanner(task.id, null); onToggleComplete(task.id); }}
         onDismiss={() => setBanner(task.id, null)}

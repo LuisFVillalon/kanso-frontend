@@ -121,12 +121,13 @@ export const useTasks = (enabled: boolean) => {
     }
   };
 
-  // "Complete all" from a parent's banner: completes the task and its open
-  // linked tasks in one request, so they all share one completed_date.
+  // "Complete all" from a parent's banner: completes the task and every open
+  // task under it, at any depth, in one request, so they all share one completed_date.
   const completeWithLinked = async (id: number): Promise<void> => {
     const task = tasks.find(t => t.id === id);
     if (!task || pendingRef.current.has(id)) return;
-    const openLinked = tasks.filter(t => t.parent_task_id === id && !t.completed);
+    const tree = subtaskTreeIds(tasks, id);
+    const openLinked = tasks.filter(t => t.id !== id && tree.has(t.id) && !t.completed);
     const ids = new Set([id, ...openLinked.map(t => t.id)]);
     const before = new Map([task, ...openLinked].map(t => [t.id, t]));
     ids.forEach(i => pendingRef.current.add(i));

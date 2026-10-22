@@ -61,7 +61,7 @@ function EditHarness({ initial, onSubmit, onChange = () => {}, tasks = allTasks 
     <EditTaskModal
       isOpen task={t} onClose={() => {}} onTaskChange={next => { onChange(next); setT({ ...t, ...next } as Task); }}
       tags={[]} onToggleTag={() => {}} onSubmit={onSubmit} activeTaskCount={1} usedPriorityLevels={[]}
-      allTasks={tasks} onOpenTask={setT}
+      allTasks={tasks}
     />
   );
 }
@@ -220,14 +220,12 @@ describe('LinkedTasksField on the edit-task form', () => {
     const onChange = vi.fn();
     act(() => root.render(<EditHarness initial={allTasks[2]} onSubmit={vi.fn()} onChange={onChange} />));
     expect(doc().body.textContent).toContain('Leads up to');
-    expect(button('Open parent task Prepare for Google phone screen')).not.toBeNull();
 
     act(() => buttonByText('Unlink').click());
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ parent_task_id: null }));
     expect(doc().body.textContent).toContain('Unlinked. Save to make it a standalone task again.');
-    // The trail stays, struck through and no longer a link, until Undo.
+    // The trail stays, struck through, until Undo.
     expect(doc().body.textContent).toContain('Prepare for Google phone screen');
-    expect(button('Open parent task Prepare for Google phone screen')).toBeNull();
 
     act(() => buttonByText('Undo').click());
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ parent_task_id: 2 }));
@@ -244,19 +242,14 @@ describe('LinkedTasksField on the edit-task form', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.anything(), [{ title: 'Book a quiet room' }]);
   });
 
-  it('shows the whole trail above a deeply linked task and opens any task in it', () => {
+  it('shows the whole trail above a deeply linked task as plain text, so edits are never left behind', () => {
     const deeper = task(7, 'Book a quiet room', { parent_task_id: 3, position: 0 });
     const tasks = [...allTasks, deeper];
     act(() => root.render(<EditHarness initial={deeper} onSubmit={vi.fn()} tasks={tasks} />));
     expect(doc().querySelector('[title="Leads up to Prepare for Google phone screen › Mock interview with Dana"]'))
       .not.toBeNull();
-
-    act(() => button('Open parent task Mock interview with Dana').click());
-    // The editor now shows Mock interview with Dana, with its own parent above it and its linked task in its list.
-    expect(doc().querySelector<HTMLInputElement>('input[placeholder="Enter task title"]')!.value)
-      .toBe('Mock interview with Dana');
-    expect(doc().querySelector('[title="Leads up to Prepare for Google phone screen"]')).not.toBeNull();
-    expect(rowTitles()).toEqual(['Book a quiet room']);
+    expect(button('Open parent task Mock interview with Dana')).toBeNull();
+    expect(button('Open parent task Prepare for Google phone screen')).toBeNull();
   });
 
   it("offers neither the task's own parents nor itself when linking under a nested task", () => {
