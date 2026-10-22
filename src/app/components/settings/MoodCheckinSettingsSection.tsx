@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * Settings → Mood check-ins: which check-ins the dashboard nudges for and
- * when. Purely controlled: SettingsModal saves each change at once (as the
- * profile's `mood_checkins`).
+ * Settings → Notifications → Mood check-ins: which check-ins the dashboard
+ * nudges for and when. Purely controlled: SettingsModal saves each change at
+ * once (as the profile's `mood_checkins`).
  */
 
 import React from 'react';
@@ -16,6 +16,13 @@ interface Props {
   shutoffTime: string;
   loading: boolean;
 }
+
+/** The Notifications page group that holds these settings and the mood alerts. */
+export const MOOD_GROUP = {
+  id: 'notif-group-mood',
+  title: 'Mood check-ins',
+  description: 'A few seconds at the end of the day. Check-ins are private to you and aren’t sent to the Daily Brief.',
+};
 
 export type MoodToggle = 'daily' | 'weekly' | 'monthly' | 'show_in_reports';
 
@@ -76,7 +83,7 @@ const MoodCheckinSettingsSection: React.FC<Props> = ({ value, onChange, shutoffT
 
       <div>
         <p id="mood-setting-remind" className="block text-xs font-medium text-text-muted mb-1">
-          Remind me <span className="font-normal">· follows “Call it a day”</span>
+          Dashboard nudge <span className="font-normal">· follows “Call it a day”</span>
         </p>
         <div className="flex items-center gap-1 p-1 rounded-lg bg-surface border border-border" role="group" aria-labelledby="mood-setting-remind">
           {remindOptions.map(({ remind, label }) => (
@@ -98,10 +105,6 @@ const MoodCheckinSettingsSection: React.FC<Props> = ({ value, onChange, shutoffT
           <p className="text-xs text-text-muted mt-1">Also silences the mood reminder and missed check-in notifications.</p>
         )}
       </div>
-
-      <p className="text-xs" style={{ color: 'var(--tm-text-muted)' }}>
-        Check-ins are private to you and aren&rsquo;t sent to the Daily Brief.
-      </p>
     </div>
   );
 };

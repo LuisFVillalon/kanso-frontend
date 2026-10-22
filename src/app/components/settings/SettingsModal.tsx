@@ -6,7 +6,7 @@
  * page has a back arrow.
  *
  *   Account    Profile · Sign-in and security
- *   Your days  Work day and rest · Term Tracker · Mood check-ins
+ *   Your days  Work day and rest · Term Tracker
  *   App        Notifications · Appearance · Canvas
  *   Sign out
  *
@@ -14,6 +14,10 @@
  * and swatches at once, one field per request. Each page shows its own
  * Saved / Couldn't save indicator, and switches that change how the app
  * behaves (rest days, check-ins, alerts) offer a short Undo.
+ *
+ * Notifications gathers everything about being reminded: task reminders,
+ * mood check-ins (saved on the profile) and quiet hours. Where the API
+ * refuses notifications it still holds the mood check-ins.
  *
  * Demo sandboxes (Supabase anonymous users) have no credentials or account to
  * manage, so they get no Sign-in and security page, and Canvas says it needs
@@ -23,7 +27,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Loader2, Check, AlertTriangle, ChevronLeft, ChevronRight, User, ShieldCheck, Clock,
-  Hourglass, Smile, Bell, Palette, GraduationCap, LogOut,
+  Hourglass, Bell, Palette, GraduationCap, LogOut,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
@@ -34,8 +38,9 @@ import Modal from '@/app/components/common/Modal';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
 import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import BigPictureSettingsSection, { type TermTrackerDraft } from '@/app/components/settings/BigPictureSettingsSection';
-import MoodCheckinSettingsSection, { MOOD_TOGGLES } from '@/app/components/settings/MoodCheckinSettingsSection';
+import MoodCheckinSettingsSection, { MOOD_GROUP, MOOD_TOGGLES } from '@/app/components/settings/MoodCheckinSettingsSection';
 import NotificationPreferencesForm from '@/app/components/settings/NotificationPreferencesForm';
+import SettingsGroup from '@/app/components/settings/SettingsGroup';
 import CanvasIntegrationSection from '@/app/components/settings/CanvasIntegrationSection';
 import ProfilePage from '@/app/components/settings/pages/ProfilePage';
 import WorkDayPage, { REST_DAY_OPTIONS } from '@/app/components/settings/pages/WorkDayPage';
@@ -66,13 +71,14 @@ interface Props {
 
 export type SettingsPage =
   | 'profile' | 'security'
-  | 'workday' | 'term' | 'mood'
+  | 'workday' | 'term'
   | 'notifications' | 'appearance' | 'canvas';
 
 /** A page, or one of the old tab names, which still open the page that holds them. */
-export type SettingsSection = SettingsPage | 'integrations' | 'password' | 'email' | 'delete';
+export type SettingsSection = SettingsPage | 'mood' | 'integrations' | 'password' | 'email' | 'delete';
 
 const LEGACY_SECTIONS: Record<string, SettingsPage> = {
+  mood: 'notifications',
   integrations: 'canvas',
   password: 'security',
   email: 'security',
@@ -99,13 +105,12 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { page: 'workday', label: 'Work day and rest', icon: Clock, lede: 'When your day runs and which days are off.' },
       { page: 'term', label: 'Term Tracker', icon: Hourglass, lede: 'The countdown on your dashboard.' },
-      { page: 'mood', label: 'Mood check-ins', icon: Smile, lede: 'A few seconds at the end of the day.' },
     ],
   },
   {
     label: 'App',
     items: [
-      { page: 'notifications', label: 'Notifications', icon: Bell, lede: 'Which alerts kanso sends, and when to keep quiet.' },
+      { page: 'notifications', label: 'Notifications', icon: Bell, lede: 'Task reminders, mood check-ins and when to keep quiet.' },
       { page: 'appearance', label: 'Appearance', icon: Palette, lede: 'Theme, accent color and page ruling.' },
       { page: 'canvas', label: 'Canvas', icon: GraduationCap, lede: 'Your classes and due dates from Canvas.' },
     ],
@@ -174,9 +179,8 @@ export default function SettingsModal({
 
   const available = useCallback((page: SettingsPage) => {
     if (page === 'security') return !isDemo;
-    if (page === 'notifications') return showNotifications;
     return true;
-  }, [isDemo, showNotifications]);
+  }, [isDemo]);
   const groups = NAV_GROUPS
     .map(g => ({ ...g, items: g.items.filter(item => available(item.page)) }))
     .filter(g => g.items.length > 0);
@@ -281,11 +285,11 @@ export default function SettingsModal({
 
   const changeMood = (next: MoodCheckinSettings) => {
     const before = getProfileField('moodCheckins');
-    setProfileField(on.mood, 'moodCheckins', next);
+    setProfileField(on.notifications, 'moodCheckins', next);
     const toggled = MOOD_TOGGLES.find(t => before[t.key] !== next[t.key]);
     if (!toggled) return;
     offerUndo(`${toggled.label} turned ${next[toggled.key] ? 'on' : 'off'}.`, () => {
-      setProfileField(on.mood, 'moodCheckins', { ...getProfileField('moodCheckins'), [toggled.key]: before[toggled.key] });
+      setProfileField(on.notifications, 'moodCheckins', { ...getProfileField('moodCheckins'), [toggled.key]: before[toggled.key] });
     });
   };
 
@@ -331,8 +335,8 @@ export default function SettingsModal({
         );
       case 'term':
         return <BigPictureSettingsSection value={termAutosave.value} onChange={changeTermField} loading={calendarSettingsLoading} />;
-      case 'mood':
-        return (
+      case 'notifications': {
+        const moodCheckins = (
           <MoodCheckinSettingsSection
             value={draft.moodCheckins}
             onChange={changeMood}
@@ -340,33 +344,42 @@ export default function SettingsModal({
             loading={profileLoading}
           />
         );
-      case 'notifications':
-        if (!showNotifications) return null;
-        return notifications.preferences ? (
-          <NotificationPreferencesForm
-            preferences={notifications.preferences}
-            onSave={notifications.savePreferences}
-            track={on.notifications}
-            onUndoableChange={offerUndo}
-            moodRemindersOff={draft.moodCheckins.remind === 'off'}
-          />
-        ) : notifications.preferencesError ? (
-          <div className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
-            <p>Couldn&apos;t load your notification settings.</p>
-            <button
-              type="button"
-              onClick={() => void notifications.loadPreferences()}
-              className="mt-1 font-medium hover:underline"
-              style={{ color: 'var(--tm-accent)' }}
-            >
-              Try again
-            </button>
-          </div>
-        ) : (
-          <div className="flex justify-center py-6" style={{ color: 'var(--tm-text-muted)' }}>
-            <Loader2 className="w-5 h-5 animate-spin" aria-label="Loading notification settings" />
+        if (showNotifications && notifications.preferences) {
+          return (
+            <NotificationPreferencesForm
+              preferences={notifications.preferences}
+              onSave={notifications.savePreferences}
+              track={on.notifications}
+              onUndoableChange={offerUndo}
+              moodRemindersOff={draft.moodCheckins.remind === 'off'}
+              moodCheckins={moodCheckins}
+            />
+          );
+        }
+        // Until the alert settings load (or where there are none), the mood check-ins stand alone.
+        return (
+          <div className="space-y-8">
+            {showNotifications && (notifications.preferencesError ? (
+              <div className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
+                <p>Couldn&apos;t load your notification settings.</p>
+                <button
+                  type="button"
+                  onClick={() => void notifications.loadPreferences()}
+                  className="mt-1 font-medium hover:underline"
+                  style={{ color: 'var(--tm-accent)' }}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : (
+              <div className="flex justify-center py-6" style={{ color: 'var(--tm-text-muted)' }}>
+                <Loader2 className="w-5 h-5 animate-spin" aria-label="Loading notification settings" />
+              </div>
+            ))}
+            <SettingsGroup {...MOOD_GROUP}>{moodCheckins}</SettingsGroup>
           </div>
         );
+      }
       case 'appearance':
         return (
           <AppearancePage

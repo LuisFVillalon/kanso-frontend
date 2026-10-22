@@ -13,7 +13,8 @@ const auth = vi.hoisted(() => ({
   isDemo: false,
 }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
-vi.mock('@/app/context/NotificationsContextValue', () => ({ useOptionalNotifications: () => null }));
+const notifications = vi.hoisted(() => ({ value: null as null | Record<string, unknown> }));
+vi.mock('@/app/context/NotificationsContextValue', () => ({ useOptionalNotifications: () => notifications.value }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
 }));
@@ -130,6 +131,7 @@ beforeEach(() => {
   onSaveProfileField.mockResolvedValue(undefined);
   auth.user = { email: 'maya@example.com', app_metadata: { provider: 'email' } };
   auth.isDemo = false;
+  notifications.value = null;
   window.matchMedia = vi.fn(() => ({ matches: false })) as unknown as typeof window.matchMedia;
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -161,6 +163,13 @@ describe('SettingsModal navigation', () => {
     render('integrations');
     expect(heading()).toBe('Canvas');
     expect(document.body.textContent).toContain('Canvas section');
+  });
+
+  it('opens the old Mood check-ins page as Notifications, which now holds the check-ins', () => {
+    render('mood');
+    expect(heading()).toBe('Notifications');
+    expect(navItem('Mood check-ins')).toBeUndefined();
+    expect(document.querySelector('[role="switch"][aria-labelledby="mood-setting-daily"]')).toBeTruthy();
   });
 
   it('drills into a page from the menu list on a phone, with a back arrow', async () => {
@@ -282,6 +291,51 @@ describe('SettingsModal autosave', () => {
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: { ...DEFAULT_MOOD_SETTINGS, daily: !DEFAULT_MOOD_SETTINGS.daily } });
     await click(button('Undo'));
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: DEFAULT_MOOD_SETTINGS });
+  });
+});
+
+describe('SettingsModal notifications page', () => {
+  const preferences = {
+    types: { due_today: true, task_reminder: true, final_warning: true, overdue: true, habit_reminder: true, mood_reminder: true, mood_missed: true },
+    quiet_hours_start: null,
+    quiet_hours_end: null,
+    default_reminder_minutes: 120,
+    mood_reminder_minutes: 60,
+  };
+  const savePreferences = vi.fn(async (changes: object) => ({ ...preferences, ...changes }));
+  const loadPreferences = vi.fn(async () => {});
+  const groupTitles = () => [...document.querySelectorAll('section[aria-labelledby="settings-page-title"] h3')].map(h => h.textContent);
+
+  it('groups reminders, mood check-ins, quiet hours and other alerts on one page', async () => {
+    notifications.value = { status: 'ready', preferences, preferencesError: null, savePreferences, loadPreferences };
+    render('notifications');
+    expect(groupTitles()).toEqual(['Reminders', 'Mood check-ins', 'Quiet hours', 'Other alerts']);
+    const mood = document.querySelector('section[aria-labelledby="notif-group-mood"]')!;
+    expect(mood.querySelector('[aria-labelledby="mood-setting-daily"]')).toBeTruthy();
+    expect(mood.querySelector('[aria-labelledby="notif-type-mood_reminder"]')).toBeTruthy();
+
+    // Mood check-ins still save on the profile, and report on this page's indicator.
+    await click(mood.querySelector<HTMLButtonElement>('[aria-labelledby="mood-setting-weekly"]')!);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: { ...DEFAULT_MOOD_SETTINGS, weekly: !DEFAULT_MOOD_SETTINGS.weekly } });
+    expect(savePreferences).not.toHaveBeenCalled();
+    expect(document.querySelector('section[aria-labelledby="settings-page-title"] [role="status"]')?.textContent).toContain('Saved');
+  });
+
+  it('shows the mood check-ins while the alert settings load', () => {
+    notifications.value = { status: 'loading', preferences: null, preferencesError: null, savePreferences, loadPreferences };
+    render('notifications');
+    expect(document.querySelector('[aria-label="Loading notification settings"]')).toBeTruthy();
+    expect(groupTitles()).toEqual(['Mood check-ins']);
+    expect(loadPreferences).toHaveBeenCalled();
+  });
+
+  it('keeps the page, with only the mood check-ins, where notifications are unavailable', () => {
+    notifications.value = { status: 'unavailable', preferences: null, preferencesError: null, savePreferences, loadPreferences };
+    render();
+    expect(navItem('Notifications')).toBeTruthy();
+    render('notifications');
+    expect(groupTitles()).toEqual(['Mood check-ins']);
+    expect(document.querySelector('[aria-label="Loading notification settings"]')).toBeNull();
   });
 });
 
