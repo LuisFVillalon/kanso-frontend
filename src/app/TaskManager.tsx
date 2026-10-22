@@ -16,6 +16,7 @@ import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import { useMountTransition } from '@/app/hooks/useMountTransition';
 import { useCanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { useCanvasTaskSync } from '@/app/hooks/useCanvasTaskSync';
+import { useCanvasConnected } from '@/app/hooks/useCanvasConnected';
 import { Note } from '@/app/types/notes';
 import { taskToEditForm } from '@/app/utils/taskUtils';
 import DragHandle from '@/app/components/common/DragHandle';
@@ -28,6 +29,7 @@ import PanelCarousel, {
   DEFAULT_HOME_PANELS, isHomePanels, type HomePanels, type PanelCarouselHandle, type PanelKey,
 } from '@/app/components/common/PanelCarousel';
 import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
+import WidgetsArea from '@/app/components/layout/WidgetsArea';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
 import MoodNudge from '@/app/components/mood/MoodNudge';
 import { DayMoodCheckinModal, daySummaryFrom } from '@/app/components/mood/DayMoodCheckin';
@@ -59,7 +61,7 @@ const TaskManager: React.FC = () => {
     profile.appMode as AppMode | null,
     next => { saveProfile({ ...profile, appMode: next }); },
   );
-  // The two home-page panels side by side (see PanelCarousel); Tasks + Notes until the user slides.
+  // The two home-page panels side by side (see PanelCarousel); Tasks + Notes until the user switches.
   const [homePanels, setHomePanels] = usePersistedPref<HomePanels>(
     'tm-home-panels',
     DEFAULT_HOME_PANELS,
@@ -80,6 +82,12 @@ const TaskManager: React.FC = () => {
   const { tasks, isLoading, toggleComplete, completeWithLinked, deleteTask, archiveTask, updateTask, refreshTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
   // Tasks added from Canvas: synced on load and on a Canvas panel refresh.
   const canvasTaskSync = useCanvasTaskSync({ enabled: !isLoading && !isDemo, tasks, refreshTasks });
+  // The Canvas panel is only offered with Canvas connected. Until the first
+  // check answers, a saved pair that includes it keeps it, so it doesn't flicker away.
+  const canvasConnected = useCanvasConnected({ isDemo, syncToken: shell.settingsClosedToken });
+  const homePanelKeys: PanelKey[] = (canvasConnected ?? homePanels.includes('canvas'))
+    ? ['tasks', 'notes', 'canvas']
+    : ['tasks', 'notes'];
 
   // The key-press moment: plays when checking off a task settles today's
   // plan, and when the user switches into focus mode.
@@ -382,19 +390,23 @@ const TaskManager: React.FC = () => {
 
                 <TaskDebriefPanel profile={profile} profileLoaded={profileLoaded} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
 
-                <CalendarAndStats
-                  habits={habits}
-                  onToggleHabit={toggleHabit}
-                  onCreateHabit={shell.openManageHabits}
-                  pendingHabitIds={pendingHabitIds}
-                  habitsLoading={habitsLoading}
-                  stats={stats}
-                  allNotes={allNotes}
-                  noteTags={noteTags}
-                  profile={profile}
-                  onSaveProfile={saveProfile}
-                  calendarSettings={calendarSettings}
-                  calendarSettingsLoading={calendarSettingsLoading}
+                <WidgetsArea
+                  widgets={
+                    <CalendarAndStats
+                      habits={habits}
+                      onToggleHabit={toggleHabit}
+                      onCreateHabit={shell.openManageHabits}
+                      pendingHabitIds={pendingHabitIds}
+                      habitsLoading={habitsLoading}
+                      stats={stats}
+                      allNotes={allNotes}
+                      noteTags={noteTags}
+                      profile={profile}
+                      onSaveProfile={saveProfile}
+                      calendarSettings={calendarSettings}
+                      calendarSettingsLoading={calendarSettingsLoading}
+                    />
+                  }
                 />
               </div>
             )}
@@ -405,6 +417,7 @@ const TaskManager: React.FC = () => {
                 ref={carouselRef}
                 value={homePanels}
                 onChange={setHomePanels}
+                available={homePanelKeys}
                 leftWidthPct={tasksWidthPct}
                 splitRef={splitContainerRef}
                 onSplitterMouseDown={handleSplitterMouseDown}
