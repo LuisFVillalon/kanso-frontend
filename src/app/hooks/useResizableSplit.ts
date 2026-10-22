@@ -15,8 +15,8 @@ interface UseResizableSplitOptions {
 }
 
 /**
- * Returns a mousedown handler that drives a draggable panel-resize interaction.
- * Attach the returned handler to the drag-handle element's onMouseDown prop.
+ * Returns a pointerdown handler that drives a draggable panel-resize interaction
+ * for mouse, touch and pen. Attach it to the drag-handle element's onPointerDown prop.
  */
 export function useResizableSplit(
   containerRef: React.RefObject<HTMLElement | null>,
@@ -24,16 +24,17 @@ export function useResizableSplit(
 ) {
   const isDragging = useRef(false);
 
-  const onMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
       e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
       isDragging.current = true;
       onResizingChange?.(true);
       const isVertical = anchor === 'top' || anchor === 'bottom';
       document.body.style.cursor = isVertical ? 'row-resize' : 'col-resize';
       document.body.style.userSelect = 'none';
 
-      const onMove = (ev: MouseEvent) => {
+      const onMove = (ev: PointerEvent) => {
         if (!isDragging.current || !containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
         let raw: number;
@@ -53,15 +54,17 @@ export function useResizableSplit(
         onResizingChange?.(false);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
       };
 
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
     },
     [containerRef, min, max, anchor, onResize, onResizingChange],
   );
 
-  return onMouseDown;
+  return onPointerDown;
 }

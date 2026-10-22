@@ -134,18 +134,36 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(container.querySelector('.overflow-auto.rounded-xl')!.classList.contains('grow')).toBe(true);
 
     await act(async () => {
-      container.querySelector('.cursor-row-resize')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      document.dispatchEvent(new MouseEvent('mousemove', { clientY: 1100 }));
+      container.querySelector('.cursor-row-resize')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointermove', { clientY: 1100 }));
     });
     // 1100 pointer − 100 top + half the handle.
     expect(onResize).toHaveBeenLastCalledWith(1004);
     expect(onResizeEnd).not.toHaveBeenCalled();
 
     await act(async () => {
-      document.dispatchEvent(new MouseEvent('mousemove', { clientY: 9000 }));
-      document.dispatchEvent(new MouseEvent('mouseup'));
+      document.dispatchEvent(new PointerEvent('pointermove', { clientY: 9000 }));
+      document.dispatchEvent(new PointerEvent('pointerup'));
     });
     expect(onResize).toHaveBeenLastCalledWith(2400);
+    expect(onResizeEnd).toHaveBeenCalledTimes(1);
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
+  });
+
+  it('drags taller with a finger on a touch screen', async () => {
+    const onResize = vi.fn();
+    const onResizeEnd = vi.fn();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    await render({ heightPx: 900, onResize, onResizeEnd });
+    const handle = container.querySelector<HTMLElement>('.cursor-row-resize')!;
+    expect(handle.classList.contains('touch-none')).toBe(true);
+
+    await act(async () => {
+      handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 7 }));
+      document.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'touch', pointerId: 7, clientY: 1200 }));
+      document.dispatchEvent(new PointerEvent('pointercancel', { pointerType: 'touch', pointerId: 7 }));
+    });
+    expect(onResize).toHaveBeenLastCalledWith(1104);
     expect(onResizeEnd).toHaveBeenCalledTimes(1);
     vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
   });

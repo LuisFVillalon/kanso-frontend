@@ -128,7 +128,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     [onResize],
   );
   const handleResizingChange = useCallback((resizing: boolean) => { if (!resizing) onResizeEnd?.(); }, [onResizeEnd]);
-  const handleResizeMouseDown = useResizableSplit(rootRef, {
+  const handleResizePointerDown = useResizableSplit(rootRef, {
     anchor: 'top',
     onResize: handleResize,
     onResizingChange: handleResizingChange,
@@ -272,7 +272,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
 
       {onResize && (
         <div className="-mt-2" title="Drag to make the calendar taller">
-          <DragHandle onMouseDown={handleResizeMouseDown} orientation="row" alwaysVisible />
+          <DragHandle onPointerDown={handleResizePointerDown} orientation="row" alwaysVisible />
         </div>
       )}
 

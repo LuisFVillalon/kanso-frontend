@@ -78,7 +78,7 @@ interface PanelCarouselProps {
   /** The left panel's share of the split, in %. */
   leftWidthPct: number;
   splitRef: React.RefObject<HTMLDivElement | null>;
-  onSplitterMouseDown: (e: React.MouseEvent) => void;
+  onSplitterPointerDown: (e: React.PointerEvent) => void;
   /** Renders a panel; `widthPct` is the share of the split it currently fills. */
   renderPanel: (key: PanelKey, slot: { widthPct: number }) => React.ReactNode;
 }
@@ -180,7 +180,7 @@ function PanelSwitcher({ choices, value, phone, onChange }: PanelSwitcherProps) 
 }
 
 const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(function PanelCarousel(
-  { value, onChange, available, leftWidthPct, splitRef, onSplitterMouseDown, renderPanel },
+  { value, onChange, available, leftWidthPct, splitRef, onSplitterPointerDown, renderPanel },
   ref,
 ) {
   const phone = useSyncExternalStore(subscribePhone, isPhoneNow, () => false);
@@ -237,7 +237,7 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
           );
         })}
         <div className="hidden md:flex shrink-0" style={{ order: 1 }}>
-          <DragHandle onMouseDown={onSplitterMouseDown} />
+          <DragHandle onPointerDown={onSplitterPointerDown} />
         </div>
       </div>
     </div>
