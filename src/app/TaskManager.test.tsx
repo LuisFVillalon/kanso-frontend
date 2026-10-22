@@ -11,11 +11,12 @@ const api = vi.hoisted(() => ({
   updateHabit: vi.fn(),
   describeError: (_: unknown, fallback: string) => fallback,
   syncCanvasLinkedTasks: vi.fn(),
+  fetchCanvasConnection: vi.fn(),
   CanvasTaskExistsError: class extends Error {},
 }));
 vi.mock('@/app/lib/backend-api', () => api);
 
-const auth = vi.hoisted(() => ({ isDemo: false, user: { id: 'u1' }, signOut: vi.fn() }));
+const auth = vi.hoisted(() => ({ isDemo: false, user: { id: 'u1' }, dataUserId: 'u1', signOut: vi.fn() }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('@/app/context/ToastContext', () => ({ useToast: () => vi.fn() }));
@@ -56,10 +57,13 @@ vi.mock('@/app/context/AppShellContext', () => ({
 }));
 
 // Only the Canvas panel is on screen, standing in for its rows' "Add to tasks" and its refresh button.
+// The panels offered are listed on the wrapper.
 vi.mock('@/app/components/common/PanelCarousel', async importOriginal => ({
   ...(await importOriginal<object>()),
-  default: ({ renderPanel }: { renderPanel: (key: 'canvas', opts: { widthPct: number }) => React.ReactNode }) =>
-    <>{renderPanel('canvas', { widthPct: 50 })}</>,
+  default: ({ renderPanel, available }: {
+    renderPanel: (key: 'canvas', opts: { widthPct: number }) => React.ReactNode;
+    available: string[];
+  }) => <div data-available={available.join(',')}>{renderPanel('canvas', { widthPct: 50 })}</div>,
 }));
 vi.mock('@/app/components/canvas/CanvasPanel', () => ({
   default: ({ addToTasks, onRefresh }: { addToTasks?: unknown; onRefresh?: () => void }) => (
@@ -76,6 +80,7 @@ vi.mock('@/app/components/notes/NotesPanel', () => ({
   isNoteOrder: (c: unknown) => c === 'newest' || c === 'oldest',
 }));
 vi.mock('@/app/components/layout/CalendarAndStats', () => ({ default: Empty }));
+vi.mock('@/app/components/calendar/WeekView', () => ({ default: Empty }));
 vi.mock('@/app/components/task/TaskDebriefPanel', () => ({ default: Empty }));
 vi.mock('@/app/components/mood/MoodNudge', () => ({ default: Empty }));
 vi.mock('@/app/components/doodle/DoodleCanvas', () => ({ default: Empty }));
@@ -94,6 +99,7 @@ import TaskManager from './TaskManager';
 let root: Root;
 let container: HTMLDivElement;
 const buttonNamed = (name: string) => [...container.querySelectorAll('button')].find(b => b.textContent === name);
+const availablePanels = () => container.querySelector('[data-available]')!.getAttribute('data-available');
 
 const render = async () => {
   await act(async () => root.render(<TaskManager />));
@@ -104,6 +110,7 @@ beforeEach(() => {
   root = createRoot(container);
   tasksContext.tasks = [linkedTask];
   api.syncCanvasLinkedTasks.mockResolvedValue([]);
+  api.fetchCanvasConnection.mockResolvedValue({ connected: true });
 });
 
 afterEach(() => {
@@ -126,5 +133,45 @@ describe('TaskManager Canvas panel', () => {
     expect(buttonNamed('Add to tasks')).toBeUndefined();
     await act(async () => buttonNamed('Refresh')!.click());
     expect(api.syncCanvasLinkedTasks).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskManager home panels', () => {
+  it('offers Canvas when it is connected', async () => {
+    await render();
+    expect(api.fetchCanvasConnection).toHaveBeenCalledTimes(1);
+    expect(availablePanels()).toBe('tasks,notes,canvas');
+  });
+
+  it('leaves Canvas out when it is not connected', async () => {
+    api.fetchCanvasConnection.mockResolvedValue({ connected: false });
+    await render();
+    expect(availablePanels()).toBe('tasks,notes');
+  });
+
+  it('keeps a saved Canvas pair while the connection check fails', async () => {
+    localStorage.setItem('tm-home-panels', JSON.stringify('canvas,tasks'));
+    api.fetchCanvasConnection.mockRejectedValue(new Error('offline'));
+    await render();
+    expect(availablePanels()).toBe('tasks,notes,canvas');
+  });
+
+  it('offers the sample Canvas data to a demo user without checking a connection', async () => {
+    auth.isDemo = true;
+    await render();
+    expect(api.fetchCanvasConnection).not.toHaveBeenCalled();
+    expect(availablePanels()).toBe('tasks,notes,canvas');
+  });
+});
+
+describe('TaskManager widgets area', () => {
+  const tab = (name: string) => [...container.querySelectorAll('[role="tab"]')].find(t => t.textContent === name)!;
+
+  it('switches between the widgets and the week calendar and remembers the choice per user', async () => {
+    await render();
+    expect(tab('Widgets').getAttribute('aria-selected')).toBe('true');
+    await act(async () => (tab('Week calendar') as HTMLElement).click());
+    expect(tab('Week calendar').getAttribute('aria-selected')).toBe('true');
+    expect(localStorage.getItem('tm-home-widgets-view:u1')).toBe('"week"');
   });
 });

@@ -109,16 +109,44 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
             </div>
           )}
           {notes.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onNoteOrderChange(noteOrder === 'newest' ? 'oldest' : 'newest')}
-              aria-label={`Notes order: ${noteOrder === 'newest' ? 'newest' : 'oldest'} first. Switch to ${noteOrder === 'newest' ? 'oldest' : 'newest'} first`}
-              title="Flip the notes' order"
-              className="toolbar-control ml-auto gap-1.5 flex-shrink-0"
-            >
-              <ArrowDownUp className="w-3.5 h-3.5" aria-hidden />
-              {noteOrder === 'newest' ? 'Newest first' : 'Oldest first'}
-            </button>
+            <div role="group" aria-label="Notes view" className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => onNoteOrderChange(noteOrder === 'newest' ? 'oldest' : 'newest')}
+                aria-label={`Notes order: ${noteOrder === 'newest' ? 'newest' : 'oldest'} first. Switch to ${noteOrder === 'newest' ? 'oldest' : 'newest'} first`}
+                title="Flip the notes' order"
+                className="toolbar-control gap-1.5"
+              >
+                <ArrowDownUp className="w-3.5 h-3.5" aria-hidden />
+                {noteOrder === 'newest' ? 'Newest first' : 'Oldest first'}
+              </button>
+              {/* View toggle — cards (new) vs. folders (the original file/folder browser) */}
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === 'cards' ? 'folders' : 'cards')}
+                aria-label={viewMode === 'cards' ? 'Show folder view' : 'Show card view'}
+                title={viewMode === 'cards' ? 'Show folder view' : 'Show card view'}
+                className="relative w-14 h-7 rounded-full border border-border-subtle shadow-sm transition-colors duration-200"
+                style={{
+                  backgroundColor: viewMode === 'folders'
+                    ? 'color-mix(in srgb, var(--tm-accent) 55%, white 45%)'
+                    : 'var(--tm-border-subtle)',
+                }}
+              >
+                <span
+                  className="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform duration-200 ease-out"
+                  style={{ transform: `translateX(${viewMode === 'folders' ? 28 : 0}px)` }}
+                />
+                <span className="absolute inset-0.5 flex items-center justify-between pointer-events-none">
+                  <span className="w-6 h-6 flex items-center justify-center">
+                    <LayoutGrid className={`w-3.5 h-3.5 transition-colors ${viewMode === 'cards' ? 'text-white' : 'text-text-muted'}`} />
+                  </span>
+                  <span className="w-6 h-6 flex items-center justify-center">
+                    <FolderClosed className={`w-3.5 h-3.5 transition-colors ${viewMode === 'folders' ? 'text-white' : 'text-text-muted'}`} />
+                  </span>
+                </span>
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -137,33 +165,6 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
         </div>
       ) : (
         <>
-          {/* View toggle — cards (new) vs. folders (the original file/folder browser) */}
-          <button
-            type="button"
-            onClick={() => setViewMode(viewMode === 'cards' ? 'folders' : 'cards')}
-            aria-label={viewMode === 'cards' ? 'Show folder view' : 'Show card view'}
-            title={viewMode === 'cards' ? 'Show folder view' : 'Show card view'}
-            className="absolute bottom-2 right-2 z-50 w-14 h-7 rounded-full border border-border-subtle shadow-sm transition-colors duration-200 flex-shrink-0"
-            style={{
-              backgroundColor: viewMode === 'folders'
-                ? 'color-mix(in srgb, var(--tm-accent) 55%, white 45%)'
-                : 'var(--tm-border-subtle)',
-            }}
-          >
-            <span
-              className="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform duration-200 ease-out"
-              style={{ transform: `translateX(${viewMode === 'folders' ? 28 : 0}px)` }}
-            />
-            <span className="absolute inset-0.5 flex items-center justify-between pointer-events-none">
-              <span className="w-6 h-6 flex items-center justify-center">
-                <LayoutGrid className={`w-3.5 h-3.5 transition-colors ${viewMode === 'cards' ? 'text-white' : 'text-text-muted'}`} />
-              </span>
-              <span className="w-6 h-6 flex items-center justify-center">
-                <FolderClosed className={`w-3.5 h-3.5 transition-colors ${viewMode === 'folders' ? 'text-white' : 'text-text-muted'}`} />
-              </span>
-            </span>
-          </button>
-
           <div
             className="overflow-y-auto h-[50vh] lg:h-[600px] pl-2 pr-1 scrollbar-custom pt-2"
             style={heightPx ? { height: `${heightPx}px` } : undefined}

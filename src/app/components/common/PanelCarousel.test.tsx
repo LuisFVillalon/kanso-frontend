@@ -1,39 +1,37 @@
 // @vitest-environment jsdom
-import React, { act, useState } from 'react';
+import React, { act, useImperativeHandle, useRef, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PanelCarousel, {
-  revealDirection, shownPanels, slidePanels, type HomePanels, type PanelKey,
+  panelChoices, resolvePanels, shownPanels, type HomePanels, type PanelCarouselHandle, type PanelKey,
 } from './PanelCarousel';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('slidePanels', () => {
-  it('slides left around the ring: Tasks+Notes → Notes+Canvas → Canvas+Tasks → Tasks+Notes', () => {
-    const seen: HomePanels[] = ['tasks,notes'];
-    for (let i = 0; i < 3; i++) seen.push(slidePanels(seen[seen.length - 1], 1));
-    expect(seen).toEqual(['tasks,notes', 'notes,canvas', 'canvas,tasks', 'tasks,notes']);
+const ALL: PanelKey[] = ['tasks', 'notes', 'canvas'];
+const NO_CANVAS: PanelKey[] = ['tasks', 'notes'];
+
+describe('panelChoices', () => {
+  it('offers every pair on a wide screen and every panel on a phone', () => {
+    expect(panelChoices(ALL, false)).toEqual(['tasks,notes', 'notes,canvas', 'canvas,tasks']);
+    expect(panelChoices(ALL, true).map(v => shownPanels(v, true))).toEqual([['tasks'], ['notes'], ['canvas']]);
   });
 
-  it('slides right the other way round', () => {
-    const seen: HomePanels[] = ['tasks,notes'];
-    for (let i = 0; i < 3; i++) seen.push(slidePanels(seen[seen.length - 1], -1));
-    expect(seen).toEqual(['tasks,notes', 'canvas,tasks', 'notes,canvas', 'tasks,notes']);
+  it('leaves Canvas out when it is not connected', () => {
+    expect(panelChoices(NO_CANVAS, false)).toEqual(['tasks,notes']);
+    expect(panelChoices(NO_CANVAS, true).map(v => shownPanels(v, true))).toEqual([['tasks'], ['notes']]);
   });
 });
 
-describe('revealDirection', () => {
-  it('brings the hidden panel in from the right on a wide screen', () => {
-    expect(revealDirection('tasks,notes', 'canvas', false)).toBe(1);
-    expect(revealDirection('canvas,tasks', 'notes', false)).toBe(1);
-    expect(revealDirection('tasks,notes', 'notes', false)).toBe(0);
+describe('resolvePanels', () => {
+  it('falls back to Tasks when a saved choice shows Canvas and it is not connected', () => {
+    expect(resolvePanels('canvas,tasks', NO_CANVAS, true)).toBe('tasks,notes');
+    expect(resolvePanels('notes,canvas', NO_CANVAS, false)).toBe('tasks,notes');
+    expect(resolvePanels('canvas,tasks', ALL, false)).toBe('canvas,tasks');
   });
 
-  it('slides toward whichever side the panel sits on when a phone shows one', () => {
-    expect(shownPanels('tasks,notes', true)).toEqual(['tasks']);
-    expect(revealDirection('tasks,notes', 'notes', true)).toBe(1);
-    expect(revealDirection('tasks,notes', 'canvas', true)).toBe(-1);
-    expect(revealDirection('tasks,notes', 'tasks', true)).toBe(0);
+  it('keeps Notes on a phone, where the pair it was saved with is not on screen', () => {
+    expect(resolvePanels('notes,canvas', NO_CANVAS, true)).toBe('notes,canvas');
   });
 });
 
@@ -41,60 +39,57 @@ describe('revealDirection', () => {
 
 let container: HTMLDivElement;
 let root: Root;
-let media: { reduce: boolean; phone: boolean };
+let media: { phone: boolean };
 let changes: HomePanels[];
+let handle: PanelCarouselHandle | null;
 
-/** A panel with its own state, to check it survives being slid away and back. */
+/** A panel with its own state, to check it survives being switched away and back. */
 const Counter: React.FC<{ name: PanelKey }> = ({ name }) => {
   const [count, setCount] = useState(0);
   return <button type="button" data-counter={name} onClick={() => setCount(c => c + 1)}>{name}:{count}</button>;
 };
 
-const Harness: React.FC<{ initial?: HomePanels }> = ({ initial = 'tasks,notes' }) => {
-  const [value, setValue] = useState<HomePanels>(initial);
-  const splitRef = React.useRef<HTMLDivElement>(null);
-  return (
-    <>
-      <input aria-label="search" />
-      <PanelCarousel
-        value={value}
-        onChange={next => { changes.push(next); setValue(next); }}
-        leftWidthPct={50}
-        splitRef={splitRef}
-        onSplitterMouseDown={() => {}}
-        renderPanel={key => <Counter name={key} />}
-      />
-    </>
-  );
-};
+interface HarnessProps { initial?: HomePanels; available?: PanelKey[] }
 
-const render = async (initial?: HomePanels) => {
-  await act(async () => root.render(<Harness initial={initial} />));
+const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Harness({ initial = 'tasks,notes', available = ALL }, ref) {
+  const [value, setValue] = useState<HomePanels>(initial);
+  const splitRef = useRef<HTMLDivElement>(null);
+  const inner = useRef<PanelCarouselHandle>(null);
+  useImperativeHandle(ref, () => ({ show: panel => inner.current?.show(panel) }), []);
+  return (
+    <PanelCarousel
+      ref={inner}
+      value={value}
+      onChange={next => { changes.push(next); setValue(next); }}
+      available={available}
+      leftWidthPct={50}
+      splitRef={splitRef}
+      onSplitterMouseDown={() => {}}
+      renderPanel={key => <Counter name={key} />}
+    />
+  );
+});
+
+const render = async (props: HarnessProps = {}) => {
+  await act(async () => root.render(<Harness {...props} ref={h => { handle = h; }} />));
 };
-const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+const tabs = () => [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+const tabNamed = (name: string) => tabs().find(t => t.textContent === name)!;
+const selected = () => tabs().filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent);
 const click = async (el: HTMLElement) => { await act(async () => { el.click(); }); };
-const pressed = () =>
-  [...container.querySelectorAll<HTMLButtonElement>('[role="group"] button')]
-    .filter(b => b.getAttribute('aria-pressed') === 'true')
-    .map(b => b.getAttribute('aria-label'));
 const slot = (key: PanelKey) => container.querySelector<HTMLElement>(`[data-panel="${key}"]`);
-const track = () => container.querySelector<HTMLElement>('[data-testid="panel-track"]')!;
-const press = async (key: string, target: EventTarget = document, init: KeyboardEventInit = {}) => {
-  await act(async () => {
-    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
-  });
-};
+const visible = (key: PanelKey) => !!slot(key)?.className.includes('split-slot');
+const split = () => container.querySelector<HTMLElement>('#home-panels-tabpanel')!;
 
 beforeEach(() => {
-  media = { reduce: false, phone: false };
+  media = { phone: false };
   changes = [];
+  handle = null;
   vi.stubGlobal('matchMedia', (query: string) => ({
-    matches: query.includes('reduced-motion') ? media.reduce : query.includes('max-width') ? media.phone : false,
+    matches: query.includes('max-width') ? media.phone : false,
     addEventListener: () => {},
     removeEventListener: () => {},
   }));
-  // jsdom lays nothing out; give the split a width so the slide can be measured.
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1000);
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -103,124 +98,93 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
-  document.querySelectorAll('.modal-overlay').forEach(el => el.remove());
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe('PanelCarousel', () => {
-  it('loops through the pairs with the ‹ and › buttons', async () => {
-    media.reduce = true;
+  it('labels each tab with the panels it shows and marks the one on screen', async () => {
     await render();
-    expect(pressed()).toEqual(['Tasks', 'Notes']);
-    for (let i = 0; i < 3; i++) await click(button('Slide left'));
-    await click(button('Slide right'));
-    expect(changes).toEqual(['notes,canvas', 'canvas,tasks', 'tasks,notes', 'canvas,tasks']);
-    expect(pressed()).toEqual(['Tasks', 'Canvas']);
+    expect(container.querySelector('[role="tablist"]')!.getAttribute('aria-label')).toBe('Home panels');
+    expect(tabs().map(t => t.textContent)).toEqual(['Tasks & Notes', 'Notes & Canvas', 'Canvas & Tasks']);
+    expect(selected()).toEqual(['Tasks & Notes']);
+    expect(split().getAttribute('role')).toBe('tabpanel');
+    expect(split().getAttribute('aria-labelledby')).toBe(tabNamed('Tasks & Notes').id);
   });
 
-  it('shows only the left panel of the pair as active on a phone', async () => {
-    media.reduce = true;
+  it('switches the pair from a tab click', async () => {
+    await render();
+    await click(tabNamed('Canvas & Tasks'));
+    expect(changes).toEqual(['canvas,tasks']);
+    expect(selected()).toEqual(['Canvas & Tasks']);
+    expect(visible('canvas') && visible('tasks')).toBe(true);
+    expect(visible('notes')).toBe(false);
+    await click(tabNamed('Canvas & Tasks'));
+    expect(changes).toEqual(['canvas,tasks']);
+  });
+
+  it('moves the selection with the arrow keys, Home and End, focusing the new tab', async () => {
+    await render();
+    const press = async (key: string) => {
+      await act(async () => {
+        document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      });
+    };
+    tabNamed('Tasks & Notes').focus();
+    await press('ArrowRight');
+    await press('End');
+    await press('ArrowRight');
+    await press('ArrowLeft');
+    expect(changes).toEqual(['notes,canvas', 'canvas,tasks', 'tasks,notes', 'canvas,tasks']);
+    expect(document.activeElement).toBe(tabNamed('Canvas & Tasks'));
+    expect(tabs().map(t => t.tabIndex)).toEqual([-1, -1, 0]);
+  });
+
+  it('shows one panel per tab on a phone', async () => {
     media.phone = true;
-    await render('notes,canvas');
-    expect(pressed()).toEqual(['Notes']);
-    await click(button('Tasks'));
+    await render({ initial: 'notes,canvas' });
+    expect(tabs().map(t => t.textContent)).toEqual(['Tasks', 'Notes', 'Canvas']);
+    expect(selected()).toEqual(['Notes']);
+    await click(tabNamed('Tasks'));
     expect(changes).toEqual(['tasks,notes']);
   });
 
-  it('slides a grey icon in and ignores clicks on a shown one', async () => {
-    media.reduce = true;
-    await render();
-    await click(button('Notes'));
-    expect(changes).toEqual([]);
-    await click(button('Canvas'));
-    expect(changes).toEqual(['notes,canvas']);
-    expect(pressed()).toEqual(['Notes', 'Canvas']);
-  });
-
-  describe('arrow keys', () => {
-    beforeEach(() => { media.reduce = true; });
-
-    it('slides left on ArrowLeft and right on ArrowRight', async () => {
-      await render();
-      await press('ArrowLeft');
-      await press('ArrowRight');
-      await press('ArrowRight');
-      expect(changes).toEqual(['notes,canvas', 'tasks,notes', 'canvas,tasks']);
-    });
-
-    it('leaves keys typed in an input alone', async () => {
-      await render();
-      const input = container.querySelector('input')!;
-      await press('ArrowLeft', input);
+  describe('without Canvas connected', () => {
+    it('shows Tasks and Notes with no tabs on a wide screen, even when Canvas was saved', async () => {
+      await render({ initial: 'canvas,tasks', available: NO_CANVAS });
+      expect(container.querySelector('[role="tablist"]')).toBeNull();
+      expect(split().getAttribute('role')).toBeNull();
+      expect(visible('tasks') && visible('notes')).toBe(true);
+      expect(slot('canvas')).toBeNull();
       expect(changes).toEqual([]);
     });
 
-    it('ignores keys with a modifier or while a modal is open', async () => {
-      await render();
-      await press('ArrowLeft', document, { shiftKey: true });
-      await press('ArrowRight', document, { metaKey: true });
-      const overlay = document.createElement('div');
-      overlay.className = 'modal-overlay fixed';
-      document.body.appendChild(overlay);
-      await press('ArrowLeft');
-      expect(changes).toEqual([]);
+    it('offers only Tasks and Notes on a phone, falling back to Tasks', async () => {
+      media.phone = true;
+      await render({ initial: 'canvas,tasks', available: NO_CANVAS });
+      expect(tabs().map(t => t.textContent)).toEqual(['Tasks', 'Notes']);
+      expect(selected()).toEqual(['Tasks']);
+      expect(slot('canvas')).toBeNull();
     });
   });
 
-  it('slides with a 350ms transform and keeps each panel mounted', async () => {
-    const frames: FrameRequestCallback[] = [];
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => frames.push(cb));
-    const flushFrames = async () => {
-      while (frames.length) await act(async () => { frames.shift()!(0); });
-    };
+  it('keeps each panel mounted, so it comes back as it was left', async () => {
     await render();
     await click(container.querySelector<HTMLElement>('[data-counter="tasks"]')!);
     expect(slot('canvas')).toBeNull();
-
-    await click(button('Slide left'));
-    // The indicator moves at once; the strip starts where it was...
-    expect(changes).toEqual(['notes,canvas']);
-    expect(container.querySelector('[data-sliding="true"]')).not.toBeNull();
-    expect(track().style.transform).toBe('translateX(0px)');
-    // ...and slides one panel width plus the handle.
-    await flushFrames();
-    expect(track().style.transform).toBe('translateX(-508px)');
-    expect(track().style.transition).toBe('transform var(--tm-dur-slow) var(--tm-ease)');
-    expect(slot('canvas')).not.toBeNull();
-
-    await act(async () => {
-      const end = new Event('transitionend', { bubbles: true });
-      Object.assign(end, { propertyName: 'transform' });
-      track().dispatchEvent(end);
-    });
-    expect(container.querySelector('[data-sliding="true"]')).toBeNull();
-    expect(track().style.transform).toBe('');
-    expect(slot('tasks')!.className).toContain('hidden');
-
-    // Sliding Tasks back in finds it as it was left.
-    media.reduce = true;
-    await click(button('Slide left'));
+    await click(tabNamed('Notes & Canvas'));
+    expect(visible('tasks')).toBe(false);
+    expect(slot('tasks')!.textContent).toBe('tasks:1');
+    await click(tabNamed('Canvas & Tasks'));
     expect(slot('tasks')!.className).toContain('split-right');
     expect(slot('tasks')!.textContent).toBe('tasks:1');
   });
 
-  it('skips the slide under prefers-reduced-motion', async () => {
-    media.reduce = true;
-    await render();
-    await click(button('Slide left'));
-    expect(changes).toEqual(['notes,canvas']);
-    expect(container.querySelector('[data-sliding="true"]')).toBeNull();
-    expect(track().style.transform).toBe('');
-    expect(slot('notes')!.className).toContain('split-left');
-    expect(slot('canvas')!.className).toContain('split-right');
-  });
-
-  it('ignores another slide while one is running', async () => {
-    await render();
-    await click(button('Slide left'));
-    await click(button('Slide left'));
-    await press('ArrowLeft');
-    expect(changes).toEqual(['notes,canvas']);
+  it('brings a panel on screen through its handle, with that panel on the left', async () => {
+    await render({ initial: 'notes,canvas' });
+    await act(async () => handle!.show('canvas'));
+    expect(changes).toEqual([]);
+    await act(async () => handle!.show('tasks'));
+    expect(changes).toEqual(['tasks,notes']);
   });
 });
