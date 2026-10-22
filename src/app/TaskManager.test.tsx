@@ -143,6 +143,12 @@ describe('TaskManager home panels', () => {
     expect(availablePanels()).toBe('tasks,notes,canvas');
   });
 
+  it('offers Canvas when it is connected with the calendar feed', async () => {
+    api.fetchCanvasConnection.mockResolvedValue({ connected: true, connection_type: 'feed' });
+    await render();
+    expect(availablePanels()).toBe('tasks,notes,canvas');
+  });
+
   it('leaves Canvas out when it is not connected', async () => {
     api.fetchCanvasConnection.mockResolvedValue({ connected: false });
     await render();

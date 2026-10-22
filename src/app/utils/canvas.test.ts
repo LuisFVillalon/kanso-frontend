@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { CanvasItem, CanvasSubmission } from '@/app/types/canvas';
-import { courseColor, groupByDay, itemStatus, scoreLabel, syncedLabel } from './canvas';
+import type { CanvasCapabilities, CanvasCapability, CanvasConnection, CanvasItem, CanvasSubmission } from '@/app/types/canvas';
+import { canvasCan, canvasConnectionType, courseColor, groupByDay, itemStatus, scoreLabel, syncedLabel } from './canvas';
 
 const NOW = new Date(2026, 9, 21, 12, 0);
 const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60 * 1000).toISOString();
@@ -81,5 +81,34 @@ describe('courseColor', () => {
     expect(courseColor(7, [5, 7])).toBe(courseColor(7, [5, 7]));
     expect(courseColor(5, [5, 7])).not.toBe(courseColor(7, [5, 7]));
     expect(courseColor(9, [5, 7])).toBe('var(--tm-text-muted)');
+  });
+});
+
+describe('canvasCan', () => {
+  const connection = (overrides: Partial<CanvasConnection>): CanvasConnection => ({
+    connected: true, status: 'active', base_url: 'https://sdsu.instructure.com', token_last4: null, canvas_user_id: null,
+    canvas_user_name: null, token_expires_at: null, hidden_course_ids: [], created_at: null, updated_at: null,
+    last_synced_at: null, last_error_at: null, ...overrides,
+  });
+  const caps = (on: CanvasCapability[]): CanvasCapabilities => ({
+    upcoming: false, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
+    announcements: false, link_tasks: false, submission_status: false,
+    ...Object.fromEntries(on.map(c => [c, true])),
+  });
+
+  it('goes by the capabilities the backend sends', () => {
+    const feed = connection({ connection_type: 'feed', capabilities: caps(['upcoming', 'link_tasks']) });
+    expect(canvasConnectionType(feed)).toBe('feed');
+    expect(canvasCan(feed, 'upcoming')).toBe(true);
+    expect(canvasCan(feed, 'link_tasks')).toBe(true);
+    expect(canvasCan(feed, 'courses')).toBe(false);
+    expect(canvasCan(feed, 'announcements')).toBe(false);
+    expect(canvasCan(feed, 'submission_status')).toBe(false);
+  });
+
+  it('treats a backend from before the calendar feed as a token that can show everything', () => {
+    expect(canvasConnectionType(connection({}))).toBe('token');
+    expect(canvasCan(connection({}), 'announcements')).toBe(true);
+    expect(canvasCan(connection({ connected: false }), 'upcoming')).toBe(false);
   });
 });

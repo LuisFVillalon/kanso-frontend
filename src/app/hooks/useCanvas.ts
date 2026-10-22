@@ -11,6 +11,7 @@ import {
   fetchCanvasPanelCourses,
 } from '@/app/lib/backend-api';
 import { canvasView } from '@/app/components/settings/CanvasIntegrationSection';
+import { canvasCan } from '@/app/utils/canvas';
 import type {
   CanvasAnnouncements,
   CanvasAssignments,
@@ -37,6 +38,7 @@ const READ_ERROR_MESSAGES: Record<string, string> = {
   canvas_forbidden: "Canvas wouldn't share this with kanso. Your school may limit what tokens can do.",
   canvas_course_hidden: "This course is unticked under Courses to show in Settings.",
   canvas_course_not_found: "Canvas doesn't list this course anymore.",
+  canvas_not_supported: "The Canvas calendar feed doesn't include this. It needs an access token.",
 };
 
 export interface CanvasFailure {
@@ -49,6 +51,7 @@ export function canvasReadFailure(err: unknown): CanvasFailure {
   const detail = err instanceof ApiError ? err.detail : null;
   if (detail === 'canvas_not_connected') return { status: 'not-connected', message: "Canvas isn't connected." };
   if (detail === 'canvas_token_invalid') return { status: 'reconnect', message: 'Canvas rejected the token.' };
+  if (detail === 'canvas_feed_invalid') return { status: 'reconnect', message: 'Canvas stopped serving the calendar feed.' };
   if (detail && Object.hasOwn(READ_ERROR_MESSAGES, detail)) return { status: 'error', message: READ_ERROR_MESSAGES[detail] };
   if (err instanceof ApiError && err.status === 429) {
     return { status: 'error', message: 'Too many Canvas requests. Try again in a minute.' };
@@ -66,7 +69,9 @@ interface UseCanvasOptions {
 /**
  * The Canvas panel's data: the masked connection, then the Upcoming overview
  * and the course list, with the announcements loaded the first time their
- * tab opens. Everything comes through the backend's Canvas proxy.
+ * tab opens. Everything comes through the backend's Canvas proxy. A
+ * calendar feed connection reads only the overview: the feed has no courses
+ * or announcements, so `courses` stays null.
  */
 export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
   const [status, setStatus] = useState<CanvasPanelStatus>('loading');
@@ -108,6 +113,9 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
   const load = useCallback(async (refresh: boolean) => {
     const run = ++latest.current;
     try {
+      // Demo sandboxes read the sample data a token would.
+      let withCourses = true;
+      let withAnnouncements = true;
       if (!isDemo) {
         const conn = await fetchCanvasConnection();
         if (run !== latest.current) return;
@@ -117,12 +125,16 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
           setStatus(conn.connected ? 'reconnect' : 'not-connected');
           return;
         }
+        withCourses = canvasCan(conn, 'courses');
+        withAnnouncements = canvasCan(conn, 'announcements');
       }
       const [nextOverview, nextCourses, nextAnnouncements] = await Promise.all([
         fetchCanvasOverview(refresh),
-        fetchCanvasPanelCourses(refresh),
+        withCourses ? fetchCanvasPanelCourses(refresh) : Promise.resolve(null),
         // A failed announcements fetch keeps the ones on screen rather than failing the panel.
-        wantAnnouncementsRef.current ? fetchCanvasAnnouncements(refresh).catch(() => null) : Promise.resolve(null),
+        withAnnouncements && wantAnnouncementsRef.current
+          ? fetchCanvasAnnouncements(refresh).catch(() => null)
+          : Promise.resolve(null),
       ]);
       if (run !== latest.current) return;
       setOverview(nextOverview);
@@ -144,6 +156,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
   // Announcements load the first time their tab opens, then with every reload.
   useEffect(() => {
     if (!wantAnnouncements || status !== 'ready' || announcements || announcementsError) return;
+    if (!isDemo && !(connection && canvasCan(connection, 'announcements'))) return;
     let cancelled = false;
     fetchCanvasAnnouncements().then(
       result => { if (!cancelled) setAnnouncements(result); },
@@ -155,7 +168,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
       },
     );
     return () => { cancelled = true; };
-  }, [wantAnnouncements, status, announcements, announcementsError, fail]);
+  }, [wantAnnouncements, status, announcements, announcementsError, isDemo, connection, fail]);
 
   const loadAnnouncements = useCallback(() => {
     wantAnnouncementsRef.current = true;

@@ -5,8 +5,8 @@ vi.mock('./supabase', () => ({
 }));
 
 import {
-  ApiError, archiveTask, CanvasTaskExistsError, completeTaskWithLinked, createTask, fetchCalendarActivity, fetchCanvasCourses,
-  fetchCanvasModules, fetchCanvasOverview, fetchCanvasPanelCourses, onDelete, syncCanvasLinkedTasks,
+  ApiError, archiveTask, CanvasTaskExistsError, completeTaskWithLinked, connectCanvasFeed, createTask, fetchCalendarActivity,
+  fetchCanvasCourses, fetchCanvasModules, fetchCanvasOverview, fetchCanvasPanelCourses, onDelete, syncCanvasLinkedTasks,
 } from './backend-api';
 
 const fetchMock = vi.fn();
@@ -94,6 +94,20 @@ describe('linked task modes', () => {
     expect(requestedUrl().pathname).toMatch(/\/update-task-status\/4$/);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PATCH' });
     expect(requestedParams().get('with_linked')).toBe('true');
+  });
+});
+
+describe('connectCanvasFeed', () => {
+  it('sends the link in the body and the time zone as tz', async () => {
+    await connectCanvasFeed('webcal://sdsu.instructure.com/feeds/calendars/user_abc.ics', true);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(requestedUrl().pathname).toMatch(/\/canvas\/connection\/feed$/);
+    expect(requestedParams().get('tz')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(requestedParams().has('refresh')).toBe(false);
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body)).toEqual({
+      feed_url: 'webcal://sdsu.instructure.com/feeds/calendars/user_abc.ics', allow_account_change: true,
+    });
   });
 });
 

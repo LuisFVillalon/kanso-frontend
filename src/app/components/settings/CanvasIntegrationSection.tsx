@@ -1,26 +1,35 @@
 'use client';
 
 /**
- * Settings → Canvas: connect the user's Canvas account with a
- * personal access token and the school's Canvas address, then see it masked
- * ("Connected · ends in …7Hq2"), test it, replace it, remove it, and pick
- * the courses the home page shows.
+ * Settings → Canvas: connect the user's Canvas account, then see it masked
+ * ("Connected · calendar feed" or "Connected · ends in …7Hq2"), test it,
+ * replace it, remove it, and, with a token, pick the courses the home page
+ * shows.
  *
- * The token only ever lives in the form's uncontrolled password input: it is
- * read from the DOM on submit, sent once to the backend (which checks it with
- * Canvas before storing it encrypted), and the input is cleared as soon as
- * Canvas accepts it. It never enters React state, storage or logs, and the
- * backend never sends it back.
+ * Two ways to connect. The recommended one is the user's private calendar
+ * feed link (Canvas → Calendar → Calendar Feed): read-only and needing no
+ * school approval, but with upcoming assignments and due dates only. The
+ * other is a personal access token and the school's Canvas address, for
+ * schools that allow student tokens; it reads courses, grades and
+ * announcements too.
+ *
+ * Anyone with the feed link can read the user's calendar, so it's handled
+ * like the token: either only ever lives in its form's uncontrolled password
+ * input, is read from the DOM on submit, sent once to the backend (which
+ * checks it with Canvas before storing it encrypted), and the input is
+ * cleared as soon as Canvas accepts it. Neither enters React state, storage
+ * or logs, and the backend never sends either back.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, Check, CircleAlert, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Loader2,
-  PlugZap, RefreshCw, ShieldCheck, Trash2,
+  AlertTriangle, CalendarSync, Check, CircleAlert, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Link2,
+  Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2,
 } from 'lucide-react';
 import {
   ApiError,
   connectCanvas,
+  connectCanvasFeed,
   describeError,
   fetchCanvasConnection,
   fetchCanvasCourses,
@@ -28,7 +37,10 @@ import {
   testCanvasConnection,
   updateCanvasHiddenCourses,
 } from '@/app/lib/backend-api';
-import type { CanvasConnection, CanvasCourse, CanvasErrorCode } from '@/app/types/canvas';
+import type {
+  CanvasCapabilities, CanvasConnection, CanvasConnectionType, CanvasCourse, CanvasErrorCode,
+} from '@/app/types/canvas';
+import { canvasCan, canvasConnectionType } from '@/app/utils/canvas';
 
 /** How far ahead of the token's expiry Settings starts warning about it. */
 export const EXPIRING_SOON_DAYS = 7;
@@ -41,6 +53,10 @@ const ERROR_MESSAGES: Record<CanvasErrorCode, string> = {
     "kanso couldn't find a Canvas site at this address. Use the address you see when you open Canvas.",
   canvas_token_invalid:
     "Canvas didn't accept this token. It may be incomplete, expired, or deleted in Canvas. Copy it again or create a new one.",
+  canvas_feed_url_invalid:
+    "That isn't a Canvas calendar feed link. Copy it from Canvas under Calendar → Calendar Feed. It ends in .ics.",
+  canvas_feed_invalid:
+    "Canvas doesn't know this calendar feed link. It may be mistyped, or it was reset in Canvas. Copy it again from Canvas under Calendar → Calendar Feed.",
   canvas_forbidden:
     "Canvas accepted the token but wouldn't share your account details. Your school may limit what tokens can do.",
   canvas_account_changed: 'This token belongs to a different Canvas account or school.',
@@ -49,11 +65,20 @@ const ERROR_MESSAGES: Record<CanvasErrorCode, string> = {
   canvas_not_configured: "Canvas isn't available yet. Nothing was saved, so try again later.",
 };
 
-/** The form field an error code points at; the rest show under the form. */
+/** The token form field an error code points at; the rest show under the form. */
 const ERROR_FIELDS: Partial<Record<CanvasErrorCode, 'url' | 'token'>> = {
   canvas_url_invalid: 'url',
   canvas_not_canvas: 'url',
   canvas_token_invalid: 'token',
+};
+
+/** The codes the feed form shows under its one field, each saying what's wrong with the link. */
+const FEED_FIELD_ERRORS: Partial<Record<CanvasErrorCode, string>> = {
+  canvas_feed_url_invalid: ERROR_MESSAGES.canvas_feed_url_invalid,
+  canvas_feed_invalid: ERROR_MESSAGES.canvas_feed_invalid,
+  canvas_url_invalid:
+    "kanso can't use this link. Copy the calendar feed link from Canvas as it is: it starts with https:// or webcal://.",
+  canvas_not_canvas: "This link isn't a Canvas calendar. Copy the link from Canvas under Calendar → Calendar Feed.",
 };
 
 /** The Canvas error code a failed request carried, or null for any other failure. */
@@ -93,8 +118,18 @@ const formatDateTime = (iso: string) =>
 
 const relativeDays = (days: number) => (days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`);
 
-/** The headline on the connection card, e.g. "Connected · ends in …7Hq2". */
+/** The headline on the connection card, e.g. "Connected · ends in …7Hq2" or "Connected · calendar feed". */
 export function canvasStatusLine(connection: CanvasConnection, now: Date): string {
+  if (canvasConnectionType(connection) === 'feed') {
+    switch (canvasView(connection, now)) {
+      case 'invalid':
+        return 'Not syncing · Canvas stopped serving the feed';
+      case 'error':
+        return "Connected · calendar feed · couldn't reach Canvas";
+      default:
+        return 'Connected · calendar feed';
+    }
+  }
   const endsIn = `Connected · ends in …${connection.token_last4 ?? ''}`;
   switch (canvasView(connection, now)) {
     case 'invalid':
@@ -108,9 +143,17 @@ export function canvasStatusLine(connection: CanvasConnection, now: Date): strin
   }
 }
 
+const NO_CAPABILITIES: CanvasCapabilities = {
+  upcoming: false, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
+  announcements: false, link_tasks: false, submission_status: false,
+};
+
 const NOT_CONNECTED: CanvasConnection = {
   connected: false,
   status: null,
+  connection_type: null,
+  capabilities: NO_CAPABILITIES,
+  feed_url_masked: null,
   base_url: null,
   token_last4: null,
   canvas_user_id: null,
@@ -157,6 +200,44 @@ const SecurityNote = () => (
   </div>
 );
 
+const FeedNote = () => (
+  <div
+    className="flex gap-2 items-start rounded-lg px-3 py-2.5 text-xs"
+    style={{ backgroundColor: 'var(--tm-surface-raised)', color: 'var(--tm-text-secondary)' }}
+    data-testid="canvas-feed-note"
+  >
+    <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: 'var(--tm-text-muted)' }} />
+    <p>
+      The calendar feed is read-only and needs no approval from your school. It gives kanso your upcoming
+      assignments and due dates only: no grades, submissions, announcements or course files. Anyone with the link can
+      see your Canvas calendar, so keep it private like a password. kanso stores it encrypted and never shows it
+      again.
+    </p>
+  </div>
+);
+
+const HowToGetFeed: React.FC<{ open: boolean }> = ({ open }) => (
+  <details
+    open={open}
+    className="rounded-lg border text-sm"
+    style={{ borderColor: 'var(--tm-border)', backgroundColor: 'var(--tm-surface)' }}
+  >
+    <summary className="flex items-center gap-2 px-3 py-2.5 font-semibold cursor-pointer text-text-primary">
+      <CircleHelp className="w-3.5 h-3.5" />
+      How do I find my calendar feed link?
+    </summary>
+    <ol className="list-decimal pl-9 pr-3 pb-3 space-y-1" style={{ color: 'var(--tm-text-secondary)' }}>
+      <li>Open Canvas and select <strong className="text-text-primary">Calendar</strong> in the menu on the left.</li>
+      <li>
+        Select <strong className="text-text-primary">Calendar Feed</strong>, under the list of calendars on the right
+        side of the page.
+      </li>
+      <li>Copy the link Canvas shows. It ends in <span className="font-mono text-xs">.ics</span>.</li>
+      <li>Paste it below. kanso checks it with Canvas before saving.</li>
+    </ol>
+  </details>
+);
+
 const HowToGetToken: React.FC<{ open: boolean }> = ({ open }) => (
   <details
     open={open}
@@ -197,9 +278,33 @@ const FieldError: React.FC<{ id: string; children: React.ReactNode }> = ({ id, c
   </p>
 );
 
-// ── Connect / replace / reconnect form ──────────────────────────────────────
+// ── Connect / replace / reconnect forms ─────────────────────────────────────
 
 type FormMode = 'connect' | 'replace' | 'reconnect';
+
+/** Asks before a token for a different Canvas account, or a feed link at another school, replaces the connection. */
+const AccountSwitchConfirm: React.FC<{ what: 'token' | 'link'; onSwitch: () => void; onKeep: () => void }> = ({
+  what,
+  onSwitch,
+  onKeep,
+}) => (
+  <div role="alert" className="rounded-lg border p-3 space-y-2" style={{ borderColor: 'var(--tm-warning)', backgroundColor: 'var(--tm-warning-subtle)' }}>
+    <p className="text-sm text-text-primary">
+      <strong className="font-semibold">
+        {what === 'token' ? ERROR_MESSAGES.canvas_account_changed : "This link is for a different school's Canvas."}
+      </strong>{' '}
+      Switch kanso to it? Your &ldquo;Courses to show&rdquo; choices will reset.
+    </p>
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={onSwitch} className="btn btn-primary text-xs py-1.5">
+        Switch account
+      </button>
+      <button type="button" onClick={onKeep} className="btn btn-outline text-xs py-1.5">
+        Keep current account
+      </button>
+    </div>
+  </div>
+);
 
 interface FormProps {
   mode: FormMode;
@@ -330,20 +435,11 @@ const CanvasTokenForm: React.FC<FormProps> = ({ mode, defaultUrl, onSubmit, onCa
       )}
 
       {confirmSwitch && (
-        <div role="alert" className="rounded-lg border p-3 space-y-2" style={{ borderColor: 'var(--tm-warning)', backgroundColor: 'var(--tm-warning-subtle)' }}>
-          <p className="text-sm text-text-primary">
-            <strong className="font-semibold">{ERROR_MESSAGES.canvas_account_changed}</strong> Switch kanso to it? Your
-            &ldquo;Courses to show&rdquo; choices will reset.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void submit(true)} className="btn btn-primary text-xs py-1.5">
-              Switch account
-            </button>
-            <button type="button" onClick={() => setConfirmSwitch(false)} className="btn btn-outline text-xs py-1.5">
-              Keep current account
-            </button>
-          </div>
-        </div>
+        <AccountSwitchConfirm
+          what="token"
+          onSwitch={() => void submit(true)}
+          onKeep={() => setConfirmSwitch(false)}
+        />
       )}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -367,6 +463,186 @@ const CanvasTokenForm: React.FC<FormProps> = ({ mode, defaultUrl, onSubmit, onCa
   );
 };
 
+interface FeedFormProps {
+  mode: FormMode;
+  onSubmit: (feedUrl: string, allowAccountChange: boolean) => Promise<void>;
+  onCancel?: () => void;
+}
+
+const CanvasFeedForm: React.FC<FeedFormProps> = ({ mode, onSubmit, onCancel }) => {
+  // Uncontrolled on purpose: like a token, the link stays in the input, never in state.
+  const feedRef = useRef<HTMLInputElement>(null);
+  const [showLink, setShowLink] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<{ field: boolean; message: string } | null>(null);
+  const [confirmSwitch, setConfirmSwitch] = useState(false);
+
+  const submit = async (allowAccountChange: boolean) => {
+    const input = feedRef.current;
+    if (!input) return;
+    if (!input.value.trim()) {
+      setError({ field: true, message: 'Paste the calendar feed link from Canvas.' });
+      return;
+    }
+    setChecking(true);
+    setError(null);
+    setConfirmSwitch(false);
+    try {
+      await onSubmit(input.value.trim(), allowAccountChange);
+      input.value = '';
+    } catch (err) {
+      const code = canvasErrorCode(err);
+      if (code === 'canvas_account_changed') {
+        setConfirmSwitch(true);
+      } else {
+        const fieldMessage = code ? FEED_FIELD_ERRORS[code] : undefined;
+        setError(fieldMessage
+          ? { field: true, message: fieldMessage }
+          : { field: false, message: canvasErrorMessage(err, "Couldn't connect Canvas. Please try again.") });
+      }
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const fieldError = error?.field ? error.message : null;
+  const formError = error && !error.field ? error.message : null;
+
+  return (
+    <form
+      onSubmit={e => { e.preventDefault(); void submit(false); }}
+      className="space-y-4"
+      aria-label={mode === 'connect' ? 'Connect Canvas calendar feed' : `${SUBMIT_LABEL[mode]} calendar feed`}
+    >
+      <div>
+        <label htmlFor="canvas-feed" className="block text-xs font-medium text-text-muted mb-1">Calendar feed link</label>
+        <div className="relative">
+          <input
+            id="canvas-feed"
+            ref={feedRef}
+            type={showLink ? 'text' : 'password'}
+            defaultValue=""
+            onChange={() => { setError(null); setConfirmSwitch(false); }}
+            placeholder="https://yourschool.instructure.com/feeds/calendars/….ics"
+            autoComplete="off"
+            spellCheck={false}
+            data-1p-ignore
+            data-lpignore="true"
+            disabled={checking}
+            aria-invalid={!!fieldError}
+            aria-describedby={fieldError ? 'canvas-feed-error' : undefined}
+            className="input-field w-full text-sm pr-10"
+            style={fieldError ? { borderColor: 'var(--tm-danger)' } : undefined}
+          />
+          <button
+            type="button"
+            onClick={() => setShowLink(s => !s)}
+            aria-label={showLink ? 'Hide link' : 'Show link'}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-primary"
+          >
+            {showLink ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+        {fieldError && <FieldError id="canvas-feed-error">{fieldError}</FieldError>}
+      </div>
+
+      {formError && (
+        <p role="alert" className="text-sm rounded-md px-3 py-2" style={{ backgroundColor: 'var(--tm-danger-subtle)', color: 'var(--tm-danger)' }}>
+          {formError}
+        </p>
+      )}
+
+      {confirmSwitch && (
+        <AccountSwitchConfirm what="link" onSwitch={() => void submit(true)} onKeep={() => setConfirmSwitch(false)} />
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="submit" disabled={checking} className="btn btn-primary text-sm py-2 disabled:opacity-60">
+          {checking
+            ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking with Canvas…</>
+            : <><PlugZap className="w-4 h-4" /> {SUBMIT_LABEL[mode]}</>}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel} disabled={checking} className="btn btn-outline text-sm py-2">
+            Cancel
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-text-muted">
+        {mode === 'connect'
+          ? 'kanso saves the link only after Canvas serves the feed.'
+          : "If Canvas doesn't serve the new link, nothing is saved and your current connection stays as it is."}
+      </p>
+    </form>
+  );
+};
+
+/**
+ * The calendar feed form, recommended and shown first, with the access token
+ * a secondary choice for schools that allow it; `initial` picks the one
+ * shown first, e.g. the connected type when replacing it.
+ */
+const ConnectOptions: React.FC<{
+  mode: FormMode;
+  initial: CanvasConnectionType;
+  defaultUrl: string;
+  onConnectFeed: (feedUrl: string, allowAccountChange: boolean) => Promise<void>;
+  onConnectToken: (baseUrl: string, token: string, allowAccountChange: boolean) => Promise<void>;
+  onCancel?: () => void;
+}> = ({ mode, initial, defaultUrl, onConnectFeed, onConnectToken, onCancel }) => {
+  const [method, setMethod] = useState<CanvasConnectionType>(initial);
+  const connecting = mode === 'connect';
+  const switchButton = (
+    <button
+      type="button"
+      onClick={() => setMethod(method === 'feed' ? 'token' : 'feed')}
+      className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+      style={{ color: 'var(--tm-accent)' }}
+    >
+      {method === 'feed'
+        ? <><KeyRound className="w-3.5 h-3.5" /> Use an access token if your school allows it</>
+        : <><CalendarSync className="w-3.5 h-3.5" /> Use your calendar feed link instead (recommended)</>}
+    </button>
+  );
+
+  if (method === 'token') {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-xs font-medium text-text-muted">
+          {connecting ? 'Connect with an access token' : 'Paste a new access token'}
+        </h3>
+        <p className="text-sm text-text-secondary">
+          A token also brings your courses, grades and announcements into kanso, but many schools turn student tokens
+          off.
+        </p>
+        <HowToGetToken open={connecting} />
+        <CanvasTokenForm mode={mode} defaultUrl={defaultUrl} onSubmit={onConnectToken} onCancel={onCancel} />
+        <SecurityNote />
+        {switchButton}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <h3 className="text-xs font-medium text-text-muted">
+          {connecting ? 'Connect with your calendar feed' : 'Paste a new calendar feed link'}
+        </h3>
+        <span
+          className="chip px-2 py-0.5 text-[11px] font-semibold"
+          style={{ backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)' }}
+        >
+          Recommended
+        </span>
+      </div>
+      <HowToGetFeed open={connecting} />
+      <CanvasFeedForm mode={mode} onSubmit={onConnectFeed} onCancel={onCancel} />
+      <FeedNote />
+      {switchButton}
+    </div>
+  );
+};
+
 // ── Connection card ─────────────────────────────────────────────────────────
 
 const DOT_COLOR: Record<CanvasView, string> = {
@@ -379,6 +655,8 @@ const DOT_COLOR: Record<CanvasView, string> = {
 
 const ConnectionCard: React.FC<{ connection: CanvasConnection; now: Date }> = ({ connection, now }) => {
   const view = canvasView(connection, now);
+  const feed = canvasConnectionType(connection) === 'feed';
+  const added = connection.created_at && <span className="text-text-muted"> · added {formatDate(connection.created_at)}</span>;
   const expires = connection.token_expires_at;
   let expiresText: React.ReactNode = null;
   if (expires) {
@@ -408,11 +686,23 @@ const ConnectionCard: React.FC<{ connection: CanvasConnection; now: Date }> = ({
           <dt className="text-text-muted">Canvas account</dt>
           <dd className="min-w-0 break-words text-text-primary">{connection.canvas_user_name}</dd>
         </>}
-        <dt className="text-text-muted">Token</dt>
-        <dd className="text-text-primary">
-          <span className="font-mono text-xs">•••• •••• {connection.token_last4}</span>
-          {connection.created_at && <span className="text-text-muted"> · added {formatDate(connection.created_at)}</span>}
+        <dt className="text-text-muted">Connected with</dt>
+        <dd className="text-text-primary" data-testid="canvas-type">
+          {feed ? <>Calendar feed · read-only{added}</> : 'Access token'}
         </dd>
+        {feed && connection.feed_url_masked && <>
+          <dt className="text-text-muted">Feed link</dt>
+          <dd className="min-w-0 break-all font-mono text-xs text-text-primary self-center" data-testid="canvas-feed-masked">
+            {connection.feed_url_masked}
+          </dd>
+        </>}
+        {!feed && <>
+          <dt className="text-text-muted">Token</dt>
+          <dd className="text-text-primary">
+            <span className="font-mono text-xs">•••• •••• {connection.token_last4}</span>
+            {added}
+          </dd>
+        </>}
         {expiresText && <>
           <dt className="text-text-muted">Expires</dt>
           <dd className="text-text-primary">{expiresText}</dd>
@@ -495,8 +785,9 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
   }, [isDemo, load]);
 
   // The course list comes from Canvas through the backend; until that route
-  // answers (or while the token is rejected), "Courses to show" stays hidden.
-  const coursesKey = connection?.connected && connection.status !== 'invalid'
+  // answers (or while the token is rejected, or with the calendar feed, which
+  // has no courses), "Courses to show" stays hidden.
+  const coursesKey = connection?.connected && connection.status !== 'invalid' && canvasCan(connection, 'courses')
     ? `${connection.base_url}#${connection.canvas_user_id}`
     : null;
   useEffect(() => {
@@ -510,11 +801,18 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
   }, [coursesKey]);
   const visibleCourses = courses && courses.key === coursesKey ? courses.list : null;
 
-  const handleConnect = async (baseUrl: string, token: string, allowAccountChange: boolean) => {
-    const next = await connectCanvas(baseUrl, token, allowAccountChange);
+  const connected = (next: CanvasConnection) => {
     setConnection(next);
     setMode('view');
     setNotice({ tone: 'success', text: next.canvas_user_name ? `Canvas connected as ${next.canvas_user_name}.` : 'Canvas connected.' });
+  };
+
+  const handleConnect = async (baseUrl: string, token: string, allowAccountChange: boolean) => {
+    connected(await connectCanvas(baseUrl, token, allowAccountChange));
+  };
+
+  const handleConnectFeed = async (feedUrl: string, allowAccountChange: boolean) => {
+    connected(await connectCanvasFeed(feedUrl, allowAccountChange));
   };
 
   const handleTest = async () => {
@@ -523,7 +821,14 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
     try {
       const next = await testCanvasConnection();
       setConnection(next);
-      if (next.status === 'active') setNotice({ tone: 'success', text: 'Canvas accepted the token. Checked just now.' });
+      if (next.status === 'active') {
+        setNotice({
+          tone: 'success',
+          text: canvasConnectionType(next) === 'feed'
+            ? 'Canvas served the calendar feed. Checked just now.'
+            : 'Canvas accepted the token. Checked just now.',
+        });
+      }
     } catch (err) {
       const code = canvasErrorCode(err);
       setNotice({ tone: 'error', text: canvasErrorMessage(err, "Couldn't test the connection. Please try again.") });
@@ -538,11 +843,12 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
   const handleRemove = async () => {
     setBusy('remove');
     setNotice(null);
+    const what = connection && canvasConnectionType(connection) === 'feed' ? 'calendar feed link' : 'token';
     try {
       await removeCanvasConnection();
       setConnection(NOT_CONNECTED);
       setMode('view');
-      setNotice({ tone: 'success', text: 'Canvas removed. The token was deleted from kanso.' });
+      setNotice({ tone: 'success', text: `Canvas removed. The ${what} was deleted from kanso.` });
     } catch (err) {
       setNotice({ tone: 'error', text: canvasErrorMessage(err, "Couldn't remove Canvas. Please try again.") });
     } finally {
@@ -572,7 +878,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
   const intro = (
     <div className="flex items-center gap-2" style={{ color: 'var(--tm-text-secondary)' }}>
       <GraduationCap className="w-4 h-4 shrink-0" />
-      <p className="text-sm">Connect Canvas to see your classes, due dates and grades in kanso.</p>
+      <p className="text-sm">Connect Canvas to see what&apos;s due in kanso and add it to your tasks.</p>
     </div>
   );
 
@@ -586,7 +892,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
           </p>
           <p className="text-text-secondary">
             {isDemo
-              ? 'Connecting Canvas stores your access token, so it needs your own kanso account. Create one to connect Canvas.'
+              ? 'Connecting Canvas stores your calendar feed link or access token, so it needs your own kanso account. Create one to connect Canvas.'
               : unavailable}
           </p>
         </Banner>
@@ -623,6 +929,18 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
 
   const now = new Date();
   const view = canvasView(connection, now);
+  const type = connection.connected ? canvasConnectionType(connection) : 'feed';
+  const feed = type === 'feed';
+  const connectOptions = (formMode: FormMode, onCancel?: () => void) => (
+    <ConnectOptions
+      mode={formMode}
+      initial={type}
+      defaultUrl={connection.base_url ?? ''}
+      onConnectFeed={handleConnectFeed}
+      onConnectToken={handleConnect}
+      onCancel={onCancel}
+    />
+  );
   const noticeEl = notice && (
     <p
       role={notice.tone === 'error' ? 'alert' : 'status'}
@@ -641,9 +959,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
       <div className="space-y-4">
         {intro}
         {noticeEl}
-        <HowToGetToken open />
-        <CanvasTokenForm mode="connect" defaultUrl="" onSubmit={handleConnect} />
-        <SecurityNote />
+        {connectOptions('connect')}
       </div>
     );
   }
@@ -656,8 +972,10 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
       <div>
         <p className="text-sm font-semibold text-text-primary">Remove Canvas?</p>
         <p className="text-sm text-text-secondary mt-1">
-          kanso permanently deletes your token right away. Nothing goes to Recently deleted. To stop the token working
-          everywhere, also delete it in Canvas under Approved Integrations.
+          {feed
+            ? 'kanso permanently deletes your calendar feed link right away. Nothing goes to Recently deleted.'
+            : 'kanso permanently deletes your token right away. Nothing goes to Recently deleted. To stop the token '
+              + 'working everywhere, also delete it in Canvas under Approved Integrations.'}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -694,19 +1012,26 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
     return (
       <div className="space-y-4">
         {noticeEl}
-        <Banner tone="danger" icon={KeyRound}>
-          <p>
-            <strong className="font-semibold">
-              {isExpired(connection, now) ? 'Your Canvas token expired.' : `Canvas stopped accepting your token${rejectedOn}.`}
-            </strong>{' '}
-            It expired or was deleted in Canvas. Paste a new token to reconnect. Your course choices are kept.
-          </p>
-        </Banner>
+        {feed ? (
+          <Banner tone="danger" icon={CalendarSync}>
+            <p>
+              <strong className="font-semibold">Canvas stopped serving your calendar feed link{rejectedOn}.</strong>{' '}
+              The link may have changed in Canvas. Paste the current one to reconnect.
+            </p>
+          </Banner>
+        ) : (
+          <Banner tone="danger" icon={KeyRound}>
+            <p>
+              <strong className="font-semibold">
+                {isExpired(connection, now) ? 'Your Canvas token expired.' : `Canvas stopped accepting your token${rejectedOn}.`}
+              </strong>{' '}
+              It expired or was deleted in Canvas. Paste a new token to reconnect. Your course choices are kept.
+            </p>
+          </Banner>
+        )}
         <ConnectionCard connection={connection} now={now} />
         {mode === 'remove' ? removeConfirm : <>
-          <h3 className="text-xs font-medium text-text-muted">Reconnect Canvas</h3>
-          <HowToGetToken open={false} />
-          <CanvasTokenForm mode="reconnect" defaultUrl={connection.base_url ?? ''} onSubmit={handleConnect} />
+          {connectOptions('reconnect')}
           <div className="flex">{removeButton('Remove instead')}</div>
         </>}
       </div>
@@ -728,24 +1053,14 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
         <Banner tone="warning" icon={AlertTriangle}>
           <p>
             <strong className="font-semibold">kanso couldn&apos;t reach Canvas the last time it checked.</strong>{' '}
-            Your token is still saved. Press Test to try again.
+            Your {feed ? 'calendar feed link' : 'token'} is still saved. Press Test to try again.
           </p>
         </Banner>
       )}
       <ConnectionCard connection={connection} now={now} />
 
       {mode === 'remove' && removeConfirm}
-      {mode === 'replace' && <>
-        <h3 className="text-xs font-medium text-text-muted">Replace token</h3>
-        <p className="text-sm text-text-secondary">Paste a new token. kanso checks it with Canvas before swapping it in.</p>
-        <HowToGetToken open={false} />
-        <CanvasTokenForm
-          mode="replace"
-          defaultUrl={connection.base_url ?? ''}
-          onSubmit={handleConnect}
-          onCancel={() => setMode('view')}
-        />
-      </>}
+      {mode === 'replace' && connectOptions('replace', () => setMode('view'))}
       {mode === 'view' && (
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => void handleTest()} disabled={busy !== null} className="btn btn-secondary text-sm py-2 disabled:opacity-60">
@@ -757,7 +1072,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
             onClick={() => { setNotice(null); setMode('replace'); }}
             className={`btn text-sm py-2 ${view === 'expiring' ? 'btn-primary' : 'btn-outline'}`}
           >
-            <KeyRound className="w-4 h-4" /> Replace
+            {feed ? <Link2 className="w-4 h-4" /> : <KeyRound className="w-4 h-4" />} Replace
           </button>
           {removeButton('Remove')}
         </div>
@@ -771,7 +1086,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
           onToggle={courseId => void handleToggleCourse(courseId)}
         />
       )}
-      <SecurityNote />
+      {feed ? <FeedNote /> : <SecurityNote />}
     </div>
   );
 };
