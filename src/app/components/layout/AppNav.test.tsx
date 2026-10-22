@@ -78,7 +78,12 @@ describe('AppNav', () => {
     mocks.pathname = '/trash';
     render();
     expect(current(rail())).toEqual(['Deleted']);
-    // Archive and Recently deleted live under More on a phone.
+    // Reports, Archive and Recently deleted live under More on a phone.
+    expect(current(tabbar())).toEqual(['More']);
+
+    mocks.pathname = '/reports';
+    render();
+    expect(current(rail())).toEqual(['Reports']);
     expect(current(tabbar())).toEqual(['More']);
   });
 
@@ -97,6 +102,8 @@ describe('AppNav', () => {
     click(within(rail(), 'Expand navigation'));
     expect(rail().hasAttribute('data-expanded')).toBe(true);
     expect(within(rail(), 'Calendar').textContent).toContain('G C');
+    expect(within(rail(), 'Reports').textContent).toContain('G R');
+    expect(within(rail(), 'Reports').getAttribute('href')).toBe('/reports');
     expect(within(rail(), 'Recently deleted')).toBeDefined();
     expect(localStorage.getItem(NAV_EXPANDED_KEY)).toBe('true');
 
@@ -171,7 +178,7 @@ describe('AppNav', () => {
 
     click(within(tabbar(), 'More'));
     expect([...sheet()!.querySelectorAll('a, button')].map(el => el.textContent?.trim()))
-      .toEqual(['Archive', 'Recently deleted', 'Manage habits', 'Manage tags', 'Settings', 'Light', 'Dark', 'Log out']);
+      .toEqual(['Reports', 'Archive', 'Recently deleted', 'Manage habits', 'Manage tags', 'Settings', 'Light', 'Dark', 'Log out']);
     click(within(sheet()!, 'Log out'));
     expect(actions.onLogout).toHaveBeenCalledTimes(1);
   });
