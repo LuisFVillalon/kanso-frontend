@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@/app/types/task';
-import { formatDueDateShort, getDueStatus, groupLinkedTasks, parentChain, subtaskTreeIds, taskToEditForm, todayPlanProgress } from './taskUtils';
+import { formatDueDateShort, getDueStatus, linkedTaskIndex, parentChain, subtaskTreeIds, taskToEditForm, todayPlanProgress } from './taskUtils';
 
 describe('subtaskTreeIds', () => {
   const tasks = [
@@ -24,94 +24,45 @@ describe('subtaskTreeIds', () => {
   });
 });
 
-describe('groupLinkedTasks', () => {
-  const task = (id: number, parent_task_id: number | null = null, completed = false): Task => ({
-    id, parent_task_id, completed,
+describe('linkedTaskIndex', () => {
+  const task = (id: number, parent_task_id: number | null = null, completed = false, position: number | null = null): Task => ({
+    id, parent_task_id, completed, position,
     title: `Task ${id}`, description: '', priority: null, due_date: null, due_time: null,
     tags: [], created_date: '2026-10-01', completed_date: null,
   });
-  const shape = (groups: ReturnType<typeof groupLinkedTasks>) =>
-    groups.map(g => ({ id: g.task.id, linked: g.linked.map(l => l.task.id), done: g.linkedDone, total: g.linkedTotal }));
-  // The whole tree as nested ids: [id, [children…]].
-  type Tree = [number, Tree[]];
-  const tree = (groups: ReturnType<typeof groupLinkedTasks>): Tree[] => groups.map(g => [g.task.id, tree(g.linked)]);
+  const ids = (tasks: Task[]) => tasks.map(t => t.id);
 
-  // 1 has linked tasks 2 (done), 3 and 5; 4 stands alone.
-  const all = [task(1), task(5, 1), task(2, 1, true), task(3, 1), task(4)];
-  const byId = (ids: number[]) => ids.map(id => all.find(t => t.id === id)!);
+  // 1 → 2 → 3 (done) and 2 → 4; 1 → 5 stands beside 2; 6 stands alone.
+  const all = [task(6), task(5, 1, false, 1), task(4, 2), task(3, 2, true), task(2, 1, false, 0), task(1)];
+  const index = linkedTaskIndex(all);
 
-  it('nests linked tasks under their parent, oldest first, with progress', () => {
-    expect(shape(groupLinkedTasks(all, byId([1, 5, 2, 3, 4])))).toEqual([
-      { id: 1, linked: [2, 3, 5], done: 1, total: 3 },
-      { id: 4, linked: [], done: 0, total: 0 },
-    ]);
+  it('lists a task\'s direct linked tasks in their saved order', () => {
+    expect(ids(index.childrenOf(1))).toEqual([2, 5]);
+    expect(ids(index.childrenOf(2))).toEqual([3, 4]);
+    expect(index.childrenOf(6)).toEqual([]);
   });
 
-  it('keeps every linked task under a matching parent, even ones the filters hide', () => {
-    expect(shape(groupLinkedTasks(all, byId([4, 1])))).toEqual([
-      { id: 4, linked: [], done: 0, total: 0 },
-      { id: 1, linked: [2, 3, 5], done: 1, total: 3 },
-    ]);
+  it('collects every task under a task, at any depth', () => {
+    expect(ids(index.descendantsOf(1)).sort()).toEqual([2, 3, 4, 5]);
+    expect(ids(index.descendantsOf(2)).sort()).toEqual([3, 4]);
   });
 
-  it('keeps the parent visible when only a linked task matches, showing just the matches', () => {
-    expect(shape(groupLinkedTasks(all, byId([4, 3])))).toEqual([
-      { id: 4, linked: [], done: 0, total: 0 },
-      { id: 1, linked: [3], done: 1, total: 3 },
-    ]);
+  it('counts the open tasks anywhere under a task', () => {
+    expect(index.openUnder(1)).toBe(3);
+    expect(index.openUnder(2)).toBe(1);
+    expect(index.openUnder(3)).toBe(0);
   });
 
-  it('places a group at its parent when the parent matches, not at an earlier linked task', () => {
-    expect(shape(groupLinkedTasks(all, byId([3, 4, 1]))).map(g => g.id)).toEqual([4, 1]);
+  it('leaves a task whose parent is not loaded under nothing', () => {
+    const orphanIndex = linkedTaskIndex([task(9, 99)]);
+    expect(orphanIndex.childrenOf(99)).toEqual([]);
+    expect(orphanIndex.byId.get(9)?.id).toBe(9);
   });
 
-  it('places a group at its first matching linked task when the parent does not match', () => {
-    expect(shape(groupLinkedTasks(all, byId([3, 4, 5]))).map(g => g.id)).toEqual([1, 4]);
-  });
-
-  it('shows each task once', () => {
-    const ids = groupLinkedTasks(all, all).flatMap(g => [g.task.id, ...g.linked.map(l => l.task.id)]);
-    expect(ids.sort()).toEqual([1, 2, 3, 4, 5]);
-  });
-
-  it('treats a linked task whose parent is not loaded as top-level', () => {
-    const orphan = task(9, 99);
-    expect(shape(groupLinkedTasks([orphan], [orphan]))).toEqual([{ id: 9, linked: [], done: 0, total: 0 }]);
-  });
-
-  // 1 → 2 → 3 (done) and 2 → 4; 1 → 5 stands beside 2.
-  const deep = [task(1), task(2, 1), task(3, 2, true), task(4, 2), task(5, 1)];
-  const deepById = (ids: number[]) => ids.map(id => deep.find(t => t.id === id)!);
-
-  it('nests linked tasks under their own parent at every depth, each with its own progress', () => {
-    const groups = groupLinkedTasks(deep, deep);
-    expect(tree(groups)).toEqual([[1, [[2, [[3, []], [4, []]]], [5, []]]]]);
-    expect(shape(groups)).toEqual([{ id: 1, linked: [2, 5], done: 0, total: 2 }]);
-    expect(shape(groups[0].linked)).toEqual([
-      { id: 2, linked: [3, 4], done: 1, total: 2 },
-      { id: 5, linked: [], done: 0, total: 0 },
-    ]);
-  });
-
-  it('keeps the path down to a deep match, showing just the branches that lead to one', () => {
-    const groups = groupLinkedTasks(deep, deepById([3]));
-    expect(tree(groups)).toEqual([[1, [[2, [[3, []]]]]]]);
-    // Progress still counts the linked tasks the filters hide.
-    expect(shape(groups[0].linked)).toEqual([{ id: 2, linked: [3], done: 1, total: 2 }]);
-  });
-
-  it('shows everything under a matching nested task', () => {
-    expect(tree(groupLinkedTasks(deep, deepById([2])))).toEqual([[1, [[2, [[3, []], [4, []]]]]]]);
-  });
-
-  it('keeps tasks in a parent loop top-level instead of hanging', () => {
-    const loop = [task(1, 2), task(2, 1)];
-    expect(shape(groupLinkedTasks(loop, loop)).map(g => g.id)).toEqual([1, 2]);
-  });
-
-  it('keeps a task hanging off a loop top-level too', () => {
-    const loop = [task(1, 2), task(2, 1), task(3, 1)];
-    expect(tree(groupLinkedTasks(loop, loop))).toEqual([[1, []], [2, []], [3, []]]);
+  it('stops at a parent loop instead of hanging', () => {
+    const loop = linkedTaskIndex([task(1, 2), task(2, 1), task(3, 1)]);
+    expect(ids(loop.descendantsOf(1)).sort()).toEqual([2, 3]);
+    expect(loop.openUnder(1)).toBe(2);
   });
 });
 

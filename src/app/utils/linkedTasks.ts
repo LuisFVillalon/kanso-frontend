@@ -1,5 +1,6 @@
-import { LinkedTaskRef, Task } from '@/app/types/task';
-import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { LinkedTaskRef, NewLinkedTask, Tag, Task } from '@/app/types/task';
+import type { TaskFormData } from '@/app/components/task/TaskFormFields';
+import { parseLocalDate, toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 
 // ── Linked tasks on the task form ───────────────────────────────────────────
 // A task's linked tasks are the tasks that lead up to completing it, stored
@@ -9,10 +10,10 @@ import { toLocalDateStr } from '@/app/utils/dateUtils';
 // itself or a task below it. The backend enforces the same rules
 // (PUT /update-linked-tasks/{id}).
 
-/** One row of the form's Linked tasks list: an existing task, or the title of one created on save. */
+/** One row of the form's Linked tasks list: an existing task, or one created on save with all its fields. */
 export type LinkedDraft =
   | { kind: 'existing'; id: number }
-  | { kind: 'new'; key: string; title: string };
+  | { kind: 'new'; key: string; form: TaskFormData };
 
 /** Mirrors the backend's title limit, so a new linked task's title can't fail on length. */
 export const LINKED_TITLE_MAX = 500;
@@ -45,14 +46,58 @@ export function linkedDraftsChanged(saved: LinkedDraft[], drafts: LinkedDraft[])
   });
 }
 
+/** A blank form for a new linked task, starting with its parent's tags. */
+export function blankLinkedTaskForm(parentTags: Tag[], title = ''): TaskFormData {
+  return {
+    title,
+    description: '',
+    priority: null,
+    due_date: '',
+    due_time: '',
+    tags: [...parentTags],
+    estimated_time: null,
+    reminder_minutes: null,
+  };
+}
+
+const dateOrNull = (v: string | Date | null | undefined) =>
+  v instanceof Date ? toLocalDateStr(v) : v ? v : null;
+const timeOrNull = (v: string | Date | null | undefined) =>
+  v instanceof Date ? toLocalTimeStr(v) : v ? v : null;
+
+/** A new linked task's form as the fields PUT /update-linked-tasks creates it with. */
+export function toNewLinkedTask(form: TaskFormData): NewLinkedTask {
+  return {
+    title: form.title.trim(),
+    description: form.description.trim(),
+    priority: form.priority ?? null,
+    due_date: dateOrNull(form.due_date),
+    due_time: timeOrNull(form.due_time),
+    tags: form.tags.map(tag => ({ id: tag.id, name: tag.name, color: tag.color })),
+    estimated_time: form.estimated_time ?? null,
+    reminder_minutes: form.reminder_minutes ?? null,
+  };
+}
+
 /** The request body's children for PUT /update-linked-tasks, skipping rows whose task is no longer loaded. */
 export function toLinkedRefs(drafts: LinkedDraft[], allTasks: Task[]): LinkedTaskRef[] {
   const ids = new Set(allTasks.map(t => t.id));
   return drafts.flatMap((d): LinkedTaskRef[] => {
-    if (d.kind === 'new') return [{ title: d.title.trim() }];
+    if (d.kind === 'new') return [toNewLinkedTask(d.form)];
     return ids.has(d.id) ? [{ id: d.id }] : [];
   });
 }
+
+/** "YYYY-MM-DD" moved by `days`. */
+export function shiftDateStr(date: string, days: number): string {
+  const d = parseLocalDate(date);
+  d.setDate(d.getDate() + days);
+  return toLocalDateStr(d);
+}
+
+/** Whether a linked task due `due` is due after its parent, due `parentDue` (both "YYYY-MM-DD" or empty). */
+export const isDueAfterParent = (due: string | null, parentDue: string | null) =>
+  !!due && !!parentDue && due > parentDue;
 
 /** Returns a copy of `list` with the item at `from` moved to `to` (unchanged if `to` is out of range). */
 export function moveItem<T>(list: T[], from: number, to: number): T[] {

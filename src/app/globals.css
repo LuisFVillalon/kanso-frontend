@@ -534,6 +534,26 @@ html[data-page-style="blank"] body {
   to   { opacity: 1; }
 }
 
+/* A task card the list just scrolled to (a parent named in a linked task's
+   trail, a linked-task chip, a task just created): a blue wash and ring that
+   fade out. It runs on a layer of its own, so the card's fade-in never
+   replays, under the card's content (the card is a stacking context). */
+@keyframes task-flash {
+  0%, 45% { background-color: var(--tm-accent-subtle); box-shadow: 0 0 0 2px var(--tm-accent); }
+  100%    { background-color: transparent; box-shadow: 0 0 0 0 transparent; }
+}
+
+.task-flash { position: relative; isolation: isolate; }
+.task-flash::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: task-flash 2s ease-out both;
+}
+
 @keyframes shimmer {
   from { background-position: -200% 0; }
   to   { background-position:  200% 0; }

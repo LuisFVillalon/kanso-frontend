@@ -4,6 +4,8 @@ import { DURATION_PRESETS, findDurationPreset, parseCustomHours } from '@/app/ut
 interface DurationPickerProps {
   value: number | null | undefined;
   onChange: (hours: number | null) => void;
+  /** The id of the label that names the preset group. */
+  labelledBy?: string;
 }
 
 const formatHours = (hours: number) => String(Math.round(hours * 100) / 100);
@@ -11,7 +13,7 @@ const formatHours = (hours: number) => String(Math.round(hours * 100) / 100);
 // Segmented choice of preset estimates plus a free-form "Custom" hours input.
 // Clicking the selected preset again clears the estimate. Invalid custom text
 // keeps the current estimate and blocks the enclosing form from submitting.
-const DurationPicker: React.FC<DurationPickerProps> = ({ value, onChange }) => {
+const DurationPicker: React.FC<DurationPickerProps> = ({ value, onChange, labelledBy = 'estimated-duration-label' }) => {
   const hasValue = value != null && value > 0;
   const initialCustom = hasValue && !findDurationPreset(value);
   const [customOpen, setCustomOpen] = useState(initialCustom);
@@ -66,7 +68,7 @@ const DurationPicker: React.FC<DurationPickerProps> = ({ value, onChange }) => {
 
   return (
     <div>
-      <div role="group" aria-labelledby="estimated-duration-label" className="flex flex-wrap gap-2">
+      <div role="group" aria-labelledby={labelledBy} className="flex flex-wrap gap-2">
         {DURATION_PRESETS.map(p => {
           const selected = selectedPreset === p;
           return (

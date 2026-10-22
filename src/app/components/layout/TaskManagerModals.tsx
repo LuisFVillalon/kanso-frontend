@@ -36,6 +36,8 @@ interface TaskManagerModalsProps {
   onEditTaskChange: (task: TaskFormData) => void;
   onToggleEditTag: (tag: Tag) => void;
   onSubmitEditTask: (e: React.FormEvent, linked?: LinkedTaskRef[]) => void | Promise<void>;
+  /** Saves a linked task opened inside the edit modal (see EditTaskModal). */
+  onSaveLinkedTask: (task: Task, linked?: LinkedTaskRef[]) => Promise<boolean>;
 
   // Create tag
   showCreateTagModal: boolean;
@@ -94,7 +96,7 @@ interface TaskManagerModalsProps {
 const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   showNewTaskModal, onCloseNewTaskModal, newTask, onTaskChange, onToggleTag,
   onSubmitTask, activeTaskCount, occupiedPriorityLevels, tags, allTasks,
-  showEditTaskModal, editTask, onCloseEditTaskModal, onEditTaskChange, onToggleEditTag, onSubmitEditTask,
+  showEditTaskModal, editTask, onCloseEditTaskModal, onEditTaskChange, onToggleEditTag, onSubmitEditTask, onSaveLinkedTask,
   showCreateTagModal, onCloseCreateTagModal, newTag, onTagChange, onSubmitTag,
   editingTag, showEditTagModal, onCloseEditTagModal, onDeleteTag, onArchiveTag, onEditTag, onOpenCreateTag,
   showCreateHabitModal, onCloseCreateHabitModal, newHabit, onHabitChange, onSubmitHabit,
@@ -127,6 +129,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         tags={tags}
         onToggleTag={onToggleEditTag}
         onSubmit={onSubmitEditTask}
+        onSaveLinkedTask={onSaveLinkedTask}
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
         allTasks={allTasks}

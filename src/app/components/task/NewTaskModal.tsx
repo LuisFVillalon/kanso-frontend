@@ -51,7 +51,7 @@ const NewTaskForm: React.FC<NewTaskModalProps> = ({
     e.preventDefault();
     setError(null);
     setLinkedError(null);
-    if (linked.some(d => d.kind === 'new' && !d.title.trim())) {
+    if (linked.some(d => d.kind === 'new' && !d.form.title.trim())) {
       setLinkedError('Give each new linked task a title, or remove it.');
       return;
     }
@@ -103,6 +103,12 @@ const NewTaskForm: React.FC<NewTaskModalProps> = ({
                 allTasks={allTasks}
                 parentId={created?.id ?? null}
                 parentDueDate={newTask.due_date}
+                parentTitle={newTask.title}
+                parentTags={newTask.tags}
+                parentPriority={newTask.priority}
+                tags={tags}
+                activeTaskCount={activeTaskCount + 1}
+                usedPriorityLevels={usedPriorityLevels}
                 drafts={linked}
                 onChange={setLinked}
                 mode={created ? 'edit' : 'create'}

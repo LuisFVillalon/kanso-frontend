@@ -1,16 +1,20 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Check, GripVertical, Info, Plus, Search, Timer, X,
+  AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, GripVertical, Plus, Search, SquarePen, Timer, X,
 } from 'lucide-react';
-import { ParentSummary, Task } from '@/app/types/task';
-import { formatDueDate, formatDueDateShort, getDueStatus } from '@/app/utils/taskUtils';
+import { ParentSummary, Tag, Task } from '@/app/types/task';
+import { formatDueDate, formatDueDateShort, formatTime12Hour, getDueStatus } from '@/app/utils/taskUtils';
 import { formatDuration } from '@/app/utils/duration';
 import {
-  LINKED_TITLE_MAX, LinkCandidate, LinkedDraft, dueDateStr, linkCandidates, moveItem,
+  LINKED_TITLE_MAX, LinkCandidate, LinkedDraft, blankLinkedTaskForm, dueDateStr, isDueAfterParent, linkCandidates, moveItem,
 } from '@/app/utils/linkedTasks';
-import { LinkedProgressBar } from './LinkedTasksList';
+import { toLocalTimeStr } from '@/app/utils/dateUtils';
+import { LinkedProgressBar } from './LinkedTasksSummary';
+import { TaskFormData } from './TaskFormFields';
+import NewLinkedTaskFields from './NewLinkedTaskFields';
 import TaskStatusChip from './TaskStatusChip';
 import ParentTrail from './ParentTrail';
+import Callout from './Callout';
 
 interface LinkedTasksFieldProps {
   /** Every loaded (active) task. */
@@ -21,6 +25,16 @@ interface LinkedTasksFieldProps {
   parentOfParent?: number | null;
   /** The edited task's due date, for the "due after this task" warning. */
   parentDueDate: string | Date | null;
+  /** The edited task's title, tags and priority as the form has them now; new linked tasks start with its tags. */
+  parentTitle: string;
+  parentTags: Tag[];
+  parentPriority?: number | null;
+  /** Every tag, for the new linked tasks' tag pickers. */
+  tags: Tag[];
+  activeTaskCount: number;
+  usedPriorityLevels: number[];
+  /** Opens a linked task in the same editor; without it, rows have no open button. */
+  onOpenTask?: (task: Task) => void;
   drafts: LinkedDraft[];
   onChange: (drafts: LinkedDraft[]) => void;
   /** Wording for the save button the hints refer to. */
@@ -41,16 +55,29 @@ interface RowData {
   isNew: boolean;
 }
 
+const timeStr = (v: string | Date | null) => (v instanceof Date ? toLocalTimeStr(v) : v || null);
+
+/** "Oct 23 · 5:00 PM · 1h · P3": what a new linked task's row shows while its fields are hidden. */
+const newSummary = (f: TaskFormData) => [
+  f.due_date && formatDueDateShort(dueDateStr(f.due_date)),
+  timeStr(f.due_time) && formatTime12Hour(timeStr(f.due_time)),
+  f.estimated_time != null && formatDuration(Number(f.estimated_time)),
+  f.priority != null && `P${f.priority}`,
+].filter(Boolean).join(' · ');
+
 /**
  * The "Linked tasks" section of the create and edit task forms: tasks that
  * lead up to completing this one. Links existing tasks through a searchable
- * picker, adds new ones by title (created on save, with this task's tags),
- * reorders them by drag or ↑/↓, and unlinks them with × (the task itself
- * stays). Shows "x of y done" progress, the summed estimate and a warning
- * when a linked task is due after this one. Saving is the form's job.
+ * picker, adds new ones (created on save) that open with every task field,
+ * starting with this task's tags, reorders them by drag or ↑/↓, and unlinks
+ * them with × (the task itself stays). An existing row's pencil opens that
+ * task in the same editor. Shows "x of y done" progress, the summed estimate
+ * and a warning when a linked task is due after this one. Saving is the
+ * form's job.
  */
 const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
-  allTasks, parentId, parentOfParent = null, parentDueDate, drafts, onChange, mode, error,
+  allTasks, parentId, parentOfParent = null, parentDueDate, parentTitle, parentTags, parentPriority = null,
+  tags, activeTaskCount, usedPriorityLevels, onOpenTask, drafts, onChange, mode, error,
 }) => {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -59,14 +86,25 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<{ index: number; after: boolean } | null>(null);
   const [armed, setArmed] = useState<number | null>(null);
+  // New rows whose fields are showing, by draft key.
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
   const gripRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const newInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   const byId = useMemo(() => new Map(allTasks.map(t => [t.id, t])), [allTasks]);
   // A row whose task has since been deleted or archived elsewhere drops out.
   const visible = drafts.filter(d => d.kind === 'new' || byId.has(d.id));
   const rows: RowData[] = visible.map(d => {
-    if (d.kind === 'new') return { title: d.title, done: false, due: null, estimate: null, isNew: true };
+    if (d.kind === 'new') {
+      return {
+        title: d.form.title,
+        done: false,
+        due: dueDateStr(d.form.due_date),
+        estimate: d.form.estimated_time ?? null,
+        isNew: true,
+      };
+    }
     const t = byId.get(d.id)!;
     return {
       title: t.title,
@@ -90,7 +128,8 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
   const estimate = rows.reduce((sum, r) => sum + (r.estimate ?? 0), 0);
   const newCount = rows.filter(r => r.isNew).length;
   const parentDue = dueDateStr(parentDueDate);
-  const isLate = (r: RowData) => !r.done && !!r.due && !!parentDue && r.due > parentDue;
+  const isLate = (r: RowData) => !r.done && isDueAfterParent(r.due, parentDue);
+  const childCount = (id: number) => allTasks.filter(t => t.parent_task_id === id).length;
   const late = rows.filter(isLate);
   const saveWord = mode === 'create' ? 'create' : 'save';
 
@@ -104,16 +143,36 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
     setOpen(false);
   };
 
+  // A new row opens with its fields showing (and the others' hidden), ready for a due date.
   const addNew = () => {
     const title = newTitle.trim();
-    if (!title) return;
-    onChange([...visible, { kind: 'new', key: `new-${++nextDraftKey}`, title }]);
+    if (!title) {
+      newInputRef.current?.focus();
+      return;
+    }
+    const key = `new-${++nextDraftKey}`;
+    onChange([...visible, { kind: 'new', key, form: blankLinkedTaskForm(parentTags, title) }]);
+    setOpenKeys(new Set([key]));
     setNewTitle('');
-    newInputRef.current?.focus();
+    setTimeout(() => listRef.current?.querySelector<HTMLInputElement>(`[data-draft="${key}"] input[type="date"]`)?.focus());
   };
 
-  const rename = (index: number, title: string) =>
-    onChange(visible.map((d, i) => (i === index && d.kind === 'new' ? { ...d, title } : d)));
+  const toggleOpen = (key: string) =>
+    setOpenKeys(prev => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+
+  const updateNew = (index: number, form: TaskFormData) =>
+    onChange(visible.map((d, i) => (i === index && d.kind === 'new' ? { ...d, form } : d)));
+
+  // Ranks picked for the task itself or another new linked task aren't free for this one.
+  const usedFor = (index: number) => [
+    ...usedPriorityLevels,
+    ...(parentPriority != null ? [parentPriority] : []),
+    ...visible.flatMap((d, i) => (i !== index && d.kind === 'new' && d.form.priority != null ? [d.form.priority] : [])),
+  ];
 
   const remove = (index: number) => onChange(visible.filter((_, i) => i !== index));
 
@@ -219,12 +278,15 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
             </span>
           )}
         </div>
-        <p className="text-xs text-text-muted mt-1">Tasks that need to happen before this one is finished.</p>
+        <p className="text-xs text-text-muted mt-1">
+          Tasks that need to happen before this one is finished. Each one is a full task in your list.
+        </p>
       </div>
 
       {total > 0 && <LinkedProgressBar done={done} total={total} />}
 
       <ul
+        ref={listRef}
         aria-labelledby="linked-tasks-label"
         className="list-none flex flex-col gap-1 rounded-xl border border-border p-1.5"
         style={{ backgroundColor: 'var(--tm-surface-raised)' }}
@@ -237,12 +299,18 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
         {visible.map((d, i) => {
           const r = rows[i];
           const lateRow = isLate(r);
+          const key = draftKey(d);
+          const isOpen = d.kind === 'new' && openKeys.has(key);
+          const existing = d.kind === 'existing' ? byId.get(d.id)! : null;
+          const ownLinked = existing ? childCount(existing.id) : 0;
+          const name = r.title || 'new task';
           const dropLine = dropAt?.index === i && dragFrom !== null && dragFrom !== i
             ? `inset 0 ${dropAt.after ? '-2px' : '2px'} 0 var(--tm-accent)`
             : undefined;
           return (
             <li
-              key={draftKey(d)}
+              key={key}
+              data-draft={key}
               draggable={armed === i}
               onDragStart={e => {
                 setDragFrom(i);
@@ -257,88 +325,131 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
               }}
               onDrop={e => onDrop(e, i)}
               onDragEnd={endDrag}
-              className="flex items-center gap-2 rounded-lg border border-border-subtle px-2 py-[7px]"
+              className="rounded-lg border"
               style={{
                 backgroundColor: 'var(--tm-surface)',
+                borderColor: r.isNew ? 'var(--tm-accent)' : 'var(--tm-border-subtle)',
                 opacity: dragFrom === i ? 0.4 : 1,
                 boxShadow: dropLine,
               }}
             >
-              <button
-                type="button"
-                ref={el => { gripRefs.current[i] = el; }}
-                onPointerDown={() => setArmed(i)}
-                onPointerUp={() => dragFrom == null && setArmed(null)}
-                onKeyDown={e => onGripKeyDown(e, i)}
-                className="btn btn-ghost p-0.5 flex-shrink-0 cursor-grab text-text-muted"
-                aria-label={`Reorder ${r.title || 'new task'}. Use the up and down arrow keys`}
-                title="Drag, or use ↑/↓"
-              >
-                <GripVertical className="w-3.5 h-3.5" />
-              </button>
-              <CheckBox done={r.done} />
-              <span className="flex-1 min-w-0">
-                {r.isNew ? (
-                  <input
-                    type="text"
-                    value={r.title}
-                    maxLength={LINKED_TITLE_MAX}
-                    onChange={e => rename(i, e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && e.preventDefault()}
-                    aria-label="New linked task title"
-                    className="w-full border-0 bg-transparent p-0 text-sm font-medium text-text-primary outline-none"
-                  />
-                ) : (
-                  <span className={`block truncate text-sm font-medium ${r.done ? 'line-through text-text-muted' : 'text-text-primary'}`}>
-                    {r.title}
+              <div className="flex items-center gap-2 px-2 py-[7px]">
+                <button
+                  type="button"
+                  ref={el => { gripRefs.current[i] = el; }}
+                  onPointerDown={() => setArmed(i)}
+                  onPointerUp={() => dragFrom == null && setArmed(null)}
+                  onKeyDown={e => onGripKeyDown(e, i)}
+                  className="btn btn-ghost p-0.5 flex-shrink-0 cursor-grab text-text-muted"
+                  aria-label={`Reorder ${name}. Use the up and down arrow keys`}
+                  title="Drag, or use ↑/↓"
+                >
+                  <GripVertical className="w-3.5 h-3.5" />
+                </button>
+                {r.isNew ? <NewBadge /> : <CheckBox done={r.done} />}
+                <span className="flex-1 min-w-0">
+                  <span
+                    className={`block truncate text-sm font-medium ${
+                      r.done ? 'line-through text-text-muted' : r.title ? 'text-text-primary' : 'text-text-muted'
+                    }`}
+                  >
+                    {r.title || 'Untitled'}
+                  </span>
+                </span>
+                {d.kind === 'new' && !isOpen && newSummary(d.form) && (
+                  <span className="hidden sm:inline flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
+                    {newSummary(d.form)}
                   </span>
                 )}
-              </span>
-              {r.isNew && <NewBadge />}
-              {r.due && (
-                <span
-                  className="flex-shrink-0 inline-flex items-center gap-1 text-xs whitespace-nowrap"
-                  style={{ color: lateRow ? 'var(--tm-warning)' : 'var(--tm-text-muted)' }}
-                  title={lateRow ? 'Due after this task' : 'Due'}
-                >
-                  {lateRow && <AlertTriangle className="w-3 h-3" />}
-                  {formatDueDateShort(r.due)}
+                {!r.isNew && r.due && (
+                  <span
+                    className="flex-shrink-0 inline-flex items-center gap-1 text-xs whitespace-nowrap"
+                    style={{ color: lateRow ? 'var(--tm-warning)' : 'var(--tm-text-muted)' }}
+                    title={lateRow ? 'Due after this task' : 'Due'}
+                  >
+                    {lateRow && <AlertTriangle className="w-3 h-3" />}
+                    {formatDueDateShort(r.due)}
+                  </span>
+                )}
+                {!r.isNew && r.estimate != null && (
+                  <span className="hidden sm:inline flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
+                    {formatDuration(Number(r.estimate))}
+                  </span>
+                )}
+                {ownLinked > 0 && (
+                  <span
+                    className="flex-shrink-0 rounded-full px-1.5 text-[10.5px] font-bold text-text-secondary"
+                    style={{ backgroundColor: 'var(--tm-surface-raised)' }}
+                    title={`${ownLinked} linked task${ownLinked === 1 ? '' : 's'} under it`}
+                  >
+                    +{ownLinked}
+                  </span>
+                )}
+                <span className="flex items-center flex-shrink-0">
+                  {d.kind === 'new' && (
+                    <button
+                      type="button"
+                      onClick={() => toggleOpen(key)}
+                      className="btn btn-ghost p-1"
+                      aria-expanded={isOpen}
+                      aria-label={`${isOpen ? 'Hide details of' : 'Edit details of'} ${name}`}
+                      title={isOpen ? 'Hide details' : 'Edit details'}
+                    >
+                      {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                    </button>
+                  )}
+                  {existing && onOpenTask && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenTask(existing)}
+                      className="btn btn-ghost p-1"
+                      aria-label={`Open ${existing.title}`}
+                      title="Open this task here"
+                    >
+                      <SquarePen className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => move(i, i - 1)}
+                    disabled={i === 0}
+                    className="btn btn-ghost p-1 hidden sm:inline-flex disabled:opacity-30"
+                    aria-label={`Move ${name} up`}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(i, i + 1)}
+                    disabled={i === total - 1}
+                    className="btn btn-ghost p-1 hidden sm:inline-flex disabled:opacity-30"
+                    aria-label={`Move ${name} down`}
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(i)}
+                    className="btn btn-ghost p-1 hover:text-[var(--tm-danger)]"
+                    aria-label={`Remove ${name}`}
+                    title={r.isNew ? 'Remove' : 'Unlink (the task itself stays)'}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </span>
+              </div>
+              {d.kind === 'new' && isOpen && (
+                <div className="space-y-4 px-2.5 pt-3 pb-3 border-t border-dashed border-border">
+                  <NewLinkedTaskFields
+                    values={d.form}
+                    onChange={form => updateNew(i, form)}
+                    parent={{ title: parentTitle, due_date: parentDueDate }}
+                    tags={tags}
+                    activeTaskCount={activeTaskCount + newCount}
+                    usedPriorityLevels={usedFor(i)}
+                  />
+                </div>
               )}
-              {r.estimate != null && (
-                <span className="hidden sm:inline flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
-                  {formatDuration(Number(r.estimate))}
-                </span>
-              )}
-              <span className="flex items-center flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => move(i, i - 1)}
-                  disabled={i === 0}
-                  className="btn btn-ghost p-1 hidden sm:inline-flex disabled:opacity-30"
-                  aria-label={`Move ${r.title || 'new task'} up`}
-                >
-                  <ArrowUp className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => move(i, i + 1)}
-                  disabled={i === total - 1}
-                  className="btn btn-ghost p-1 hidden sm:inline-flex disabled:opacity-30"
-                  aria-label={`Move ${r.title || 'new task'} down`}
-                >
-                  <ArrowDown className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(i)}
-                  className="btn btn-ghost p-1 hover:text-[var(--tm-danger)]"
-                  aria-label={`Remove ${r.title || 'new task'}`}
-                  title={r.isNew ? 'Remove' : 'Unlink (the task itself stays)'}
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </span>
             </li>
           );
         })}
@@ -417,8 +528,8 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
           <button type="button" onClick={addNew} className="btn btn-secondary px-4">Add</button>
         </div>
         <p id="linked-new-hint" className="text-xs text-text-muted">
-          Type just the title. It&apos;s added to the list above as <NewBadge />, and the task is created
-          when you {saveWord} this one, with this task&apos;s tags. You can fill in its other details later.
+          It&apos;s added to the list above as <NewBadge /> and opens with every field, so you can set its due
+          date, priority, reminder and the rest now. It&apos;s created when you {saveWord} this one.
         </p>
       </div>
 
@@ -431,7 +542,7 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
           {newCount > 0 && (
             <span className="inline-flex items-center gap-1">
               <Plus className="w-3 h-3" />
-              {newCount === 1 ? '1 new task' : `${newCount} new tasks`} created on save, with this task&apos;s tags
+              {newCount === 1 ? '1 new task' : `${newCount} new tasks`} created on save
             </span>
           )}
         </div>
@@ -473,22 +584,6 @@ const NewBadge: React.FC = () => (
     New
   </span>
 );
-
-const Callout: React.FC<{ tone: 'warning' | 'danger' | 'info'; role?: string; children: React.ReactNode }> = ({
-  tone, role, children,
-}) => {
-  const Icon = tone === 'info' ? Info : AlertTriangle;
-  return (
-    <div
-      role={role}
-      className="flex gap-2 rounded-lg px-3 py-2.5 text-[13px] leading-snug text-text-primary"
-      style={{ backgroundColor: `var(--tm-${tone === 'info' ? 'accent' : tone}-subtle)` }}
-    >
-      <Icon className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: `var(--tm-${tone === 'info' ? 'accent' : tone})` }} />
-      <div>{children}</div>
-    </div>
-  );
-};
 
 /**
  * "Leads up to [parent trail] [Unlink]" on the edit form of a linked task:

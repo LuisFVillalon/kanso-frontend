@@ -34,8 +34,9 @@ const Probe: React.FC<ProbeProps & { onResult: (r: typeof result) => void }> = (
 };
 const run = (props: ProbeProps) => {
   act(() => root.render(<Probe {...props} onResult={r => { result = r; }} />));
-  return result.taskGroups.map(g => [g.task.title, g.linked.map(l => l.task.title), `${g.linkedDone}/${g.linkedTotal}`]);
+  return result.visibleTasks.map(t => [t.title]);
 };
+const listed = (props: ProbeProps) => run(props).map(([title]) => title);
 
 beforeEach(() => {
   container = document.createElement('div');
@@ -45,29 +46,28 @@ beforeEach(() => {
 afterEach(() => act(() => root.unmount()));
 
 describe('useTaskFiltering with linked tasks', () => {
-  it('nests linked tasks under their parent instead of listing them top-level', () => {
-    expect(run({})).toEqual([
-      ['Laundry', [], '0/0'],
-      ['Apply to Google', ['Update résumé', 'Mock interview', 'Ask for a reference'], '1/3'],
-    ]);
+  it('lists every linked task as its own task, in the sort order', () => {
+    expect(listed({})).toEqual(['Update résumé', 'Laundry', 'Apply to Google', 'Mock interview', 'Ask for a reference']);
   });
 
-  it('keeps the parent when a search matches only a linked task', () => {
-    expect(run({ search: 'mock' })).toEqual([
-      ['Apply to Google', ['Mock interview'], '1/3'],
-    ]);
+  it('judges each task by the search on its own, without pulling in its parent', () => {
+    expect(listed({ search: 'mock' })).toEqual(['Mock interview']);
+    expect(listed({ search: 'google' })).toEqual(['Apply to Google']);
   });
 
-  it('keeps the parent when a tag filter matches only a linked task', () => {
-    expect(run({ selectedTags: [school] })).toEqual([
-      ['Apply to Google', ['Mock interview'], '1/3'],
-    ]);
+  it('judges each task by the tag filter on its own', () => {
+    expect(listed({ selectedTags: [school] })).toEqual(['Mock interview']);
   });
 
-  it('keeps the parent when the completed filter matches only a linked task', () => {
-    expect(run({ view: { show: 'done' } })).toEqual([
-      ['Apply to Google', ['Update résumé'], '1/3'],
-    ]);
+  it('judges each task by Show on its own', () => {
+    expect(listed({ view: { show: 'done' } })).toEqual(['Update résumé']);
+    expect(listed({ view: { show: 'open' } })).toEqual(['Laundry', 'Apply to Google', 'Mock interview', 'Ask for a reference']);
+  });
+
+  it('lists only tasks that are not linked under a loaded task with "Only top-level tasks"', () => {
+    expect(listed({ view: { topLevelOnly: true } })).toEqual(['Laundry', 'Apply to Google']);
+    // A linked task whose parent isn't loaded counts as top-level.
+    expect(listed({ view: { topLevelOnly: true }, list: [task(7, 'Orphan', { parent_task_id: 99 })] })).toEqual(['Orphan']);
   });
 
   it('counts each task once in the stats', () => {
@@ -83,7 +83,7 @@ const quiz = task(12, 'Quiz', { due_date: '2026-10-22', priority: 3, estimated_t
 const gym = task(13, 'Gym', { due_date: '2026-10-23', priority: null, estimated_time: 60, created_date: '2026-10-04', completed: true });
 const read = task(14, 'Read', { due_date: null, priority: 1, estimated_time: null, created_date: '2026-10-02' });
 const flat = [essay, quiz, gym, read];
-const titles = (props: ProbeProps) => run({ list: flat, ...props }).map(([title]) => title);
+const titles = (props: ProbeProps) => listed({ list: flat, ...props });
 
 describe('useTaskFiltering show and sort', () => {
   it('shows open, completed or all tasks', () => {
@@ -112,6 +112,8 @@ describe('useTaskFiltering show and sort', () => {
 describe('isTaskView', () => {
   it('accepts a saved view and rejects anything else', () => {
     expect(isTaskView({ show: 'done', sortKey: 'priority', sortOrder: 'desc' })).toBe(true);
+    expect(isTaskView({ show: 'open', sortKey: 'due', sortOrder: 'asc', topLevelOnly: true })).toBe(true);
+    expect(isTaskView({ show: 'open', sortKey: 'due', sortOrder: 'asc', topLevelOnly: 'yes' })).toBe(false);
     expect(isTaskView({ show: 'completed', sortKey: 'due', sortOrder: 'asc' })).toBe(false);
     expect(isTaskView('all')).toBe(false);
     expect(isTaskView(null)).toBe(false);

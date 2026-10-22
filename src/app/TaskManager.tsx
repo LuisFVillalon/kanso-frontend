@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/app/context/AuthContext';
 import { useToast } from '@/app/context/ToastContext';
 import { useAppShell } from '@/app/context/AppShellContext';
-import { Tag, TaskView } from '@/app/types/task';
+import { BaseTaskForm, Tag, Task, TaskView } from '@/app/types/task';
 import { useTasksContext } from '@/app/context/TasksContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
@@ -23,6 +23,7 @@ import DragHandle from '@/app/components/common/DragHandle';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
 import HeaderSearch from '@/app/components/common/HeaderSearch';
 import TasksPanel from '@/app/components/task/TasksPanel';
+import type { TaskFormData } from '@/app/components/task/TaskFormFields';
 import NotesPanel, { isNoteOrder, type NoteOrder } from '@/app/components/notes/NotesPanel';
 import CanvasPanel from '@/app/components/canvas/CanvasPanel';
 import PanelCarousel, {
@@ -79,7 +80,7 @@ const TaskManager: React.FC = () => {
   const showDebriefPanels = useMountTransition(!doodleMode && !focusMode);
   const showDoodleToolbar = useMountTransition(doodleMode);
 
-  const { tasks, isLoading, toggleComplete, completeWithLinked, deleteTask, archiveTask, updateTask, refreshTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+  const { tasks, isLoading, toggleComplete, completeWithLinked, deleteTask, archiveTask, addTask, updateTask, refreshTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
   // Tasks added from Canvas: synced on load and on a Canvas panel refresh.
   const canvasTaskSync = useCanvasTaskSync({ enabled: !isLoading && !isDemo, tasks, refreshTasks });
   // The Canvas panel is only offered with Canvas connected. Until the first
@@ -114,6 +115,17 @@ const TaskManager: React.FC = () => {
   if (!tagsLoading && selectedTags.some(t => !tags.some(tag => tag.id === t.id))) {
     setSelectedTags(selectedTags.filter(t => tags.some(tag => tag.id === t.id)));
   }
+
+  // "Show it" on a task the filters hide: clear them all so every task shows.
+  const showAllTasks = () => {
+    setTaskView({ ...taskView, show: 'all', topLevelOnly: false });
+    setSearchTerm('');
+    setSelectedTags([]);
+  };
+
+  // The "+ Linked task" form under a card: creates a fully specified task under it.
+  const createLinkedTask = (parent: Task, form: TaskFormData) =>
+    addTask({ id: 0, created_date: '', ...form, parent_task_id: parent.id } as BaseTaskForm);
 
   const updatePriority = async (taskId: number, priority: number | null) => {
     const task = tasks.find(t => t.id === taskId);
@@ -176,7 +188,7 @@ const TaskManager: React.FC = () => {
   const openMoodCheckin = (date?: string) =>
     setMoodCheckinDate(date ?? toLocalDateStr(checkinDayAt(new Date(), profile.dayStartTime, profile.shutoffTime)));
 
-  const { taskGroups, stats } = useTaskFiltering(tasks, taskView, searchTerm, selectedTags);
+  const { visibleTasks, stats } = useTaskFiltering(tasks, taskView, searchTerm, selectedTags);
 
   const {
     habits, habitsLoading, toggle: toggleHabit, pendingHabitIds, syncToken: habitSyncToken,
@@ -264,13 +276,16 @@ const TaskManager: React.FC = () => {
       return (
         <TasksPanel
           tags={tags}
-          taskGroups={taskGroups}
+          tasks={visibleTasks}
+          allTasks={tasks}
           onToggleComplete={toggleComplete}
           onCompleteWithLinked={completeWithLinked}
           onDeleteTask={deleteTask}
           onArchiveTask={archiveTask}
           onUpdatePriority={updatePriority}
           onEditTask={shell.openEditTask}
+          onCreateLinkedTask={createLinkedTask}
+          onShowAll={showAllTasks}
           activeTaskCount={activeTaskCount}
           occupiedPriorities={occupiedPriorityLevels}
           compact={widthPct < 40}
