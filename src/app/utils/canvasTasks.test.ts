@@ -63,6 +63,12 @@ describe('canvasAssignmentId', () => {
       .toBe(31);
   });
 
+  it('is unknown for a calendar feed item the backend marks as not linkable', () => {
+    expect(canvasAssignmentId(item({ linkable: false }))).toBeNull();
+    expect(canvasAssignmentId(item({ kind: 'event', html_url: `${HOST}/calendar`, linkable: false }))).toBeNull();
+    expect(canvasAssignmentId(item({ linkable: true }))).toBe(9876);
+  });
+
   it("isn't known for events, pages and notes", () => {
     expect(canvasAssignmentId(item({ kind: 'event', html_url: `${HOST}/calendar` }))).toBeNull();
     expect(canvasAssignmentId(item({ kind: 'page', html_url: `${HOST}/courses/1001/pages/intro` }))).toBeNull();
@@ -99,6 +105,11 @@ describe('canvasTaskForm', () => {
       canvas_html_url: `${HOST}/courses/1001/assignments/9876`,
       canvas_due_at: item().due_at,
     });
+  });
+
+  it("keeps an all-day feed item's day as canvas_due_date, and none for a timed item", () => {
+    expect(canvasTaskForm(item({ day: '2026-10-23', linkable: true }), 9876, null, []).canvas_due_date).toBe('2026-10-23');
+    expect(canvasTaskForm(item(), 9876, null, []).canvas_due_date).toBeNull();
   });
 
   it('sends no canvas_due_at for an item without a due date', () => {

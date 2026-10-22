@@ -76,6 +76,8 @@ export interface Task {
   canvas_html_url?: string | null;
   /** The assignment's due_at as Canvas last gave it, so the backend can tell Canvas moving it from the user editing the date. */
   canvas_due_at?: string | null;
+  /** The day an all-day Canvas calendar feed item falls on, which the feed sync compares by date alone. */
+  canvas_due_date?: string | null;
 }
 
 /** A task above another one, as a parent trail shows it. */
@@ -102,6 +104,7 @@ export interface BaseTaskForm {
   canvas_assignment_id?: number | null;
   canvas_html_url?: string | null;
   canvas_due_at?: string | null;
+  canvas_due_date?: string | null;
 }
 
 

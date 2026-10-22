@@ -137,6 +137,10 @@ export interface CanvasItem {
   submission: CanvasSubmission | null;
   /** The Canvas assignment behind a planner quiz or discussion, when the backend sends it. */
   assignment_id?: number | null;
+  /** A calendar feed item that can be added to tasks: only assignments; token items leave it out. */
+  linkable?: boolean;
+  /** A feed item due all day: its date ("2026-10-23"), which a task added from it keeps as canvas_due_date. */
+  day?: string | null;
 }
 
 /** A course's assignment; quizzes are assignments too, with kind "quiz". */

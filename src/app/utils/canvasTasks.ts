@@ -23,9 +23,11 @@ const pathOf = (url: string | null | undefined): string | null => {
 /**
  * The Canvas assignment an item is, which a task added from it follows, or
  * null when it isn't one (an event, a page, a note, a classic quiz or
- * discussion the backend didn't name the assignment of).
+ * discussion the backend didn't name the assignment of, or a calendar feed
+ * item the backend marks as not linkable).
  */
 export function canvasAssignmentId(item: CanvasItem): number | null {
+  if (item.linkable === false) return null;
   if (typeof item.assignment_id === 'number') return item.assignment_id;
   // A course's assignment list: every row is an assignment, quizzes included.
   if ('submission_types' in item) return item.id;
@@ -72,6 +74,7 @@ export function canvasTaskForm(
     canvas_assignment_id: assignmentId,
     canvas_html_url: item.html_url,
     canvas_due_at: item.due_at,
+    canvas_due_date: item.day ?? null,
   };
 }
 

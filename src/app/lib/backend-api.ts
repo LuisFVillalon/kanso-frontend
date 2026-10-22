@@ -173,6 +173,7 @@ export async function createTask(task: {
   canvas_assignment_id?: number | null;
   canvas_html_url?: string | null;
   canvas_due_at?: string | null;
+  canvas_due_date?: string | null;
 }) {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/create-task`, {
@@ -905,13 +906,15 @@ export async function connectCanvas(baseUrl: string, token: string, allowAccount
  * Connects, replaces or reconnects Canvas with the user's private calendar
  * feed link (Canvas → Calendar → Calendar Feed): the backend reads the feed
  * once before storing the link, so a link Canvas won't serve changes nothing.
- * A webcal:// link, as Canvas often shows it, is read as https://. A feed at
- * a different school than the current connection fails with
- * canvas_account_changed unless `allowAccountChange` confirms the switch.
+ * A webcal:// link, as Canvas often shows it, is read as https://. The
+ * browser's time zone goes along as `tz`: the backend keeps it with the
+ * connection and puts all-day items' due times in it. A feed at a different
+ * school than the current connection fails with canvas_account_changed
+ * unless `allowAccountChange` confirms the switch.
  */
 export async function connectCanvasFeed(feedUrl: string, allowAccountChange = false): Promise<CanvasConnection> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/canvas/connection/feed`, {
+  const res = await fetch(`${API_BASE_URL}/canvas/connection/feed${canvasReadQuery(false)}`, {
     method: "PUT",
     headers,
     body: JSON.stringify({ feed_url: feedUrl, allow_account_change: allowAccountChange }),
