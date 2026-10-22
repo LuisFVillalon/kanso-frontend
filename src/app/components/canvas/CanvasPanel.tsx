@@ -303,6 +303,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     <div
       data-canvas-status={status}
       className="card-glass flex flex-col overflow-hidden h-[50vh] lg:h-[600px]"
+      data-panel-body
       style={heightPx ? { height: `${heightPx}px` } : undefined}
     >
       <div className="flex items-center gap-2 px-3.5 pt-3 pb-2.5 border-b border-border-subtle">

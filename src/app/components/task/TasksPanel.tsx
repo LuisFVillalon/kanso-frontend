@@ -173,6 +173,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
       ) : (
         <div
           className="flex flex-col gap-2 overflow-y-auto h-[50vh] lg:h-[600px] pl-2 pr-1 scrollbar-custom"
+          data-panel-body
           style={heightPx ? { height: `${heightPx}px` } : undefined}
         >
           {taskGroups.map((group, index) => (

@@ -147,9 +147,10 @@ const TaskManager: React.FC = () => {
     tasksWidthPct,
     panelHeightPx,
     splitContainerRef,
+    panelAreaRef,
     handleSplitterMouseDown,
     handleHeightSplitterMouseDown,
-  } = useSplitPanel();
+  } = useSplitPanel(!isLoading && !tagsLoading && showMainContent);
 
   const openNotifiedTask = (taskId: number) => {
     const task = tasks.find(t => t.id === taskId);
@@ -412,7 +413,7 @@ const TaskManager: React.FC = () => {
             )}
 
             {/* Tasks, Notes & Canvas — two at a time in the resizable split */}
-            <div className="space-y-4">
+            <div ref={panelAreaRef} className="space-y-4">
               <PanelCarousel
                 ref={carouselRef}
                 value={homePanels}
