@@ -2,7 +2,6 @@
 
 import React, { useEffect, useId, useRef, useState } from 'react';
 import {
-  FINAL_WARNING_MINUTES,
   REMINDER_MINUTES_MAX,
   REMINDER_PRESETS,
   formatLeadTime,
@@ -28,8 +27,6 @@ interface ReminderLeadPickerProps {
   /** Offers a "Default" choice showing this lead; leave out where there is no default to fall back on. */
   defaultMinutes?: number;
   disabled?: boolean;
-  /** Notes when a lead is short enough to leave only the task's final warning; off where there is none. */
-  finalWarningNote?: boolean;
   /** One-click leads; the task reminder ones unless given. */
   presets?: number[];
   /** The largest lead the API accepts; one week unless given. */
@@ -45,7 +42,7 @@ interface ReminderLeadPickerProps {
  * input stays invalid so the enclosing form won't submit.
  */
 const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
-  value, onChange, defaultMinutes, disabled, finalWarningNote = true,
+  value, onChange, defaultMinutes, disabled,
   presets = REMINDER_PRESETS, maxMinutes = REMINDER_MINUTES_MAX, 'aria-labelledby': labelledBy,
 }) => {
   const allowDefault = defaultMinutes !== undefined;
@@ -90,9 +87,7 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
     if (minutes >= 1 && minutes <= maxMinutes) onChange(minutes);
   };
 
-  const effective = custom ? (customValid ? customMinutes : null) : (value ?? defaultMinutes ?? null);
-
-  return (
+    return (
     <div className="space-y-2">
       <select
         value={selected}
@@ -139,11 +134,6 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
       {custom && !disabled && !customValid && (
         <p id={errorId} className="text-xs" style={{ color: 'var(--tm-danger)' }}>
           {customError}
-        </p>
-      )}
-      {finalWarningNote && !disabled && effective !== null && effective <= FINAL_WARNING_MINUTES && (
-        <p className="text-xs text-text-muted">
-          Leads of {FINAL_WARNING_MINUTES} minutes or less send just the {FINAL_WARNING_MINUTES}-minute final warning.
         </p>
       )}
     </div>

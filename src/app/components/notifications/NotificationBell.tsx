@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import {
-  AlarmClock, Bell, BellRing, CalendarX, CheckCheck, CircleDot, Loader2, Repeat, Smile, Sun, X,
+  Bell, BellRing, CalendarX, CheckCheck, CircleDot, Loader2, Repeat, Smile, Sun, X,
 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNotifications } from '@/app/context/NotificationsContextValue';
@@ -14,7 +14,6 @@ import { formatRelativeTime, isMoodType, moodCheckinDates } from '@/app/utils/no
 const TYPE_ICON: Record<string, { icon: React.ElementType; color: string }> = {
   due_today:      { icon: Sun,           color: 'var(--tm-accent)' },
   task_reminder:  { icon: BellRing,      color: 'var(--tm-accent)' },
-  final_warning:  { icon: AlarmClock,    color: 'var(--tm-warning)' },
   // A slipped task gets the gentle amber dot, never red (brand/DESIGN.md).
   overdue:        { icon: CircleDot,     color: 'var(--tm-slipped-dot)' },
   habit_reminder: { icon: Repeat,        color: 'var(--tm-success-text)' },

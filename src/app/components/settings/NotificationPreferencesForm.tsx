@@ -11,11 +11,12 @@ import { MOOD_REMINDER_MINUTES_MAX, MOOD_REMINDER_PRESETS } from '@/app/utils/no
 /** Switch labels, in the order the day runs within each group. Other types the server lists aren't offered. */
 const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
   task_reminder:  { label: 'Reminder before a task is due', hint: "At each task's reminder time." },
-  final_warning:  { label: 'Final warning', hint: 'Always 30 minutes before a task is due, on top of its reminder.' },
   mood_reminder:  { label: 'Mood check-in reminder', hint: "Before you call it a day, if today's mood isn't logged yet." },
   mood_missed:    { label: 'Missed mood check-ins', hint: 'When days go by without a mood check-in.' },
 };
-const REMINDER_TYPES = ['task_reminder', 'final_warning'];
+const REMINDER_TYPES = ['task_reminder'];
+/** Types the app no longer offers; an older server may still list them, but they're never saved. */
+const RETIRED_TYPES = ['final_warning'];
 const MOOD_TYPES = ['mood_reminder', 'mood_missed'];
 
 /** The fields of `draft` that differ from `saved`, as a PATCH body. */
@@ -25,7 +26,7 @@ export function preferenceChanges(
 ): NotificationPreferencesUpdate {
   const changes: NotificationPreferencesUpdate = {};
   const types = Object.fromEntries(
-    Object.entries(draft.types).filter(([type, on]) => saved.types[type] !== on),
+    Object.entries(draft.types).filter(([type, on]) => !RETIRED_TYPES.includes(type) && saved.types[type] !== on),
   );
   if (Object.keys(types).length > 0) changes.types = types;
   // Quiet hours are set (or cleared) as a pair.
@@ -133,7 +134,6 @@ const NotificationPreferencesForm: React.FC<Props> = ({
         value={draft.mood_reminder_minutes}
         onChange={minutes => { if (minutes !== null) edit({ mood_reminder_minutes: minutes }, { debounce: true }); }}
         disabled={draft.types.mood_reminder === false}
-        finalWarningNote={false}
         presets={MOOD_REMINDER_PRESETS}
         maxMinutes={MOOD_REMINDER_MINUTES_MAX}
       />

@@ -17,7 +17,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 const prefs = (overrides: Partial<NotificationPreferences> = {}): NotificationPreferences => ({
-  types: { task_reminder: true, final_warning: true },
+  types: { task_reminder: true },
   quiet_hours_start: null,
   quiet_hours_end: null,
   default_reminder_minutes: 120,
@@ -94,29 +94,28 @@ afterEach(() => {
 
 describe('NotificationPreferencesForm', () => {
   it('shows a switch per alert type, reflecting the saved state, and no Save button', () => {
-    render(prefs({ types: { ...prefs().types, final_warning: false } }));
-    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(2);
-    expect(switchFor('Reminder before a task is due').getAttribute('aria-checked')).toBe('true');
-    expect(switchFor('Final warning').getAttribute('aria-checked')).toBe('false');
+    render(prefs({ types: { ...prefs().types, task_reminder: false } }));
+    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(1);
+    expect(switchFor('Reminder before a task is due').getAttribute('aria-checked')).toBe('false');
     expect([...document.querySelectorAll('button')].some(b => /save/i.test(b.textContent ?? ''))).toBe(false);
   });
 
   it('saves only the switched type, at once', async () => {
     const onSave = render(prefs());
-    await click(switchFor('Final warning'));
+    await click(switchFor('Reminder before a task is due'));
     expect(onSave).toHaveBeenCalledOnce();
-    expect(onSave).toHaveBeenCalledWith({ types: { final_warning: false } });
+    expect(onSave).toHaveBeenCalledWith({ types: { task_reminder: false } });
     expect(track).toHaveBeenCalledWith('notifications', expect.any(Function));
   });
 
   it('offers an Undo that switches the alert back and saves that', async () => {
     const onSave = render(prefs());
-    await click(switchFor('Final warning'));
-    expect(onUndoableChange).toHaveBeenCalledWith('Final warning turned off.', expect.any(Function));
+    await click(switchFor('Reminder before a task is due'));
+    expect(onUndoableChange).toHaveBeenCalledWith('Reminder before a task is due turned off.', expect.any(Function));
     const undo = onUndoableChange.mock.calls[0][1];
     await act(async () => { undo(); });
-    expect(switchFor('Final warning').getAttribute('aria-checked')).toBe('true');
-    expect(onSave).toHaveBeenLastCalledWith({ types: { final_warning: true } });
+    expect(switchFor('Reminder before a task is due').getAttribute('aria-checked')).toBe('true');
+    expect(onSave).toHaveBeenLastCalledWith({ types: { task_reminder: true } });
   });
 
   it('waits for both quiet-hour ends, then saves them as a pair after a pause', async () => {
@@ -173,10 +172,10 @@ describe('NotificationPreferencesForm', () => {
 
   it('keeps the change on screen and reports the failure when saving fails', async () => {
     const onSave = render(prefs(), vi.fn().mockRejectedValue(new Error('offline')));
-    await click(switchFor('Final warning'));
+    await click(switchFor('Reminder before a task is due'));
     expect(onSave).toHaveBeenCalledOnce();
     await expect(track.mock.results[0].value).resolves.toBe(false);
-    expect(switchFor('Final warning').getAttribute('aria-checked')).toBe('false');
+    expect(switchFor('Reminder before a task is due').getAttribute('aria-checked')).toBe('false');
   });
 
   it('saves a value still waiting for its pause when the page closes', async () => {
@@ -188,9 +187,16 @@ describe('NotificationPreferencesForm', () => {
     root = createRoot(container);
   });
 
+  it('offers no Final warning switch and never saves it, even when the server still lists it', async () => {
+    const onSave = render(prefs({ types: { task_reminder: true, final_warning: false } }));
+    expect(document.body.textContent).not.toMatch(/final warning/i);
+    await click(switchFor('Reminder before a task is due'));
+    expect(onSave).toHaveBeenCalledWith({ types: { task_reminder: false } });
+  });
+
   it('has no Other alerts: types outside the groups get no switch', () => {
     render(prefs({ types: { ...prefs().types, due_today: true, overdue: true, habit_reminder: true, mood_check_in: true } }));
-    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(2);
+    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(1);
     expect(document.body.textContent).not.toMatch(/Other alerts|Morning summary|Slipped task nudge|Evening habit reminder|Mood check in/);
   });
 
@@ -204,7 +210,6 @@ describe('NotificationPreferencesForm', () => {
       expect([...document.querySelectorAll('h3')].map(h => h.textContent))
         .toEqual(['Reminders', 'Mood check-ins', 'Quiet hours']);
       expect(groupOf(switchFor('Reminder before a task is due'))).toBe('Reminders');
-      expect(groupOf(switchFor('Final warning'))).toBe('Reminders');
       expect(groupOf(switchFor('Mood check-in reminder'))).toBe('Mood check-ins');
       expect(groupOf(switchFor('Missed mood check-ins'))).toBe('Mood check-ins');
       expect(groupOf(input('quiet-start'))).toBe('Quiet hours');
@@ -292,9 +297,9 @@ describe('NotificationPreferencesForm', () => {
       expect(customUnit().value).toBe('minutes');
     });
 
-    it("doesn't mention the task final warning for a short mood lead", () => {
-      render(moodPrefs({ mood_reminder_minutes: 15 }));
-      expect(document.body.textContent).not.toContain('final warning.');
+    it("doesn't mention a final warning for a short lead", () => {
+      render(moodPrefs({ mood_reminder_minutes: 15, default_reminder_minutes: 15 }));
+      expect(document.body.textContent).not.toMatch(/final warning/i);
     });
 
     it('greys out the lead while the reminder is off', async () => {
