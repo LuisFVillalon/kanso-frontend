@@ -38,7 +38,8 @@ const HabitTimeGoalField: React.FC<HabitTimeGoalFieldProps> = ({
         <span className="text-sm text-text-muted flex-shrink-0">hours per day</span>
       </div>
       <p id={hintId} className="mt-1 text-xs text-text-muted">
-        {goal ?? 'How long you plan to spend on this habit each day. 0.5 = 30 minutes.'}
+        {goal ? `${goal}. ` : 'How long you plan to spend on this habit each day. '}
+        Goals go in half-hour steps (0.5 = 30 minutes).
       </p>
     </div>
   );

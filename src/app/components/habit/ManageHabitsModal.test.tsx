@@ -58,7 +58,7 @@ describe('ManageHabitsModal', () => {
     const label = document.body.querySelector(`label[for="${input.id}"]`);
     expect(label?.textContent).toBe('Daily time goal (optional)');
     expect(text()).toContain('hours per day');
-    expect(document.getElementById(input.getAttribute('aria-describedby')!)?.textContent).toBe('Goal: 30 min per day');
+    expect(document.getElementById(input.getAttribute('aria-describedby')!)?.textContent).toBe('Goal: 30 min per day. Goals go in half-hour steps (0.5 = 30 minutes).');
 
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     act(() => {
@@ -75,6 +75,6 @@ describe('ManageHabitsModal', () => {
   it('shows the field hint when no time goal is set', () => {
     render({ habits: [habit({ estimated_time: null })], onUpdateHabit: vi.fn() });
     act(() => (document.body.querySelector('[aria-label="Edit habit"]') as HTMLButtonElement).click());
-    expect(text()).toContain('How long you plan to spend on this habit each day. 0.5 = 30 minutes.');
+    expect(text()).toContain('How long you plan to spend on this habit each day. Goals go in half-hour steps (0.5 = 30 minutes).');
   });
 });
