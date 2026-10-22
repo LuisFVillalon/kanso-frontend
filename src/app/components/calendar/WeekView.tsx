@@ -61,6 +61,13 @@ const useMinuteClock = (): Date => {
   return now;
 };
 
+/** "Oct 19–25, 2026"; a week spanning New Year names both years: "Dec 28, 2026 – Jan 3, 2027". */
+const weekLabel = (start: Date, end: Date): string => {
+  if (start.getFullYear() === end.getFullYear()) return `${formatDateRange(start, end)}, ${end.getFullYear()}`;
+  const label = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${label(start)} – ${label(end)}`;
+};
+
 const toggleById = (tags: Tag[], tag: Tag): Tag[] =>
   tags.some(t => t.id === tag.id) ? tags.filter(t => t.id !== tag.id) : [...tags, tag];
 
@@ -181,7 +188,7 @@ const WeekView: React.FC = () => {
           </button>
         </div>
         <h2 className="text-base sm:text-lg text-text-primary" aria-live="polite">
-          {formatDateRange(days[0], days[6])}, {days[6].getFullYear()}
+          {weekLabel(days[0], days[6])}
         </h2>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-text-muted" aria-label="Loading week activity" />}
 

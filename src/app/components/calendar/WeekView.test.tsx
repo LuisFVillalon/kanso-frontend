@@ -92,7 +92,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('WeekView', () => {
+// Each test renders the full 24-hour week grid in jsdom, which takes a few
+// seconds on its own and well past vitest's 5s default when the full suite
+// runs in parallel on a loaded machine.
+describe('WeekView', { timeout: 30_000 }, () => {
   it('loads the Monday–Sunday week containing today and plots its activity', async () => {
     mocks.tasks = [task({ id: 3, title: 'Essay', due_date: '2026-10-22', due_time: '14:00', estimated_time: 1 })];
     await render();
@@ -109,6 +112,17 @@ describe('WeekView', () => {
     expect(container.querySelector('button[aria-label^="Note session"]')).toBeNull();
     await act(async () => [...container.querySelectorAll('button')].find(b => b.textContent === 'Today')!.click());
     expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-10-19', '2026-10-25');
+  });
+
+  it('pages across the new year without stopping, naming both years on the spanning week', async () => {
+    vi.setSystemTime(new Date(2026, 11, 30, 12, 0)); // Wed 30 Dec 2026
+    await render();
+    const heading = () => container.querySelector('h2')!.textContent;
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-12-28', '2027-01-03');
+    expect(heading()).toBe('Dec 28, 2026 – Jan 3, 2027');
+    await act(async () => button('Next week').click());
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2027-01-04', '2027-01-10');
+    expect(heading()).toBe('Jan 4–10, 2027');
   });
 
   it('opens the New Task modal prefilled with the clicked slot and creates the task there', async () => {

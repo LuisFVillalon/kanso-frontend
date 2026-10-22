@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTasksContext } from '@/app/context/TasksContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useNotesContext } from '@/app/context/NotesContext';
-import { fetchHabitHistory } from '@/app/lib/backend-api';
+import { fetchCalendarActivity } from '@/app/lib/backend-api';
 import { Habit } from '@/app/types/habit';
 import { Task } from '@/app/types/task';
 import { Note } from '@/app/types/notes';
@@ -17,67 +17,72 @@ export interface DayData {
   notesEdited: Note[];
 }
 
+interface HabitLogResult {
+  /** The year this result answers, so a previous year's logs never paint onto the one being loaded. */
+  year: number;
+  logged: Map<number, Set<string>>;
+}
+
 /**
- * Aggregates tasks/habits/notes into a per-day map for Jan 1 – today of the
- * current calendar year. Habit completion has no bulk "whole year" endpoint —
- * fetchHabitHistory only returns the past N days counting back from today —
- * so the year is fixed to the current one rather than letting callers page
- * to a different year, where that "past N days" window wouldn't line up
- * with Jan 1 – Dec 31 of that year at all.
+ * Aggregates tasks/habits/notes into a per-day map for Jan 1 – Dec 31 of
+ * `year` (the current year by default). Habit completions come from
+ * GET /get-calendar-activity for that whole year — one ranged request that
+ * works for any past or future year, unlike fetchHabitHistory's "past N
+ * days from today" window, which the backend caps at 365 days.
+ *
+ * `loading` only covers the first load; while a different year's habit
+ * completions load, `yearLoading` is set and the tasks/notes for the new
+ * year already show.
  */
-export function useYearCalendarData() {
-  const year = new Date().getFullYear();
+export function useYearCalendarData(year: number = new Date().getFullYear()) {
   const { tasks, isLoading: tasksLoading } = useTasksContext();
   const { habits, habitsLoading } = useHabitsContext();
   const { notes, isLoading: notesLoading } = useNotesContext();
 
-  const [habitLogged, setHabitLogged] = useState<Map<number, Set<string>>>(new Map());
-  const [habitHistoryLoading, setHabitHistoryLoading] = useState(true);
+  const [habitLogs, setHabitLogs] = useState<HabitLogResult | null>(null);
 
   useEffect(() => {
     if (habitsLoading) return;
 
     if (habits.length === 0) {
-      setHabitLogged(new Map());
-      setHabitHistoryLoading(false);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing to fetch; record this year's empty result
+      setHabitLogs({ year, logged: new Map() });
       return;
     }
 
     let cancelled = false;
-    setHabitHistoryLoading(true);
+    const todayStr = toLocalDateStr(new Date());
 
-    const today = new Date();
-    const jan1 = new Date(year, 0, 1);
-    const days = Math.max(1, Math.floor((today.getTime() - jan1.getTime()) / 86400000) + 1);
-    const todayStr = toLocalDateStr(today);
-
-    Promise.all(
-      habits.map(h => fetchHabitHistory(h.id, days).then(entries => [h.id, entries] as const)),
-    )
-      .then(results => {
+    fetchCalendarActivity(`${year}-01-01`, `${year}-12-31`)
+      .then(activity => {
         if (cancelled) return;
-        const map = new Map<number, Set<string>>();
-        for (const [habitId, entries] of results) {
-          const set = new Set(entries.filter(e => e.logged).map(e => e.date));
-          // "Today" is tracked authoritatively on the habit object itself
-          // (see useHabits/HabitHistoryModal) — keep this map in agreement.
-          const habit = habits.find(h => h.id === habitId);
-          if (habit?.logged_today) set.add(todayStr);
-          else set.delete(todayStr);
-          map.set(habitId, set);
+        const map = new Map<number, Set<string>>(habits.map(h => [h.id, new Set<string>()]));
+        for (const { habit_id, date } of activity.habit_completions) map.get(habit_id)?.add(date);
+        // "Today" is tracked authoritatively on the habit object itself
+        // (see useHabits/HabitHistoryModal) — keep this map in agreement.
+        if (todayStr.startsWith(`${year}-`)) {
+          for (const habit of habits) {
+            const set = map.get(habit.id)!;
+            if (habit.logged_today) set.add(todayStr);
+            else set.delete(todayStr);
+          }
         }
-        setHabitLogged(map);
+        setHabitLogs({ year, logged: map });
       })
-      .catch(err => console.error('[useYearCalendarData] Failed to fetch habit history:', err))
-      .finally(() => { if (!cancelled) setHabitHistoryLoading(false); });
+      .catch(err => {
+        console.error('[useYearCalendarData] Failed to fetch habit completions:', err);
+        if (!cancelled) setHabitLogs({ year, logged: new Map() });
+      });
 
     return () => { cancelled = true; };
     // habits.length is a reasonable proxy for habit set identity here — a
-    // full deep dependency on `habits` would re-fetch history on every
+    // full deep dependency on `habits` would re-fetch the year on every
     // logged_today toggle, which is unnecessary since that override is
     // applied locally above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [habitsLoading, habits.length, year]);
+
+  const habitLogged = habitLogs?.year === year ? habitLogs.logged : null;
 
   const dayData = useMemo(() => {
     const map = new Map<string, DayData>();
@@ -115,7 +120,7 @@ export function useYearCalendarData() {
     }
 
     for (const habit of habits) {
-      const logged = habitLogged.get(habit.id);
+      const logged = habitLogged?.get(habit.id);
       if (!logged) continue;
       for (const dateStr of logged) {
         if (!dateStr.startsWith(yearPrefix)) continue;
@@ -132,6 +137,7 @@ export function useYearCalendarData() {
     year,
     dayData,
     habits,
-    loading: tasksLoading || notesLoading || habitsLoading || habitHistoryLoading,
+    loading: tasksLoading || notesLoading || habitsLoading || habitLogs === null,
+    yearLoading: habitLogged === null,
   };
 }
