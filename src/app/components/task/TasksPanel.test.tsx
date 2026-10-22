@@ -174,6 +174,14 @@ describe('TasksPanel with linked tasks nested deeper', () => {
     expect(container.textContent).toContain('2 linked tasks are still open.');
   });
 
+  it('asks even when the direct linked tasks are done but a deeper one is open', () => {
+    // Mock interview was completed on its own, leaving Practice questions open under it.
+    render([parent, done, { ...open, completed: true }, practice, room]);
+    act(() => parentCheckbox().click());
+    expect(handlers.onToggleComplete).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('1 linked task is still open.');
+  });
+
   it("suggests completing the nested parent, not the card, when its last open linked task is done", () => {
     render([parent, done, open, practice, room]);
     click('Mark complete: Practice questions');

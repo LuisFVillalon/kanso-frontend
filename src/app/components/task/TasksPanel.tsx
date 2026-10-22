@@ -92,7 +92,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
     const entry = shown.get(id);
     if (entry) {
       const { group, parent } = entry;
-      if (!group.task.completed && group.linkedDone < group.linkedTotal) {
+      if (!group.task.completed && group.openInTree > 0) {
         setBanner(id, 'open');
         return;
       }
@@ -125,7 +125,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   // comes before Canvas's. Nested tasks get theirs under their own row.
   const bannerFor = ({ task, linkedDone, linkedTotal, openInTree }: TaskGroup) => {
     const kind = banners[task.id];
-    const applies = !task.completed && linkedTotal > 0 && (kind === 'open' ? linkedDone < linkedTotal : linkedDone === linkedTotal);
+    const applies = !task.completed && linkedTotal > 0 && (kind === 'open' ? openInTree > 0 : linkedDone === linkedTotal);
     if (!kind || !applies) {
       if (!canvasSubmitted?.shows(task)) return null;
       return (
