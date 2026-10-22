@@ -22,7 +22,7 @@ import { createPortal } from 'react-dom';
 export const MODAL_LAYER = {
   /** Standalone modals opened directly from the main UI (tasks, settings). */
   base: 50,
-  /** Modals opened from within another modal or a sidebar action. */
+  /** Modals opened from within another modal or from the navigation (New, account and More menus). */
   raised: 60,
   /** Modals opened from within a "raised" modal (e.g. habit history from manage-habits). */
   elevated: 70,

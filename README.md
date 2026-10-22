@@ -83,7 +83,7 @@ src/app/
   favicon.ico icon.svg apple-icon.png manifest.webmanifest  # App icons and web manifest
   components/            # Grouped by domain: task, notes, habit, calendar, stats, settings,
                          # mood, landing, doodle, tag, auth, notifications, canvas; plus common/ and layout/ (cross-domain)
-  context/               # Auth, Toast, Notifications, and the Tasks/Tags/Habits/Notes data providers
+  context/               # Auth, Toast, Notifications, AppShell (global actions), and the Tasks/Tags/Habits/Notes data providers
   hooks/                 # Data hooks (useTasksAndTags, useNotes, useHabits, useProfile, ...)
   lib/backend-api.ts     # Every backend and AI-service request, with auth headers and typed errors
   lib/supabase.ts        # Supabase client (auth only)
