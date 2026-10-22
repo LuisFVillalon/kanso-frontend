@@ -167,6 +167,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
         <>
           <div
             className="overflow-y-auto h-[50vh] lg:h-[600px] pl-2 pr-1 scrollbar-custom pt-2"
+            data-panel-body
             style={heightPx ? { height: `${heightPx}px` } : undefined}
           >
             {viewMode === 'cards' ? (
