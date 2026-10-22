@@ -2,11 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Archive, Check, Timer, Trash2, Calendar, SquarePen, GraduationCap, ExternalLink } from 'lucide-react';
 import { Task } from '@/app/types/task';
 import {
+  TaskGroup,
   getDueStatus,
   getDurationColor,
   formatTime12Hour,
   formatDueDateShort,
   PRIORITY_COLORS,
+  parentChain,
   toInkTone,
 } from '@/app/utils/taskUtils';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
@@ -16,6 +18,9 @@ import PriorityPicker from './PriorityPicker';
 import TaskTags from './TaskTags';
 import TaskStatusChip from './TaskStatusChip';
 import LinkedTasksList, { LinkedCountPill, LinkedToggleButton } from './LinkedTasksList';
+import ParentTrail from './ParentTrail';
+
+const NO_LOADED_TASKS: ReadonlyMap<number, Task> = new Map();
 
 /** "From Canvas · CS 460 ↗": opens the assignment a task added from Canvas follows. */
 const FromCanvasLink: React.FC<{ url: string; className?: string }> = ({ url, className = '' }) => {
@@ -49,15 +54,16 @@ interface TaskItemProps {
   compact?: boolean;
   /** True while a toggle-complete, archive or delete request for this task is in flight. */
   pending?: boolean;
-  /** Linked tasks nested under this one (see groupLinkedTasks). */
-  linkedTasks?: Task[];
+  /** Linked tasks nested under this one, each with its own (see groupLinkedTasks). */
+  linkedTasks?: TaskGroup[];
   linkedDone?: number;
   linkedTotal?: number;
-  linkedVia?: Record<number, string>;
   /** In-flight ids, so a linked task's checkbox can show its own pending state. */
   pendingTaskIds?: Set<number>;
   /** A completion question shown at the bottom of the card (see LinkedTaskBanner). */
   banner?: React.ReactNode;
+  /** The completion question a nested linked task is asking, shown under its row. */
+  linkedBannerFor?: (group: TaskGroup) => React.ReactNode;
 }
 
 const TaskItem: React.FC<TaskItemProps> = ({
@@ -76,9 +82,9 @@ const TaskItem: React.FC<TaskItemProps> = ({
   linkedTasks = [],
   linkedDone = 0,
   linkedTotal = 0,
-  linkedVia,
   pendingTaskIds,
   banner,
+  linkedBannerFor,
 }) => {
   const maxPriority = activeTaskCount ?? Object.keys(PRIORITY_COLORS).length;
 
@@ -99,7 +105,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
       linkedTasks={linkedTasks}
       linkedDone={linkedDone}
       linkedTotal={linkedTotal}
-      linkedVia={linkedVia}
+      parent={task}
       expanded={linkedExpanded}
       onToggleExpanded={() => setLinkedExpanded(v => !v)}
       onToggleComplete={onToggleComplete}
@@ -107,8 +113,11 @@ const TaskItem: React.FC<TaskItemProps> = ({
       maxPriority={maxPriority}
       pendingTaskIds={pendingTaskIds}
       compact={compact}
+      bannerFor={linkedBannerFor}
     />
   );
+  // A card is top-level, so its parent (if any) isn't loaded; only the API's summary can name it.
+  const parents = parentChain(NO_LOADED_TASKS, task);
   const [descriptionOverflows, setDescriptionOverflows] = useState(false);
 
   const descriptionRef = useRef<HTMLParagraphElement>(null);
@@ -178,6 +187,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
           >
             {task.title}
           </span>
+
+          <ParentTrail chain={parents} className="flex-shrink-[2]" />
 
           {hasLinked && <LinkedCountPill done={linkedDone} total={linkedTotal} />}
 
@@ -251,13 +262,16 @@ const TaskItem: React.FC<TaskItemProps> = ({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 sm:gap-4 mb-1.5 sm:mb-2">
-            <h3
-              className={`text-base sm:text-lg font-semibold leading-snug ${
-                task.completed ? 'text-text-muted line-through' : 'text-text-primary'
-              }`}
-            >
-              {task.title}
-            </h3>
+            <div className="min-w-0">
+              <h3
+                className={`text-base sm:text-lg font-semibold leading-snug ${
+                  task.completed ? 'text-text-muted line-through' : 'text-text-primary'
+                }`}
+              >
+                {task.title}
+              </h3>
+              {parents.length > 0 && <ParentTrail chain={parents} className="mt-0.5" />}
+            </div>
 
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {task.category && (

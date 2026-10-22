@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { LinkedTaskRef, Task, Tag } from '@/app/types/task';
 import TaskFormFields, { TaskFormData } from './TaskFormFields';
-import LinkedTasksField, { LeadsUpToField, LinkedDepthNote } from './LinkedTasksField';
+import LinkedTasksField, { LeadsUpToField } from './LinkedTasksField';
 import Modal from '@/app/components/common/Modal';
 import {
   LinkedDraft, LinkedTasksSaveError, linkedDraftsChanged, linkedDraftsFor, linkedSaveMessage, toLinkedRefs,
 } from '@/app/utils/linkedTasks';
+import { parentChain } from '@/app/utils/taskUtils';
 
 interface EditTaskModalProps {
   isOpen: boolean;
@@ -41,8 +42,10 @@ const EditTaskForm: React.FC<EditTaskModalProps & { task: Task }> = ({
   const [originalParentId] = useState(task.parent_task_id ?? null);
 
   const parentId = task.parent_task_id ?? null;
-  const parentTitle = (id: number | null) => allTasks?.find(t => t.id === id)?.title ?? null;
-  const showLinkedField = !!allTasks && parentId == null;
+  const byId = useMemo(() => new Map((allTasks ?? []).map(t => [t.id, t])), [allTasks]);
+  // The tasks above this one as it was when the modal opened, so the trail stays put while unlinked.
+  const parents = parentChain(byId, { ...task, parent_task_id: originalParentId });
+  const showLinkedField = !!allTasks;
 
   const setParent = (parent_task_id: number | null) =>
     onTaskChange({ ...(task as TaskFormData), parent_task_id });
@@ -91,7 +94,7 @@ const EditTaskForm: React.FC<EditTaskModalProps & { task: Task }> = ({
           usedPriorityLevels={usedPriorityLevels}
           afterTitle={allTasks && originalParentId != null && (
             <LeadsUpToField
-              parentTitle={parentTitle(originalParentId)}
+              chain={parents}
               unlinked={parentId == null}
               onUnlink={() => setParent(null)}
               onUndo={() => setParent(originalParentId)}
@@ -104,20 +107,16 @@ const EditTaskForm: React.FC<EditTaskModalProps & { task: Task }> = ({
             {/* .perf zeroes its own margins, so the gap below it lives on this wrapper's second child. */}
             <hr className="perf" />
             <div className="mt-5">
-              {showLinkedField ? (
-                <LinkedTasksField
-                  allTasks={allTasks}
-                  parentId={task.id}
-                  parentOfParent={parentId}
-                  parentDueDate={task.due_date}
-                  drafts={linked}
-                  onChange={setLinked}
-                  mode="edit"
-                  error={linkedError}
-                />
-              ) : (
-                <LinkedDepthNote parentTitle={parentTitle(parentId)} />
-              )}
+              <LinkedTasksField
+                allTasks={allTasks}
+                parentId={task.id}
+                parentOfParent={parentId}
+                parentDueDate={task.due_date}
+                drafts={linked}
+                onChange={setLinked}
+                mode="edit"
+                error={linkedError}
+              />
             </div>
           </div>
         )}

@@ -60,6 +60,8 @@ export interface Task {
   completed_date: string | Date | null;
   estimated_time?: number | null;
   parent_task_id?: number | null;
+  /** The parent's id and title, when the API sends them; absent from older backends, so parent_task_id stays the source of truth. */
+  parent?: ParentSummary | null;
   /** Order among its parent's linked tasks; null for top-level tasks and links saved before ordering existed. */
   position?: number | null;
   /** Supabase Auth UUID — set server-side, never supplied by the client. */
@@ -74,6 +76,12 @@ export interface Task {
   canvas_html_url?: string | null;
   /** The assignment's due_at as Canvas last gave it, so the backend can tell Canvas moving it from the user editing the date. */
   canvas_due_at?: string | null;
+}
+
+/** A task above another one, as a parent trail shows it. */
+export interface ParentSummary {
+  id: number;
+  title: string;
 }
 
 export interface BaseTaskForm {

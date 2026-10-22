@@ -262,7 +262,7 @@ export function archiveTask(id: number, linked?: LinkedRemoveMode): Promise<Task
 }
 
 /**
- * "Complete all": completes a task and its open linked tasks in one
+ * "Complete all": completes a task and every open task nested under it in one
  * transaction (PATCH /update-task-status/{id}?with_linked=true), all with the
  * same completed_date. Returns the updated task itself.
  */

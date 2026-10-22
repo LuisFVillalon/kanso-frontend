@@ -1,25 +1,35 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Check, ChevronDown, ChevronRight, SquarePen } from 'lucide-react';
 import { Task } from '@/app/types/task';
-import { formatDueDateShort, getDueStatus, getPriorityBadgeStyle } from '@/app/utils/taskUtils';
+import { TaskGroup, formatDueDateShort, getDueStatus, getPriorityBadgeStyle } from '@/app/utils/taskUtils';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
 import TaskStatusChip from './TaskStatusChip';
+import ParentTrail from './ParentTrail';
 
-interface LinkedTasksListProps {
-  /** The linked tasks to render (may be a filtered subset of the total). */
-  linkedTasks: Task[];
-  linkedDone: number;
-  linkedTotal: number;
-  /** Own parent's title for linked tasks nested deeper than one level. */
-  linkedVia?: Record<number, string>;
-  expanded: boolean;
-  onToggleExpanded: () => void;
+/** Nesting deeper than this stops indenting further; each row's parent trail still says where it sits. */
+const MAX_INDENT_DEPTH = 4;
+
+/** What every row in the tree needs from the card. */
+interface RowContext {
   onToggleComplete?: (id: number) => void;
   onEditTask?: (task: Task) => void;
   maxPriority: number;
   pendingTaskIds?: Set<number>;
-  compact?: boolean;
+  compact: boolean;
+  /** The completion question a linked task with linked tasks of its own is asking, if any. */
+  bannerFor?: (group: TaskGroup) => React.ReactNode;
+}
+
+interface LinkedTasksListProps extends Partial<Pick<RowContext, 'compact'>>, Omit<RowContext, 'compact'> {
+  /** The linked tasks to render, each with its own (may be a filtered subset of the total). */
+  linkedTasks: TaskGroup[];
+  linkedDone: number;
+  linkedTotal: number;
+  /** The card's task, which these rows lead up to. */
+  parent: Task;
+  expanded: boolean;
+  onToggleExpanded: () => void;
 }
 
 export const LinkedProgressBar: React.FC<{ done: number; total: number; className?: string }> = ({
@@ -60,142 +70,189 @@ export const LinkedCountPill: React.FC<{ done: number; total: number }> = ({ don
   );
 };
 
-/** Chevron that collapses or expands a card's linked tasks. */
-export const LinkedToggleButton: React.FC<{ expanded: boolean; onClick: () => void }> = ({ expanded, onClick }) => (
+/** Chevron that collapses or expands a task's linked tasks; `title` names the task for a nested row. */
+export const LinkedToggleButton: React.FC<{ expanded: boolean; onClick: () => void; title?: string }> = ({
+  expanded,
+  onClick,
+  title,
+}) => (
   <button
     type="button"
     onClick={onClick}
     className="btn btn-ghost p-0.5 flex-shrink-0"
     aria-expanded={expanded}
-    aria-label={expanded ? 'Hide linked tasks' : 'Show linked tasks'}
+    aria-label={`${expanded ? 'Hide' : 'Show'} linked tasks${title ? ` of ${title}` : ''}`}
   >
     {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
   </button>
 );
 
-const LinkedTaskRow: React.FC<{
-  task: Task;
-  viaTitle?: string;
-  compact: boolean;
-  maxPriority: number;
-  pending: boolean;
-  onToggleComplete?: (id: number) => void;
-  onEditTask?: (task: Task) => void;
-}> = ({ task, viaTitle, compact, maxPriority, pending, onToggleComplete, onEditTask }) => {
-  const dueStatus = getDueStatus(task);
-  const priorityStyle = task.priority != null ? getPriorityBadgeStyle(task.priority, maxPriority) : null;
+/** Toggle-sized gap that keeps checkboxes lined up beside rows that have a toggle. */
+const TOGGLE_SPACER = <span className="w-[18px] flex-shrink-0" aria-hidden />;
+
+/** The rows for one level of the tree, each nesting its own linked tasks. */
+const LinkedTaskTree: React.FC<{
+  groups: TaskGroup[];
+  /** The tasks above this level, from the card's task down to these rows' parent. */
+  ancestors: Task[];
+  depth: number;
+  ctx: RowContext;
+}> = ({ groups, ancestors, depth, ctx }) => {
+  const nestedIndent = depth >= MAX_INDENT_DEPTH ? 'pl-1' : 'ml-[9px] pl-2.5';
+  const listClass = depth === 0
+    ? (ctx.compact ? 'mt-1.5 ml-[22px] pl-2.5' : 'mt-1.5 ml-2 pl-3')
+    : `mt-0.5 ${nestedIndent}`;
+  const anyNested = groups.some(g => g.linkedTotal > 0);
 
   return (
-    <li
-      className={`group flex items-center gap-2.5 rounded-md hover:bg-[var(--tm-surface-raised)] ${
-        compact ? 'px-1 py-0.5' : 'px-2 py-1.5'
-      }`}
-    >
-      <button
-        type="button"
-        onClick={() => onToggleComplete?.(task.id)}
-        disabled={pending}
-        aria-label={`${task.completed ? 'Mark incomplete' : 'Mark complete'}: ${task.title}`}
-        style={{ opacity: pending ? 0.5 : 1, cursor: pending ? 'wait' : 'pointer' }}
-        className={`flex-shrink-0 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all active:scale-90 ${
-          task.completed
-            ? 'border-[var(--tm-success)] bg-[var(--tm-success-subtle)]'
-            : 'border-border hover:border-accent'
-        }`}
-      >
-        {task.completed && <Check className="w-2.5 h-2.5 text-success-text" strokeWidth={3} />}
-      </button>
-
-      <span
-        className={`flex-1 min-w-0 truncate text-sm font-medium ${
-          task.completed ? 'line-through text-text-muted' : 'text-text-primary'
-        }`}
-      >
-        {task.title}
-        {viaTitle && <span className="ml-1.5 text-xs font-normal text-text-muted">↳ {viaTitle}</span>}
-      </span>
-
-      {priorityStyle && (
-        <span
-          className="chip flex-shrink-0 font-bold"
-          style={{
-            backgroundColor: priorityStyle.bg,
-            color: priorityStyle.text,
-            padding: '0.1rem 0.45rem',
-            borderRadius: '9999px',
-            fontSize: '9px',
-          }}
-          title={`Priority ${task.priority}`}
-        >
-          {task.priority}
-        </span>
-      )}
-
-      {!compact && !task.completed && (dueStatus ? (
-        <TaskStatusChip status={dueStatus} size="sm" />
-      ) : task.due_date && (
-        <span className="flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
-          {formatDueDateShort(toLocalDateStr(task.due_date))}
-        </span>
+    <ul className={`list-none flex flex-col gap-0.5 border-l-2 border-border-subtle ${listClass}`}>
+      {groups.map(g => (
+        <LinkedTaskRow
+          key={g.task.id}
+          group={g}
+          ancestors={ancestors}
+          depth={depth}
+          alignToggle={anyNested}
+          ctx={ctx}
+        />
       ))}
+    </ul>
+  );
+};
 
-      {!compact && !task.completed && task.estimated_time != null && (
-        <span className="hidden sm:inline flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
-          {formatDuration(Number(task.estimated_time))}
-        </span>
-      )}
+const LinkedTaskRow: React.FC<{
+  group: TaskGroup;
+  ancestors: Task[];
+  depth: number;
+  /** True when a sibling has a toggle, so this row leaves room for one. */
+  alignToggle: boolean;
+  ctx: RowContext;
+}> = ({ group, ancestors, depth, alignToggle, ctx }) => {
+  const { task, linked, linkedDone, linkedTotal } = group;
+  const { compact, maxPriority, pendingTaskIds, onToggleComplete, onEditTask, bannerFor } = ctx;
+  const [expanded, setExpanded] = useState(true);
+  const pending = pendingTaskIds?.has(task.id) ?? false;
+  const hasLinked = linkedTotal > 0;
+  const dueStatus = getDueStatus(task);
+  const priorityStyle = task.priority != null ? getPriorityBadgeStyle(task.priority, maxPriority) : null;
+  const openAncestor = (id: number) => {
+    const ancestor = ancestors.find(a => a.id === id);
+    if (ancestor) onEditTask?.(ancestor);
+  };
 
-      <button
-        type="button"
-        onClick={() => onEditTask?.(task)}
-        className="btn btn-ghost p-1 flex-shrink-0 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-        title="Edit task"
-        aria-label={`Edit ${task.title}`}
+  return (
+    <li>
+      <div
+        className={`group flex items-center gap-2.5 rounded-md hover:bg-[var(--tm-surface-raised)] ${
+          compact ? 'px-1 py-0.5' : 'px-2 py-1.5'
+        }`}
       >
-        <SquarePen className="w-3.5 h-3.5" />
-      </button>
+        {hasLinked
+          ? <LinkedToggleButton expanded={expanded} onClick={() => setExpanded(v => !v)} title={task.title} />
+          : alignToggle && TOGGLE_SPACER}
+
+        <button
+          type="button"
+          onClick={() => onToggleComplete?.(task.id)}
+          disabled={pending}
+          aria-label={`${task.completed ? 'Mark incomplete' : 'Mark complete'}: ${task.title}`}
+          style={{ opacity: pending ? 0.5 : 1, cursor: pending ? 'wait' : 'pointer' }}
+          className={`flex-shrink-0 w-4 h-4 rounded-sm border-2 flex items-center justify-center transition-all active:scale-90 ${
+            task.completed
+              ? 'border-[var(--tm-success)] bg-[var(--tm-success-subtle)]'
+              : 'border-border hover:border-accent'
+          }`}
+        >
+          {task.completed && <Check className="w-2.5 h-2.5 text-success-text" strokeWidth={3} />}
+        </button>
+
+        <span className="flex-1 min-w-0 flex items-center gap-1.5">
+          <span
+            className={`min-w-0 truncate text-sm font-medium ${
+              task.completed ? 'line-through text-text-muted' : 'text-text-primary'
+            }`}
+          >
+            {task.title}
+          </span>
+          {/* The nesting already shows the rest, so the row names just its own parent. */}
+          <ParentTrail
+            chain={ancestors.map(a => ({ id: a.id, title: a.title }))}
+            onOpen={onEditTask && openAncestor}
+            maxShown={1}
+            className="flex-shrink-[3]"
+          />
+        </span>
+
+        {hasLinked && <LinkedCountPill done={linkedDone} total={linkedTotal} />}
+
+        {priorityStyle && (
+          <span
+            className="chip flex-shrink-0 font-bold"
+            style={{
+              backgroundColor: priorityStyle.bg,
+              color: priorityStyle.text,
+              padding: '0.1rem 0.45rem',
+              borderRadius: '9999px',
+              fontSize: '9px',
+            }}
+            title={`Priority ${task.priority}`}
+          >
+            {task.priority}
+          </span>
+        )}
+
+        {!compact && !task.completed && (dueStatus ? (
+          <TaskStatusChip status={dueStatus} size="sm" />
+        ) : task.due_date && (
+          <span className="flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
+            {formatDueDateShort(toLocalDateStr(task.due_date))}
+          </span>
+        ))}
+
+        {!compact && !task.completed && task.estimated_time != null && (
+          <span className="hidden sm:inline flex-shrink-0 text-xs whitespace-nowrap text-text-muted">
+            {formatDuration(Number(task.estimated_time))}
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={() => onEditTask?.(task)}
+          className="btn btn-ghost p-1 flex-shrink-0 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+          title="Edit task"
+          aria-label={`Edit ${task.title}`}
+        >
+          <SquarePen className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {bannerFor?.(group)}
+
+      {expanded && linked.length > 0 && (
+        <LinkedTaskTree groups={linked} ancestors={[...ancestors, task]} depth={depth + 1} ctx={ctx} />
+      )}
     </li>
   );
 };
 
 /**
- * The linked tasks nested under a parent card. The full card gets a
- * collapsible "Linked tasks · x of y done" header with a progress bar; the
- * compact card puts its toggle and count in the card's own row, so it only
- * renders the rows here.
+ * The linked tasks nested under a parent card, each with its own nested
+ * under it at any depth. The full card gets a collapsible "Linked tasks · x
+ * of y done" header with a progress bar; the compact card puts its toggle
+ * and count in the card's own row, so it only renders the rows here.
  */
 const LinkedTasksList: React.FC<LinkedTasksListProps> = ({
   linkedTasks,
   linkedDone,
   linkedTotal,
-  linkedVia,
+  parent,
   expanded,
   onToggleExpanded,
-  onToggleComplete,
-  onEditTask,
-  maxPriority,
-  pendingTaskIds,
   compact = false,
+  ...rest
 }) => {
   const rows = expanded && linkedTasks.length > 0 && (
-    <ul
-      className={`list-none flex flex-col gap-0.5 border-l-2 border-border-subtle ${
-        compact ? 'mt-1.5 ml-[22px] pl-2.5' : 'mt-1.5 ml-2 pl-3'
-      }`}
-    >
-      {linkedTasks.map(t => (
-        <LinkedTaskRow
-          key={t.id}
-          task={t}
-          viaTitle={linkedVia?.[t.id]}
-          compact={compact}
-          maxPriority={maxPriority}
-          pending={pendingTaskIds?.has(t.id) ?? false}
-          onToggleComplete={onToggleComplete}
-          onEditTask={onEditTask}
-        />
-      ))}
-    </ul>
+    <LinkedTaskTree groups={linkedTasks} ancestors={[parent]} depth={0} ctx={{ ...rest, compact }} />
   );
 
   if (compact) return rows || null;

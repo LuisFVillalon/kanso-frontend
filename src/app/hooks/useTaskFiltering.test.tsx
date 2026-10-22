@@ -34,7 +34,7 @@ const Probe: React.FC<ProbeProps & { onResult: (r: typeof result) => void }> = (
 };
 const run = (props: ProbeProps) => {
   act(() => root.render(<Probe {...props} onResult={r => { result = r; }} />));
-  return result.taskGroups.map(g => [g.task.title, g.linked.map(t => t.title), `${g.linkedDone}/${g.linkedTotal}`]);
+  return result.taskGroups.map(g => [g.task.title, g.linked.map(l => l.task.title), `${g.linkedDone}/${g.linkedTotal}`]);
 };
 
 beforeEach(() => {

@@ -11,6 +11,7 @@ import { useToast } from '@/app/context/ToastContext';
 import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
 import { TrashItem, TrashKind } from '@/app/types/trash';
 import { formatUpdatedDate } from '@/app/utils/dateUtils';
+import { parentChain } from '@/app/utils/taskUtils';
 import { daysLeft, deletedWithTask, restoredWithTask, trashKey } from '@/app/utils/trashUtils';
 import Modal from '@/app/components/common/Modal';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -78,8 +79,12 @@ const TrashView: React.FC = () => {
     () => (filter === 'all' ? items : items.filter(item => item.kind === filter)),
     [items, filter],
   );
-  const taskTitle = (id: number | null | undefined) =>
-    items.find(item => item.kind === 'task' && item.id === id)?.title;
+  const trashedTasks = useMemo(
+    () => new Map(items.filter(item => item.kind === 'task').map(item => [item.id, item])),
+    [items],
+  );
+  // "A › B": the trashed tasks above this one, or the API's summary of a parent that isn't here.
+  const parentTrail = (item: TrashItem) => parentChain(trashedTasks, item).map(p => p.title).join(' › ');
 
   // The tasks a restore or purge of `item` carries along (its subtasks
   // deleted with it, and for a restore its trashed parents), as trash keys.
@@ -216,7 +221,7 @@ const TrashView: React.FC = () => {
               const restoring = restoringKeys.has(key);
               const { label, icon: KindIcon } = KINDS[item.kind];
               const left = daysLeft(item.purge_at, now);
-              const parentTitle = item.kind === 'task' ? taskTitle(item.parent_task_id) : undefined;
+              const parentTitle = item.kind === 'task' ? parentTrail(item) : undefined;
               const title = displayTitle(item);
               return (
                 <li key={key} className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">

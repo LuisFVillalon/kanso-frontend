@@ -30,7 +30,7 @@ import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
 import { Tag, Task } from '@/app/types/task';
 import { Note } from '@/app/types/notes';
 import { Habit } from '@/app/types/habit';
-import { subtaskTreeIds } from '@/app/utils/taskUtils';
+import { parentChain, subtaskTreeIds } from '@/app/utils/taskUtils';
 import { stripHtml } from '@/app/utils/textUtils';
 import { formatUpdatedDate } from '@/app/utils/dateUtils';
 import { collectItemTags, filterByAnyTag } from '@/app/utils/tagFilter';
@@ -106,6 +106,7 @@ const ArchiveView: React.FC = () => {
     [filterTags, selectedTagIds],
   );
   const visibleTasks = useMemo(() => filterByAnyTag(tasks, activeTagIds), [tasks, activeTagIds]);
+  const tasksById = useMemo(() => new Map(tasks.map(t => [t.id, t])), [tasks]);
   const visibleNotes = useMemo(() => filterByAnyTag(notes, activeTagIds), [notes, activeTagIds]);
   // Archived items keep their tags even when those tags are archived too.
   const archivedTagIds = useMemo(() => new Set(tags.map(t => t.id)), [tags]);
@@ -298,7 +299,8 @@ const ArchiveView: React.FC = () => {
   const counts: Record<TabKey, number> = { tasks: tasks.length, notes: notes.length, tags: tags.length, habits: habits.length };
   const activeTab = TABS.find(t => t.key === tab)!;
   const visibleCount = tab === 'tasks' ? visibleTasks.length : tab === 'notes' ? visibleNotes.length : counts[tab];
-  const taskTitle = (id: number | null | undefined) => tasks.find(t => t.id === id)?.title;
+  // "A › B": the archived tasks above this one, or the API's summary of an active parent.
+  const parentTrail = (task: Task) => parentChain(tasksById, task).map(p => p.title).join(' › ');
 
   const rowActions = (key: string, onRestore: () => void, onDelete: () => void) => {
     const restoring = restoringKeys.has(key);
@@ -423,7 +425,7 @@ const ArchiveView: React.FC = () => {
           ) : (
             <ul className="flex flex-col gap-2">
               {tab === 'tasks' && visibleTasks.map(task => {
-                const parentTitle = taskTitle(task.parent_task_id);
+                const parentTitle = parentTrail(task);
                 return (
                   <li key={task.id} className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex-1 min-w-0">

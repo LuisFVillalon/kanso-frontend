@@ -11,7 +11,7 @@ export type LinkedBannerKind = 'open' | 'alldone';
 interface LinkedTaskBannerProps {
   kind: LinkedBannerKind;
   title: string;
-  /** Linked tasks still open, for the `open` banner. */
+  /** Tasks still open anywhere under this one, for the `open` banner. */
   openCount: number;
   onCompleteAll: () => void;
   onCompleteOne: () => void;

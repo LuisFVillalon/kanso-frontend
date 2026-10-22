@@ -1,4 +1,4 @@
-import { BaseTaskForm, EditTaskForm, Task } from '@/app/types/task';
+import { BaseTaskForm, EditTaskForm, ParentSummary, Task } from '@/app/types/task';
 import { compareLinkedOrder } from '@/app/utils/linkedTasks';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 
@@ -170,32 +170,31 @@ export function subtaskTreeIds(tasks: Pick<Task, 'id' | 'parent_task_id'>[], roo
 
 // ── Linked tasks (nesting for the task list) ────────────────────────────────
 
-/** A top-level task in the list, with the linked tasks shown under it. */
+/** A task in the list with the linked tasks shown under it, each nesting its own the same way. */
 export interface TaskGroup {
   task: Task;
   /** Linked tasks to render under `task`, in their saved order (`position`, then id). */
-  linked: Task[];
+  linked: TaskGroup[];
   /** Progress over `task`'s direct linked tasks, including ones the filters hide. */
   linkedDone: number;
   linkedTotal: number;
-  /** For a linked task deeper than one level, its own parent's title, by task id. */
-  linkedVia: Record<number, string>;
+  /** Open tasks anywhere under `task` (linked tasks, theirs, …), including hidden ones. */
+  openInTree: number;
 }
 
 /**
- * Nests linked tasks (tasks with a parent_task_id) under their parent.
+ * Nests linked tasks (tasks with a parent_task_id) under their parent, at
+ * any depth.
  *
  * `matching` is the filtered, sorted list; `allTasks` is everything loaded.
- * The list is one level deep, so a deeper tree hangs every descendant off its
- * topmost loaded ancestor, labelled with its own parent and counted only in
- * that parent's progress. A task whose parent isn't loaded, or whose chain
- * loops, stays top-level.
+ * Each top-level group is a tree rooted at a task with no loaded parent. A
+ * task whose parent isn't loaded, or whose chain loops, stays top-level.
  *
- * A group is shown when its parent or any of its linked tasks matches the
- * filters, so a matching linked task never loses its parent. When the parent
- * matches, the group sits at the parent's place in the sort and shows every
- * linked task; when only linked tasks match, the group sits at the first
- * match's place and shows just the matches.
+ * A group is shown when its root or any task in its tree matches the
+ * filters, so a matching linked task never loses the tasks above it. A
+ * matching task shows every task under it; otherwise only the branches that
+ * lead to a match are shown. When the root matches, the group sits at the
+ * root's place in the sort; otherwise it sits at the first match's place.
  */
 export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[] {
   const byId = new Map(allTasks.map(t => [t.id, t]));
@@ -213,44 +212,81 @@ export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[
     return current.id;
   };
 
-  const linkedByRoot = new Map<number, Task[]>();
+  // Only tasks whose chain reaches a root hang under their parent, so the
+  // children map has no loops.
+  const childrenOf = new Map<number, Task[]>();
   for (const t of allTasks) {
-    const root = rootOf(t);
-    if (root === t.id) continue;
-    const list = linkedByRoot.get(root) ?? [];
+    if (rootOf(t) === t.id) continue;
+    const list = childrenOf.get(t.parent_task_id!) ?? [];
     list.push(t);
-    linkedByRoot.set(root, list);
+    childrenOf.set(t.parent_task_id!, list);
   }
-  for (const list of linkedByRoot.values()) list.sort(compareLinkedOrder);
+  for (const list of childrenOf.values()) list.sort(compareLinkedOrder);
 
   const matchingIds = new Set(matching.map(t => t.id));
+  const leadsToMatch = new Map<number, boolean>();
+  const hasMatch = (task: Task): boolean => {
+    let found = leadsToMatch.get(task.id);
+    if (found === undefined) {
+      found = matchingIds.has(task.id) || (childrenOf.get(task.id) ?? []).some(hasMatch);
+      leadsToMatch.set(task.id, found);
+    }
+    return found;
+  };
+
+  const openUnder = (task: Task): number =>
+    (childrenOf.get(task.id) ?? []).reduce((n, c) => n + (c.completed ? 0 : 1) + openUnder(c), 0);
+
+  const build = (task: Task, showAll: boolean): TaskGroup => {
+    const children = childrenOf.get(task.id) ?? [];
+    const all = showAll || matchingIds.has(task.id);
+    return {
+      task,
+      linked: children.filter(c => all || hasMatch(c)).map(c => build(c, all)),
+      linkedDone: children.filter(c => c.completed).length,
+      linkedTotal: children.length,
+      openInTree: openUnder(task),
+    };
+  };
+
   const groups: TaskGroup[] = [];
   const placed = new Set<number>();
 
   for (const m of matching) {
     const rootId = rootOf(m);
-    // A matching parent gets placed at its own position in the sort.
+    // A matching root gets placed at its own position in the sort.
     if (rootId !== m.id && matchingIds.has(rootId)) continue;
     if (placed.has(rootId)) continue;
     placed.add(rootId);
-
-    const root = byId.get(rootId) ?? m;
-    const allLinked = linkedByRoot.get(rootId) ?? [];
-    const direct = allLinked.filter(t => t.parent_task_id === rootId);
-    const linkedVia: Record<number, string> = {};
-    for (const t of allLinked) {
-      if (t.parent_task_id !== rootId) linkedVia[t.id] = byId.get(t.parent_task_id!)!.title;
-    }
-    groups.push({
-      task: root,
-      linked: matchingIds.has(rootId) ? allLinked : allLinked.filter(t => matchingIds.has(t.id)),
-      linkedDone: direct.filter(t => t.completed).length,
-      linkedTotal: direct.length,
-      linkedVia,
-    });
+    groups.push(build(byId.get(rootId) ?? m, false));
   }
 
   return groups;
+}
+
+/**
+ * The tasks above `task`, from the topmost down to its own parent, found by
+ * following parent_task_id through `byId`. When a parent isn't there, the
+ * trail ends with the summary the API sent for it, if any. Stops at a loop.
+ */
+export function parentChain<T extends Pick<Task, 'id' | 'title' | 'parent_task_id' | 'parent'>>(
+  byId: ReadonlyMap<number, T>,
+  task: T,
+): ParentSummary[] {
+  const chain: ParentSummary[] = [];
+  const seen = new Set([task.id]);
+  let current = task;
+  while (current.parent_task_id != null && !seen.has(current.parent_task_id)) {
+    const parent = byId.get(current.parent_task_id);
+    if (!parent) {
+      if (current.parent?.id === current.parent_task_id) chain.unshift(current.parent);
+      break;
+    }
+    seen.add(parent.id);
+    chain.unshift({ id: parent.id, title: parent.title });
+    current = parent;
+  }
+  return chain;
 }
 
 export const countTasksByTag = (tasks: Task[]) => {

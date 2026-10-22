@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@/app/types/task';
-import { formatDueDateShort, getDueStatus, groupLinkedTasks, subtaskTreeIds, taskToEditForm, todayPlanProgress } from './taskUtils';
+import { formatDueDateShort, getDueStatus, groupLinkedTasks, parentChain, subtaskTreeIds, taskToEditForm, todayPlanProgress } from './taskUtils';
 
 describe('subtaskTreeIds', () => {
   const tasks = [
@@ -31,7 +31,10 @@ describe('groupLinkedTasks', () => {
     tags: [], created_date: '2026-10-01', completed_date: null,
   });
   const shape = (groups: ReturnType<typeof groupLinkedTasks>) =>
-    groups.map(g => ({ id: g.task.id, linked: g.linked.map(t => t.id), done: g.linkedDone, total: g.linkedTotal }));
+    groups.map(g => ({ id: g.task.id, linked: g.linked.map(l => l.task.id), done: g.linkedDone, total: g.linkedTotal }));
+  // The whole tree as nested ids: [id, [children…]].
+  type Tree = [number, Tree[]];
+  const tree = (groups: ReturnType<typeof groupLinkedTasks>): Tree[] => groups.map(g => [g.task.id, tree(g.linked)]);
 
   // 1 has linked tasks 2 (done), 3 and 5; 4 stands alone.
   const all = [task(1), task(5, 1), task(2, 1, true), task(3, 1), task(4)];
@@ -67,7 +70,7 @@ describe('groupLinkedTasks', () => {
   });
 
   it('shows each task once', () => {
-    const ids = groupLinkedTasks(all, all).flatMap(g => [g.task.id, ...g.linked.map(t => t.id)]);
+    const ids = groupLinkedTasks(all, all).flatMap(g => [g.task.id, ...g.linked.map(l => l.task.id)]);
     expect(ids.sort()).toEqual([1, 2, 3, 4, 5]);
   });
 
@@ -76,16 +79,65 @@ describe('groupLinkedTasks', () => {
     expect(shape(groupLinkedTasks([orphan], [orphan]))).toEqual([{ id: 9, linked: [], done: 0, total: 0 }]);
   });
 
-  it('hangs a deeper tree off its topmost ancestor, counting only direct linked tasks', () => {
-    const deep = [task(1), task(2, 1), task(3, 2, true)];
-    const groups = groupLinkedTasks(deep, [deep[2]]);
-    expect(shape(groups)).toEqual([{ id: 1, linked: [3], done: 0, total: 1 }]);
-    expect(groups[0].linkedVia).toEqual({ 3: 'Task 2' });
+  // 1 → 2 → 3 (done) and 2 → 4; 1 → 5 stands beside 2.
+  const deep = [task(1), task(2, 1), task(3, 2, true), task(4, 2), task(5, 1)];
+  const deepById = (ids: number[]) => ids.map(id => deep.find(t => t.id === id)!);
+
+  it('nests linked tasks under their own parent at every depth, each with its own progress', () => {
+    const groups = groupLinkedTasks(deep, deep);
+    expect(tree(groups)).toEqual([[1, [[2, [[3, []], [4, []]]], [5, []]]]]);
+    expect(shape(groups)).toEqual([{ id: 1, linked: [2, 5], done: 0, total: 2 }]);
+    expect(shape(groups[0].linked)).toEqual([
+      { id: 2, linked: [3, 4], done: 1, total: 2 },
+      { id: 5, linked: [], done: 0, total: 0 },
+    ]);
+  });
+
+  it('keeps the path down to a deep match, showing just the branches that lead to one', () => {
+    const groups = groupLinkedTasks(deep, deepById([3]));
+    expect(tree(groups)).toEqual([[1, [[2, [[3, []]]]]]]);
+    // Progress still counts the linked tasks the filters hide.
+    expect(shape(groups[0].linked)).toEqual([{ id: 2, linked: [3], done: 1, total: 2 }]);
+  });
+
+  it('shows everything under a matching nested task', () => {
+    expect(tree(groupLinkedTasks(deep, deepById([2])))).toEqual([[1, [[2, [[3, []], [4, []]]]]]]);
   });
 
   it('keeps tasks in a parent loop top-level instead of hanging', () => {
     const loop = [task(1, 2), task(2, 1)];
     expect(shape(groupLinkedTasks(loop, loop)).map(g => g.id)).toEqual([1, 2]);
+  });
+
+  it('keeps a task hanging off a loop top-level too', () => {
+    const loop = [task(1, 2), task(2, 1), task(3, 1)];
+    expect(tree(groupLinkedTasks(loop, loop))).toEqual([[1, []], [2, []], [3, []]]);
+  });
+});
+
+describe('parentChain', () => {
+  const t = (id: number, parent_task_id: number | null = null, extra: Partial<Task> = {}): Task => ({
+    id, parent_task_id, title: `Task ${id}`, description: '', completed: false, priority: null,
+    due_date: null, due_time: null, tags: [], created_date: '2026-10-01', completed_date: null, ...extra,
+  });
+  const map = (tasks: Task[]) => new Map(tasks.map(x => [x.id, x]));
+
+  it('lists the tasks above, topmost first', () => {
+    const tasks = [t(1), t(2, 1), t(3, 2)];
+    expect(parentChain(map(tasks), tasks[2])).toEqual([{ id: 1, title: 'Task 1' }, { id: 2, title: 'Task 2' }]);
+    expect(parentChain(map(tasks), tasks[0])).toEqual([]);
+  });
+
+  it("ends with the API's summary of a parent that isn't loaded", () => {
+    const child = t(3, 2, { parent: { id: 2, title: 'Archived parent' } });
+    expect(parentChain(map([child]), child)).toEqual([{ id: 2, title: 'Archived parent' }]);
+    // A summary for some other parent is ignored.
+    expect(parentChain(map([child]), { ...child, parent_task_id: 9 })).toEqual([]);
+  });
+
+  it('stops at a loop', () => {
+    const tasks = [t(1, 2), t(2, 1)];
+    expect(parentChain(map(tasks), tasks[0])).toEqual([{ id: 2, title: 'Task 2' }]);
   });
 });
 

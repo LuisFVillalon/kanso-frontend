@@ -202,3 +202,85 @@ describe('useTasks linked task lifecycle', () => {
     expect(byId.get(3)).toMatchObject({ parent_task_id: 1, position: 1 });
   });
 });
+
+describe('useTasks with linked tasks nested deeper', () => {
+  // Apply (1) → Mock interview (3) → Practice (4) → Notes (6); Mock interview → Room (7).
+  const tree = () => [
+    task(1, 'Apply'),
+    task(3, 'Mock interview', { parent_task_id: 1, position: 0 }),
+    task(4, 'Practice', { parent_task_id: 3, position: 0 }),
+    task(6, 'Notes', { parent_task_id: 4, position: 0 }),
+    task(7, 'Room', { parent_task_id: 3, position: 1, completed: true }),
+    task(5, 'Unrelated'),
+  ];
+
+  it('archives a nested task with cascade: its whole subtree leaves, the tasks above stay', async () => {
+    act(() => hook.setTasks(tree()));
+    api.archiveTask.mockResolvedValue(tree()[1]);
+
+    await act(() => hook.archiveTask(tree()[1], 'cascade'));
+
+    expect(api.archiveTask).toHaveBeenCalledWith(3, 'cascade');
+    expect(hook.tasks.map(t => t.id)).toEqual([1, 5]);
+  });
+
+  it('deletes a nested task with keep: only its direct linked tasks are unlinked, deeper ones stay put', async () => {
+    act(() => hook.setTasks(tree()));
+    api.onDelete.mockResolvedValue(undefined);
+
+    await act(() => hook.deleteTask(tree()[1], 'keep'));
+
+    expect(api.onDelete).toHaveBeenCalledWith(3, 'keep');
+    const byId = new Map(hook.tasks.map(t => [t.id, t]));
+    expect(byId.has(3)).toBe(false);
+    expect(byId.get(4)).toMatchObject({ parent_task_id: null, position: null });
+    expect(byId.get(7)).toMatchObject({ parent_task_id: null, position: null });
+    expect(byId.get(6)).toMatchObject({ parent_task_id: 4, position: 0 });
+  });
+
+  it('puts a nested subtree back where it was when its delete fails', async () => {
+    act(() => hook.setTasks(tree()));
+    api.onDelete.mockRejectedValue(new Error('500'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await act(() => hook.deleteTask(tree()[2]));
+
+    expect(new Set(hook.tasks.map(t => t.id))).toEqual(new Set([1, 3, 4, 5, 6, 7]));
+    expect(hook.tasks.find(t => t.id === 6)).toMatchObject({ parent_task_id: 4 });
+  });
+
+  it('completes all on a nested task: its whole subtree, nothing above it', async () => {
+    act(() => hook.setTasks(tree()));
+    api.completeTaskWithLinked.mockResolvedValue(task(3, 'Mock interview', {
+      parent_task_id: 1, position: 0, completed: true, completed_date: '2026-10-21T09:00:00',
+    }));
+
+    await act(() => hook.completeWithLinked(3));
+
+    expect(api.completeTaskWithLinked).toHaveBeenCalledWith(3);
+    const byId = new Map(hook.tasks.map(t => [t.id, t]));
+    expect(byId.get(3)).toMatchObject({ completed: true, parent_task_id: 1 });
+    expect(byId.get(4)).toMatchObject({ completed: true, completed_date: '2026-10-21T09:00:00' });
+    expect(byId.get(6)).toMatchObject({ completed: true, completed_date: '2026-10-21T09:00:00', priority: null });
+    expect(byId.get(7)).toMatchObject({ completed: true, completed_date: null });
+    expect(byId.get(1)).toMatchObject({ completed: false });
+  });
+
+  it('saves linked tasks under a nested task, moving one in with its own linked tasks', async () => {
+    act(() => hook.setTasks(tree()));
+    const room = tree()[4];
+    api.updateLinkedTasks.mockResolvedValue({
+      parent: room,
+      children: [task(4, 'Practice', { parent_task_id: 7, position: 0 })],
+    });
+
+    await act(() => hook.saveLinkedTasks(room, [{ id: 4 }]));
+
+    expect(api.updateLinkedTasks).toHaveBeenCalledWith(7, [{ id: 4 }]);
+    const byId = new Map(hook.tasks.map(t => [t.id, t]));
+    expect(byId.get(4)).toMatchObject({ parent_task_id: 7, position: 0 });
+    // Notes moves along with Practice.
+    expect(byId.get(6)).toMatchObject({ parent_task_id: 4 });
+    expect(byId.get(7)).toMatchObject({ parent_task_id: 3 });
+  });
+});

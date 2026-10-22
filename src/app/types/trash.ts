@@ -1,3 +1,5 @@
+import type { ParentSummary } from './task';
+
 export type TrashKind = 'task' | 'note' | 'tag' | 'habit';
 
 /** One deleted item in the trash, as listed by GET /get-trash. */
@@ -11,4 +13,6 @@ export interface TrashItem {
   purge_at: string;
   /** Tasks only: the parent it was a subtask of. */
   parent_task_id?: number | null;
+  /** Tasks only: that parent's id and title, when the API sends them. */
+  parent?: ParentSummary | null;
 }

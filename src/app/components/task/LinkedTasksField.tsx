@@ -1,8 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Check, CornerDownRight, GripVertical, Info, Plus, Search, Timer, X,
+  AlertTriangle, ArrowDown, ArrowUp, Check, GripVertical, Info, Plus, Search, Timer, X,
 } from 'lucide-react';
-import { Task } from '@/app/types/task';
+import { ParentSummary, Task } from '@/app/types/task';
 import { formatDueDate, formatDueDateShort, getDueStatus } from '@/app/utils/taskUtils';
 import { formatDuration } from '@/app/utils/duration';
 import {
@@ -10,6 +10,7 @@ import {
 } from '@/app/utils/linkedTasks';
 import { LinkedProgressBar } from './LinkedTasksList';
 import TaskStatusChip from './TaskStatusChip';
+import ParentTrail from './ParentTrail';
 
 interface LinkedTasksFieldProps {
   /** Every loaded (active) task. */
@@ -490,25 +491,27 @@ const Callout: React.FC<{ tone: 'warning' | 'danger' | 'info'; role?: string; ch
 };
 
 /**
- * "Leads up to [parent] [Unlink]" on the edit form of a linked task. Unlinking
- * turns it back into a standalone task when the form is saved; until then it
- * can be undone.
+ * "Leads up to [parent trail] [Unlink]" on the edit form of a linked task:
+ * every task above it, from the topmost down to its own parent, as plain
+ * text. Unlinking turns it back into a standalone
+ * task when the form is saved; until then it can be undone.
  */
 export const LeadsUpToField: React.FC<{
-  parentTitle: string | null;
+  chain: ParentSummary[];
   unlinked: boolean;
   onUnlink: () => void;
   onUndo: () => void;
-}> = ({ parentTitle, unlinked, onUnlink, onUndo }) => (
+}> = ({ chain, unlinked, onUnlink, onUndo }) => (
   <div>
     <span className="block text-sm font-medium text-text-secondary mb-2">Leads up to</span>
     <div
       className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2"
       style={{ backgroundColor: 'var(--tm-surface)' }}
     >
-      <CornerDownRight className="w-3.5 h-3.5 flex-shrink-0 text-text-muted" />
-      <span className={`flex-1 min-w-0 truncate text-sm font-medium ${unlinked ? 'line-through text-text-muted' : 'text-text-primary'}`}>
-        {parentTitle ?? 'Another task'}
+      <span className={`flex-1 min-w-0 flex text-sm ${unlinked ? 'line-through' : ''}`}>
+        {chain.length > 0
+          ? <ParentTrail chain={chain} variant="field" />
+          : <span className="text-text-muted">Another task</span>}
       </span>
       <button type="button" onClick={unlinked ? onUndo : onUnlink} className="btn btn-outline px-3 py-1 text-sm">
         {unlinked ? 'Undo' : 'Unlink'}
@@ -520,14 +523,6 @@ export const LeadsUpToField: React.FC<{
         : 'Unlinking turns it back into a standalone task.'}
     </p>
   </div>
-);
-
-/** Shown instead of the Linked tasks section on a task that is itself linked. */
-export const LinkedDepthNote: React.FC<{ parentTitle: string | null }> = ({ parentTitle }) => (
-  <Callout tone="info">
-    This task is one of the linked tasks of <b>{parentTitle ?? 'another task'}</b>, so it can&apos;t have
-    linked tasks of its own: links go one level deep. Unlink it above to give it its own.
-  </Callout>
 );
 
 export default LinkedTasksField;
