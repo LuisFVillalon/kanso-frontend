@@ -111,6 +111,17 @@ describe('WeekView', () => {
     expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-10-19', '2026-10-25');
   });
 
+  it('pages across the new year without stopping, naming both years on the spanning week', async () => {
+    vi.setSystemTime(new Date(2026, 11, 30, 12, 0)); // Wed 30 Dec 2026
+    await render();
+    const heading = () => container.querySelector('h2')!.textContent;
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-12-28', '2027-01-03');
+    expect(heading()).toBe('Dec 28, 2026 – Jan 3, 2027');
+    await act(async () => button('Next week').click());
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2027-01-04', '2027-01-10');
+    expect(heading()).toBe('Jan 4–10, 2027');
+  });
+
   it('opens the New Task modal prefilled with the clicked slot and creates the task there', async () => {
     await render();
     await act(async () => button('Create task on Thursday, October 22 at 9:30 AM').click());
