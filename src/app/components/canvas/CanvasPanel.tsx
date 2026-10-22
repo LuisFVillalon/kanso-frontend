@@ -5,7 +5,7 @@
  * its modules, assignments and grades) and announcements, read through the
  * backend's Canvas proxy (hooks/useCanvas.ts). It also covers every state the
  * connection can be in: not connected, the first load, a rejected or expired
- * token ("Reconnect Canvas"), a token expiring soon, Canvas busy or down
+ * token or a rejected feed link (reconnect), a token expiring soon, Canvas busy or down
  * (older saved data, dimmed), and no active courses. Demo sandboxes see the
  * backend's read-only sample data and no connect prompts.
  *
