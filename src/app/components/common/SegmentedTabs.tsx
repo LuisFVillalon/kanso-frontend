@@ -10,7 +10,7 @@ export interface SegmentedTab<T extends string> {
 }
 
 interface SegmentedTabsProps<T extends string> {
-  /** Names the tablist for screen readers, e.g. "Home panels". */
+  /** Names the tablist for screen readers, e.g. "Widgets or week calendar". */
   label: string;
   tabs: readonly SegmentedTab<T>[];
   value: T;
