@@ -349,7 +349,7 @@ const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
 // ── View ────────────────────────────────────────────────────────────────────
 
 /**
- * Weekly / monthly / yearly report on the calendar page: tasks completed vs
+ * Weekly / monthly / yearly report on the /reports page: tasks completed vs
  * planned, estimated hours, time in notes, habit check-ins and streaks, the
  * busiest days and an activity chart — plus mood from the daily, weekly and
  * monthly check-ins, unless "Show mood in reports" is off.

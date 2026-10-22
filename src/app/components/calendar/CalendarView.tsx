@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { CalendarRange, ChartColumn, GalleryHorizontal, LayoutGrid } from 'lucide-react';
 import { useAppShell } from '@/app/context/AppShellContext';
+import { useCalendarViewMode } from '@/app/hooks/useCalendarViewMode';
 import { useYearCalendarData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -11,7 +13,6 @@ import MonthCarousel from './MonthCarousel';
 import DaySummaryPanel from './DaySummaryPanel';
 import DayDetailModal from './DayDetailModal';
 import WeekView from './WeekView';
-import CalendarReportView from './report/CalendarReportView';
 
 const CalendarView: React.FC = () => {
   const { year, dayData, habits, loading } = useYearCalendarData();
@@ -19,7 +20,7 @@ const CalendarView: React.FC = () => {
   const showMood = profileLoaded && profile.moodCheckins.daily;
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [carouselDate, setCarouselDate] = useState<Date | null>(() => new Date());
-  const [viewMode, setViewMode] = useState<'week' | 'carousel' | 'all' | 'report'>('all');
+  const [viewMode, setViewMode] = useCalendarViewMode();
 
   const todayStr = toLocalDateStr(new Date());
 
@@ -74,28 +75,22 @@ const CalendarView: React.FC = () => {
             <LayoutGrid className="w-4 h-4" />
             <span className="hidden sm:inline">All Months</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('report')}
-            aria-pressed={viewMode === 'report'}
-            title="Report view"
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-              viewMode === 'report'
-                ? 'bg-surface-raised text-text-primary shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            <ChartColumn className="w-4 h-4" />
-            <span className="hidden sm:inline">Report</span>
-          </button>
         </div>
+
+        <Link
+          href="/reports"
+          title="Reports"
+          aria-label="Reports"
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2.5 rounded-lg bg-surface border border-border text-xs sm:text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
+        >
+          <ChartColumn className="w-4 h-4" aria-hidden />
+          <span className="hidden sm:inline">Reports</span>
+        </Link>
       </div>
 
       <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 pb-6 sm:pb-10">
         {viewMode === 'week' ? (
           <WeekView />
-        ) : viewMode === 'report' ? (
-          <CalendarReportView />
         ) : viewMode === 'carousel' ? (
           <div className="flex flex-col lg:flex-row gap-4 items-stretch">
             <div className="lg:flex-1 lg:min-w-0">

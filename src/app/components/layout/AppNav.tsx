@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Archive, Blocks, CalendarDays, Ellipsis, FilePlus, FolderCog, House, LogOut, Moon, NotebookText,
+  Archive, Blocks, CalendarDays, ChartColumn, Ellipsis, FilePlus, FolderCog, House, LogOut, Moon, NotebookText,
   PanelLeftClose, PanelLeftOpen, Plus, Settings, SquarePlus, Sun, Trash2, type LucideIcon,
 } from 'lucide-react';
 import Logo from '@/app/components/common/Logo';
@@ -29,11 +29,12 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/', label: 'Home', icon: House, goKey: 'h' },
   { href: '/notes', label: 'Notes', icon: NotebookText, goKey: 'n' },
   { href: '/calendar', label: 'Calendar', icon: CalendarDays, goKey: 'c' },
+  { href: '/reports', label: 'Reports', icon: ChartColumn, goKey: 'r' },
   { href: '/archive', label: 'Archive', icon: Archive, goKey: 'a' },
   { href: '/trash', label: 'Recently deleted', shortLabel: 'Deleted', icon: Trash2 },
 ];
 
-const [HOME, NOTES, CALENDAR, ARCHIVE, TRASH] = NAV_ITEMS;
+const [HOME, NOTES, CALENDAR, REPORTS, ARCHIVE, TRASH] = NAV_ITEMS;
 
 export const isActivePath = (pathname: string, href: string) =>
   href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
@@ -221,7 +222,7 @@ const AppNav: React.FC<AppNavProps> = ({
     action();
   };
 
-  const moreActive = isActivePath(pathname, ARCHIVE.href) || isActivePath(pathname, TRASH.href);
+  const moreActive = [REPORTS, ARCHIVE, TRASH].some(item => isActivePath(pathname, item.href));
 
   return (
     <>
@@ -245,7 +246,7 @@ const AppNav: React.FC<AppNavProps> = ({
           )}
         </div>
 
-        {[HOME, NOTES, CALENDAR, ARCHIVE].map(item => (
+        {[HOME, NOTES, CALENDAR, REPORTS, ARCHIVE].map(item => (
           <RailLink key={item.href} item={item} active={isActivePath(pathname, item.href)} expanded={expanded} />
         ))}
         <div className="flex-1" />
@@ -321,6 +322,7 @@ const AppNav: React.FC<AppNavProps> = ({
 
       {sheet === 'more' && (
         <Sheet label="More" onClose={closeSheet}>
+          <SheetRow icon={REPORTS.icon} label={REPORTS.label} href={REPORTS.href} current={isActivePath(pathname, REPORTS.href)} onClick={closeSheet} />
           <SheetRow icon={ARCHIVE.icon} label={ARCHIVE.label} href={ARCHIVE.href} current={isActivePath(pathname, ARCHIVE.href)} onClick={closeSheet} />
           <SheetRow icon={TRASH.icon} label={TRASH.label} href={TRASH.href} current={isActivePath(pathname, TRASH.href)} onClick={closeSheet} />
           <SheetRow icon={Blocks} label="Manage habits" onClick={fromSheet(onManageHabits)} />
