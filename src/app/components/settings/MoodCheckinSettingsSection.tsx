@@ -21,7 +21,7 @@ interface Props {
 export const MOOD_GROUP = {
   id: 'notif-group-mood',
   title: 'Mood check-ins',
-  description: 'A few seconds at the end of the day.',
+  description: 'A few seconds at the end of the day. Check-ins are private to you and aren’t sent to the Daily Brief.',
 };
 
 export type MoodToggle = 'daily' | 'weekly' | 'monthly' | 'show_in_reports';
@@ -105,10 +105,6 @@ const MoodCheckinSettingsSection: React.FC<Props> = ({ value, onChange, shutoffT
           <p className="text-xs text-text-muted mt-1">Also silences the mood reminder and missed check-in notifications.</p>
         )}
       </div>
-
-      <p className="text-xs" style={{ color: 'var(--tm-text-muted)' }}>
-        Check-ins are private to you and aren&rsquo;t sent to the Daily Brief.
-      </p>
     </div>
   );
 };
