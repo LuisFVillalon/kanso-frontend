@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CanvasConnection, CanvasItem, CanvasSubmission } from '@/app/types/canvas';
+import type { CanvasCapabilities, CanvasCapability, CanvasConnection, CanvasItem, CanvasSubmission } from '@/app/types/canvas';
 import { canvasCan, canvasConnectionType, courseColor, groupByDay, itemStatus, scoreLabel, syncedLabel } from './canvas';
 
 const NOW = new Date(2026, 9, 21, 12, 0);
@@ -90,27 +90,25 @@ describe('canvasCan', () => {
     canvas_user_name: null, token_expires_at: null, hidden_course_ids: [], created_at: null, updated_at: null,
     last_synced_at: null, last_error_at: null, ...overrides,
   });
-
-  it('reads everything with a token, including from a backend that sends no type', () => {
-    expect(canvasConnectionType(connection({}))).toBe('token');
-    for (const cap of ['upcoming', 'link_tasks', 'courses', 'announcements', 'submissions'] as const) {
-      expect(canvasCan(connection({}), cap)).toBe(true);
-      expect(canvasCan(connection({ type: 'token' }), cap)).toBe(true);
-    }
+  const caps = (on: CanvasCapability[]): CanvasCapabilities => ({
+    upcoming: false, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
+    announcements: false, link_tasks: false, submission_status: false,
+    ...Object.fromEntries(on.map(c => [c, true])),
   });
 
-  it('reads only upcoming items, which can become tasks, with the calendar feed', () => {
-    const feed = connection({ type: 'feed' });
+  it('goes by the capabilities the backend sends', () => {
+    const feed = connection({ connection_type: 'feed', capabilities: caps(['upcoming', 'link_tasks']) });
     expect(canvasConnectionType(feed)).toBe('feed');
     expect(canvasCan(feed, 'upcoming')).toBe(true);
     expect(canvasCan(feed, 'link_tasks')).toBe(true);
     expect(canvasCan(feed, 'courses')).toBe(false);
     expect(canvasCan(feed, 'announcements')).toBe(false);
-    expect(canvasCan(feed, 'submissions')).toBe(false);
+    expect(canvasCan(feed, 'submission_status')).toBe(false);
   });
 
-  it('goes by the capabilities the backend lists when it sends them', () => {
-    expect(canvasCan(connection({ type: 'feed', capabilities: ['upcoming'] }), 'link_tasks')).toBe(false);
-    expect(canvasCan(connection({ type: 'token', capabilities: ['upcoming', 'courses'] }), 'announcements')).toBe(false);
+  it('treats a backend from before the calendar feed as a token that can show everything', () => {
+    expect(canvasConnectionType(connection({}))).toBe('token');
+    expect(canvasCan(connection({}), 'announcements')).toBe(true);
+    expect(canvasCan(connection({ connected: false }), 'upcoming')).toBe(false);
   });
 });

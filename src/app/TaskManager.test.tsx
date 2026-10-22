@@ -144,7 +144,7 @@ describe('TaskManager home panels', () => {
   });
 
   it('offers Canvas when it is connected with the calendar feed', async () => {
-    api.fetchCanvasConnection.mockResolvedValue({ connected: true, type: 'feed', capabilities: ['upcoming', 'link_tasks'] });
+    api.fetchCanvasConnection.mockResolvedValue({ connected: true, connection_type: 'feed' });
     await render();
     expect(availablePanels()).toBe('tasks,notes,canvas');
   });

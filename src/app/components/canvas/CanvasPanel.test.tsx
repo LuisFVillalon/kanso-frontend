@@ -298,8 +298,12 @@ describe('CanvasPanel', () => {
   });
 
   describe('calendar feed connection', () => {
+    const FEED_CAPABILITIES = {
+      upcoming: true, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
+      announcements: false, link_tasks: true, submission_status: false,
+    };
     const feedConnection = (overrides: Partial<CanvasConnection> = {}) => connected({
-      type: 'feed', capabilities: ['upcoming', 'link_tasks'], token_last4: null, canvas_user_id: null,
+      connection_type: 'feed', capabilities: FEED_CAPABILITIES, token_last4: 'T0ke', canvas_user_id: null,
       canvas_user_name: null, token_expires_at: null, ...overrides,
     });
     const feedOverview = () => overview({ missing: [], recently_graded: [] });
@@ -353,7 +357,7 @@ describe('CanvasPanel', () => {
     });
 
     it('goes by the capabilities the backend lists', async () => {
-      api.fetchCanvasConnection.mockResolvedValue(feedConnection({ capabilities: ['upcoming'] }));
+      api.fetchCanvasConnection.mockResolvedValue(feedConnection({ capabilities: { ...FEED_CAPABILITIES, link_tasks: false } }));
       await act(async () => root.render(<CanvasPanel onOpenSettings={onOpenSettings} addToTasks={addToTasks} />));
       expect(text()).toContain('Homework 5');
       expect(button('Add "Homework 5" to tasks')).toBeUndefined();
@@ -361,7 +365,7 @@ describe('CanvasPanel', () => {
   });
 
   it('reads courses and shows every tab for a token, with or without a type from the backend', async () => {
-    api.fetchCanvasConnection.mockResolvedValue(connected({ type: 'token' }));
+    api.fetchCanvasConnection.mockResolvedValue(connected({ connection_type: 'token' }));
     await render();
     expect(api.fetchCanvasPanelCourses).toHaveBeenCalled();
     expect(button('Courses')).toBeTruthy();

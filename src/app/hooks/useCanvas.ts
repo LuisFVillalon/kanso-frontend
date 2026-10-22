@@ -38,6 +38,7 @@ const READ_ERROR_MESSAGES: Record<string, string> = {
   canvas_forbidden: "Canvas wouldn't share this with kanso. Your school may limit what tokens can do.",
   canvas_course_hidden: "This course is unticked under Courses to show in Settings.",
   canvas_course_not_found: "Canvas doesn't list this course anymore.",
+  canvas_not_supported: "The Canvas calendar feed doesn't include this. It needs an access token.",
 };
 
 export interface CanvasFailure {

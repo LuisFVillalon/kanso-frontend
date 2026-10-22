@@ -905,15 +905,16 @@ export async function connectCanvas(baseUrl: string, token: string, allowAccount
  * Connects, replaces or reconnects Canvas with the user's private calendar
  * feed link (Canvas → Calendar → Calendar Feed): the backend reads the feed
  * once before storing the link, so a link Canvas won't serve changes nothing.
- * A feed for a different Canvas account fails with canvas_account_changed
- * unless `allowAccountChange` confirms the switch.
+ * A webcal:// link, as Canvas often shows it, is read as https://. A feed at
+ * a different school than the current connection fails with
+ * canvas_account_changed unless `allowAccountChange` confirms the switch.
  */
 export async function connectCanvasFeed(feedUrl: string, allowAccountChange = false): Promise<CanvasConnection> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/canvas/connection`, {
+  const res = await fetch(`${API_BASE_URL}/canvas/connection/feed`, {
     method: "PUT",
     headers,
-    body: JSON.stringify({ type: "feed", feed_url: feedUrl, allow_account_change: allowAccountChange }),
+    body: JSON.stringify({ feed_url: feedUrl, allow_account_change: allowAccountChange }),
   });
   await assertOk(res, "connectCanvasFeed");
   return res.json();

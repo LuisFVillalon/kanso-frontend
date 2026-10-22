@@ -2,19 +2,17 @@ import type { CanvasCapability, CanvasConnection, CanvasConnectionType, CanvasIt
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { getDueStatus, type DueStatus } from '@/app/utils/taskUtils';
 
-const FEED_CAPABILITIES: readonly CanvasCapability[] = ['upcoming', 'link_tasks'];
-
 /** How a connection is made; a backend from before the calendar feed sends no type, so it's a token. */
-export const canvasConnectionType = (connection: CanvasConnection): CanvasConnectionType => connection.type ?? 'token';
+export const canvasConnectionType = (connection: CanvasConnection): CanvasConnectionType =>
+  connection.connection_type ?? 'token';
 
 /**
- * Whether a connection can read `capability`: as the backend lists it, else
- * what its type allows (everything for a token, Upcoming and Add to tasks
- * for the calendar feed).
+ * Whether a connection can show `capability`, as the backend says; a backend
+ * from before the calendar feed sends no capabilities, and a token there
+ * can show everything.
  */
 export function canvasCan(connection: CanvasConnection, capability: CanvasCapability): boolean {
-  if (Array.isArray(connection.capabilities)) return connection.capabilities.includes(capability);
-  return canvasConnectionType(connection) === 'token' || FEED_CAPABILITIES.includes(capability);
+  return connection.capabilities ? connection.capabilities[capability] : connection.connected;
 }
 
 const MINUTE_MS = 60 * 1000;

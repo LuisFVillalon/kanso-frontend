@@ -12,11 +12,29 @@ export type CanvasStatus = 'active' | 'invalid' | 'error';
 export type CanvasConnectionType = 'token' | 'feed';
 
 /**
- * What a connection can read. A token can read everything; the calendar
- * feed reads upcoming items, which can still be added to tasks, and nothing
- * else: no courses or grades, announcements or submission status.
+ * What a connection can show. A token can show everything; the calendar
+ * feed only upcoming items and tasks added from them: no missing or graded
+ * work, courses, modules, assignments, announcements or submission status.
+ * All false while not connected.
  */
-export type CanvasCapability = 'upcoming' | 'link_tasks' | 'courses' | 'announcements' | 'submissions';
+export interface CanvasCapabilities {
+  /** GET /canvas/overview's upcoming list. */
+  upcoming: boolean;
+  /** Its missing and recently_graded lists. */
+  missing: boolean;
+  recently_graded: boolean;
+  /** GET /canvas/courses (grades), and a course's modules and assignments. */
+  courses: boolean;
+  modules: boolean;
+  assignments: boolean;
+  announcements: boolean;
+  /** Add to tasks, and the linked-task sync of due dates. */
+  link_tasks: boolean;
+  /** The linked-task sync reports whether an assignment was submitted. */
+  submission_status: boolean;
+}
+
+export type CanvasCapability = keyof CanvasCapabilities;
 
 /**
  * The masked Canvas connection, as the /canvas/connection routes return it
@@ -27,12 +45,15 @@ export interface CanvasConnection {
   connected: boolean;
   status: CanvasStatus | null;
   /** Null when not connected; a backend from before the calendar feed leaves it out (a token). */
-  type?: CanvasConnectionType | null;
+  connection_type?: CanvasConnectionType | null;
   /** Left out by a backend from before the calendar feed, where everything is a token's. */
-  capabilities?: CanvasCapability[];
+  capabilities?: CanvasCapabilities;
   /** Normalized "https://host". */
   base_url: string | null;
+  /** The token's last 4 characters, or for a feed its code's. */
   token_last4: string | null;
+  /** A feed's link with its code cut to the last 4: "https://host/feeds/calendars/user_…xxxx.ics". */
+  feed_url_masked?: string | null;
   canvas_user_id: number | null;
   canvas_user_name: string | null;
   /** ISO timestamps from here on, null when unknown or never. */
@@ -56,6 +77,7 @@ export type CanvasErrorCode =
   | 'canvas_url_invalid'
   | 'canvas_not_canvas'
   | 'canvas_token_invalid'
+  | 'canvas_feed_url_invalid'
   | 'canvas_feed_invalid'
   | 'canvas_forbidden'
   | 'canvas_account_changed'
@@ -68,7 +90,12 @@ export type CanvasErrorCode =
 // app/schemas/canvas_schema.py). Dates are ISO timestamps; every html_url is
 // an https link on the school's own Canvas host, or null.
 
-export type CanvasReadErrorCode = 'canvas_busy' | 'canvas_course_hidden' | 'canvas_course_not_found';
+export type CanvasReadErrorCode =
+  | 'canvas_busy'
+  | 'canvas_course_hidden'
+  | 'canvas_course_not_found'
+  | 'canvas_feed_invalid'
+  | 'canvas_not_supported';
 
 /** Freshness fields every read route sends with its data. */
 export interface CanvasReadMeta {

@@ -37,7 +37,9 @@ import {
   testCanvasConnection,
   updateCanvasHiddenCourses,
 } from '@/app/lib/backend-api';
-import type { CanvasConnection, CanvasConnectionType, CanvasCourse, CanvasErrorCode } from '@/app/types/canvas';
+import type {
+  CanvasCapabilities, CanvasConnection, CanvasConnectionType, CanvasCourse, CanvasErrorCode,
+} from '@/app/types/canvas';
 import { canvasCan, canvasConnectionType } from '@/app/utils/canvas';
 
 /** How far ahead of the token's expiry Settings starts warning about it. */
@@ -51,8 +53,10 @@ const ERROR_MESSAGES: Record<CanvasErrorCode, string> = {
     "kanso couldn't find a Canvas site at this address. Use the address you see when you open Canvas.",
   canvas_token_invalid:
     "Canvas didn't accept this token. It may be incomplete, expired, or deleted in Canvas. Copy it again or create a new one.",
+  canvas_feed_url_invalid:
+    "That isn't a Canvas calendar feed link. Copy it from Canvas under Calendar → Calendar Feed. It ends in .ics.",
   canvas_feed_invalid:
-    "Canvas didn't serve a calendar feed at this link. It may be incomplete or out of date. Copy it again from Canvas under Calendar → Calendar Feed.",
+    "Canvas doesn't know this calendar feed link. It may be mistyped, or it was reset in Canvas. Copy it again from Canvas under Calendar → Calendar Feed.",
   canvas_forbidden:
     "Canvas accepted the token but wouldn't share your account details. Your school may limit what tokens can do.",
   canvas_account_changed: 'This token belongs to a different Canvas account or school.',
@@ -68,8 +72,14 @@ const ERROR_FIELDS: Partial<Record<CanvasErrorCode, 'url' | 'token'>> = {
   canvas_token_invalid: 'token',
 };
 
-/** The codes the feed form shows under its one field: each says the link is wrong. */
-const FEED_FIELD_ERRORS: readonly CanvasErrorCode[] = ['canvas_feed_invalid', 'canvas_url_invalid', 'canvas_not_canvas'];
+/** The codes the feed form shows under its one field, each saying what's wrong with the link. */
+const FEED_FIELD_ERRORS: Partial<Record<CanvasErrorCode, string>> = {
+  canvas_feed_url_invalid: ERROR_MESSAGES.canvas_feed_url_invalid,
+  canvas_feed_invalid: ERROR_MESSAGES.canvas_feed_invalid,
+  canvas_url_invalid:
+    "kanso can't use this link. Copy the calendar feed link from Canvas as it is: it starts with https:// or webcal://.",
+  canvas_not_canvas: "This link isn't a Canvas calendar. Copy the link from Canvas under Calendar → Calendar Feed.",
+};
 
 /** The Canvas error code a failed request carried, or null for any other failure. */
 export function canvasErrorCode(err: unknown): CanvasErrorCode | null {
@@ -133,11 +143,17 @@ export function canvasStatusLine(connection: CanvasConnection, now: Date): strin
   }
 }
 
+const NO_CAPABILITIES: CanvasCapabilities = {
+  upcoming: false, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
+  announcements: false, link_tasks: false, submission_status: false,
+};
+
 const NOT_CONNECTED: CanvasConnection = {
   connected: false,
   status: null,
-  type: null,
-  capabilities: [],
+  connection_type: null,
+  capabilities: NO_CAPABILITIES,
+  feed_url_masked: null,
   base_url: null,
   token_last4: null,
   canvas_user_id: null,
@@ -266,7 +282,7 @@ const FieldError: React.FC<{ id: string; children: React.ReactNode }> = ({ id, c
 
 type FormMode = 'connect' | 'replace' | 'reconnect';
 
-/** Asks before a token or feed link for a different Canvas account replaces the connected one. */
+/** Asks before a token for a different Canvas account, or a feed link at another school, replaces the connection. */
 const AccountSwitchConfirm: React.FC<{ what: 'token' | 'link'; onSwitch: () => void; onKeep: () => void }> = ({
   what,
   onSwitch,
@@ -274,8 +290,10 @@ const AccountSwitchConfirm: React.FC<{ what: 'token' | 'link'; onSwitch: () => v
 }) => (
   <div role="alert" className="rounded-lg border p-3 space-y-2" style={{ borderColor: 'var(--tm-warning)', backgroundColor: 'var(--tm-warning-subtle)' }}>
     <p className="text-sm text-text-primary">
-      <strong className="font-semibold">This {what} belongs to a different Canvas account or school.</strong> Switch kanso
-      to it? Your &ldquo;Courses to show&rdquo; choices will reset.
+      <strong className="font-semibold">
+        {what === 'token' ? ERROR_MESSAGES.canvas_account_changed : "This link is for a different school's Canvas."}
+      </strong>{' '}
+      Switch kanso to it? Your &ldquo;Courses to show&rdquo; choices will reset.
     </p>
     <div className="flex flex-wrap gap-2">
       <button type="button" onClick={onSwitch} className="btn btn-primary text-xs py-1.5">
@@ -477,10 +495,10 @@ const CanvasFeedForm: React.FC<FeedFormProps> = ({ mode, onSubmit, onCancel }) =
       if (code === 'canvas_account_changed') {
         setConfirmSwitch(true);
       } else {
-        setError({
-          field: !!code && FEED_FIELD_ERRORS.includes(code),
-          message: canvasErrorMessage(err, "Couldn't connect Canvas. Please try again."),
-        });
+        const fieldMessage = code ? FEED_FIELD_ERRORS[code] : undefined;
+        setError(fieldMessage
+          ? { field: true, message: fieldMessage }
+          : { field: false, message: canvasErrorMessage(err, "Couldn't connect Canvas. Please try again.") });
       }
     } finally {
       setChecking(false);
@@ -672,6 +690,12 @@ const ConnectionCard: React.FC<{ connection: CanvasConnection; now: Date }> = ({
         <dd className="text-text-primary" data-testid="canvas-type">
           {feed ? <>Calendar feed · read-only{added}</> : 'Access token'}
         </dd>
+        {feed && connection.feed_url_masked && <>
+          <dt className="text-text-muted">Feed link</dt>
+          <dd className="min-w-0 break-all font-mono text-xs text-text-primary self-center" data-testid="canvas-feed-masked">
+            {connection.feed_url_masked}
+          </dd>
+        </>}
         {!feed && <>
           <dt className="text-text-muted">Token</dt>
           <dd className="text-text-primary">

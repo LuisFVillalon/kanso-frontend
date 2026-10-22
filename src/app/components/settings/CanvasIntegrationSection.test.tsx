@@ -50,9 +50,13 @@ const connected = (overrides: Partial<CanvasConnection> = {}): CanvasConnection 
   ...overrides,
 });
 const feedConnected = (overrides: Partial<CanvasConnection> = {}): CanvasConnection => connected({
-  type: 'feed',
-  capabilities: ['upcoming', 'link_tasks'],
-  token_last4: null,
+  connection_type: 'feed',
+  capabilities: {
+    upcoming: true, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
+    announcements: false, link_tasks: true, submission_status: false,
+  },
+  token_last4: 'T0ke',
+  feed_url_masked: 'https://sdsu.instructure.com/feeds/calendars/user_…T0ke.ics',
   canvas_user_id: null,
   canvas_user_name: null,
   token_expires_at: null,
@@ -136,7 +140,8 @@ describe('canvasErrorMessage', () => {
     [422, 'canvas_url_invalid', "isn't a Canvas address kanso can use"],
     [422, 'canvas_not_canvas', "couldn't find a Canvas site at this address"],
     [422, 'canvas_token_invalid', "Canvas didn't accept this token"],
-    [422, 'canvas_feed_invalid', "Canvas didn't serve a calendar feed at this link"],
+    [422, 'canvas_feed_url_invalid', "isn't a Canvas calendar feed link"],
+    [422, 'canvas_feed_invalid', "Canvas doesn't know this calendar feed link"],
     [422, 'canvas_forbidden', "wouldn't share your account details"],
     [409, 'canvas_account_changed', 'different Canvas account or school'],
     [502, 'canvas_unavailable', "Canvas couldn't be reached right now"],
@@ -195,6 +200,8 @@ describe('CanvasIntegrationSection', () => {
     expect(input.value).toBe('');
     expect(status()).toBe('Connected · calendar feed');
     expect(container.querySelector('[data-testid="canvas-type"]')?.textContent).toContain('Calendar feed · read-only');
+    expect(container.querySelector('[data-testid="canvas-feed-masked"]')?.textContent)
+      .toBe('https://sdsu.instructure.com/feeds/calendars/user_…T0ke.ics');
     expect(text()).toContain('Canvas connected.');
     expect(text()).not.toContain('s3cr3tFeedT0ken');
     expect(text()).not.toContain('•••• ••••');
@@ -217,8 +224,22 @@ describe('CanvasIntegrationSection', () => {
     await render();
     feedInput().value = 'https://sdsu.instructure.com/not-a-feed';
     await submitForm();
-    expect(container.querySelector('#canvas-feed-error')?.textContent).toContain("Canvas didn't serve a calendar feed");
+    expect(container.querySelector('#canvas-feed-error')?.textContent).toContain("Canvas doesn't know this calendar feed link");
     expect(feedInput().getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it.each([
+    ['canvas_feed_url_invalid', "isn't a Canvas calendar feed link"],
+    ['canvas_url_invalid', 'starts with https:// or webcal://'],
+    ['canvas_not_canvas', "isn't a Canvas calendar"],
+  ])('explains %s under the feed field in terms of the link', async (code, message) => {
+    api.fetchCanvasConnection.mockResolvedValue(notConnected);
+    api.connectCanvasFeed.mockRejectedValue(apiError(422, code));
+    await render();
+    feedInput().value = 'webcal://example.com/calendar.ics';
+    await submitForm();
+    expect(container.querySelector('#canvas-feed-error')?.textContent).toContain(message);
+    expect(text()).not.toContain('example.com');
   });
 
   it('asks before a feed link for a different account replaces the connection', async () => {
@@ -230,7 +251,7 @@ describe('CanvasIntegrationSection', () => {
     await click(button('Replace'));
     feedInput().value = FEED_URL;
     await submitForm();
-    expect(text()).toContain('This link belongs to a different Canvas account or school.');
+    expect(text()).toContain("This link is for a different school's Canvas.");
     await click(button('Switch account'));
     expect(api.connectCanvasFeed).toHaveBeenLastCalledWith(FEED_URL, true);
     expect(text()).toContain('Canvas connected as Other Person.');
