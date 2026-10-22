@@ -9,9 +9,6 @@ export const DEFAULT_REMINDER_MINUTES = 120;
 /** Leads offered as one-click choices, in minutes. */
 export const REMINDER_PRESETS = [15, 30, 60, 120, 24 * 60];
 
-/** The backend always sends a final warning this long before a task is due. */
-export const FINAL_WARNING_MINUTES = 30;
-
 /** The mood reminder's one-click leads, in minutes before "Call it a day". */
 export const MOOD_REMINDER_PRESETS = [15, 30, 60, 120];
 

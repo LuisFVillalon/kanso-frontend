@@ -1,6 +1,6 @@
 /** Alert types the backend computes (kanso-backend app/schemas/notification_schema.py). */
 export type NotificationType =
-  | 'due_today' | 'task_reminder' | 'final_warning' | 'overdue' | 'habit_reminder'
+  | 'due_today' | 'task_reminder' | 'overdue' | 'habit_reminder'
   | 'mood_reminder' | 'mood_missed';
 
 /** One in-app notification, as GET /get-notifications returns it. */
