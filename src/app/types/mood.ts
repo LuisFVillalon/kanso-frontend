@@ -61,6 +61,13 @@ export const DEFAULT_MOOD_SETTINGS: MoodCheckinSettings = {
   monthly: false,
 };
 
+/** The known settings from `/get-profile`, defaults filled in; legacy keys it may still carry are dropped, so they are never saved back. */
+export const moodSettings = (saved?: Partial<MoodCheckinSettings> | null): MoodCheckinSettings => ({
+  daily: saved?.daily ?? DEFAULT_MOOD_SETTINGS.daily,
+  weekly: saved?.weekly ?? DEFAULT_MOOD_SETTINGS.weekly,
+  monthly: saved?.monthly ?? DEFAULT_MOOD_SETTINGS.monthly,
+});
+
 /** The 5-face scale, index = score - 1. */
 export const MOOD_LABELS = ['Rough', 'Low', 'Okay', 'Good', 'Great'] as const;
 export const ENERGY_LABELS = ['Drained', 'Low', 'Steady', 'Good', 'Charged'] as const;

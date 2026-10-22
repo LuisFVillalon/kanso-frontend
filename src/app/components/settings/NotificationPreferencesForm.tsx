@@ -6,6 +6,7 @@ import SettingsGroup from '@/app/components/settings/SettingsGroup';
 import { MOOD_GROUP } from '@/app/components/settings/MoodCheckinSettingsSection';
 import { AUTOSAVE_DEBOUNCE_MS, type TrackSave } from '@/app/components/settings/autosave';
 import type { NotificationPreferences, NotificationPreferencesUpdate } from '@/app/types/notification';
+import { MOOD_REMINDER_MINUTES_MAX, MOOD_REMINDER_PRESETS } from '@/app/utils/notifications';
 
 /** Switch labels, in the order the day runs within each group. Other types the server lists aren't offered. */
 const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
@@ -133,8 +134,12 @@ const NotificationPreferencesForm: React.FC<Props> = ({
         onChange={minutes => { if (minutes !== null) edit({ mood_reminder_minutes: minutes }, { debounce: true }); }}
         disabled={draft.types.mood_reminder === false}
         finalWarningNote={false}
+        presets={MOOD_REMINDER_PRESETS}
+        maxMinutes={MOOD_REMINDER_MINUTES_MAX}
       />
-      <p className="text-xs text-text-muted mt-1">Counts back from your &ldquo;Call it a day&rdquo; time, not from a task&rsquo;s due time.</p>
+      <p className="text-xs text-text-muted mt-1">
+        Counts back from your &ldquo;Call it a day&rdquo; time, not from a task&rsquo;s due time. A lead longer than your working day sends it at the start of the day.
+      </p>
     </div>
   );
   const defaultReminderChoice = (

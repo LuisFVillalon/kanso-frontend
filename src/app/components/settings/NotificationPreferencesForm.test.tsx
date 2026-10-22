@@ -218,6 +218,7 @@ describe('NotificationPreferencesForm', () => {
       const moodRow = switchFor('Mood check-in reminder').parentElement!;
       expect(moodRow.nextElementSibling!.contains(select('mood-reminder-lead-label'))).toBe(true);
       expect(moodRow.nextElementSibling!.textContent).toContain('not from a task’s due time');
+      expect(moodRow.nextElementSibling!.textContent).toContain('longer than your working day sends it at the start of the day');
     });
 
     it('shows the mood check-in settings it is given at the top of the Mood check-ins group', () => {
@@ -259,14 +260,25 @@ describe('NotificationPreferencesForm', () => {
       expect(onSave).toHaveBeenCalledWith({ mood_reminder_minutes: 30 });
     });
 
-    it('saves a custom lead and holds back an out-of-range one', async () => {
+    it('offers its own same-day presets', () => {
+      render(moodPrefs());
+      expect([...lead().options].map(o => o.value)).toEqual(['15', '30', '60', '120', 'custom']);
+    });
+
+    it('saves a custom lead and holds back one of a day or more', async () => {
       const onSave = render(moodPrefs());
       act(() => typeInto(lead(), 'custom'));
-      act(() => typeInto(customUnit(), 'days'));
-      act(() => typeInto(customAmount(), '8'));
-      expect(document.body.textContent).toContain('from 1 minute up to 7 days');
+      expect([...customUnit().options].map(o => o.value)).toEqual(['minutes', 'hours']);
+      act(() => typeInto(customUnit(), 'hours'));
+      act(() => typeInto(customAmount(), '24'));
+      expect(document.body.textContent).toContain('from 1 minute up to 23 h 59 min');
+      expect(customAmount().checkValidity()).toBe(false);
       await pause();
-      expect(onSave).not.toHaveBeenCalledWith({ mood_reminder_minutes: 8 * 24 * 60 });
+      expect(onSave).not.toHaveBeenCalledWith({ mood_reminder_minutes: 24 * 60 });
+      act(() => typeInto(customUnit(), 'minutes'));
+      act(() => typeInto(customAmount(), '1439'));
+      await pause();
+      expect(onSave).toHaveBeenLastCalledWith({ mood_reminder_minutes: 1439 });
       act(() => typeInto(customUnit(), 'minutes'));
       act(() => typeInto(customAmount(), '45'));
       await pause();
