@@ -32,9 +32,11 @@ interface Props {
   /** The local day, "YYYY-MM-DD". */
   date: string;
   /**
-   * - `brief`: the Daily Brief's line — "Log today's mood", or the day's
-   *   mood with Edit.
-   * - `chip`: the calendar day panel's chip — "Log mood", or the mood with Edit.
+   * - `brief`: the Daily Brief's chip beside Focus Next, named for the
+   *   check-in day ("Log today's mood").
+   * - `chip`: the calendar day panel's chip, named for the full date.
+   *
+   * Both show "Log mood", or the day's mood with Edit.
    */
   variant: 'brief' | 'chip';
   summary?: DaySummary | null;
@@ -70,41 +72,18 @@ const DayMoodCheckin: React.FC<Props> = ({ date, variant, summary = null, classN
 
   return (
     <>
-      {checkin !== undefined && (variant === 'brief' ? (
-        <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2 rounded-lg bg-surface-raised text-sm ${className}`}>
-          {checkin ? (
-            <>
-              {face}
-              <p className="flex-1 min-w-0 text-text-secondary">
-                {isToday ? 'Today' : dayName}&rsquo;s mood: <b className="text-text-primary">{moodLabel(checkin.mood)}</b>
-              </p>
-              <button type="button" onClick={open} aria-label={`Edit ${dayName}’s mood`} className="font-medium text-accent hover:underline">
-                Edit
-              </button>
-            </>
-          ) : (
-            <>
-              <Smile className="w-4 h-4 text-text-muted shrink-0" aria-hidden="true" />
-              <p className="flex-1 basis-56 min-w-0 text-text-secondary">
-                {isToday ? 'How’s today going?' : `How was ${dayName}?`} Log your mood any time, and change it later.
-              </p>
-              <button type="button" onClick={open} className="chip mood-tag">
-                Log {dayName}&rsquo;s mood
-              </button>
-            </>
-          )}
-        </div>
-      ) : checkin ? (
-        <span className="chip mood-tag gap-1.5">
+      {checkin !== undefined && (checkin ? (
+        <span className={`chip mood-tag gap-1.5 ${className}`}>
           {face}
+          {variant === 'brief' && <span className="sr-only">{isToday ? 'Today' : dayName}&rsquo;s mood: </span>}
           <span className="text-text-primary">{moodLabel(checkin.mood)}</span>
           <span aria-hidden="true" className="opacity-40">·</span>
-          <button type="button" onClick={open} aria-label={`Edit mood for ${longName}`} className="font-medium text-accent hover:underline">
+          <button type="button" onClick={open} aria-label={variant === 'brief' ? `Edit ${dayName}’s mood` : `Edit mood for ${longName}`} className="font-medium text-accent hover:underline">
             Edit
           </button>
         </span>
       ) : (
-        <button type="button" onClick={open} aria-label={`Log mood for ${longName}`} className="chip mood-tag">
+        <button type="button" onClick={open} aria-label={variant === 'brief' ? `Log ${dayName}’s mood` : `Log mood for ${longName}`} className={`chip mood-tag ${className}`}>
           <Smile className="w-3.5 h-3.5" aria-hidden="true" />
           Log mood
         </button>
@@ -130,7 +109,7 @@ const DayMoodCheckin: React.FC<Props> = ({ date, variant, summary = null, classN
 export default DayMoodCheckin;
 
 /**
- * The Daily Brief's mood line: the check-in day's mood, logged or edited at
+ * The Daily Brief's mood chip: the check-in day's mood, logged or edited at
  * any time. A day called off past midnight keeps its check-in until the next
  * day starts, as the dashboard nudge does.
  */
