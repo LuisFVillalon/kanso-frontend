@@ -28,7 +28,7 @@ const KIND_STYLE: Record<TimedEvent['kind'] | 'habit', { bg: string; edge: strin
 };
 
 /** The grid's own height; it scrolls the hours inside. */
-export const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
+const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
 
 export const WEEK_LEGEND = [
   { label: 'Planned task', ...KIND_STYLE.task },
@@ -71,6 +71,8 @@ interface WeekGridProps {
   onOpenTask: (taskId: number) => void;
   onOpenNote: (noteId: number) => void;
   onOpenHabit: (habitId: number) => void;
+  /** Fill the parent's remaining height (a flex column) instead of the grid's own height. */
+  fill?: boolean;
 }
 
 /**
@@ -83,7 +85,7 @@ interface WeekGridProps {
  */
 const WeekGrid: React.FC<WeekGridProps> = ({
   days, timed, allDay, todayIndex, nowMinutes, scrollToMinutes, scrollKey,
-  canOpenTask, canOpenHabit, onCreateAt, onOpenTask, onOpenNote, onOpenHabit,
+  canOpenTask, canOpenHabit, onCreateAt, onOpenTask, onOpenNote, onOpenHabit, fill = false,
 }) => {
   const hintId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -139,8 +141,8 @@ const WeekGrid: React.FC<WeekGridProps> = ({
   return (
     <div
       ref={scrollRef}
-      className="relative overflow-auto scrollbar-custom rounded-xl border border-border"
-      style={{ backgroundColor: 'var(--tm-surface)', height: WEEK_GRID_HEIGHT }}
+      className={`relative overflow-auto scrollbar-custom rounded-xl border border-border ${fill ? 'flex-1 min-h-0' : ''}`}
+      style={{ backgroundColor: 'var(--tm-surface)', height: fill ? undefined : WEEK_GRID_HEIGHT }}
     >
       <div className="min-w-[42rem]">
         {/* Day headers + all-day row, pinned to the top while the hours scroll. */}

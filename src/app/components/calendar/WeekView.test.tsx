@@ -62,8 +62,8 @@ const activityFor = (start: string, end: string): CalendarActivity => ({
   habit_completions: [{ habit_id: 5, habit_title: 'Run', date: '2026-10-21', estimated_time: null }],
 });
 
-const render = async () => {
-  await act(async () => root.render(<WeekView />));
+const render = async (props: React.ComponentProps<typeof WeekView> = {}) => {
+  await act(async () => root.render(<WeekView {...props} />));
 };
 
 const button = (label: string): HTMLButtonElement => {
@@ -96,6 +96,19 @@ afterEach(() => {
 // seconds on its own and well past vitest's 5s default when the full suite
 // runs in parallel on a loaded machine.
 describe('WeekView', { timeout: 30_000 }, () => {
+  it('keeps the hour grid at its own height, or fills the parent with fill', async () => {
+    const grid = () => container.querySelector<HTMLElement>('.overflow-auto.rounded-xl')!;
+    await render();
+    expect(grid().style.height).not.toBe('');
+    expect(grid().classList.contains('flex-1')).toBe(false);
+
+    await render({ fill: true });
+    expect((container.firstElementChild as HTMLElement).classList.contains('h-full')).toBe(true);
+    expect(grid().style.height).toBe('');
+    expect(grid().classList.contains('flex-1')).toBe(true);
+    expect(grid().classList.contains('min-h-0')).toBe(true);
+  });
+
   it('loads the Monday–Sunday week containing today and plots its activity', async () => {
     mocks.tasks = [task({ id: 3, title: 'Essay', due_date: '2026-10-22', due_time: '14:00', estimated_time: 1 })];
     await render();
