@@ -2,7 +2,7 @@
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { NotificationPreferences } from '@/app/types/notification';
+import type { NotificationPreferences, NotificationPreferencesUpdate } from '@/app/types/notification';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -11,6 +11,7 @@ vi.mock('@/app/lib/backend-api', () => ({
 }));
 
 import NotificationPreferencesForm, { preferenceChanges } from './NotificationPreferencesForm';
+import { AUTOSAVE_DEBOUNCE_MS } from './autosave';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -23,9 +24,33 @@ const prefs = (overrides: Partial<NotificationPreferences> = {}): NotificationPr
   ...overrides,
 });
 
-const render = (preferences: NotificationPreferences, onSave = vi.fn().mockImplementation(async () => preferences)) => {
-  act(() => root.render(<NotificationPreferencesForm preferences={preferences} onSave={onSave} />));
-  return onSave;
+/** Runs each save the way the settings page's tracker does, reporting whether it succeeded. */
+const track = vi.fn((_key: string, run: () => Promise<unknown>) => run().then(() => true, () => false));
+const onUndoableChange = vi.fn<(message: string, undo: () => void) => void>();
+
+/** An onSave that applies the changes and answers with the result, like the API. */
+const server = (preferences: NotificationPreferences) => {
+  let stored = preferences;
+  return vi.fn(async (changes: NotificationPreferencesUpdate) => {
+    const { default_reminder_minutes: minutes, ...rest } = changes;
+    stored = {
+      ...stored,
+      ...rest,
+      types: { ...stored.types, ...changes.types },
+      default_reminder_minutes: minutes === undefined ? stored.default_reminder_minutes : minutes ?? 120,
+    };
+    return stored;
+  });
+};
+
+const render = (
+  preferences: NotificationPreferences,
+  onSave: (changes: NotificationPreferencesUpdate) => Promise<NotificationPreferences> = server(preferences),
+) => {
+  act(() => root.render(
+    <NotificationPreferencesForm preferences={preferences} onSave={onSave} track={track} onUndoableChange={onUndoableChange} />,
+  ));
+  return onSave as ReturnType<typeof vi.fn>;
 };
 
 const byText = <T extends HTMLElement>(selector: string, text: string) =>
@@ -34,7 +59,6 @@ const switchFor = (label: string) => {
   const id = byText('p', label).id;
   return document.querySelector<HTMLButtonElement>(`[role="switch"][aria-labelledby="${id}"]`)!;
 };
-const saveButton = () => byText<HTMLButtonElement>('button', 'Save notifications');
 const input = (id: string) => document.getElementById(id) as HTMLInputElement;
 const select = (labelledBy: string) => document.querySelector<HTMLSelectElement>(`select[aria-labelledby="${labelledBy}"]`)!;
 
@@ -45,11 +69,18 @@ const typeInto = (el: HTMLInputElement | HTMLSelectElement, value: string) => {
   el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
 };
 
-const submit = async () => {
-  await act(async () => { saveButton().click(); });
+/** Lets a typed value's pause run out, and its save settle. */
+const pause = async () => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS); });
+};
+const click = async (el: HTMLElement) => {
+  await act(async () => { el.click(); });
 };
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  track.mockClear();
+  onUndoableChange.mockClear();
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -58,63 +89,69 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
 describe('NotificationPreferencesForm', () => {
-  it('shows a switch per alert type, reflecting the saved state', () => {
+  it('shows a switch per alert type, reflecting the saved state, and no Save button', () => {
     render(prefs({ types: { ...prefs().types, overdue: false } }));
     expect(document.querySelectorAll('[role="switch"]')).toHaveLength(5);
     expect(switchFor('Morning summary').getAttribute('aria-checked')).toBe('true');
     expect(switchFor('Slipped task nudge').getAttribute('aria-checked')).toBe('false');
+    expect([...document.querySelectorAll('button')].some(b => /save/i.test(b.textContent ?? ''))).toBe(false);
   });
 
-  it('keeps Save disabled until something changes', () => {
-    render(prefs());
-    expect(saveButton().disabled).toBe(true);
-    act(() => switchFor('Evening habit reminder').click());
-    expect(saveButton().disabled).toBe(false);
-    act(() => switchFor('Evening habit reminder').click());
-    expect(saveButton().disabled).toBe(true);
-  });
-
-  it('saves only the switched type', async () => {
+  it('saves only the switched type, at once', async () => {
     const onSave = render(prefs());
-    act(() => switchFor('Final warning').click());
-    await submit();
+    await click(switchFor('Final warning'));
+    expect(onSave).toHaveBeenCalledOnce();
     expect(onSave).toHaveBeenCalledWith({ types: { final_warning: false } });
-    expect(document.body.textContent).toContain('Saved.');
+    expect(track).toHaveBeenCalledWith('notifications', expect.any(Function));
   });
 
-  it('sends quiet hours as a pair, including ones that cross midnight', async () => {
+  it('offers an Undo that switches the alert back and saves that', async () => {
+    const onSave = render(prefs());
+    await click(switchFor('Evening habit reminder'));
+    expect(onUndoableChange).toHaveBeenCalledWith('Evening habit reminder turned off.', expect.any(Function));
+    const undo = onUndoableChange.mock.calls[0][1];
+    await act(async () => { undo(); });
+    expect(switchFor('Evening habit reminder').getAttribute('aria-checked')).toBe('true');
+    expect(onSave).toHaveBeenLastCalledWith({ types: { habit_reminder: true } });
+  });
+
+  it('waits for both quiet-hour ends, then saves them as a pair after a pause', async () => {
     const onSave = render(prefs());
     act(() => typeInto(input('quiet-start'), '22:00'));
     expect(document.body.textContent).toContain('Set both a start and an end');
-    expect(saveButton().disabled).toBe(true);
+    await pause();
+    expect(onSave).not.toHaveBeenCalled();
     act(() => typeInto(input('quiet-end'), '07:00'));
-    await submit();
+    expect(onSave).not.toHaveBeenCalled();
+    await pause();
+    expect(onSave).toHaveBeenCalledOnce();
     expect(onSave).toHaveBeenCalledWith({ quiet_hours_start: '22:00', quiet_hours_end: '07:00' });
   });
 
   it('clears quiet hours by sending both as null', async () => {
     const onSave = render(prefs({ quiet_hours_start: '22:00', quiet_hours_end: '07:00' }));
-    act(() => byText<HTMLButtonElement>('button', 'Clear').click());
+    await click(byText<HTMLButtonElement>('button', 'Clear'));
     expect(input('quiet-start').value).toBe('');
-    await submit();
     expect(onSave).toHaveBeenCalledWith({ quiet_hours_start: null, quiet_hours_end: null });
   });
 
-  it('rejects quiet hours that start and end together', () => {
-    render(prefs());
+  it("doesn't save quiet hours that start and end together", async () => {
+    const onSave = render(prefs());
     act(() => typeInto(input('quiet-start'), '09:00'));
     act(() => typeInto(input('quiet-end'), '09:00'));
     expect(document.body.textContent).toContain("can't start and end at the same time");
-    expect(saveButton().disabled).toBe(true);
+    await pause();
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('saves a new default reminder from the presets', async () => {
     const onSave = render(prefs());
     act(() => typeInto(select('default-reminder-label'), '1440'));
-    await submit();
+    await pause();
     expect(onSave).toHaveBeenCalledWith({ default_reminder_minutes: 1440 });
   });
 
@@ -126,22 +163,29 @@ describe('NotificationPreferencesForm', () => {
     act(() => typeInto(unit, 'days'));
     act(() => typeInto(amount, '8'));
     expect(document.body.textContent).toContain('from 1 minute up to 7 days');
-    await submit();
-    expect(onSave).not.toHaveBeenCalled();
+    await pause();
+    expect(onSave).not.toHaveBeenCalledWith({ default_reminder_minutes: 8 * 24 * 60 });
     act(() => typeInto(unit, 'minutes'));
     act(() => typeInto(amount, '45'));
-    await submit();
-    expect(onSave).toHaveBeenCalledWith({ default_reminder_minutes: 45 });
+    await pause();
+    expect(onSave).toHaveBeenLastCalledWith({ default_reminder_minutes: 45 });
   });
 
-  it('shows an error and keeps the draft when saving fails', async () => {
+  it('keeps the change on screen and reports the failure when saving fails', async () => {
     const onSave = render(prefs(), vi.fn().mockRejectedValue(new Error('offline')));
-    act(() => switchFor('Morning summary').click());
-    await submit();
+    await click(switchFor('Morning summary'));
     expect(onSave).toHaveBeenCalledOnce();
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Couldn't save your notification settings");
+    await expect(track.mock.results[0].value).resolves.toBe(false);
     expect(switchFor('Morning summary').getAttribute('aria-checked')).toBe('false');
-    expect(saveButton().disabled).toBe(false);
+  });
+
+  it('saves a value still waiting for its pause when the page closes', async () => {
+    const onSave = render(prefs());
+    act(() => typeInto(select('default-reminder-label'), '1440'));
+    expect(onSave).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+    expect(onSave).toHaveBeenCalledWith({ default_reminder_minutes: 1440 });
+    root = createRoot(container);
   });
 
   it('lists a type this build has no label for', () => {
@@ -162,30 +206,28 @@ describe('NotificationPreferencesForm', () => {
       expect(lead('30 minutes before').getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('saves the lead on its own', async () => {
+    it('saves the lead on its own, at once', async () => {
       const onSave = render(moodPrefs());
-      act(() => lead('30 minutes before').click());
-      await submit();
+      await click(lead('30 minutes before'));
       expect(onSave).toHaveBeenCalledWith({ mood_reminder_minutes: 30 });
     });
 
-    it('greys out the lead while the reminder is off', () => {
+    it('greys out the lead while the reminder is off', async () => {
       render(moodPrefs());
-      act(() => switchFor('Mood check-in reminder').click());
+      await click(switchFor('Mood check-in reminder'));
       expect(lead('1 hour before').disabled).toBe(true);
     });
 
     it('says the mood notifications are silenced while mood reminders are off', () => {
-      act(() => root.render(<NotificationPreferencesForm preferences={moodPrefs()} onSave={vi.fn()} moodRemindersOff />));
-      expect(document.body.textContent?.match(/Silenced while Profile → Mood check-ins/g)).toHaveLength(2);
+      act(() => root.render(<NotificationPreferencesForm preferences={moodPrefs()} onSave={vi.fn()} track={track} moodRemindersOff />));
+      expect(document.body.textContent?.match(/Silenced while Mood check-ins → Remind me/g)).toHaveLength(2);
       expect(lead('1 hour before').disabled).toBe(true);
     });
 
     it('has no lead choice, and never sends one, when the server has no such preference', async () => {
       const onSave = render(prefs({ types: { ...prefs().types, mood_reminder: true } }));
       expect(document.body.textContent).not.toContain('1 hour before');
-      act(() => switchFor('Mood check-in reminder').click());
-      await submit();
+      await click(switchFor('Mood check-in reminder'));
       expect(onSave).toHaveBeenCalledWith({ types: { mood_reminder: false } });
     });
 

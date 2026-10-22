@@ -1,8 +1,8 @@
 'use client';
 
-// Accent color swatch grid for Settings → Profile → Appearance — the app's
+// Accent color swatch grid for Settings → Appearance — the app's
 // curated palette (theme.ts) rendered through the shared ColorSwatchPicker
-// UI, with the Notion Blue default called out via a subtle ring.
+// UI, with the kanso blue default called out via a subtle ring.
 
 import React from 'react';
 import ColorSwatchPicker from '@/app/components/common/ColorSwatchPicker';

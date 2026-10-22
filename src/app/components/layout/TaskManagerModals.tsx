@@ -84,7 +84,8 @@ interface TaskManagerModalsProps {
   onAccountDeleted: () => void;
   profile: ProfileFields;
   profileLoading: boolean;
-  onSaveProfile: (next: ProfileFields) => Promise<{ ok: boolean; error?: string }>;
+  onSaveProfileField: (patch: Partial<ProfileFields>) => Promise<void>;
+  onSignOut: () => Promise<void> | void;
   calendarSettings: CalendarSettings;
   calendarSettingsLoading: boolean;
   onSaveCalendarSettings: (changes: Partial<Omit<CalendarSettings, 'id'>>) => Promise<CalendarSettings>;
@@ -100,7 +101,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   showManageHabitsModal, onCloseManageHabitsModal, habits, onCreateHabitFromManage,
   onDeleteHabit, onArchiveHabit, onUpdateHabit, onViewHabitHistory,
   historyHabit, historyShowBackButton, onCloseHabitHistory, onToggleHabitDate,
-  showSettings, settingsSection, onCloseSettings, onAccountDeleted, profile, profileLoading, onSaveProfile,
+  showSettings, settingsSection, onCloseSettings, onAccountDeleted, onSignOut, profile, profileLoading, onSaveProfileField,
   calendarSettings, calendarSettingsLoading, onSaveCalendarSettings,
 }) => {
   return (
@@ -184,9 +185,10 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         initialSection={settingsSection}
         onClose={onCloseSettings}
         onAccountDeleted={onAccountDeleted}
+        onSignOut={onSignOut}
         profile={profile}
         profileLoading={profileLoading}
-        onSaveProfile={onSaveProfile}
+        onSaveProfileField={onSaveProfileField}
         calendarSettings={calendarSettings}
         calendarSettingsLoading={calendarSettingsLoading}
         onSaveCalendarSettings={onSaveCalendarSettings}

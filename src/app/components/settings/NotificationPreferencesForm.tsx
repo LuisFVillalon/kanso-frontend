@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReminderLeadPicker from '@/app/components/notifications/ReminderLeadPicker';
-import { describeError } from '@/app/lib/backend-api';
+import { AUTOSAVE_DEBOUNCE_MS, type TrackSave } from '@/app/components/settings/autosave';
 import type { NotificationPreferences, NotificationPreferencesUpdate } from '@/app/types/notification';
 import { DEFAULT_MOOD_REMINDER_MINUTES, MOOD_REMINDER_MINUTES } from '@/app/utils/notifications';
 
@@ -58,24 +57,66 @@ function quietHoursError(start: string | null, end: string | null): string | nul
 interface Props {
   preferences: NotificationPreferences;
   onSave: (changes: NotificationPreferencesUpdate) => Promise<NotificationPreferences>;
+  /** Reports each save to the page's Saved / Couldn't save indicator. */
+  track: TrackSave;
+  /** Offers an Undo for a switch that was just flipped. */
+  onUndoableChange?: (message: string, undo: () => void) => void;
   /** Mood check-in reminders are set to "Don't nudge", which silences the mood notifications too. */
   moodRemindersOff?: boolean;
 }
 
 /**
  * Settings → Notifications: a switch per alert type, quiet hours (which may
- * run past midnight) and the default reminder lead. Saves only what changed.
+ * run past midnight) and the default reminder lead. Every change saves
+ * itself, sending only what changed: switches at once, times after a pause
+ * in typing, and quiet hours only once they're valid.
  */
-const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moodRemindersOff = false }) => {
-  const [saved, setSaved] = useState(preferences);
+const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, track, onUndoableChange, moodRemindersOff = false }) => {
   const [draft, setDraft] = useState(preferences);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [justSaved, setJustSaved] = useState(false);
+  const draftRef = useRef(preferences);
+  const savedRef = useRef(preferences);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Read at save time, so a parent passing new callbacks never resets a pending save.
+  const callbacks = useRef({ onSave, track });
+  useEffect(() => { callbacks.current = { onSave, track }; }, [onSave, track]);
 
-  const edit = (patch: Partial<NotificationPreferences>) => {
-    setDraft(prev => ({ ...prev, ...patch }));
-    setJustSaved(false);
+  const saveNow = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    const { onSave, track } = callbacks.current;
+    void track('notifications', async () => {
+      const sent = draftRef.current;
+      if (quietHoursError(sent.quiet_hours_start, sent.quiet_hours_end)) return;
+      const changes = preferenceChanges(savedRef.current, sent);
+      if (Object.keys(changes).length === 0) return;
+      const next = await onSave(changes);
+      savedRef.current = next;
+      // Keep anything edited while this was saving.
+      if (draftRef.current === sent) {
+        draftRef.current = next;
+        setDraft(next);
+      }
+    });
+  }, []);
+
+  // Leaving the page mid-pause still saves what was typed.
+  useEffect(() => () => { if (timer.current) saveNow(); }, [saveNow]);
+
+  const edit = (patch: Partial<NotificationPreferences>, { debounce = false } = {}) => {
+    const next = { ...draftRef.current, ...patch };
+    draftRef.current = next;
+    setDraft(next);
+    if (timer.current) clearTimeout(timer.current);
+    if (debounce) timer.current = setTimeout(saveNow, AUTOSAVE_DEBOUNCE_MS);
+    else saveNow();
+  };
+
+  const toggleType = (type: string, label: string) => {
+    const on = !draftRef.current.types[type];
+    edit({ types: { ...draftRef.current.types, [type]: on } });
+    onUndoableChange?.(`${label} turned ${on ? 'on' : 'off'}.`, () => {
+      edit({ types: { ...draftRef.current.types, [type]: !on } });
+    });
   };
 
   const types = [
@@ -109,28 +150,8 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
       </div>
     </div>
   );
-  const changes = preferenceChanges(saved, draft);
-  const dirty = Object.keys(changes).length > 0;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!dirty || quietError) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const next = await onSave(changes);
-      setSaved(next);
-      setDraft(next);
-      setJustSaved(true);
-    } catch (err) {
-      setError(describeError(err, "Couldn't save your notification settings. Please try again."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <div className="space-y-6">
       <fieldset className="space-y-3">
         <legend className="text-xs font-medium text-text-muted mb-2">Alerts</legend>
         {types.map(type => {
@@ -145,7 +166,7 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
                   {hint && <p className="text-xs text-text-muted">{hint}</p>}
                   {moodRemindersOff && MOOD_TYPES.includes(type) && (
                     <p className="text-xs" style={{ color: 'var(--tm-warning)' }}>
-                      Silenced while Profile → Mood check-ins → Remind me is &ldquo;Don&rsquo;t nudge&rdquo;.
+                      Silenced while Mood check-ins → Remind me is &ldquo;Don&rsquo;t nudge&rdquo;.
                     </p>
                   )}
                 </div>
@@ -154,7 +175,7 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
                   role="switch"
                   aria-checked={on}
                   aria-labelledby={labelId}
-                  onClick={() => edit({ types: { ...draft.types, [type]: !on } })}
+                  onClick={() => toggleType(type, label)}
                   className="relative shrink-0 w-10 h-6 rounded-full transition-colors"
                   style={{ backgroundColor: on ? 'var(--tm-accent)' : 'var(--tm-border)' }}
                 >
@@ -173,15 +194,15 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
 
       <fieldset>
         <legend className="text-xs font-medium text-text-muted mb-2">Quiet hours</legend>
-        <div className="grid grid-cols-[1fr_1fr_auto] gap-3 items-end">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:gap-3 items-end">
           <div>
             <label htmlFor="quiet-start" className="block text-xs font-medium text-text-muted mb-1">From</label>
             <input
               id="quiet-start"
               type="time"
               value={draft.quiet_hours_start ?? ''}
-              onChange={e => edit({ quiet_hours_start: e.target.value || null })}
-              className="input-field w-full text-sm"
+              onChange={e => edit({ quiet_hours_start: e.target.value || null }, { debounce: true })}
+              className="input-field w-full min-w-0 text-sm"
             />
           </div>
           <div>
@@ -190,8 +211,8 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
               id="quiet-end"
               type="time"
               value={draft.quiet_hours_end ?? ''}
-              onChange={e => edit({ quiet_hours_end: e.target.value || null })}
-              className="input-field w-full text-sm"
+              onChange={e => edit({ quiet_hours_end: e.target.value || null }, { debounce: true })}
+              className="input-field w-full min-w-0 text-sm"
             />
           </div>
           <button
@@ -219,28 +240,11 @@ const NotificationPreferencesForm: React.FC<Props> = ({ preferences, onSave, moo
         <ReminderLeadPicker
           aria-labelledby="default-reminder-label"
           value={draft.default_reminder_minutes}
-          onChange={minutes => { if (minutes !== null) edit({ default_reminder_minutes: minutes }); }}
+          onChange={minutes => { if (minutes !== null) edit({ default_reminder_minutes: minutes }, { debounce: true }); }}
         />
         <p className="text-xs text-text-muted mt-1">Used for tasks with a due time unless you pick another when editing the task.</p>
       </div>
-
-      {error && (
-        <p role="alert" className="text-sm rounded-md px-3 py-2" style={{ backgroundColor: 'var(--tm-danger-subtle)', color: 'var(--tm-danger)' }}>
-          {error}
-        </p>
-      )}
-
-      <div className="flex items-center gap-3">
-        <button type="submit" disabled={!dirty || !!quietError || saving} className="btn btn-primary disabled:opacity-60">
-          {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : 'Save notifications'}
-        </button>
-        {justSaved && !dirty && (
-          <span role="status" className="flex items-center gap-1 text-sm" style={{ color: 'var(--tm-success-text)' }}>
-            <Check className="w-4 h-4" /> Saved.
-          </span>
-        )}
-      </div>
-    </form>
+    </div>
   );
 };
 

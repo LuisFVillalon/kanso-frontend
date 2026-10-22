@@ -16,11 +16,11 @@ interface PageStyleOption {
 
 export const PAGE_STYLES: PageStyleOption[] = [
   { key: 'graph',     label: 'Graph',         description: '5mm grid ruling — the notebook default.' },
-  { key: 'dot',       label: 'Dot Grid',      description: 'Bullet-journal dot matrix.' },
-  { key: 'college',   label: 'College Rule',  description: 'Narrow-spaced horizontal lines.' },
-  { key: 'wide',      label: 'Wide Rule',     description: 'Wider-spaced horizontal lines.' },
-  { key: 'isometric', label: 'Isometric Dot', description: 'Staggered dots for sketching in 3D.' },
-  { key: 'blank',     label: 'Blank Page',    description: 'No ruling — plain cream paper.' },
+  { key: 'dot',       label: 'Dot grid',      description: 'Bullet-journal dot matrix.' },
+  { key: 'college',   label: 'College rule',  description: 'Narrow-spaced horizontal lines.' },
+  { key: 'wide',      label: 'Wide rule',     description: 'Wider-spaced horizontal lines.' },
+  { key: 'isometric', label: 'Isometric dot', description: 'Staggered dots for sketching in 3D.' },
+  { key: 'blank',     label: 'Blank page',    description: 'No ruling — plain cream paper.' },
 ];
 
 export function applyPageStyle(key: string): void {

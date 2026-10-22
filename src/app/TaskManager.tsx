@@ -58,7 +58,7 @@ const TaskManager: React.FC = () => {
   const [doodleColor, setDoodleColor] = useState(() => getStoredThemeColor() ?? DEFAULT_ACCENT);
   const [doodleErasing, setDoodleErasing] = useState(false);
 
-  const { profile, loading: profileLoading, loaded: profileLoaded, saveProfile } = useProfile(user);
+  const { profile, loading: profileLoading, loaded: profileLoaded, saveProfile, saveProfileField } = useProfile(user);
   const { calendarSettings, loading: calendarSettingsLoading, saveCalendarSettings } = useCalendarSettings(user);
   const [mode, setMode] = usePersistedPref<AppMode>(
     'tm-app-mode',
@@ -394,7 +394,7 @@ const TaskManager: React.FC = () => {
     return (
       <CanvasPanel
         heightPx={panelHeightPx}
-        onOpenSettings={() => openSettings('integrations')}
+        onOpenSettings={() => openSettings('canvas')}
         syncToken={canvasSyncToken}
         addToTasks={isDemo ? undefined : canvasAddToTasks}
         onRefresh={isDemo ? undefined : () => void canvasTaskSync.sync(true)}
@@ -630,9 +630,10 @@ const TaskManager: React.FC = () => {
         settingsSection={settingsSection}
         onCloseSettings={() => { state.setShowSettings(false); setCanvasSyncToken(n => n + 1); }}
         onAccountDeleted={handleLogout}
+        onSignOut={handleLogout}
         profile={profile}
         profileLoading={profileLoading}
-        onSaveProfile={saveProfile}
+        onSaveProfileField={saveProfileField}
         calendarSettings={calendarSettings}
         calendarSettingsLoading={calendarSettingsLoading}
         onSaveCalendarSettings={saveCalendarSettings}

@@ -104,7 +104,7 @@ const CountdownClock: React.FC<{ endDate: Date }> = ({ endDate }) => {
 };
 
 // ── Work days / Days off timers ────────────────────────────────────────────────
-// Driven by the user's rest days (Settings → Profile). "Days off" are the
+// Driven by the user's rest days (Settings → Work day and rest). "Days off" are the
 // rest days; "Work days" are every other day. Whichever kind today is counts
 // down to the end of its current run of consecutive days (runs may wrap the
 // week — see utils/dayRuns.ts); the other shows the length of its next run.
@@ -156,8 +156,8 @@ interface DayRunDisplay {
 }
 
 const DAY_RUN_COPY: Record<DayKind, { everyDay: string; never: string }> = {
-  work: { everyDay: 'Every day is a work day — no days off set in Settings → Profile', never: 'No work days — every day is set as a day off' },
-  off: { everyDay: 'Every day is a day off', never: 'No days off set in Settings → Profile' },
+  work: { everyDay: 'Every day is a work day — no days off set in Settings → Work day and rest', never: 'No work days — every day is set as a day off' },
+  off: { everyDay: 'Every day is a day off', never: 'No days off set in Settings → Work day and rest' },
 };
 
 const describeDayRun = (now: Date, kind: DayKind, run: DayRunState): DayRunDisplay => {
@@ -274,7 +274,7 @@ const DayRunTimers: React.FC<{ restDays: number[] }> = ({ restDays }) => {
 };
 
 // ── Daily window timer (from the user's profile) ───────────────────────────────
-// Settings → Profile lets the user set "Day starts at" (localStorage only,
+// Settings → Work day and rest lets the user set "Day starts at" (localStorage only,
 // `tm_day_start_time`) and "Call it a day at" (persisted to the backend
 // profile as `shutoff_time`). This is that same daily window: while `now`
 // falls inside it, it counts down to the shutoff time; otherwise it shows

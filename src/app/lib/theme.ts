@@ -18,7 +18,7 @@ export const DEFAULT_ACCENT = '#006BCB';
 // endpoint would return, so the picker UI never has to change to accept a
 // larger or server-managed palette — see ColorSwatchPicker.
 export const THEME_ACCENT_COLORS: ColorOption[] = [
-  { id: 'default',  label: 'Notion Blue (Default)', value: DEFAULT_ACCENT },
+  { id: 'default',  label: 'Kanso blue (default)', value: DEFAULT_ACCENT },
   { id: 'red',      label: 'Red',      value: '#DC2626' },
   { id: 'rose',     label: 'Rose',     value: '#E11D48' },
   { id: 'orange',   label: 'Orange',   value: '#EA580C' },

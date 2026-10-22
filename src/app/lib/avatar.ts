@@ -16,7 +16,7 @@ interface AvatarOption {
 export const AVATAR_OPTIONS: AvatarOption[] = [
   { key: 'disc-3', label: 'Disc', icon: Disc3 },
   { key: 'sticker', label: 'Sticker', icon: Sticker },
-  { key: 'ice-cream-cone', label: 'Ice Cream Cone', icon: IceCreamCone },
+  { key: 'ice-cream-cone', label: 'Ice cream cone', icon: IceCreamCone },
   { key: 'tractor', label: 'Tractor', icon: Tractor },
   { key: 'origami', label: 'Origami', icon: Origami },
 ];

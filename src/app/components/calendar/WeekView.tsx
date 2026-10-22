@@ -40,7 +40,7 @@ const emptyTaskForm = (): BaseTaskForm => ({
   created_date: '',
 });
 
-/** The user's day start (Settings → Profile), cached locally by useProfile. */
+/** The user's day start (Settings → Work day and rest), cached locally by useProfile. */
 const readDayStartMinutes = (): number => {
   let stored: string | null = null;
   try {

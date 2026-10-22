@@ -36,3 +36,31 @@ export function toggleColorScheme(): void {
     // Storage blocked (private mode): the choice lasts until reload.
   }
 }
+
+/** Settings → Appearance's choice: a pinned theme, or 'system' to follow the OS. */
+export type ColorSchemeChoice = ColorScheme | 'system';
+
+/** The saved choice, or 'system' when nothing is pinned. */
+export function storedColorScheme(): ColorSchemeChoice {
+  const pinned = document.documentElement.dataset.theme;
+  return pinned === 'light' || pinned === 'dark' ? pinned : 'system';
+}
+
+/** Pins `choice`, or with 'system' drops the pin so the OS setting applies again. */
+export function setColorScheme(choice: ColorSchemeChoice): void {
+  const root = document.documentElement;
+  if (choice === 'system') delete root.dataset.theme;
+  else root.dataset.theme = choice;
+  // Each theme-color meta carries its own prefers-color-scheme media query
+  // (layout.tsx), so following the OS again means restoring each one's color.
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
+    const scheme = choice === 'system' ? (m.getAttribute('media')?.includes('dark') ? 'dark' : 'light') : choice;
+    m.setAttribute('content', COLOR_SCHEME_BG[scheme]);
+  });
+  try {
+    if (choice === 'system') localStorage.removeItem(COLOR_SCHEME_KEY);
+    else localStorage.setItem(COLOR_SCHEME_KEY, choice);
+  } catch {
+    // Storage blocked (private mode): the choice lasts until reload.
+  }
+}
