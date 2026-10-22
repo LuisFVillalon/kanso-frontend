@@ -81,17 +81,6 @@ const slot = (key: PanelKey) => container.querySelector<HTMLElement>(`[data-pane
 const visible = (key: PanelKey) => !!slot(key)?.className.includes('split-slot');
 const split = () => container.querySelector<HTMLElement>('#home-panels-tabpanel')!;
 
-const swipe = async (dx: number, dy = 0, target: Element = split()) => {
-  await act(async () => {
-    const start = new Event('touchstart', { bubbles: true }) as unknown as TouchEvent;
-    Object.assign(start, { touches: [{ clientX: 200, clientY: 200 }] });
-    target.dispatchEvent(start);
-    const end = new Event('touchend', { bubbles: true }) as unknown as TouchEvent;
-    Object.assign(end, { touches: [], changedTouches: [{ clientX: 200 + dx, clientY: 200 + dy }] });
-    target.dispatchEvent(end);
-  });
-};
-
 beforeEach(() => {
   media = { phone: false };
   changes = [];
@@ -197,26 +186,5 @@ describe('PanelCarousel', () => {
     expect(changes).toEqual([]);
     await act(async () => handle!.show('tasks'));
     expect(changes).toEqual(['tasks,notes']);
-  });
-
-  describe('swipe', () => {
-    it('moves to the next tab on a swipe left and back on a swipe right', async () => {
-      await render();
-      await swipe(-120);
-      await swipe(-120);
-      await swipe(-120);
-      await swipe(120);
-      expect(changes).toEqual(['notes,canvas', 'canvas,tasks', 'notes,canvas']);
-    });
-
-    it('ignores short or mostly vertical swipes, and ones that start in a field', async () => {
-      await render();
-      await swipe(-40);
-      await swipe(-120, 100);
-      const input = document.createElement('input');
-      split().appendChild(input);
-      await swipe(-120, 0, input);
-      expect(changes).toEqual([]);
-    });
   });
 });

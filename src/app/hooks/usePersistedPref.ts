@@ -25,11 +25,11 @@ export function usePersistedPref<T>(
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(storageKey);
-      if (!saved) return;
-      const parsed = JSON.parse(saved);
-      if (isValid(parsed)) setValue(parsed);
+      const parsed = saved ? JSON.parse(saved) : null;
+      setValue(isValid(parsed) ? parsed : defaultValue);
     } catch {
       // malformed or inaccessible storage — fall back to defaultValue
+      setValue(defaultValue);
     }
     // Only re-check when the storage key itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

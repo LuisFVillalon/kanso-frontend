@@ -1,6 +1,6 @@
 'use client';
 
-import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState, useSyncExternalStore } from 'react';
+import React, { forwardRef, useCallback, useImperativeHandle, useState, useSyncExternalStore } from 'react';
 import { GraduationCap, NotebookText, SquareCheckBig, type LucideIcon } from 'lucide-react';
 import DragHandle from '@/app/components/common/DragHandle';
 import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/components/common/SegmentedTabs';
@@ -10,8 +10,7 @@ import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/componen
  * connected. A wide screen shows a pair side by side in the resizable split,
  * a phone shows one. The tabs above name exactly what's on screen ("Tasks &
  * Notes", or "Tasks" on a phone) and switch it; they're hidden when there's
- * nothing to switch to. On a touch screen a sideways swipe across the panels
- * moves to the next or previous tab too.
+ * nothing to switch to.
  *
  * Every panel stays mounted once it has been shown, hidden rather than
  * unmounted, so its state (an open note editor, the Canvas tab) survives a
@@ -71,22 +70,6 @@ const subscribePhone = (onChange: () => void) => {
 };
 const isPhoneNow = () => typeof window.matchMedia === 'function' && window.matchMedia(PHONE_QUERY).matches;
 
-// How far a finger has to travel sideways, and how much straighter than
-// vertical, before a touch counts as a swipe rather than a scroll.
-const SWIPE_MIN_PX = 60;
-const SWIPE_SLOPE = 2;
-
-/** Touches that start here belong to the field or widget, not the panel switch. */
-const SWIPE_IGNORED = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="slider"], [role="dialog"], .modal-overlay';
-
-/** Whether a touch on `el` could be scrolling something sideways inside `boundary`. */
-function inSideScroller(el: Element | null, boundary: Element): boolean {
-  for (let node = el; node && node !== boundary; node = node.parentElement) {
-    if (node.scrollWidth > node.clientWidth && /auto|scroll/.test(getComputedStyle(node).overflowX)) return true;
-  }
-  return false;
-}
-
 export interface PanelCarouselHandle {
   /** Brings `panel` on screen if it isn't showing. */
   show: (panel: PanelKey) => void;
@@ -135,26 +118,6 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
 
   useImperativeHandle(ref, () => ({ show }), [show]);
 
-  const swipeStart = useRef<{ x: number; y: number } | null>(null);
-  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    const target = e.target instanceof Element ? e.target : null;
-    const ignored = e.touches.length !== 1 || choices.length < 2
-      || !!target?.closest(SWIPE_IGNORED) || inSideScroller(target, e.currentTarget);
-    swipeStart.current = ignored ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  };
-  const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    const start = swipeStart.current;
-    swipeStart.current = null;
-    const touch = e.changedTouches[0];
-    if (!start || !touch) return;
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < SWIPE_SLOPE * Math.abs(dy)) return;
-    // Swiping left brings in the next tab, as if pulling it from the right.
-    const next = choices[choices.indexOf(current) + (dx < 0 ? 1 : -1)];
-    if (next) choose(next);
-  };
-
   const hasTabs = choices.length > 1;
 
   const slotProps = (key: PanelKey): { className: string; style?: React.CSSProperties; widthPct: number } => {
@@ -183,8 +146,6 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
         aria-labelledby={hasTabs ? segmentedTabId(TABS_ID, current) : undefined}
         className="flex"
         style={{ ['--tasks-w' as string]: `${leftWidthPct}%` }}
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
       >
         {PANEL_ORDER.filter(key => mounted.includes(key) && available.includes(key)).map(key => {
           const { className, style, widthPct } = slotProps(key);
