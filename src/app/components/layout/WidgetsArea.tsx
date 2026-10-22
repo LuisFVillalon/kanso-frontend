@@ -40,7 +40,16 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
         />
       </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>
-        {view === 'widgets' ? widgets : <div className="mb-4 sm:mb-6"><WeekView /></div>}
+        {/* The widgets stay in the flow either way, so the area keeps their height and
+            switching doesn't shift the page; the week calendar overlays them and scrolls inside. */}
+        <div className="relative min-h-80">
+          <div className={view === 'week' ? 'invisible' : undefined} inert={view === 'week'} aria-hidden={view === 'week' || undefined}>
+            {widgets}
+          </div>
+          {view === 'week' && (
+            <div className="absolute inset-0 mb-4 sm:mb-6 overflow-y-auto"><WeekView /></div>
+          )}
+        </div>
       </div>
     </section>
   );

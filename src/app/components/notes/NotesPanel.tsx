@@ -110,16 +110,6 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
           )}
           {notes.length > 0 && (
             <div role="group" aria-label="Notes view" className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => onNoteOrderChange(noteOrder === 'newest' ? 'oldest' : 'newest')}
-                aria-label={`Notes order: ${noteOrder === 'newest' ? 'newest' : 'oldest'} first. Switch to ${noteOrder === 'newest' ? 'oldest' : 'newest'} first`}
-                title="Flip the notes' order"
-                className="toolbar-control gap-1.5"
-              >
-                <ArrowDownUp className="w-3.5 h-3.5" aria-hidden />
-                {noteOrder === 'newest' ? 'Newest first' : 'Oldest first'}
-              </button>
               {/* View toggle — cards (new) vs. folders (the original file/folder browser) */}
               <button
                 type="button"
@@ -145,6 +135,16 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
                     <FolderClosed className={`w-3.5 h-3.5 transition-colors ${viewMode === 'folders' ? 'text-white' : 'text-text-muted'}`} />
                   </span>
                 </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNoteOrderChange(noteOrder === 'newest' ? 'oldest' : 'newest')}
+                aria-label={`Notes order: ${noteOrder === 'newest' ? 'newest' : 'oldest'} first. Switch to ${noteOrder === 'newest' ? 'oldest' : 'newest'} first`}
+                title="Flip the notes' order"
+                className="toolbar-control gap-1.5"
+              >
+                <ArrowDownUp className="w-3.5 h-3.5" aria-hidden />
+                {noteOrder === 'newest' ? 'Newest first' : 'Oldest first'}
               </button>
             </div>
           )}
