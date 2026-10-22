@@ -297,6 +297,78 @@ describe('CanvasPanel', () => {
     expect(text()).toContain('No announcements in the last 14 days.');
   });
 
+  describe('calendar feed connection', () => {
+    const feedConnection = (overrides: Partial<CanvasConnection> = {}) => connected({
+      type: 'feed', capabilities: ['upcoming', 'link_tasks'], token_last4: null, canvas_user_id: null,
+      canvas_user_name: null, token_expires_at: null, ...overrides,
+    });
+    const feedOverview = () => overview({ missing: [], recently_graded: [] });
+    const addToTasks = { stateOf: vi.fn(() => ({ kind: 'add' as const, pending: false })), add: vi.fn() };
+
+    beforeEach(() => {
+      api.fetchCanvasConnection.mockResolvedValue(feedConnection());
+      api.fetchCanvasOverview.mockResolvedValue(feedOverview());
+    });
+
+    it('shows Upcoming with Add to tasks and reads nothing the feed has no data for', async () => {
+      await act(async () => root.render(<CanvasPanel onOpenSettings={onOpenSettings} addToTasks={addToTasks} />));
+      expect(panelStatus()).toBe('ready');
+      expect(text()).toContain('Homework 5');
+      expect(text()).toContain('Quiz 3: Paging');
+      expect(text()).toContain('Operating Systems');
+      expect(button('Add "Homework 5" to tasks')).toBeTruthy();
+      expect(api.fetchCanvasPanelCourses).not.toHaveBeenCalled();
+      expect(api.fetchCanvasAnnouncements).not.toHaveBeenCalled();
+    });
+
+    it('leaves out the Courses and Announcements tabs and says why', async () => {
+      await render();
+      expect(container.querySelector('[role="tablist"]')).toBeNull();
+      expect(button('Courses')).toBeUndefined();
+      expect(button('Announcements')).toBeUndefined();
+      expect(text()).not.toContain('No active courses');
+      const note = container.querySelector('[data-testid="canvas-feed-note"]')?.textContent;
+      expect(note).toContain('calendar feed, which has due dates only');
+      expect(note).toContain('need an access token, if your school allows one');
+      await click(button('Canvas settings'));
+      expect(onOpenSettings).toHaveBeenCalled();
+    });
+
+    it('treats a feed Canvas stopped serving as Reconnect, without reading Canvas', async () => {
+      api.fetchCanvasConnection.mockResolvedValue(feedConnection({ status: 'invalid', last_error_at: inDays(-3) }));
+      await render();
+      expect(panelStatus()).toBe('reconnect');
+      expect(text()).toContain('Your Canvas calendar feed stopped working');
+      expect(text()).not.toContain('token');
+      expect(api.fetchCanvasOverview).not.toHaveBeenCalled();
+      await click(button('Reconnect Canvas'));
+      expect(onOpenSettings).toHaveBeenCalled();
+    });
+
+    it('shows Reconnect when a read answers canvas_feed_invalid', async () => {
+      api.fetchCanvasOverview.mockRejectedValue(apiError(409, 'canvas_feed_invalid'));
+      await render();
+      expect(panelStatus()).toBe('reconnect');
+      expect(text()).toContain('Your Canvas calendar feed stopped working');
+    });
+
+    it('goes by the capabilities the backend lists', async () => {
+      api.fetchCanvasConnection.mockResolvedValue(feedConnection({ capabilities: ['upcoming'] }));
+      await act(async () => root.render(<CanvasPanel onOpenSettings={onOpenSettings} addToTasks={addToTasks} />));
+      expect(text()).toContain('Homework 5');
+      expect(button('Add "Homework 5" to tasks')).toBeUndefined();
+    });
+  });
+
+  it('reads courses and shows every tab for a token, with or without a type from the backend', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(connected({ type: 'token' }));
+    await render();
+    expect(api.fetchCanvasPanelCourses).toHaveBeenCalled();
+    expect(button('Courses')).toBeTruthy();
+    expect(button('Announcements')).toBeTruthy();
+    expect(container.querySelector('[data-testid="canvas-feed-note"]')).toBeNull();
+  });
+
   describe('demo sandbox', () => {
     beforeEach(() => { auth.isDemo = true; });
 

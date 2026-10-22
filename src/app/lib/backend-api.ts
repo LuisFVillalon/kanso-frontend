@@ -871,8 +871,9 @@ export async function updateNotificationPreferences(
 }
 
 // ── Canvas LMS ────────────────────────────────────────────────────────────────
-// The user's Canvas token goes to the backend once, in connectCanvas's body,
-// and is never returned: every response is the masked CanvasConnection.
+// The user's Canvas token or calendar feed link goes to the backend once, in
+// connectCanvas's or connectCanvasFeed's body, and is never returned: every
+// response is the masked CanvasConnection.
 // Canvas failures come back as an ApiError whose `detail` is a CanvasErrorCode.
 
 /** Fetches the masked connection status; `connected` is false when there is none. */
@@ -900,7 +901,25 @@ export async function connectCanvas(baseUrl: string, token: string, allowAccount
   return res.json();
 }
 
-/** Re-checks the stored token with Canvas; a rejected or expired one comes back with status "invalid". */
+/**
+ * Connects, replaces or reconnects Canvas with the user's private calendar
+ * feed link (Canvas → Calendar → Calendar Feed): the backend reads the feed
+ * once before storing the link, so a link Canvas won't serve changes nothing.
+ * A feed for a different Canvas account fails with canvas_account_changed
+ * unless `allowAccountChange` confirms the switch.
+ */
+export async function connectCanvasFeed(feedUrl: string, allowAccountChange = false): Promise<CanvasConnection> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/connection`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ type: "feed", feed_url: feedUrl, allow_account_change: allowAccountChange }),
+  });
+  await assertOk(res, "connectCanvasFeed");
+  return res.json();
+}
+
+/** Re-checks the stored token or feed link with Canvas; a rejected or expired one comes back with status "invalid". */
 export async function testCanvasConnection(): Promise<CanvasConnection> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/canvas/connection/test`, { method: "POST", headers });
@@ -920,7 +939,7 @@ export async function updateCanvasHiddenCourses(hiddenCourseIds: number[]): Prom
   return res.json();
 }
 
-/** Permanently deletes the connection and its token. There is no trash for it. */
+/** Permanently deletes the connection and its token or feed link. There is no trash for it. */
 export async function removeCanvasConnection(): Promise<void> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/canvas/connection`, { method: "DELETE", headers });

@@ -8,19 +8,24 @@
  * token ("Reconnect Canvas"), a token expiring soon, Canvas busy or down
  * (older saved data, dimmed), and no active courses. Demo sandboxes see the
  * backend's read-only sample data and no connect prompts.
+ *
+ * A calendar feed connection has due dates only, so the panel shows just
+ * Upcoming (with Add to tasks) and says where courses, grades and
+ * announcements went, rather than tabs that could only fail.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, CircleX, ClockAlert, CloudOff, ExternalLink, GraduationCap, KeyRound, Library, Loader2, Megaphone,
-  Plug, PlugZap, RefreshCw, type LucideIcon,
+  CalendarClock, CalendarSync, CircleX, ClockAlert, CloudOff, ExternalLink, GraduationCap, Info, KeyRound, Library,
+  Loader2, Megaphone, Plug, PlugZap, RefreshCw, type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useCanvas } from '@/app/hooks/useCanvas';
 import type { CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { canvasView } from '@/app/components/settings/CanvasIntegrationSection';
-import { courseColor, formatShortDate, formatTime, syncedLabel } from '@/app/utils/canvas';
+import { canvasCan, canvasConnectionType, courseColor, formatShortDate, formatTime, syncedLabel } from '@/app/utils/canvas';
 import { rememberCanvasCourseLabels } from '@/app/utils/canvasTasks';
+import type { CanvasCapability } from '@/app/types/canvas';
 import type { CourseLookup } from './CanvasItemRow';
 import CanvasUpcoming from './CanvasUpcoming';
 import CanvasCourses from './CanvasCourses';
@@ -29,10 +34,10 @@ import CanvasAnnouncements from './CanvasAnnouncements';
 
 type Tab = 'upcoming' | 'courses' | 'announcements';
 
-const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
-  { key: 'upcoming', label: 'Upcoming', icon: CalendarClock },
-  { key: 'courses', label: 'Courses', icon: Library },
-  { key: 'announcements', label: 'Announcements', icon: Megaphone },
+const TABS: { key: Tab; label: string; icon: LucideIcon; needs: CanvasCapability }[] = [
+  { key: 'upcoming', label: 'Upcoming', icon: CalendarClock, needs: 'upcoming' },
+  { key: 'courses', label: 'Courses', icon: Library, needs: 'courses' },
+  { key: 'announcements', label: 'Announcements', icon: Megaphone, needs: 'announcements' },
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -112,7 +117,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   const { isDemo } = useAuth();
   const canvas = useCanvas({ isDemo, syncToken });
   const { status, connection, overview, courses, announcements, loadAnnouncements } = canvas;
-  const [tab, setTab] = useState<Tab>('upcoming');
+  const [selectedTab, setTab] = useState<Tab>('upcoming');
   const [openCourseId, setOpenCourseId] = useState<number | null>(null);
   const [now, setNow] = useState(() => new Date());
 
@@ -121,17 +126,35 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     return () => clearInterval(timer);
   }, []);
 
-  // Task cards added from Canvas name their course from these.
+  // Demo sandboxes read the sample data a token would.
+  const can = (capability: CanvasCapability) => isDemo || !connection || canvasCan(connection, capability);
+  const feed = !isDemo && !!connection?.connected && canvasConnectionType(connection) === 'feed';
+  const tabs = TABS.filter(t => can(t.needs));
+  const withCourses = can('courses');
+  // A tab the connection lost (a token swapped for the feed) falls back to Upcoming.
+  const tab = tabs.some(t => t.key === selectedTab) ? selectedTab : 'upcoming';
+
+  // Task cards added from Canvas name their course from these; the feed has
+  // no course list, only each item's course name.
   useEffect(() => {
-    if (courses) rememberCanvasCourseLabels(courses.courses);
-  }, [courses]);
+    if (courses) {
+      rememberCanvasCourseLabels(courses.courses);
+    } else if (feed && overview) {
+      rememberCanvasCourseLabels([...overview.missing, ...overview.upcoming].flatMap(i =>
+        i.course_id != null && i.course_name ? [{ id: i.course_id, name: i.course_name, course_code: null }] : []));
+    }
+  }, [courses, feed, overview]);
 
   const refresh = () => {
     void canvas.refresh();
     onRefresh?.();
   };
 
-  const courseIds = useMemo(() => (courses?.courses ?? []).map(c => c.id), [courses]);
+  // Without a course list, courses take their colors in the order their work comes due.
+  const courseIds = useMemo(() => courses
+    ? courses.courses.map(c => c.id)
+    : [...new Set([...(overview?.missing ?? []), ...(overview?.upcoming ?? [])].flatMap(i => i.course_id ?? []))],
+  [courses, overview]);
   const lookup: CourseLookup = useCallback(courseId => {
     const course = courses?.courses.find(c => c.id === courseId);
     return { label: course ? course.course_code ?? course.name : null, color: courseColor(courseId, courseIds) };
@@ -182,12 +205,26 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     body = (
       <EmptyState icon={GraduationCap} title="See your classes next to your tasks">
         <p className="text-[13px] text-text-secondary max-w-[340px]">
-          Connect Canvas to see what&apos;s due, your current grades, modules and announcements.
+          Connect Canvas to see what&apos;s due and add it to your tasks. Your Canvas calendar feed link takes a
+          minute to copy and needs no approval from your school.
         </p>
         <button type="button" onClick={onOpenSettings} className="btn btn-primary">
           <Plug className="w-4 h-4" />Connect Canvas
         </button>
         <p className="text-xs text-text-muted">kanso only reads from Canvas. It never submits or changes anything.</p>
+      </EmptyState>
+    );
+  } else if (status === 'reconnect' && feed) {
+    const rejectedOn = connection?.last_error_at ? ` on ${formatShortDate(connection.last_error_at)}` : '';
+    body = (
+      <EmptyState icon={CalendarSync} tone="danger" title="Your Canvas calendar feed stopped working">
+        <p className="text-[13px] text-text-secondary max-w-[340px]">
+          Canvas stopped serving the feed link{rejectedOn}. Copy the current link from Canvas under Calendar, then
+          Calendar Feed, and paste it in to pick up where you left off.
+        </p>
+        <button type="button" onClick={onOpenSettings} className="btn btn-primary">
+          <PlugZap className="w-4 h-4" />Reconnect Canvas
+        </button>
       </EmptyState>
     );
   } else if (status === 'reconnect') {
@@ -205,14 +242,14 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
         </button>
       </EmptyState>
     );
-  } else if (status === 'error' || !overview || !courses) {
+  } else if (status === 'error' || !overview || (withCourses && !courses)) {
     body = (
       <EmptyState icon={CloudOff} title="Canvas couldn't load">
         <p className="text-[13px] text-text-secondary max-w-[340px]">{canvas.error}</p>
         {refreshButton('Retry', 'btn btn-outline')}
       </EmptyState>
     );
-  } else if (courses.courses.length === 0) {
+  } else if (courses && courses.courses.length === 0) {
     const allHidden = !isDemo && (connection?.hidden_course_ids.length ?? 0) > 0;
     body = (
       <EmptyState icon={Library} title={allHidden ? 'Every course is hidden' : 'No active courses'}>
@@ -229,8 +266,10 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   } else {
     let content: React.ReactNode;
     if (tab === 'upcoming') {
-      content = <CanvasUpcoming overview={overview} course={lookup} now={now} addToTasks={addToTasks} />;
-    } else if (tab === 'courses') {
+      content = (
+        <CanvasUpcoming overview={overview} course={lookup} now={now} addToTasks={can('link_tasks') ? addToTasks : undefined} />
+      );
+    } else if (tab === 'courses' && courses) {
       content = openCourse ? (
         <CanvasCourseDetail
           key={openCourse.id}
@@ -293,11 +332,24 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
           </Banner>
         )}
         <div className={stale ? 'opacity-60 saturate-[.6]' : undefined}>{content}</div>
+        {feed && (
+          <p className="flex gap-1.5 items-start mt-4 pt-3 border-t border-border-subtle text-xs text-text-muted" data-testid="canvas-feed-note">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-px" />
+            <span>
+              Connected with your Canvas calendar feed, which has due dates only. Courses, grades, announcements and
+              submitted work need an access token, if your school allows one.{' '}
+              <button type="button" onClick={onOpenSettings} className="font-medium text-accent hover:underline">
+                Canvas settings
+              </button>
+            </span>
+          </p>
+        )}
       </div>
     );
   }
 
-  const showTabs = status === 'loading' || (status === 'ready' && !!courses && courses.courses.length > 0);
+  const showTabs = tabs.length > 1
+    && (status === 'loading' || (status === 'ready' && !!courses && courses.courses.length > 0));
 
   return (
     <div
@@ -341,7 +393,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
 
       {showTabs && (
         <div role="tablist" aria-label="Canvas" className="flex gap-1 px-3.5 py-2 border-b border-border-subtle overflow-x-auto scrollbar-custom">
-          {TABS.map(({ key, label, icon: Icon }) => {
+          {tabs.map(({ key, label, icon: Icon }) => {
             const selected = tab === key;
             const count = key === 'upcoming' ? overview?.missing.length ?? 0 : key === 'announcements' ? unread : 0;
             return (

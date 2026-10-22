@@ -18,6 +18,7 @@ const api = vi.hoisted(() => {
       err instanceof ApiError && [400, 403, 404, 409, 429].includes(err.status) ? err.detail : fallback,
     fetchCanvasConnection: vi.fn(),
     connectCanvas: vi.fn(),
+    connectCanvasFeed: vi.fn(),
     testCanvasConnection: vi.fn(),
     updateCanvasHiddenCourses: vi.fn(),
     removeCanvasConnection: vi.fn(),
@@ -48,6 +49,16 @@ const connected = (overrides: Partial<CanvasConnection> = {}): CanvasConnection 
   created_at: inDays(-19),
   ...overrides,
 });
+const feedConnected = (overrides: Partial<CanvasConnection> = {}): CanvasConnection => connected({
+  type: 'feed',
+  capabilities: ['upcoming', 'link_tasks'],
+  token_last4: null,
+  canvas_user_id: null,
+  canvas_user_name: null,
+  token_expires_at: null,
+  ...overrides,
+});
+const FEED_URL = 'https://sdsu.instructure.com/feeds/calendars/user_s3cr3tFeedT0ken.ics';
 const apiError = (status: number, code: CanvasErrorCode | string) => new api.ApiError(status, code);
 
 let container: HTMLDivElement;
@@ -63,6 +74,8 @@ const click = async (el: HTMLElement) => { await act(async () => { el.click(); }
 const status = () => container.querySelector('[data-testid="canvas-status"]')?.textContent;
 const tokenInput = () => container.querySelector<HTMLInputElement>('#canvas-token')!;
 const urlInput = () => container.querySelector<HTMLInputElement>('#canvas-url')!;
+const feedInput = () => container.querySelector<HTMLInputElement>('#canvas-feed')!;
+const useToken = () => click(button('Use an access token if your school allows it'));
 
 /** Sets a controlled input's value the way React notices. */
 const typeInto = (el: HTMLInputElement, value: string) => {
@@ -109,6 +122,13 @@ describe('canvasView and canvasStatusLine', () => {
     expect(canvasStatusLine(connected({ status: 'invalid' }), NOW)).toBe('Not syncing · Canvas rejected the token');
     expect(canvasStatusLine(connected({ status: 'invalid', token_expires_at: inDays(-2) }), NOW)).toBe('Not syncing · the token expired');
   });
+
+  it('names a calendar feed connection without any part of the link', () => {
+    expect(canvasView(feedConnected(), NOW)).toBe('active');
+    expect(canvasStatusLine(feedConnected(), NOW)).toBe('Connected · calendar feed');
+    expect(canvasStatusLine(feedConnected({ status: 'error' }), NOW)).toBe("Connected · calendar feed · couldn't reach Canvas");
+    expect(canvasStatusLine(feedConnected({ status: 'invalid' }), NOW)).toBe('Not syncing · Canvas stopped serving the feed');
+  });
 });
 
 describe('canvasErrorMessage', () => {
@@ -116,6 +136,7 @@ describe('canvasErrorMessage', () => {
     [422, 'canvas_url_invalid', "isn't a Canvas address kanso can use"],
     [422, 'canvas_not_canvas', "couldn't find a Canvas site at this address"],
     [422, 'canvas_token_invalid', "Canvas didn't accept this token"],
+    [422, 'canvas_feed_invalid', "Canvas didn't serve a calendar feed at this link"],
     [422, 'canvas_forbidden', "wouldn't share your account details"],
     [409, 'canvas_account_changed', 'different Canvas account or school'],
     [502, 'canvas_unavailable', "Canvas couldn't be reached right now"],
@@ -134,19 +155,141 @@ describe('canvasErrorMessage', () => {
 });
 
 describe('CanvasIntegrationSection', () => {
-  it('shows the connect form with the how-to when not connected', async () => {
+  it('recommends the calendar feed when not connected, with its how-to and what it gives', async () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     await render();
-    expect(text()).toContain('How do I get a Canvas token?');
-    expect(tokenInput().type).toBe('password');
+    expect(text()).toContain('Connect with your calendar feed');
+    expect(text()).toContain('Recommended');
+    expect(text()).toContain('How do I find my calendar feed link?');
+    expect(text()).toContain('Calendar Feed');
+    expect(feedInput().type).toBe('password');
+    expect(container.querySelector('#canvas-token')).toBeNull();
     expect(button('Connect')).toBeTruthy();
-    expect(text()).toContain('never sent back to your browser');
+    const note = container.querySelector('[data-testid="canvas-feed-note"]')?.textContent;
+    expect(note).toContain('read-only and needs no approval from your school');
+    expect(note).toContain('upcoming assignments and due dates only');
+    expect(note).toContain('Anyone with the link can see your Canvas calendar');
   });
 
-  it('connects, then clears the token and shows only its last four characters', async () => {
+  it('offers the access token as the other way to connect, and back', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(notConnected);
+    await render();
+    await useToken();
+    expect(text()).toContain('How do I get a Canvas token?');
+    expect(tokenInput().type).toBe('password');
+    expect(container.querySelector('#canvas-feed')).toBeNull();
+    expect(text()).toContain('never sent back to your browser');
+    await click(button('Use your calendar feed link instead (recommended)'));
+    expect(feedInput()).toBeTruthy();
+  });
+
+  it('connects with the feed link, then clears it and never shows it', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(notConnected);
+    api.connectCanvasFeed.mockResolvedValue(feedConnected());
+    await render();
+    const input = feedInput();
+    input.value = FEED_URL;
+    await submitForm();
+    expect(api.connectCanvasFeed).toHaveBeenCalledWith(FEED_URL, false);
+    expect(api.connectCanvas).not.toHaveBeenCalled();
+    expect(input.value).toBe('');
+    expect(status()).toBe('Connected · calendar feed');
+    expect(container.querySelector('[data-testid="canvas-type"]')?.textContent).toContain('Calendar feed · read-only');
+    expect(text()).toContain('Canvas connected.');
+    expect(text()).not.toContain('s3cr3tFeedT0ken');
+    expect(text()).not.toContain('•••• ••••');
+    expect(container.querySelector('#canvas-feed')).toBeNull();
+    // The feed has no courses, so there's nothing to choose.
+    expect(api.fetchCanvasCourses).not.toHaveBeenCalled();
+  });
+
+  it('asks for the link before sending an empty feed form', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(notConnected);
+    await render();
+    await submitForm();
+    expect(api.connectCanvasFeed).not.toHaveBeenCalled();
+    expect(container.querySelector('#canvas-feed-error')?.textContent).toContain('Paste the calendar feed link');
+  });
+
+  it('shows a link Canvas will not serve under the feed field and keeps the form', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(notConnected);
+    api.connectCanvasFeed.mockRejectedValue(apiError(422, 'canvas_feed_invalid'));
+    await render();
+    feedInput().value = 'https://sdsu.instructure.com/not-a-feed';
+    await submitForm();
+    expect(container.querySelector('#canvas-feed-error')?.textContent).toContain("Canvas didn't serve a calendar feed");
+    expect(feedInput().getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('asks before a feed link for a different account replaces the connection', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected());
+    api.connectCanvasFeed
+      .mockRejectedValueOnce(apiError(409, 'canvas_account_changed'))
+      .mockResolvedValueOnce(feedConnected({ canvas_user_name: 'Other Person' }));
+    await render();
+    await click(button('Replace'));
+    feedInput().value = FEED_URL;
+    await submitForm();
+    expect(text()).toContain('This link belongs to a different Canvas account or school.');
+    await click(button('Switch account'));
+    expect(api.connectCanvasFeed).toHaveBeenLastCalledWith(FEED_URL, true);
+    expect(text()).toContain('Canvas connected as Other Person.');
+  });
+
+  it('shows a feed connection with Test, Replace and Remove, and replaces it with a token if asked', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected());
+    api.connectCanvas.mockResolvedValue(connected());
+    await render();
+    expect(status()).toBe('Connected · calendar feed');
+    expect(text()).toContain('sdsu.instructure.com');
+    expect(button('Test')).toBeTruthy();
+    expect(button('Remove')).toBeTruthy();
+    expect(container.querySelector('[data-testid="canvas-feed-note"]')).not.toBeNull();
+    await click(button('Replace'));
+    expect(text()).toContain('Paste a new calendar feed link');
+    await useToken();
+    typeInto(urlInput(), 'sdsu.instructure.com');
+    tokenInput().value = '7~secretsecretsecretsecret7Hq2';
+    await submitForm();
+    expect(api.connectCanvas).toHaveBeenCalledWith('sdsu.instructure.com', '7~secretsecretsecretsecret7Hq2', false);
+    expect(status()).toBe('Connected · ends in …7Hq2');
+    expect(container.querySelector('[data-testid="canvas-type"]')?.textContent).toBe('Access token');
+  });
+
+  it('reports a successful feed test', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected());
+    api.testCanvasConnection.mockResolvedValue(feedConnected());
+    await render();
+    await click(button('Test'));
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('Canvas served the calendar feed');
+  });
+
+  it('asks for the current feed link when Canvas stopped serving it', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected({ status: 'invalid', last_error_at: inDays(-3) }));
+    await render();
+    expect(status()).toBe('Not syncing · Canvas stopped serving the feed');
+    expect(text()).toContain('Canvas stopped serving your calendar feed link');
+    expect(feedInput()).toBeTruthy();
+    expect(button('Reconnect Canvas')).toBeTruthy();
+    expect(button('Remove instead')).toBeTruthy();
+  });
+
+  it('removes a feed connection after confirming', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected());
+    api.removeCanvasConnection.mockResolvedValue(undefined);
+    await render();
+    await click(button('Remove'));
+    expect(text()).toContain('permanently deletes your calendar feed link');
+    await click(button('Remove permanently'));
+    expect(text()).toContain('Canvas removed. The calendar feed link was deleted from kanso.');
+    expect(feedInput()).toBeTruthy();
+  });
+
+  it('connects with a token, then clears it and shows only its last four characters', async () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     api.connectCanvas.mockResolvedValue(connected());
     await render();
+    await useToken();
     typeInto(urlInput(), 'sdsu.instructure.com');
     const input = tokenInput();
     input.value = '7~secretsecretsecretsecret7Hq2';
@@ -163,6 +306,7 @@ describe('CanvasIntegrationSection', () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     api.connectCanvas.mockResolvedValue(connected({ canvas_user_name: null }));
     await render();
+    await useToken();
     typeInto(urlInput(), 'sdsu.instructure.com');
     tokenInput().value = '7~secretsecretsecretsecret7Hq2';
     await submitForm();
@@ -174,6 +318,7 @@ describe('CanvasIntegrationSection', () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     api.connectCanvas.mockRejectedValue(apiError(422, 'canvas_token_invalid'));
     await render();
+    await useToken();
     typeInto(urlInput(), 'sdsu.instructure.com');
     tokenInput().value = '7~badbadbadbadbadbad';
     await submitForm();
@@ -185,6 +330,7 @@ describe('CanvasIntegrationSection', () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     api.connectCanvas.mockRejectedValue(apiError(422, 'canvas_not_canvas'));
     await render();
+    await useToken();
     typeInto(urlInput(), 'example.com');
     tokenInput().value = '7~tokentokentokentoken';
     await submitForm();
@@ -195,6 +341,7 @@ describe('CanvasIntegrationSection', () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     api.connectCanvas.mockRejectedValue(apiError(503, 'canvas_not_configured'));
     await render();
+    await useToken();
     typeInto(urlInput(), 'sdsu.instructure.com');
     tokenInput().value = '7~tokentokentokentoken';
     await submitForm();

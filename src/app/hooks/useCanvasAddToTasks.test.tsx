@@ -112,6 +112,19 @@ describe('Add to tasks on a Canvas item', () => {
     expect(container.textContent).toContain('In tasks');
   });
 
+  it('adds a calendar feed item, which has no submission or points, as a task following its assignment', async () => {
+    tasksCtx.addTask.mockResolvedValue(task(51, { canvas_assignment_id: 9876 }));
+    // The feed names the assignment only through its link.
+    render([item({ id: 555, points_possible: null, course_id: null, course_name: 'CS 460', submission: null })]);
+    await act(async () => addButton()!.click());
+    expect(tasksCtx.addTask).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Problem Set 6',
+      due_date: '2026-10-23',
+      canvas_assignment_id: 9876,
+      canvas_html_url: `${HOST}/courses/1001/assignments/9876`,
+    }));
+  });
+
   it('offers nothing for submitted work or items that are not assignments', () => {
     render([
       item({ submission: { submitted: true, missing: false, late: false, graded: false, excused: false, score: null, grade: null, submitted_at: null, graded_at: null } }),

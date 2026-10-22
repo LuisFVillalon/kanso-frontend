@@ -1,13 +1,35 @@
-/** "invalid" means Canvas rejected the token or it expired: the user has to reconnect. */
+/**
+ * "invalid" means Canvas rejected the token or feed link, or the token
+ * expired: the user has to reconnect.
+ */
 export type CanvasStatus = 'active' | 'invalid' | 'error';
 
 /**
+ * How Canvas is connected: a personal access token, or the private, read-only
+ * calendar feed link (Canvas → Calendar → Calendar Feed), which needs no
+ * school approval but carries only the user's own due dates.
+ */
+export type CanvasConnectionType = 'token' | 'feed';
+
+/**
+ * What a connection can read. A token can read everything; the calendar
+ * feed reads upcoming items, which can still be added to tasks, and nothing
+ * else: no courses or grades, announcements or submission status.
+ */
+export type CanvasCapability = 'upcoming' | 'link_tasks' | 'courses' | 'announcements' | 'submissions';
+
+/**
  * The masked Canvas connection, as the /canvas/connection routes return it
- * (kanso-backend app/schemas/canvas_schema.py). Never carries the token itself.
+ * (kanso-backend app/schemas/canvas_schema.py). Never carries the token or
+ * the feed link itself.
  */
 export interface CanvasConnection {
   connected: boolean;
   status: CanvasStatus | null;
+  /** Null when not connected; a backend from before the calendar feed leaves it out (a token). */
+  type?: CanvasConnectionType | null;
+  /** Left out by a backend from before the calendar feed, where everything is a token's. */
+  capabilities?: CanvasCapability[];
   /** Normalized "https://host". */
   base_url: string | null;
   token_last4: string | null;
@@ -34,6 +56,7 @@ export type CanvasErrorCode =
   | 'canvas_url_invalid'
   | 'canvas_not_canvas'
   | 'canvas_token_invalid'
+  | 'canvas_feed_invalid'
   | 'canvas_forbidden'
   | 'canvas_account_changed'
   | 'canvas_unavailable'
