@@ -17,7 +17,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 const prefs = (overrides: Partial<NotificationPreferences> = {}): NotificationPreferences => ({
-  types: { due_today: true, task_reminder: true, final_warning: true, overdue: true, habit_reminder: true },
+  types: { task_reminder: true, final_warning: true },
   quiet_hours_start: null,
   quiet_hours_end: null,
   default_reminder_minutes: 120,
@@ -94,10 +94,10 @@ afterEach(() => {
 
 describe('NotificationPreferencesForm', () => {
   it('shows a switch per alert type, reflecting the saved state, and no Save button', () => {
-    render(prefs({ types: { ...prefs().types, overdue: false } }));
-    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(5);
-    expect(switchFor('Morning summary').getAttribute('aria-checked')).toBe('true');
-    expect(switchFor('Slipped task nudge').getAttribute('aria-checked')).toBe('false');
+    render(prefs({ types: { ...prefs().types, final_warning: false } }));
+    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(2);
+    expect(switchFor('Reminder before a task is due').getAttribute('aria-checked')).toBe('true');
+    expect(switchFor('Final warning').getAttribute('aria-checked')).toBe('false');
     expect([...document.querySelectorAll('button')].some(b => /save/i.test(b.textContent ?? ''))).toBe(false);
   });
 
@@ -111,12 +111,12 @@ describe('NotificationPreferencesForm', () => {
 
   it('offers an Undo that switches the alert back and saves that', async () => {
     const onSave = render(prefs());
-    await click(switchFor('Evening habit reminder'));
-    expect(onUndoableChange).toHaveBeenCalledWith('Evening habit reminder turned off.', expect.any(Function));
+    await click(switchFor('Final warning'));
+    expect(onUndoableChange).toHaveBeenCalledWith('Final warning turned off.', expect.any(Function));
     const undo = onUndoableChange.mock.calls[0][1];
     await act(async () => { undo(); });
-    expect(switchFor('Evening habit reminder').getAttribute('aria-checked')).toBe('true');
-    expect(onSave).toHaveBeenLastCalledWith({ types: { habit_reminder: true } });
+    expect(switchFor('Final warning').getAttribute('aria-checked')).toBe('true');
+    expect(onSave).toHaveBeenLastCalledWith({ types: { final_warning: true } });
   });
 
   it('waits for both quiet-hour ends, then saves them as a pair after a pause', async () => {
@@ -173,10 +173,10 @@ describe('NotificationPreferencesForm', () => {
 
   it('keeps the change on screen and reports the failure when saving fails', async () => {
     const onSave = render(prefs(), vi.fn().mockRejectedValue(new Error('offline')));
-    await click(switchFor('Morning summary'));
+    await click(switchFor('Final warning'));
     expect(onSave).toHaveBeenCalledOnce();
     await expect(track.mock.results[0].value).resolves.toBe(false);
-    expect(switchFor('Morning summary').getAttribute('aria-checked')).toBe('false');
+    expect(switchFor('Final warning').getAttribute('aria-checked')).toBe('false');
   });
 
   it('saves a value still waiting for its pause when the page closes', async () => {
@@ -188,10 +188,10 @@ describe('NotificationPreferencesForm', () => {
     root = createRoot(container);
   });
 
-  it('lists a type this build has no label for', () => {
-    render(prefs({ types: { ...prefs().types, mood_check_in: true } }));
-    expect(switchFor('Mood check in')).toBeTruthy();
-    expect(switchFor('Mood check in').closest('section')!.getAttribute('aria-labelledby')).toBe('notif-group-alerts');
+  it('has no Other alerts: types outside the groups get no switch', () => {
+    render(prefs({ types: { ...prefs().types, due_today: true, overdue: true, habit_reminder: true, mood_check_in: true } }));
+    expect(document.querySelectorAll('[role="switch"]')).toHaveLength(2);
+    expect(document.body.textContent).not.toMatch(/Other alerts|Morning summary|Slipped task nudge|Evening habit reminder|Mood check in/);
   });
 
   describe('groups', () => {
@@ -199,16 +199,15 @@ describe('NotificationPreferencesForm', () => {
       prefs({ types: { ...prefs().types, mood_reminder: true, mood_missed: true }, mood_reminder_minutes: 60 });
     const groupOf = (el: Element) => el.closest('section')!.querySelector('h3')!.textContent;
 
-    it('orders the page as Reminders, Mood check-ins, Quiet hours, Other alerts', () => {
+    it('orders the page as Reminders, Mood check-ins, Quiet hours', () => {
       render(allPrefs());
       expect([...document.querySelectorAll('h3')].map(h => h.textContent))
-        .toEqual(['Reminders', 'Mood check-ins', 'Quiet hours', 'Other alerts']);
+        .toEqual(['Reminders', 'Mood check-ins', 'Quiet hours']);
       expect(groupOf(switchFor('Reminder before a task is due'))).toBe('Reminders');
       expect(groupOf(switchFor('Final warning'))).toBe('Reminders');
       expect(groupOf(switchFor('Mood check-in reminder'))).toBe('Mood check-ins');
       expect(groupOf(switchFor('Missed mood check-ins'))).toBe('Mood check-ins');
       expect(groupOf(input('quiet-start'))).toBe('Quiet hours');
-      expect(groupOf(switchFor('Morning summary'))).toBe('Other alerts');
     });
 
     it('puts the default reminder time right under the task reminder switch, explaining how it differs from the mood lead', () => {
@@ -217,7 +216,7 @@ describe('NotificationPreferencesForm', () => {
       expect(taskRow.nextElementSibling!.contains(select('default-reminder-label'))).toBe(true);
       expect(document.body.textContent).toContain("How long before a task’s due time its reminder arrives.");
       const moodRow = switchFor('Mood check-in reminder').parentElement!;
-      expect(moodRow.nextElementSibling!.textContent).toContain('1 hour before');
+      expect(moodRow.nextElementSibling!.contains(select('mood-reminder-lead-label'))).toBe(true);
       expect(moodRow.nextElementSibling!.textContent).toContain('not from a task’s due time');
     });
 
@@ -233,7 +232,7 @@ describe('NotificationPreferencesForm', () => {
     });
 
     it('keeps the default reminder time when the server lists no reminder switch', () => {
-      render(prefs({ types: { due_today: true } }));
+      render(prefs({ types: {} }));
       expect(select('default-reminder-label')).toBeTruthy();
       expect(document.body.textContent).not.toContain('Mood check-ins');
     });
@@ -242,44 +241,66 @@ describe('NotificationPreferencesForm', () => {
   describe('mood reminders', () => {
     const moodPrefs = (overrides: Partial<NotificationPreferences> = {}) =>
       prefs({ types: { ...prefs().types, mood_reminder: true, mood_missed: true }, mood_reminder_minutes: 60, ...overrides });
-    const lead = (name: string) => byText<HTMLButtonElement>('button', name);
+    const lead = () => select('mood-reminder-lead-label');
+    const customAmount = () => document.querySelector<HTMLInputElement>('input[aria-label="Custom reminder amount"]')!;
+    const customUnit = () => document.querySelector<HTMLSelectElement>('select[aria-label="Custom reminder unit"]')!;
 
     it('labels both mood switches and picks the saved lead', () => {
       render(moodPrefs());
       expect(switchFor('Mood check-in reminder').getAttribute('aria-checked')).toBe('true');
       expect(switchFor('Missed mood check-ins').getAttribute('aria-checked')).toBe('true');
-      expect(lead('1 hour before').getAttribute('aria-pressed')).toBe('true');
-      expect(lead('30 minutes before').getAttribute('aria-pressed')).toBe('false');
+      expect(lead().value).toBe('60');
     });
 
-    it('saves the lead on its own, at once', async () => {
+    it('saves a preset lead on its own, after a pause', async () => {
       const onSave = render(moodPrefs());
-      await click(lead('30 minutes before'));
+      act(() => typeInto(lead(), '30'));
+      await pause();
       expect(onSave).toHaveBeenCalledWith({ mood_reminder_minutes: 30 });
+    });
+
+    it('saves a custom lead and holds back an out-of-range one', async () => {
+      const onSave = render(moodPrefs());
+      act(() => typeInto(lead(), 'custom'));
+      act(() => typeInto(customUnit(), 'days'));
+      act(() => typeInto(customAmount(), '8'));
+      expect(document.body.textContent).toContain('from 1 minute up to 7 days');
+      await pause();
+      expect(onSave).not.toHaveBeenCalledWith({ mood_reminder_minutes: 8 * 24 * 60 });
+      act(() => typeInto(customUnit(), 'minutes'));
+      act(() => typeInto(customAmount(), '45'));
+      await pause();
+      expect(onSave).toHaveBeenLastCalledWith({ mood_reminder_minutes: 45 });
+    });
+
+    it('shows a saved custom lead as custom', () => {
+      render(moodPrefs({ mood_reminder_minutes: 90 }));
+      expect(lead().value).toBe('custom');
+      expect(customAmount().value).toBe('90');
+      expect(customUnit().value).toBe('minutes');
+    });
+
+    it("doesn't mention the task final warning for a short mood lead", () => {
+      render(moodPrefs({ mood_reminder_minutes: 15 }));
+      expect(document.body.textContent).not.toContain('final warning.');
     });
 
     it('greys out the lead while the reminder is off', async () => {
       render(moodPrefs());
       await click(switchFor('Mood check-in reminder'));
-      expect(lead('1 hour before').disabled).toBe(true);
-    });
-
-    it('says the mood notifications are silenced while mood reminders are off', () => {
-      act(() => root.render(<NotificationPreferencesForm preferences={moodPrefs()} onSave={vi.fn()} track={track} moodRemindersOff />));
-      expect(document.body.textContent?.match(/Silenced while the dashboard nudge/g)).toHaveLength(2);
-      expect(lead('1 hour before').disabled).toBe(true);
+      expect(lead().disabled).toBe(true);
     });
 
     it('has no lead choice, and never sends one, when the server has no such preference', async () => {
       const onSave = render(prefs({ types: { ...prefs().types, mood_reminder: true } }));
-      expect(document.body.textContent).not.toContain('1 hour before');
+      expect(document.getElementById('mood-reminder-lead-label')).toBeNull();
       await click(switchFor('Mood check-in reminder'));
       expect(onSave).toHaveBeenCalledWith({ types: { mood_reminder: false } });
     });
 
     it('has no lead choice when the server lists no mood reminder type', () => {
       render(prefs({ types: { ...prefs().types, mood_missed: true }, mood_reminder_minutes: 60 }));
-      expect(document.body.textContent).not.toContain('1 hour before');
+      expect(document.getElementById('mood-reminder-lead-label')).toBeNull();
     });
   });
 });

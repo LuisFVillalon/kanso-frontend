@@ -65,7 +65,7 @@ export function useProfile(user: User | null) {
   const [profile, setProfile] = useState<ProfileFields>(readLocalDefaults);
   const [loading, setLoading] = useState(false);
   // Whether the first fetchProfile() has settled (either way), so anything
-  // timed off the profile (the mood nudge) doesn't act on the local defaults.
+  // timed off the profile (the mood check-ins) doesn't act on the local defaults.
   const [loaded, setLoaded] = useState(false);
   // The name every saveProfileField request carries, since the endpoint
   // requires one: the newest name sent so far, so a later save of another

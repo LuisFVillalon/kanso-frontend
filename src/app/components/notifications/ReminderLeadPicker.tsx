@@ -30,6 +30,8 @@ interface ReminderLeadPickerProps {
   /** Offers a "Default" choice showing this lead; leave out where there is no default to fall back on. */
   defaultMinutes?: number;
   disabled?: boolean;
+  /** Notes when a lead is short enough to leave only the task's final warning; off where there is none. */
+  finalWarningNote?: boolean;
   /** Labels the select, e.g. the id of a visible <label>. */
   'aria-labelledby'?: string;
 }
@@ -41,7 +43,7 @@ interface ReminderLeadPickerProps {
  * input stays invalid so the enclosing form won't submit.
  */
 const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
-  value, onChange, defaultMinutes, disabled, 'aria-labelledby': labelledBy,
+  value, onChange, defaultMinutes, disabled, finalWarningNote = true, 'aria-labelledby': labelledBy,
 }) => {
   const allowDefault = defaultMinutes !== undefined;
   const [custom, setCustom] = useState(() => value !== null && !REMINDER_PRESETS.includes(value));
@@ -135,7 +137,7 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
           {CUSTOM_ERROR}
         </p>
       )}
-      {!disabled && effective !== null && effective <= FINAL_WARNING_MINUTES && (
+      {finalWarningNote && !disabled && effective !== null && effective <= FINAL_WARNING_MINUTES && (
         <p className="text-xs text-text-muted">
           Leads of {FINAL_WARNING_MINUTES} minutes or less send just the {FINAL_WARNING_MINUTES}-minute final warning.
         </p>

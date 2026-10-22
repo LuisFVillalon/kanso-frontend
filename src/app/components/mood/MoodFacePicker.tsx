@@ -36,14 +36,12 @@ interface Props {
   onChange: (mood: number) => void;
   /** The radiogroup's accessible name — the question being answered. */
   label: string;
-  /** Smaller faces, for the dashboard nudge. */
-  compact?: boolean;
   className?: string;
 }
 
 /** The five faces, Rough to Great, as a radiogroup. */
-const MoodFacePicker: React.FC<Props> = ({ value, onChange, label, compact = false, className = '' }) => (
-  <div role="radiogroup" aria-label={label} className={`flex gap-1 ${compact ? 'mood-faces-compact' : ''} ${className}`}>
+const MoodFacePicker: React.FC<Props> = ({ value, onChange, label, className = '' }) => (
+  <div role="radiogroup" aria-label={label} className={`flex gap-1 ${className}`}>
     {MOOD_LABELS.map((name, i) => {
       const mood = i + 1;
       const checked = value === mood;

@@ -1,6 +1,6 @@
 import type { AppNotification } from '@/app/types/notification';
 
-/** The backend's cap on a task's (or the default) reminder lead: one week. */
+/** The backend's cap on a reminder lead (a task's, the default, or the mood reminder's): one week. */
 export const REMINDER_MINUTES_MAX = 7 * 24 * 60;
 
 /** The backend's built-in default lead, used until preferences load. */
@@ -11,10 +11,6 @@ export const REMINDER_PRESETS = [15, 30, 60, 120, 24 * 60];
 
 /** The backend always sends a final warning this long before a task is due. */
 export const FINAL_WARNING_MINUTES = 30;
-
-/** The mood reminder's lead choices, in minutes before "Call it a day". */
-export const MOOD_REMINDER_MINUTES = [60, 30];
-export const DEFAULT_MOOD_REMINDER_MINUTES = 60;
 
 export const isMoodType = (type: string) => type === 'mood_reminder' || type === 'mood_missed';
 

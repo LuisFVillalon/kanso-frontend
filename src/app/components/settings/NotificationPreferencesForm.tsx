@@ -6,23 +6,16 @@ import SettingsGroup from '@/app/components/settings/SettingsGroup';
 import { MOOD_GROUP } from '@/app/components/settings/MoodCheckinSettingsSection';
 import { AUTOSAVE_DEBOUNCE_MS, type TrackSave } from '@/app/components/settings/autosave';
 import type { NotificationPreferences, NotificationPreferencesUpdate } from '@/app/types/notification';
-import { DEFAULT_MOOD_REMINDER_MINUTES, MOOD_REMINDER_MINUTES } from '@/app/utils/notifications';
 
-/** Switch labels, in the order the day runs within each group. Types the server adds later fall to the end. */
+/** Switch labels, in the order the day runs within each group. Other types the server lists aren't offered. */
 const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
-  due_today:      { label: 'Morning summary', hint: 'Tasks due today, when your day starts.' },
   task_reminder:  { label: 'Reminder before a task is due', hint: "At each task's reminder time." },
   final_warning:  { label: 'Final warning', hint: 'Always 30 minutes before a task is due, on top of its reminder.' },
-  overdue:        { label: 'Slipped task nudge', hint: "Once, when a task's due time passes." },
-  habit_reminder: { label: 'Evening habit reminder', hint: "An hour before you call it a day, if habits are left." },
   mood_reminder:  { label: 'Mood check-in reminder', hint: "Before you call it a day, if today's mood isn't logged yet." },
   mood_missed:    { label: 'Missed mood check-ins', hint: 'When days go by without a mood check-in.' },
 };
-const TYPE_ORDER = Object.keys(TYPE_LABELS);
 const REMINDER_TYPES = ['task_reminder', 'final_warning'];
 const MOOD_TYPES = ['mood_reminder', 'mood_missed'];
-
-const humanize = (type: string) => type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ');
 
 /** The fields of `draft` that differ from `saved`, as a PATCH body. */
 export function preferenceChanges(
@@ -64,8 +57,6 @@ interface Props {
   track: TrackSave;
   /** Offers an Undo for a switch that was just flipped. */
   onUndoableChange?: (message: string, undo: () => void) => void;
-  /** Mood check-in reminders are set to "Don't nudge", which silences the mood notifications too. */
-  moodRemindersOff?: boolean;
   /** The mood check-in settings, shown at the top of the Mood check-ins group. */
   moodCheckins?: React.ReactNode;
 }
@@ -73,12 +64,12 @@ interface Props {
 /**
  * Settings → Notifications, in headed groups: Reminders (task reminders and
  * the default reminder lead), Mood check-ins (with the mood alerts and their
- * lead), Quiet hours (which may run past midnight) and Other alerts. Every
+ * lead) and Quiet hours (which may run past midnight). Every
  * change saves itself, sending only what changed: switches at once, times
  * after a pause in typing, and quiet hours only once they're valid.
  */
 const NotificationPreferencesForm: React.FC<Props> = ({
-  preferences, onSave, track, onUndoableChange, moodRemindersOff = false, moodCheckins,
+  preferences, onSave, track, onUndoableChange, moodCheckins,
 }) => {
   const [draft, setDraft] = useState(preferences);
   const draftRef = useRef(preferences);
@@ -130,35 +121,19 @@ const NotificationPreferencesForm: React.FC<Props> = ({
   const listed = (group: string[]) => group.filter(t => t in draft.types);
   const reminderTypes = listed(REMINDER_TYPES);
   const moodTypes = listed(MOOD_TYPES);
-  const otherTypes = [
-    ...listed(TYPE_ORDER.filter(t => !REMINDER_TYPES.includes(t) && !MOOD_TYPES.includes(t))),
-    ...Object.keys(draft.types).filter(t => !TYPE_ORDER.includes(t)),
-  ];
   const quietError = quietHoursError(draft.quiet_hours_start, draft.quiet_hours_end);
-  const moodLead = draft.mood_reminder_minutes === undefined
-    ? null
-    : MOOD_REMINDER_MINUTES.includes(draft.mood_reminder_minutes) ? draft.mood_reminder_minutes : DEFAULT_MOOD_REMINDER_MINUTES;
-  const moodLeadChoice = moodLead !== null && (
+  const moodLeadChoice = draft.mood_reminder_minutes !== undefined && (
     <div className="pl-4 border-l-2 border-border-subtle">
-      <p id="mood-reminder-lead-label" className="text-xs font-medium text-text-muted mb-1">
+      <label id="mood-reminder-lead-label" className="block text-xs font-medium text-text-muted mb-1">
         Send it before &ldquo;Call it a day&rdquo;
-      </p>
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-surface border border-border" role="group" aria-labelledby="mood-reminder-lead-label">
-        {MOOD_REMINDER_MINUTES.map(minutes => (
-          <button
-            key={minutes}
-            type="button"
-            onClick={() => edit({ mood_reminder_minutes: minutes })}
-            disabled={draft.types.mood_reminder === false || moodRemindersOff}
-            aria-pressed={moodLead === minutes}
-            className={`flex-1 px-2.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors disabled:opacity-60 ${
-              moodLead === minutes ? 'bg-surface-raised text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {minutes === 60 ? '1 hour before' : `${minutes} minutes before`}
-          </button>
-        ))}
-      </div>
+      </label>
+      <ReminderLeadPicker
+        aria-labelledby="mood-reminder-lead-label"
+        value={draft.mood_reminder_minutes}
+        onChange={minutes => { if (minutes !== null) edit({ mood_reminder_minutes: minutes }, { debounce: true }); }}
+        disabled={draft.types.mood_reminder === false}
+        finalWarningNote={false}
+      />
       <p className="text-xs text-text-muted mt-1">Counts back from your &ldquo;Call it a day&rdquo; time, not from a task&rsquo;s due time.</p>
     </div>
   );
@@ -179,7 +154,7 @@ const NotificationPreferencesForm: React.FC<Props> = ({
   );
 
   const typeSwitch = (type: string) => {
-    const { label, hint } = TYPE_LABELS[type] ?? { label: humanize(type), hint: '' };
+    const { label, hint } = TYPE_LABELS[type];
     const on = draft.types[type];
     const labelId = `notif-type-${type}`;
     return (
@@ -187,12 +162,7 @@ const NotificationPreferencesForm: React.FC<Props> = ({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p id={labelId} className="text-sm font-medium text-text-primary">{label}</p>
-            {hint && <p className="text-xs text-text-muted">{hint}</p>}
-            {moodRemindersOff && MOOD_TYPES.includes(type) && (
-              <p className="text-xs" style={{ color: 'var(--tm-warning)' }}>
-                Silenced while the dashboard nudge above is &ldquo;Don&rsquo;t nudge&rdquo;.
-              </p>
-            )}
+            <p className="text-xs text-text-muted">{hint}</p>
           </div>
           <button
             type="button"
@@ -270,12 +240,6 @@ const NotificationPreferencesForm: React.FC<Props> = ({
           {quietError && <p className="text-xs mt-1" style={{ color: 'var(--tm-danger)' }}>{quietError}</p>}
         </div>
       </SettingsGroup>
-
-      {otherTypes.length > 0 && (
-        <SettingsGroup id="notif-group-alerts" title="Other alerts">
-          {otherTypes.map(typeSwitch)}
-        </SettingsGroup>
-      )}
     </div>
   );
 };

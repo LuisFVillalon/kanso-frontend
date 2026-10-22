@@ -784,8 +784,6 @@ html[data-page-style="blank"] body {
   }
   .mood-face[aria-checked="true"] > span { color: var(--tm-text-primary); }
   .mood-face:active { transform: scale(0.96); }
-  .mood-faces-compact .mood-face { padding: 0.35rem 0.1rem; }
-  .mood-faces-compact .mood-face svg { width: 26px; height: 26px; }
 
   .mood-scale { display: flex; gap: 3px; }
   .mood-scale > button {

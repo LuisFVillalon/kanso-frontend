@@ -47,16 +47,11 @@ export interface MoodTags {
   custom: string[];
 }
 
-/** When the dashboard nudge appears: at "Call it a day", 30 minutes after it, or never. */
-export type MoodRemind = 'shutoff' | 'shutoff+30' | 'off';
-
 /** The profile's `mood_checkins` settings, which `/get-profile` returns with defaults filled in. */
 export interface MoodCheckinSettings {
   daily: boolean;
   weekly: boolean;
   monthly: boolean;
-  remind: MoodRemind;
-  show_in_reports: boolean;
 }
 
 /** Daily on, weekly and monthly opt-in — the same defaults the backend fills in. */
@@ -64,8 +59,6 @@ export const DEFAULT_MOOD_SETTINGS: MoodCheckinSettings = {
   daily: true,
   weekly: false,
   monthly: false,
-  remind: 'shutoff',
-  show_in_reports: true,
 };
 
 /** The 5-face scale, index = score - 1. */
