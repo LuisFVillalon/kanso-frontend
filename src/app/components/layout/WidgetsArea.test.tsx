@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => ({ dataUserId: 'u1' }) }));
 vi.mock('@/app/components/calendar/WeekView', () => ({
-  default: ({ fill }: { fill?: boolean }) => <div data-testid="week-view" data-fill={String(!!fill)} />,
+  default: ({ fill, heightPx, onResize }: { fill?: boolean; heightPx?: number | null; onResize?: (px: number) => void }) => (
+    <button type="button" data-testid="week-view" data-fill={String(!!fill)} data-height={String(heightPx)} onClick={() => onResize?.(900)} />
+  ),
 }));
 
 import WidgetsArea from './WidgetsArea';
@@ -57,5 +59,34 @@ describe('WidgetsArea', () => {
     expect(week.parentElement!.classList.contains('absolute')).toBe(true);
     expect(week.parentElement!.classList.contains('inset-0')).toBe(true);
     expect(week.parentElement!.parentElement!.parentElement).toBe(widgetsCell.parentElement);
+  });
+
+  it('grows the box when the week calendar is dragged taller, and resets on Widgets', async () => {
+    await render();
+    await act(async () => tab('Week calendar').click());
+    const week = () => container.querySelector<HTMLElement>('[data-testid="week-view"]')!;
+    const box = () => week().parentElement!.parentElement!;
+    expect(week().dataset.height).toBe('null');
+    expect(box().style.minHeight).toBe('');
+
+    await act(async () => week().click());
+    expect(week().dataset.height).toBe('900');
+    expect(box().style.minHeight).toBe('900px');
+
+    await act(async () => tab('Widgets').click());
+    await act(async () => tab('Week calendar').click());
+    expect(week().dataset.height).toBe('null');
+    expect(box().style.minHeight).toBe('');
+  });
+
+  it("doesn't keep a dragged height once the page is left", async () => {
+    await render();
+    await act(async () => tab('Week calendar').click());
+    await act(async () => container.querySelector<HTMLElement>('[data-testid="week-view"]')!.click());
+    act(() => root.unmount());
+    root = createRoot(container);
+
+    await render();
+    expect(container.querySelector<HTMLElement>('[data-testid="week-view"]')!.dataset.height).toBe('null');
   });
 });

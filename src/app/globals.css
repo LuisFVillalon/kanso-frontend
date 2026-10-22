@@ -85,6 +85,15 @@
   --tm-mood-4:           #4E9DE0;
   --tm-mood-5:           #1F6FC4;
 
+  /* Week calendar kinds: planned task, completed, note session, habit. Four
+     hues (blue, green, magenta, orange) that stay apart under red/green and
+     blue/yellow color blindness, each 3.3:1 or more on paper and surface.
+     They don't follow the user's accent, so they never collide with it. */
+  --tm-week-task:        #1A56A8;
+  --tm-week-completed:   #0B8A63;
+  --tm-week-note:        #B8408F;
+  --tm-week-habit:       #C26E0A;
+
   /* Radius */
   --tm-radius-small:     4px;
   --tm-radius-buttons:   8px;
@@ -153,6 +162,10 @@
     --tm-mood-3:           #F2BE3A;
     --tm-mood-4:           #7DBCF3;
     --tm-mood-5:           #4A9DF0;
+    --tm-week-task:        #7DB6F5;
+    --tm-week-completed:   #45CFA3;
+    --tm-week-note:        #E77FC8;
+    --tm-week-habit:       #F0A040;
     --tm-shadow-nav:       0px 0.7px 1.462px 0px rgba(0, 0, 0, 0.2), 0px 3px 9px 0px rgba(0, 0, 0, 0.25);
     --tm-shadow-product:   0px 4px 12px rgba(0, 0, 0, 0.4);
     --tm-shadow-md:        0px 6px 16px rgba(0, 0, 0, 0.35);
@@ -202,6 +215,10 @@
   --tm-mood-3:           #F2BE3A;
   --tm-mood-4:           #7DBCF3;
   --tm-mood-5:           #4A9DF0;
+  --tm-week-task:        #7DB6F5;
+  --tm-week-completed:   #45CFA3;
+  --tm-week-note:        #E77FC8;
+  --tm-week-habit:       #F0A040;
   --tm-shadow-nav:       0px 0.7px 1.462px 0px rgba(0, 0, 0, 0.2), 0px 3px 9px 0px rgba(0, 0, 0, 0.25);
   --tm-shadow-product:   0px 4px 12px rgba(0, 0, 0, 0.4);
   --tm-shadow-md:        0px 6px 16px rgba(0, 0, 0, 0.35);

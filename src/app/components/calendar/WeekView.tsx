@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
 import { useTasksContext } from '@/app/context/TasksContext';
@@ -13,6 +13,8 @@ import type { TaskFormData } from '@/app/components/task/TaskFormFields';
 import NewTaskModal from '@/app/components/task/NewTaskModal';
 import EditTaskModal from '@/app/components/task/EditTaskModal';
 import HabitHistoryModal from '@/app/components/habit/HabitHistoryModal';
+import DragHandle from '@/app/components/common/DragHandle';
+import { useResizableSplit } from '@/app/hooks/useResizableSplit';
 import { DEFAULT_DAY_START } from '@/app/lib/restDays';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
 import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
@@ -25,6 +27,22 @@ import {
   weekDays,
 } from '@/app/utils/weekLayout';
 import WeekGrid, { WEEK_LEGEND } from './WeekGrid';
+
+// Tallest a dragged week view gets, in px.
+const MAX_HEIGHT_PX = 2400;
+// Half the drag handle, so the view's bottom edge follows the pointer.
+const HANDLE_HALF_PX = 4;
+
+interface WeekViewProps {
+  /** Fill the parent's height; the hour grid scrolls in whatever room the toolbar leaves. */
+  fill?: boolean;
+  /** The view's dragged height in px, or null for its default. It never gets shorter than the default. */
+  heightPx?: number | null;
+  /** Shows a drag handle under the grid; called with the new height as it's dragged. */
+  onResize?: (heightPx: number) => void;
+  /** Called when a drag ends. */
+  onResizeEnd?: () => void;
+}
 
 const emptyTaskForm = (): BaseTaskForm => ({
   id: 0,
@@ -84,9 +102,10 @@ const toggleById = (tags: Tag[], tag: Tag): Tag[] =>
  * sessions and habit completions come from GET /get-calendar-activity.
  *
  * With `fill`, the view takes its parent's height and the hour grid scrolls in
- * whatever room the toolbar leaves.
+ * whatever room the toolbar leaves. With `onResize`, a handle under the grid
+ * drags the view taller; the parent keeps the height (`heightPx`).
  */
-const WeekView: React.FC<{ fill?: boolean }> = ({ fill = false }) => {
+const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onResize, onResizeEnd }) => {
   const router = useRouter();
   const showToast = useToast();
   const now = useMinuteClock();
@@ -102,6 +121,18 @@ const WeekView: React.FC<{ fill?: boolean }> = ({ fill = false }) => {
   const [showNewTask, setShowNewTask] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [historyHabitId, setHistoryHabitId] = useState<number | null>(null);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const handleResize = useCallback(
+    (px: number) => onResize?.(Math.min(MAX_HEIGHT_PX, Math.max(0, Math.round(px + HANDLE_HALF_PX)))),
+    [onResize],
+  );
+  const handleResizingChange = useCallback((resizing: boolean) => { if (!resizing) onResizeEnd?.(); }, [onResizeEnd]);
+  const handleResizeMouseDown = useResizableSplit(rootRef, {
+    anchor: 'top',
+    onResize: handleResize,
+    onResizingChange: handleResizingChange,
+  });
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
   const todayStr = toLocalDateStr(now);
@@ -177,7 +208,11 @@ const WeekView: React.FC<{ fill?: boolean }> = ({ fill = false }) => {
   };
 
   return (
-    <div className={`flex flex-col gap-3 ${fill ? 'h-full min-h-0' : ''}`}>
+    <div
+      ref={rootRef}
+      className={`flex flex-col gap-3 ${fill ? 'h-full min-h-0' : ''}`}
+      style={heightPx === null ? undefined : { minHeight: heightPx }}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => goToWeek(-1)} className="btn btn-ghost p-2" aria-label="Previous week" title="Previous week">
@@ -196,9 +231,9 @@ const WeekView: React.FC<{ fill?: boolean }> = ({ fill = false }) => {
         {loading && <Loader2 className="w-4 h-4 animate-spin text-text-muted" aria-label="Loading week activity" />}
 
         <ul className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legend">
-          {WEEK_LEGEND.map(({ label, bg, edge }) => (
+          {WEEK_LEGEND.map(({ label, edge }) => (
             <li key={label} className="flex items-center gap-1.5 text-xs text-text-secondary">
-              <span aria-hidden className="w-3 h-3 rounded-sm" style={{ backgroundColor: bg, borderLeft: `3px solid ${edge}` }} />
+              <span aria-hidden className="w-3 h-3 rounded-sm" style={{ backgroundColor: edge }} />
               {label}
             </li>
           ))}
@@ -234,6 +269,12 @@ const WeekView: React.FC<{ fill?: boolean }> = ({ fill = false }) => {
         onOpenHabit={setHistoryHabitId}
         fill={fill}
       />
+
+      {onResize && (
+        <div className="-mt-2" title="Drag to make the calendar taller">
+          <DragHandle onMouseDown={handleResizeMouseDown} orientation="row" alwaysVisible />
+        </div>
+      )}
 
       <NewTaskModal
         isOpen={showNewTask}
