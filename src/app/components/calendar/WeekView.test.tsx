@@ -92,7 +92,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('WeekView', () => {
+// Each test renders the full 24-hour week grid in jsdom, which takes a few
+// seconds on its own and well past vitest's 5s default when the full suite
+// runs in parallel on a loaded machine.
+describe('WeekView', { timeout: 30_000 }, () => {
   it('loads the Monday–Sunday week containing today and plots its activity', async () => {
     mocks.tasks = [task({ id: 3, title: 'Essay', due_date: '2026-10-22', due_time: '14:00', estimated_time: 1 })];
     await render();
