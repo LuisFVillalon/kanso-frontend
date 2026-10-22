@@ -248,6 +248,7 @@ const WeekView: React.FC = () => {
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
         allTasks={tasks}
+        onOpenTask={setEditingTask}
       />
 
       <HabitHistoryModal

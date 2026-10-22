@@ -3,9 +3,10 @@ import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 // ── Linked tasks on the task form ───────────────────────────────────────────
 // A task's linked tasks are the tasks that lead up to completing it, stored
-// as subtasks (parent_task_id) and ordered by `position`. Links go one level
-// deep and a task has at most one parent; linking a task that already has a
-// parent moves it. The backend enforces the same rules
+// as subtasks (parent_task_id) and ordered by `position`. Links nest to any
+// depth, a task has at most one parent, and linking a task that already has
+// a parent moves it (with its own linked tasks). A task can't be linked under
+// itself or a task below it. The backend enforces the same rules
 // (PUT /update-linked-tasks/{id}).
 
 /** One row of the form's Linked tasks list: an existing task, or the title of one created on save. */
@@ -92,8 +93,6 @@ export function linkCandidates(
 ): LinkCandidate[] {
   const byId = new Map(allTasks.map(t => [t.id, t]));
   const listed = new Set(drafts.flatMap(d => (d.kind === 'existing' ? [d.id] : [])));
-  const hasLinked = new Set(allTasks.flatMap(t => (t.parent_task_id != null ? [t.parent_task_id] : [])));
-
   const ancestors = new Set<number>();
   for (let a = parentOfParent; a != null && !ancestors.has(a); a = byId.get(a)?.parent_task_id ?? null) {
     ancestors.add(a);
@@ -102,7 +101,6 @@ export function linkCandidates(
   const q = query.trim().toLowerCase();
   const status = (t: Task): LinkCandidate => {
     if (ancestors.has(t.id)) return { task: t, ok: false, note: 'Would create a loop: this task already leads up to it' };
-    if (hasLinked.has(t.id)) return { task: t, ok: false, note: 'Has its own linked tasks, and links go one level deep' };
     if (t.parent_task_id != null && t.parent_task_id !== parentId) {
       const other = byId.get(t.parent_task_id);
       const where = other ? `“${other.title}”` : 'another task';

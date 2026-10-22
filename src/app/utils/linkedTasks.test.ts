@@ -73,13 +73,14 @@ describe('linkCandidates', () => {
     expect(ids).not.toContain(4);
   });
 
-  it('explains moves and blocks tasks that have linked tasks of their own', () => {
+  it('explains moves and offers tasks that have linked tasks of their own', () => {
     const list = linkCandidates(tasks, { parentId: 1, parentOfParent: null, drafts: [], query: '' });
     const byId = new Map(list.map(c => [c.task.id, c]));
     expect(byId.get(3)).toMatchObject({
       ok: true, moves: true, note: 'Already linked to “Prepare for Google phone screen”. Linking moves it here',
     });
-    expect(byId.get(2)).toMatchObject({ ok: false, note: 'Has its own linked tasks, and links go one level deep' });
+    expect(byId.get(2)).toMatchObject({ ok: true });
+    expect(byId.get(2)?.note).toBeUndefined();
     expect(byId.get(6)).toMatchObject({ ok: true });
     expect(byId.get(6)?.note).toBeUndefined();
   });
@@ -91,10 +92,17 @@ describe('linkCandidates', () => {
     });
   });
 
+  it('blocks every task above a nested task, not just its own parent', () => {
+    const nested = [...tasks, task(7, 'Book the room', { parent_task_id: 3 })];
+    const list = linkCandidates(nested, { parentId: 7, parentOfParent: 3, drafts: [], query: '' });
+    const blocked = list.filter(c => !c.ok).map(c => c.task.id);
+    expect(blocked).toEqual([3, 2]);
+  });
+
   it('sorts linkable before blocked, open before done, then by due date', () => {
-    const ids = linkCandidates(tasks, { parentId: null, parentOfParent: null, drafts: [], query: '' })
+    const ids = linkCandidates(tasks, { parentId: 3, parentOfParent: 2, drafts: [], query: '' })
       .map(c => c.task.id);
-    expect(ids).toEqual([3, 4, 1, 6, 5, 2]);
+    expect(ids).toEqual([4, 1, 6, 5, 2]);
   });
 
   it('filters by title, ignoring case', () => {

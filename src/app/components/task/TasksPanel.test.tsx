@@ -151,6 +151,63 @@ describe('TasksPanel finishing the last open linked task', () => {
   });
 });
 
+describe('TasksPanel with linked tasks nested deeper', () => {
+  // Mock interview (3) has its own linked tasks: Practice (4, open) and Room (6, done).
+  const practice = task(4, 'Practice questions', { parent_task_id: 3, position: 0 });
+  const room = task(6, 'Book a quiet room', { parent_task_id: 3, position: 1, completed: true });
+  const rowOf = (title: string) => button(`Edit ${title}`)!.closest('li')!;
+
+  it('asks before completing a nested task whose own linked tasks are open, under its row', () => {
+    render([parent, done, open, practice, room]);
+    click('Mark complete: Mock interview');
+    expect(handlers.onToggleComplete).not.toHaveBeenCalled();
+    expect(rowOf('Mock interview').querySelector('[role="status"]')?.textContent).toContain('1 linked task is still open.');
+
+    click('Complete all');
+    expect(handlers.onCompleteWithLinked).toHaveBeenCalledWith(3);
+    expect(container.textContent).not.toContain('still open');
+  });
+
+  it("suggests completing the nested parent, not the card, when its last open linked task is done", () => {
+    render([parent, done, open, practice, room]);
+    click('Mark complete: Practice questions');
+    expect(handlers.onToggleComplete).toHaveBeenCalledWith(4);
+    render([parent, done, open, { ...practice, completed: true }, room]);
+    const banner = rowOf('Mock interview').querySelector('[role="status"]');
+    expect(banner?.textContent).toContain('All linked tasks are done. Mark Mock interview complete?');
+    expect(container.textContent).not.toContain('Mark Apply to Google complete?');
+
+    act(() => [...banner!.querySelectorAll('button')].find(b => b.textContent === 'Mark complete')!.click());
+    expect(handlers.onToggleComplete).toHaveBeenLastCalledWith(3);
+  });
+
+  it('opens the parent from a nested row’s trail', () => {
+    const onEditTask = vi.fn();
+    const tasks = [parent, done, open, practice, room];
+    act(() => root.render(
+      <TasksPanel
+        tags={[]}
+        taskGroups={groupLinkedTasks(tasks, tasks)}
+        onUpdatePriority={vi.fn()}
+        onEditTask={onEditTask}
+        activeTaskCount={tasks.length}
+        occupiedPriorities={[]}
+        compact={false}
+        view={DEFAULT_TASK_VIEW}
+        onViewChange={vi.fn()}
+        selectedTags={[]}
+        onToggleTag={vi.fn()}
+        onClearTags={vi.fn()}
+        {...handlers}
+      />,
+    ));
+    const trail = rowOf('Practice questions').querySelector('[title^="Leads up to"]')!;
+    expect(trail.getAttribute('title')).toBe('Leads up to Apply to Google › Mock interview');
+    act(() => trail.querySelector<HTMLButtonElement>('button[aria-label="Open parent task Mock interview"]')!.click());
+    expect(onEditTask).toHaveBeenCalledWith(open);
+  });
+});
+
 describe('TasksPanel deleting or archiving a parent', () => {
   const radio = (value: string) =>
     document.body.querySelector<HTMLInputElement>(`input[name="linked-remove-mode"][value="${value}"]`)!;

@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '@/app/types/task';
+import { groupLinkedTasks } from '@/app/utils/taskUtils';
 import TaskItem from './TaskItem';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -13,10 +14,13 @@ const task = (id: number, title: string, extra: Partial<Task> = {}): Task => ({
 });
 
 const parent = task(1, 'Apply to Google');
-const linked = [
-  task(2, 'Update résumé', { parent_task_id: 1, completed: true }),
-  task(3, 'Mock interview', { parent_task_id: 1 }),
+const linkedTasks = [
+  task(2, 'Update résumé', { parent_task_id: 1, position: 0, completed: true }),
+  task(3, 'Mock interview', { parent_task_id: 1, position: 1 }),
 ];
+/** The card's linked tasks as the list nests them. */
+const nest = (tasks: Task[]) => groupLinkedTasks(tasks, tasks)[0].linked;
+const linked = nest([parent, ...linkedTasks]);
 
 let container: HTMLDivElement;
 let root: Root;
@@ -72,7 +76,7 @@ describe('TaskItem linked tasks', () => {
     act(() => button('Mark complete: Mock interview')!.click());
     expect(onToggleComplete).toHaveBeenCalledWith(3);
     act(() => button('Edit Mock interview')!.click());
-    expect(onEditTask).toHaveBeenCalledWith(linked[1]);
+    expect(onEditTask).toHaveBeenCalledWith(linkedTasks[1]);
   });
 
   it('disables a linked task checkbox while its request is in flight', () => {
@@ -89,13 +93,74 @@ describe('TaskItem linked tasks', () => {
     expect(container.textContent).not.toContain('Mock interview');
   });
 
-  it('labels a deeper linked task with its own parent', () => {
-    const deeper = task(4, 'Practice questions', { parent_task_id: 3 });
-    render({ linkedTasks: [...linked, deeper], linkedVia: { 4: 'Mock interview' } });
-    const row = button('Edit Practice questions')!.closest('li')!;
-    expect(row.textContent).toContain('↳ Mock interview');
-    expect(button('Edit Mock interview')!.closest('li')!.textContent).not.toContain('↳');
-    expect(container.textContent).toContain('1 of 2 done');
+  it('shows each linked task with a trail to the card it leads up to, which opens it', () => {
+    const onEditTask = vi.fn();
+    render({ onEditTask });
+    const row = button('Edit Mock interview')!.closest('li')!;
+    expect(row.querySelector('[title="Leads up to Apply to Google"]')).not.toBeNull();
+    act(() => row.querySelector<HTMLButtonElement>('button[aria-label="Open parent task Apply to Google"]')!.click());
+    expect(onEditTask).toHaveBeenCalledWith(parent);
+  });
+
+  describe('nested deeper', () => {
+    const practice = task(4, 'Practice questions', { parent_task_id: 3, position: 0 });
+    const room = task(5, 'Book a quiet room', { parent_task_id: 3, position: 1, completed: true });
+    const notes = task(6, 'Write up notes', { parent_task_id: 4 });
+    const nested = nest([parent, ...linkedTasks, practice, room, notes]);
+    const rowOf = (title: string) => button(`Edit ${title}`)!.closest('li')!;
+
+    it('nests a linked task under its own parent, with its progress and full trail', () => {
+      render({ linkedTasks: nested });
+      // Mock interview's linked tasks sit inside its own row, not beside it.
+      expect(rowOf('Mock interview').contains(rowOf('Practice questions'))).toBe(true);
+      expect(rowOf('Practice questions').contains(rowOf('Write up notes'))).toBe(true);
+      expect(rowOf('Update résumé').contains(rowOf('Practice questions'))).toBe(false);
+      expect(rowOf('Mock interview').querySelector('[title="1 of 2 linked tasks done"]')).not.toBeNull();
+      expect(rowOf('Write up notes').querySelector('[title="Leads up to Apply to Google › Mock interview › Practice questions"]'))
+        .not.toBeNull();
+      // The card counts only its own linked tasks.
+      expect(container.textContent).toContain('1 of 2 done');
+    });
+
+    it('opens any task in the trail', () => {
+      const onEditTask = vi.fn();
+      render({ linkedTasks: nested, onEditTask });
+      const trail = rowOf('Write up notes').querySelector('[title^="Leads up to"]')!;
+      act(() => trail.querySelector<HTMLButtonElement>('button[aria-label="Open parent task Mock interview"]')!.click());
+      expect(onEditTask).toHaveBeenCalledWith(linkedTasks[1]);
+    });
+
+    it('collapses and expands one linked task’s own linked tasks', () => {
+      render({ linkedTasks: nested });
+      act(() => button('Hide linked tasks of Mock interview')!.click());
+      expect(container.textContent).not.toContain('Practice questions');
+      expect(container.textContent).toContain('Update résumé');
+      act(() => button('Show linked tasks of Mock interview')!.click());
+      expect(container.textContent).toContain('Write up notes');
+    });
+
+    it('completes a nested task from its row and shows its banner there', () => {
+      const onToggleComplete = vi.fn();
+      render({
+        linkedTasks: nested,
+        onToggleComplete,
+        linkedBannerFor: g => g.task.id === 3 && <p role="status">Mock interview banner</p>,
+      });
+      act(() => button('Mark complete: Write up notes')!.click());
+      expect(onToggleComplete).toHaveBeenCalledWith(6);
+      expect(rowOf('Mock interview').querySelector('[role="status"]')?.textContent).toBe('Mock interview banner');
+      expect(rowOf('Practice questions').querySelector('[role="status"]')).toBeNull();
+    });
+  });
+
+  it("shows the API's summary of a card's parent that isn't loaded", () => {
+    render({
+      task: task(8, 'Orphan', { parent_task_id: 99, parent: { id: 99, title: 'Archived goal' } }),
+      linkedTotal: 0,
+    });
+    expect(container.querySelector('[title="Leads up to Archived goal"]')).not.toBeNull();
+    // Nothing to open it in, so it's plain text.
+    expect(button('Open parent task Archived goal')).toBeNull();
   });
 
   it('renders no linked section for a task without linked tasks', () => {

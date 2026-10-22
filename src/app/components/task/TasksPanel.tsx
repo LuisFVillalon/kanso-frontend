@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Filter } from 'lucide-react';
 import TaskItem from './TaskItem';
 import LinkedTaskBanner, { LinkedBannerKind } from './LinkedTaskBanner';
@@ -12,7 +12,7 @@ import { TaskGroup } from '@/app/utils/taskUtils';
 
 interface TasksPanelProps {
   tags: Tag[];
-  /** Filtered, sorted top-level tasks, each with its linked tasks. */
+  /** Filtered, sorted top-level tasks, each with its linked tasks nested under it. */
   taskGroups: TaskGroup[];
   onToggleComplete: (id: number) => void;
   /** "Complete all": completes a task and its open linked tasks together. */
@@ -63,7 +63,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   onToggleTag,
   onClearTags,
 }) => {
-  // The completion question each parent card is asking, by parent id.
+  // The completion question each task with linked tasks is asking, by task id.
   const [banners, setBanners] = useState<Record<number, LinkedBannerKind>>({});
   const [removing, setRemoving] = useState<{ task: Task; verb: 'delete' | 'archive'; linkedCount: number } | null>(null);
 
@@ -75,29 +75,38 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
       return next;
     });
 
-  // Completing a parent with open linked tasks asks first; finishing a
-  // parent's last open linked task suggests completing the parent.
+  // Every shown task, at any depth, with the task it's nested under.
+  const shown = useMemo(() => {
+    const map = new Map<number, { group: TaskGroup; parent: TaskGroup | null }>();
+    const visit = (group: TaskGroup, parent: TaskGroup | null) => {
+      map.set(group.task.id, { group, parent });
+      group.linked.forEach(child => visit(child, group));
+    };
+    taskGroups.forEach(g => visit(g, null));
+    return map;
+  }, [taskGroups]);
+
+  // Completing a task with open linked tasks asks first; finishing a task's
+  // last open linked task suggests completing that task. Both work at any depth.
   const handleToggleComplete = (id: number) => {
-    const group = taskGroups.find(g => g.task.id === id);
-    if (group) {
+    const entry = shown.get(id);
+    if (entry) {
+      const { group, parent } = entry;
       if (!group.task.completed && group.linkedDone < group.linkedTotal) {
         setBanner(id, 'open');
         return;
       }
       setBanner(id, null);
-    } else {
-      const parentGroup = taskGroups.find(g => g.linked.some(t => t.id === id && t.parent_task_id === g.task.id));
-      if (parentGroup) {
-        const child = parentGroup.linked.find(t => t.id === id)!;
-        const finishesLast = !child.completed && parentGroup.linkedDone + 1 === parentGroup.linkedTotal;
-        setBanner(parentGroup.task.id, finishesLast && !parentGroup.task.completed ? 'alldone' : null);
+      if (parent) {
+        const finishesLast = !group.task.completed && parent.linkedDone + 1 === parent.linkedTotal;
+        setBanner(parent.task.id, finishesLast && !parent.task.completed ? 'alldone' : null);
       }
     }
     onToggleComplete(id);
   };
 
   const requestRemove = (task: Task, verb: 'delete' | 'archive') => {
-    const linkedCount = taskGroups.find(g => g.task.id === task.id)?.linkedTotal ?? 0;
+    const linkedCount = shown.get(task.id)?.group.linkedTotal ?? 0;
     if (linkedCount > 0) setRemoving({ task, verb, linkedCount });
     else if (verb === 'delete') onDeleteTask(task);
     else onArchiveTask(task);
@@ -113,7 +122,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
 
   // A banner shows only while its question still applies (a failed toggle
   // rolls the list back, which quietly drops it). A linked-task question
-  // comes before Canvas's.
+  // comes before Canvas's. Nested tasks get theirs under their own row.
   const bannerFor = ({ task, linkedDone, linkedTotal }: TaskGroup) => {
     const kind = banners[task.id];
     const applies = !task.completed && linkedTotal > 0 && (kind === 'open' ? linkedDone < linkedTotal : linkedDone === linkedTotal);
@@ -174,9 +183,9 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
               linkedTasks={group.linked}
               linkedDone={group.linkedDone}
               linkedTotal={group.linkedTotal}
-              linkedVia={group.linkedVia}
               pendingTaskIds={pendingTaskIds}
               banner={bannerFor(group)}
+              linkedBannerFor={bannerFor}
               onToggleComplete={handleToggleComplete}
               tags={tags}
               onDeleteTask={t => requestRemove(t, 'delete')}

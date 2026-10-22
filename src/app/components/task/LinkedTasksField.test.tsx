@@ -53,15 +53,15 @@ function NewHarness({ onSubmit }: { onSubmit: Submit }) {
   );
 }
 
-function EditHarness({ initial, onSubmit, onChange = () => {} }: {
-  initial: Task; onSubmit: Submit; onChange?: (t: TaskFormData) => void;
+function EditHarness({ initial, onSubmit, onChange = () => {}, tasks = allTasks }: {
+  initial: Task; onSubmit: Submit; onChange?: (t: TaskFormData) => void; tasks?: Task[];
 }) {
   const [t, setT] = useState(initial);
   return (
     <EditTaskModal
       isOpen task={t} onClose={() => {}} onTaskChange={next => { onChange(next); setT({ ...t, ...next } as Task); }}
       tags={[]} onToggleTag={() => {}} onSubmit={onSubmit} activeTaskCount={1} usedPriorityLevels={[]}
-      allTasks={allTasks}
+      allTasks={tasks} onOpenTask={setT}
     />
   );
 }
@@ -137,15 +137,15 @@ describe('LinkedTasksField on the new-task form', () => {
     expect(first.textContent).toContain(rowTitles()[0]);
   });
 
-  it('lists tasks that have linked tasks of their own as not linkable', () => {
+  it('links a task that has linked tasks of their own', () => {
     act(() => root.render(<NewHarness onSubmit={vi.fn()} />));
     act(() => search().focus());
     type(search(), 'google');
     const option = doc().querySelector('[role="option"]')!;
-    expect(option.getAttribute('aria-disabled')).toBe('true');
-    expect(doc().body.textContent).toContain("Can't be linked here");
+    expect(option.getAttribute('aria-disabled')).toBe('false');
+    expect(doc().body.textContent).not.toContain("Can't be linked here");
     key(search(), 'Enter');
-    expect(doc().body.textContent).toContain('No linked tasks yet');
+    expect(rowTitles()).toEqual(['Prepare for Google phone screen']);
   });
 
   it('warns when a linked task is due after this one', () => {
@@ -216,21 +216,58 @@ describe('LinkedTasksField on the edit-task form', () => {
     );
   });
 
-  it('shows "Leads up to" on a linked task, and Unlink lets it have linked tasks of its own', () => {
+  it('shows "Leads up to" on a linked task, which can be unlinked and undone', () => {
     const onChange = vi.fn();
     act(() => root.render(<EditHarness initial={allTasks[2]} onSubmit={vi.fn()} onChange={onChange} />));
     expect(doc().body.textContent).toContain('Leads up to');
-    expect(doc().body.textContent).toContain('Prepare for Google phone screen');
-    expect(doc().body.textContent).toContain("so it can't have linked tasks of its own");
-    expect(search()).toBeNull();
+    expect(button('Open parent task Prepare for Google phone screen')).not.toBeNull();
 
     act(() => buttonByText('Unlink').click());
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ parent_task_id: null }));
     expect(doc().body.textContent).toContain('Unlinked. Save to make it a standalone task again.');
-    expect(search()).toBeTruthy();
+    // The trail stays, struck through and no longer a link, until Undo.
+    expect(doc().body.textContent).toContain('Prepare for Google phone screen');
+    expect(button('Open parent task Prepare for Google phone screen')).toBeNull();
 
     act(() => buttonByText('Undo').click());
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ parent_task_id: 2 }));
-    expect(search()).toBeNull();
+  });
+
+  it('gives a linked task the full editor, with linked tasks of its own', async () => {
+    const onSubmit = vi.fn<Submit>(async () => {});
+    act(() => root.render(<EditHarness initial={allTasks[2]} onSubmit={onSubmit} />));
+    expect(search()).toBeTruthy();
+    expect(newTitleInput()).toBeTruthy();
+    type(newTitleInput(), 'Book a quiet room');
+    key(newTitleInput(), 'Enter');
+    await submit();
+    expect(onSubmit).toHaveBeenCalledWith(expect.anything(), [{ title: 'Book a quiet room' }]);
+  });
+
+  it('shows the whole trail above a deeply linked task and opens any task in it', () => {
+    const deeper = task(7, 'Book a quiet room', { parent_task_id: 3, position: 0 });
+    const tasks = [...allTasks, deeper];
+    act(() => root.render(<EditHarness initial={deeper} onSubmit={vi.fn()} tasks={tasks} />));
+    expect(doc().querySelector('[title="Leads up to Prepare for Google phone screen › Mock interview with Dana"]'))
+      .not.toBeNull();
+
+    act(() => button('Open parent task Mock interview with Dana').click());
+    // The editor now shows Mock interview with Dana, with its own parent above it and its linked task in its list.
+    expect(doc().querySelector<HTMLInputElement>('input[placeholder="Enter task title"]')!.value)
+      .toBe('Mock interview with Dana');
+    expect(doc().querySelector('[title="Leads up to Prepare for Google phone screen"]')).not.toBeNull();
+    expect(rowTitles()).toEqual(['Book a quiet room']);
+  });
+
+  it("offers neither the task's own parents nor itself when linking under a nested task", () => {
+    const deeper = task(7, 'Book a quiet room', { parent_task_id: 3, position: 0 });
+    act(() => root.render(<EditHarness initial={deeper} onSubmit={vi.fn()} tasks={[...allTasks, deeper]} />));
+    act(() => search().focus());
+    type(search(), 'o');
+    const blocked = [...doc().querySelectorAll('[role="option"][aria-disabled="true"]')].map(o => o.textContent);
+    expect(blocked).toHaveLength(2);
+    expect(blocked.every(text => text?.includes('Would create a loop'))).toBe(true);
+    const offered = [...doc().querySelectorAll('[role="option"]')].map(o => o.textContent ?? '');
+    expect(offered.some(text => text.includes('Book a quiet room'))).toBe(false);
   });
 });
