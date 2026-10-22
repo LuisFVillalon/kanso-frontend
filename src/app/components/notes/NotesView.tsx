@@ -1,15 +1,13 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { useNotesContext } from '@/app/context/NotesContext';
 import { useTagsContext } from '@/app/context/TagsContext';
-import { useAuth } from '@/app/context/AuthContext';
 import { Note } from '@/app/types/notes';
 import { useResizableSplit } from '@/app/hooks/useResizableSplit';
-import { useProfile } from '@/app/hooks/useProfile';
+import { useAppShell } from '@/app/context/AppShellContext';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import NotesList, { ViewMode } from './NotesList';
 import NoteEditor from './NoteEditor';
@@ -28,8 +26,7 @@ const DEFAULT_SIDE = 288;
 
 const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
   const { notes, isLoading: notesLoading, addNote, updateNote, deleteNote, archiveNote, discardDraft, pendingNoteIds } = useNotesContext();
-  const { user } = useAuth();
-  const { profile, saveProfile } = useProfile(user);
+  const { profile, saveProfile } = useAppShell().profileState;
   const [viewMode, setViewMode] = usePersistedPref<ViewMode>(
     'tm-notes-view-mode',
     'cards',
@@ -164,11 +161,6 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
   return (
     <div className="min-h-screen flex flex-col">
       <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-5 flex items-center gap-3">
-        <Link href="/" className="flex items-center gap-1 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors">
-          <ChevronLeft className="w-4 h-4" />
-          Home
-        </Link>
-        <span className="text-text-muted select-none">/</span>
         <h1 className="text-2xl sm:text-3xl text-text-primary">Notes</h1>
       </div>
       <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 pb-4 sm:pb-6 min-h-0">

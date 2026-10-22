@@ -1,16 +1,35 @@
 /*
-Purpose: This custom hook filters and sorts tasks based on status, search term, and selected tags,
-nests linked tasks under their parent, and computes statistics for different task categories.
+Purpose: This custom hook filters and sorts tasks based on the task view (which tasks to show,
+the sort key and its direction), search term, and selected tags, nests linked tasks under their
+parent, and computes statistics for different task categories.
 */
 
 import { useMemo } from 'react';
-import { FilterType, StatsData, Tag, Task } from '@/app/types/task';
+import { StatsData, Tag, Task, TaskSortKey, TaskView } from '@/app/types/task';
 import { countTasksByTag, getTaskDateTime, groupLinkedTasks } from '@/app/utils/taskUtils';
+
+/** Everything, soonest due first: what the list showed before Show and Sort were split. */
+export const DEFAULT_TASK_VIEW: TaskView = { show: 'all', sortKey: 'due', sortOrder: 'asc' };
+
+export const isTaskView = (c: unknown): c is TaskView => {
+  if (!c || typeof c !== 'object') return false;
+  const v = c as Record<string, unknown>;
+  return ['open', 'done', 'all'].includes(v.show as string)
+    && ['due', 'priority', 'duration', 'created'].includes(v.sortKey as string)
+    && (v.sortOrder === 'asc' || v.sortOrder === 'desc');
+};
+
+// Ascending value per sort key; a task without one sorts last going up.
+const SORT_VALUE: Record<TaskSortKey, (t: Task) => number> = {
+  due: getTaskDateTime,
+  priority: t => t.priority ?? Infinity,
+  duration: t => t.estimated_time ?? Infinity,
+  created: t => new Date(t.created_date).getTime(),
+};
 
 export const useTaskFiltering = (
   tasks: Task[],
-  filter: FilterType,
-  sortOrder: Record<FilterType, 'asc' | 'desc'>,
+  view: TaskView,
   searchTerm: string,
   selectedTags: Tag[]
 ) => {
@@ -29,19 +48,7 @@ export const useTaskFiltering = (
 
         // Status filtering
         const matchesStatus =
-          filter === 'all'
-            ? true
-            : filter === 'active'
-            ? !task.completed
-            : filter === 'completed'
-            ? task.completed
-            : filter === 'priority'
-            ? !task.completed
-            : filter === 'created'
-            ? true
-            : filter === 'duration'
-            ? !task.completed
-            : true;
+          view.show === 'all' ? true : view.show === 'done' ? task.completed : !task.completed;
 
         // Search filtering
         const matchesSearch =
@@ -58,24 +65,10 @@ export const useTaskFiltering = (
         return matchesStatus && matchesSearch && matchesTags;
       })
       .sort((a, b) => {
-        const dir = sortOrder[filter] === 'asc' ? 1 : -1;
-        if (filter === 'priority') {
-          const pa = a.priority ?? Infinity;
-          const pb = b.priority ?? Infinity;
-          return (pa - pb) * dir;
-        }
-        if (filter === 'duration') {
-          const ea = a.estimated_time ?? Infinity;
-          const eb = b.estimated_time ?? Infinity;
-          return (ea - eb) * dir;
-        }
-        if (filter === 'created') {
-          const da = new Date(a.created_date).getTime();
-          const db = new Date(b.created_date).getTime();
-          return (da - db) * dir;
-        }
-        const diff = getTaskDateTime(a) - getTaskDateTime(b);
-        return diff * dir;
+        const value = SORT_VALUE[view.sortKey];
+        const diff = value(a) - value(b);
+        // Infinity - Infinity is NaN: two tasks without a value tie.
+        return (Number.isNaN(diff) ? 0 : diff) * (view.sortOrder === 'asc' ? 1 : -1);
       });
 
     const stats: StatsData = {
@@ -98,7 +91,7 @@ export const useTaskFiltering = (
     };
 
     return { taskGroups: groupLinkedTasks(safeTasks, filtered), stats };
-  }, [tasks, filter, sortOrder, searchTerm, selectedTags]);
+  }, [tasks, view, searchTerm, selectedTags]);
 
   return { taskGroups, stats };
 };

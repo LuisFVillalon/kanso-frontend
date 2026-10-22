@@ -1,5 +1,5 @@
 import React from 'react';
-import { FilterType, EditTaskForm, Tag, EditTaskModalState, NewTag, BaseTaskForm, Task, LinkedTaskRef } from '@/app/types/task';
+import { EditTaskForm, Tag, EditTaskModalState, NewTag, BaseTaskForm, Task, LinkedTaskRef } from '@/app/types/task';
 import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import { useToast } from '@/app/context/ToastContext';
 
@@ -13,15 +13,11 @@ interface UseTaskHandlersProps {
   setEditingTag: (tag: Tag | null) => void;
   setShowEditTagModal: (show: boolean) => void;
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
-  setSortOrder: React.Dispatch<React.SetStateAction<Record<FilterType, 'asc' | 'desc'>>>;
-  setSelectedTags: React.Dispatch<React.SetStateAction<Tag[]>>;
-  setFilter: React.Dispatch<React.SetStateAction<FilterType>>;
 
   // Current state values
   newTask: BaseTaskForm;
   showEditTaskModal: EditTaskModalState;
   newTag: { name: string; color: string };
-  filter: FilterType;
 
   // API functions
   addTask: (task: BaseTaskForm) => Promise<Task | false>;
@@ -33,7 +29,7 @@ interface UseTaskHandlersProps {
 }
 
 /** Toggles an item in an array by its `id`. Returns a new array. */
-const toggleById = <T extends { id: number }>(arr: T[], item: T): T[] =>
+export const toggleById = <T extends { id: number }>(arr: T[], item: T): T[] =>
   arr.some(t => t.id === item.id)
     ? arr.filter(t => t.id !== item.id)
     : [...arr, item];
@@ -47,13 +43,9 @@ export const useTaskHandlers = ({
   setEditingTag,
   setShowEditTagModal,
   setTasks,
-  setSortOrder,
-  setSelectedTags,
-  setFilter,
   newTask,
   showEditTaskModal,
   newTag,
-  filter,
   addTask,
   updateTask,
   saveLinkedTasks,
@@ -62,10 +54,6 @@ export const useTaskHandlers = ({
   delTag,
 }: UseTaskHandlersProps) => {
   const showToast = useToast();
-
-  const toggleSelectedTag = (tag: Tag) => {
-    setSelectedTags(prev => toggleById(prev, tag));
-  };
 
   // `linked` is saved as the new task's linked tasks once it exists; a
   // failure there throws a LinkedTasksSaveError and leaves the modal open.
@@ -173,23 +161,7 @@ export const useTaskHandlers = ({
     });
   };
 
-  const handleFilterChange = (newFilter: FilterType) => {
-    if (filter === newFilter) {
-      // 'all' has a fixed sort order and doesn't toggle
-      if (newFilter === 'all') return;
-      // Same filter clicked → toggle sort
-      setSortOrder(prev => ({
-        ...prev,
-        [newFilter]: prev[newFilter] === 'asc' ? 'desc' : 'asc'
-      }));
-    } else {
-      setFilter(newFilter);
-    }
-  };
-
-
   return {
-    toggleSelectedTag,
     handleCreateTask,
     handleEditTask,
     handleCreateTag,
@@ -198,6 +170,5 @@ export const useTaskHandlers = ({
     openEditTagModal,
     toggleTag,
     toggleEditTag,
-    handleFilterChange,
   };
 };

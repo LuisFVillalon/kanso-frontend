@@ -2,7 +2,7 @@
 
 /**
  * Settings → Appearance: light/dark (kept on this device, the same choice
- * as the sidebar toggle), the accent color and the page ruling (both saved
+ * as the account menu toggle), the accent color and the page ruling (both saved
  * to the profile). Accent and ruling preview on the whole app at once.
  */
 

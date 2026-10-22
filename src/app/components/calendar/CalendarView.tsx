@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
-import { CalendarRange, ChartColumn, ChevronLeft, GalleryHorizontal, LayoutGrid } from 'lucide-react';
-import { useAuth } from '@/app/context/AuthContext';
-import { useProfile } from '@/app/hooks/useProfile';
+import { CalendarRange, ChartColumn, GalleryHorizontal, LayoutGrid } from 'lucide-react';
+import { useAppShell } from '@/app/context/AppShellContext';
 import { useYearCalendarData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -17,8 +15,7 @@ import CalendarReportView from './report/CalendarReportView';
 
 const CalendarView: React.FC = () => {
   const { year, dayData, habits, loading } = useYearCalendarData();
-  const { user } = useAuth();
-  const { profile, loaded: profileLoaded } = useProfile(user);
+  const { profile, loaded: profileLoaded } = useAppShell().profileState;
   const showMood = profileLoaded && profile.moodCheckins.daily;
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [carouselDate, setCarouselDate] = useState<Date | null>(() => new Date());
@@ -31,11 +28,6 @@ const CalendarView: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-5 flex flex-wrap items-center gap-3">
-        <Link href="/" className="flex items-center gap-1 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors">
-          <ChevronLeft className="w-4 h-4" />
-          Home
-        </Link>
-        <span className="text-text-muted select-none">/</span>
         <h1 className="text-2xl sm:text-3xl text-text-primary">Calendar</h1>
         {viewMode !== 'week' && <span className="text-sm text-text-muted ml-1">{year}</span>}
 

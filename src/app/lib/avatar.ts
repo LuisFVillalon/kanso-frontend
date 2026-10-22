@@ -1,4 +1,4 @@
-// Lets the user pick an icon-based profile avatar shown in the sidebar and
+// Lets the user pick an icon-based profile avatar shown in the navigation rail and
 // header. Mirrors theme.ts / pageStyle.ts: cached in localStorage, synced to
 // the backend's `avatar` profile column via useProfile.ts.
 

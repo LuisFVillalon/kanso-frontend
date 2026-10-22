@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * "Are you sure?" before signing out, shared by the sidebar and Settings.
+ * "Are you sure?" before signing out, shared by the account menu and Settings.
  * Neutral, not danger red: signing out deletes nothing.
  */
 

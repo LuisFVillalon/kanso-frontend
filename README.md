@@ -72,16 +72,18 @@ A few decisions worth calling out:
 
 ```
 src/app/
-  page.tsx               # Landing page when signed out, dashboard (TaskManager) when signed in
+  (app)/                 # Route group sharing the signed-in app shell (navigation rail, global modals)
+    layout.tsx           # Wraps every page below in AppShell
+    page.tsx             # Spinner while auth loads, then the dashboard (TaskManager)
+    notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
   TaskManager.tsx        # The dashboard
-  notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
   fonts.ts               # Fraunces (display) and M PLUS Rounded 1c (body), via next/font
   favicon.ico icon.svg apple-icon.png manifest.webmanifest  # App icons and web manifest
   components/            # Grouped by domain: task, notes, habit, calendar, stats, settings,
                          # mood, landing, doodle, tag, auth, notifications, canvas; plus common/ and layout/ (cross-domain)
-  context/               # Auth, Toast, Notifications, and the Tasks/Tags/Habits/Notes data providers
+  context/               # Auth, Toast, Notifications, AppShell (global actions), and the Tasks/Tags/Habits/Notes data providers
   hooks/                 # Data hooks (useTasksAndTags, useNotes, useHabits, useProfile, ...)
   lib/backend-api.ts     # Every backend and AI-service request, with auth headers and typed errors
   lib/supabase.ts        # Supabase client (auth only)

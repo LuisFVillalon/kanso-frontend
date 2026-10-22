@@ -59,7 +59,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {children}
       <div
         aria-live="polite"
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none"
+        style={{ bottom: 'calc(1rem + var(--tm-toast-offset, 0px))' }}
+        className="fixed left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none"
       >
         {toasts.map(({ id, message, variant, action }) => {
           const { icon: Icon, color } = VARIANT_STYLE[variant];

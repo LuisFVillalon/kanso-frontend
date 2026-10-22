@@ -6,7 +6,8 @@ import TaskItem from './TaskItem';
 import LinkedTaskBanner, { LinkedBannerKind } from './LinkedTaskBanner';
 import CanvasSubmittedBanner from './CanvasSubmittedBanner';
 import RemoveLinkedTasksDialog from './RemoveLinkedTasksDialog';
-import { LinkedRemoveMode, Tag, Task } from '@/app/types/task';
+import TasksToolbar from './TasksToolbar';
+import { LinkedRemoveMode, Tag, Task, TaskView } from '@/app/types/task';
 import { TaskGroup } from '@/app/utils/taskUtils';
 
 interface TasksPanelProps {
@@ -32,6 +33,13 @@ interface TasksPanelProps {
     shows: (task: Task) => boolean;
     onNotYet: (id: number) => void;
   };
+  /** Which tasks show and how they're sorted (the toolbar's Show and Sort). */
+  view: TaskView;
+  onViewChange: (view: TaskView) => void;
+  /** The toolbar's tag filter. */
+  selectedTags: Tag[];
+  onToggleTag: (tag: Tag) => void;
+  onClearTags: () => void;
 }
 
 const TasksPanel: React.FC<TasksPanelProps> = ({
@@ -49,6 +57,11 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   heightPx,
   pendingTaskIds,
   canvasSubmitted,
+  view,
+  onViewChange,
+  selectedTags,
+  onToggleTag,
+  onClearTags,
 }) => {
   // The completion question each parent card is asking, by parent id.
   const [banners, setBanners] = useState<Record<number, LinkedBannerKind>>({});
@@ -128,6 +141,15 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
 
   return (
     <div className="flex flex-col space-y-2 sm:space-y-3">
+      <TasksToolbar
+        view={view}
+        onViewChange={onViewChange}
+        tags={tags}
+        selectedTags={selectedTags}
+        onToggleTag={onToggleTag}
+        onClearTags={onClearTags}
+        compact={compact}
+      />
       {taskGroups.length === 0 ? (
         <div className="card-glass p-6 sm:p-8 text-center mt-2">
           <div

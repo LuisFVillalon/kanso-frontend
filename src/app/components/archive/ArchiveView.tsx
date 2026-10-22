@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ChevronLeft, ArchiveRestore, Trash2, Loader2, Archive, Filter, ListChecks, NotebookText, Tags, Blocks, Flame,
+  ArchiveRestore, Trash2, Loader2, Archive, Filter, ListChecks, NotebookText, Tags, Blocks, Flame,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -335,11 +335,6 @@ const ArchiveView: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <div className="max-w-4xl mx-auto w-full px-3 sm:px-4 md:px-6 py-4 sm:py-5 flex flex-wrap items-center gap-3">
-        <Link href="/" className="flex items-center gap-1 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors">
-          <ChevronLeft className="w-4 h-4" />
-          Home
-        </Link>
-        <span className="text-text-muted select-none">/</span>
         <h1 className="text-2xl sm:text-3xl text-text-primary">Archive</h1>
         <Link
           href="/trash"

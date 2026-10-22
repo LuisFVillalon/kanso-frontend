@@ -1,41 +1,33 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/context/AuthContext';
-import { createHabit, describeError, updateHabit } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
-import { Tag, Task } from '@/app/types/task';
-import type { TaskFormData } from '@/app/components/task/TaskFormFields';
+import { useAppShell } from '@/app/context/AppShellContext';
+import { Tag, TaskView } from '@/app/types/task';
 import { useTasksContext } from '@/app/context/TasksContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useNotesContext } from '@/app/context/NotesContext';
-import { useTaskManagerState } from '@/app/hooks/useTaskManagerState';
 import { useSplitPanel } from '@/app/hooks/useSplitPanel';
-import { useTaskHandlers } from '@/app/hooks/useTaskHandlers';
-import { useTaskFiltering } from '@/app/hooks/useTaskFiltering';
-import { useProfile } from '@/app/hooks/useProfile';
-import { useCalendarSettings } from '@/app/hooks/useCalendarSettings';
+import { toggleById } from '@/app/hooks/useTaskHandlers';
+import { DEFAULT_TASK_VIEW, isTaskView, useTaskFiltering } from '@/app/hooks/useTaskFiltering';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import { useMountTransition } from '@/app/hooks/useMountTransition';
-import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
 import { useCanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { useCanvasTaskSync } from '@/app/hooks/useCanvasTaskSync';
 import { Note } from '@/app/types/notes';
 import { taskToEditForm } from '@/app/utils/taskUtils';
 import DragHandle from '@/app/components/common/DragHandle';
 import ProfileAvatar from '@/app/components/common/ProfileAvatar';
-import { TaskControls } from '@/app/components/task/TaskControls';
+import HeaderSearch from '@/app/components/common/HeaderSearch';
 import TasksPanel from '@/app/components/task/TasksPanel';
-import NotesPanel from '@/app/components/notes/NotesPanel';
+import NotesPanel, { isNoteOrder, type NoteOrder } from '@/app/components/notes/NotesPanel';
 import CanvasPanel from '@/app/components/canvas/CanvasPanel';
 import PanelCarousel, {
   DEFAULT_HOME_PANELS, isHomePanels, type HomePanels, type PanelCarouselHandle, type PanelKey,
 } from '@/app/components/common/PanelCarousel';
-import type { SettingsSection } from '@/app/components/settings/SettingsModal';
 import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
-import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
 import MoodNudge from '@/app/components/mood/MoodNudge';
 import { DayMoodCheckinModal, daySummaryFrom } from '@/app/components/mood/DayMoodCheckin';
@@ -51,15 +43,15 @@ import { useDayComplete } from '@/app/hooks/useDayComplete';
 import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 
 const TaskManager: React.FC = () => {
-  const router = useRouter();
-  const { signOut, user, isDemo } = useAuth();
+  const { isDemo } = useAuth();
   const showToast = useToast();
+  const shell = useAppShell();
   const doodleCanvasRef = useRef<DoodleCanvasHandle>(null);
   const [doodleColor, setDoodleColor] = useState(() => getStoredThemeColor() ?? DEFAULT_ACCENT);
   const [doodleErasing, setDoodleErasing] = useState(false);
 
-  const { profile, loading: profileLoading, loaded: profileLoaded, saveProfile, saveProfileField } = useProfile(user);
-  const { calendarSettings, loading: calendarSettingsLoading, saveCalendarSettings } = useCalendarSettings(user);
+  const { profile, loaded: profileLoaded, saveProfile } = shell.profileState;
+  const { calendarSettings, loading: calendarSettingsLoading } = shell.calendarSettingsState;
   const [mode, setMode] = usePersistedPref<AppMode>(
     'tm-app-mode',
     'normal',
@@ -85,19 +77,7 @@ const TaskManager: React.FC = () => {
   const showDebriefPanels = useMountTransition(!doodleMode && !focusMode);
   const showDoodleToolbar = useMountTransition(doodleMode);
 
-  const handleLogout = async () => {
-    await signOut();
-    // Every tm_*/tm-* key is a per-device cache of this account's data
-    // (profile fields, theme, doodle) — clear all of it so a different
-    // account signing in on this browser doesn't inherit the previous
-    // user's name/avatar/rest-days/doodle.
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('tm_') || k.startsWith('tm-'))
-      .forEach(k => localStorage.removeItem(k));
-    router.replace('/login');
-  };
-
-  const { tasks, isLoading, toggleComplete, completeWithLinked, addTask, deleteTask, archiveTask, updateTask, saveLinkedTasks, refreshTasks, setTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
+  const { tasks, isLoading, toggleComplete, completeWithLinked, deleteTask, archiveTask, updateTask, refreshTasks, pendingTaskIds, completionSyncToken } = useTasksContext();
   // Tasks added from Canvas: synced on load and on a Canvas panel refresh.
   const canvasTaskSync = useCanvasTaskSync({ enabled: !isLoading && !isDemo, tasks, refreshTasks });
 
@@ -114,7 +94,18 @@ const TaskManager: React.FC = () => {
     if (next === 'focus' && mode !== 'focus') playKeyPress(FOCUS_MODE_COPY, 'header');
     setMode(next);
   };
-  const { tags, tagsLoading, addTag, delTag, archiveTag, updateTag } = useTagsContext();
+  const { tags, tagsLoading } = useTagsContext();
+
+  // The Tasks list's view: which tasks, sorted by what, which way.
+  const [taskView, setTaskView] = usePersistedPref<TaskView>('tm-task-view', DEFAULT_TASK_VIEW, isTaskView);
+  const [noteOrder, setNoteOrder] = usePersistedPref<NoteOrder>('tm-notes-order', 'newest', isNoteOrder);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const toggleSelectedTag = (tag: Tag) => setSelectedTags(prev => toggleById(prev, tag));
+  // An archived or deleted tag leaves `tags`, and the filter with it.
+  if (!tagsLoading && selectedTags.some(t => !tags.some(tag => tag.id === t.id))) {
+    setSelectedTags(selectedTags.filter(t => tags.some(tag => tag.id === t.id)));
+  }
 
   const updatePriority = async (taskId: number, priority: number | null) => {
     const task = tasks.find(t => t.id === taskId);
@@ -144,14 +135,6 @@ const TaskManager: React.FC = () => {
     timeZoneName: 'short',
   });
 
-  const state = useTaskManagerState();
-  const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
-  // Bumped when Settings closes, so the Canvas panel picks up a new or removed connection.
-  const [canvasSyncToken, setCanvasSyncToken] = useState(0);
-  const openSettings = (section?: SettingsSection) => {
-    setSettingsSection(section);
-    state.setShowSettings(true);
-  };
   const {
     tasksWidthPct,
     panelHeightPx,
@@ -160,13 +143,9 @@ const TaskManager: React.FC = () => {
     handleHeightSplitterMouseDown,
   } = useSplitPanel();
 
-  const openEditTaskModal = (task: Task) => {
-    state.setShowEditTaskModal({ status: true, task });
-  };
-
   const openNotifiedTask = (taskId: number) => {
     const task = tasks.find(t => t.id === taskId);
-    if (task) openEditTaskModal(task);
+    if (task) shell.openEditTask(task);
     else showToast('That task is no longer in your list.', 'info');
   };
 
@@ -178,8 +157,8 @@ const TaskManager: React.FC = () => {
   const canvasAddToTasks = useCanvasAddToTasks(showCanvasTask);
 
   const openNotifiedHabits = (habitIds: number[]) => {
-    if (habitIds.length === 1) state.setHistoryHabitId(habitIds[0]);
-    else state.setShowManageHabitsModal(true);
+    if (habitIds.length === 1) shell.openHabitHistory(habitIds[0]);
+    else shell.openManageHabits();
   };
 
   // The day a mood notification opened the check-in form for.
@@ -188,49 +167,16 @@ const TaskManager: React.FC = () => {
   const openMoodCheckin = (date?: string) =>
     setMoodCheckinDate(date ?? toLocalDateStr(checkinDayAt(new Date(), profile.dayStartTime, profile.shutoffTime, 'shutoff').day));
 
-  const handleEditTaskChange = (next: TaskFormData) => {
-    state.setShowEditTaskModal(prev => prev.task ? { ...prev, task: { ...prev.task, ...next } as Task } : prev);
-  };
-
-  const handlers = useTaskHandlers({
-    setShowNewTaskModal: state.setShowNewTaskModal,
-    setNewTask: state.setNewTask,
-    setShowEditTaskModal: state.setShowEditTaskModal,
-    setShowCreateTagModal: state.setShowCreateTagModal,
-    setNewTag: state.setNewTag,
-    setEditingTag: state.setEditingTag,
-    setShowEditTagModal: state.setShowEditTagModal,
-    setTasks,
-    setSortOrder: state.setSortOrder,
-    setSelectedTags: state.setSelectedTags,
-    setFilter: state.setFilter,
-    newTask: state.newTask,
-    showEditTaskModal: state.showEditTaskModal,
-    newTag: state.newTag,
-    filter: state.filter,
-    addTask,
-    updateTask,
-    saveLinkedTasks,
-    addTag,
-    updateTag,
-    delTag,
-  });
-
-  const { taskGroups, stats } = useTaskFiltering(
-    tasks, state.filter, state.sortOrder, state.searchTerm, state.selectedTags,
-  );
+  const { taskGroups, stats } = useTaskFiltering(tasks, taskView, searchTerm, selectedTags);
 
   const {
-    habits, habitsLoading, toggle: toggleHabit, toggleDate: toggleHabitDate, pendingHabitIds, refetch: refetchHabits,
-    deleteHabit, archiveHabit, syncToken: habitSyncToken,
+    habits, habitsLoading, toggle: toggleHabit, pendingHabitIds, syncToken: habitSyncToken,
   } = useHabitsContext();
-  const historyHabit = habits.find(h => h.id === state.historyHabitId) ?? null;
 
   const {
-    notes: allNotes, isLoading: notesLoading, addNote, deleteNote, archiveNote, updateNote, discardDraft, pendingNoteIds,
-    removeTagFromNotes, archiveSyncToken: noteArchiveSyncToken,
+    notes: allNotes, isLoading: notesLoading, deleteNote, archiveNote, updateNote, discardDraft, pendingNoteIds,
+    archiveSyncToken: noteArchiveSyncToken,
   } = useNotesContext();
-  const restoreFromTrash = useRestoreFromTrash();
   // Only the id is held in state; the note itself is derived live from
   // allNotes on every render so edits (title/content debounce, tag toggles)
   // always flow straight through — no separate copy to fall out of sync or
@@ -250,37 +196,21 @@ const TaskManager: React.FC = () => {
     });
   }, [discardDraft]);
 
+  // A note made from the New menu or N opens here, in the Notes panel.
+  const { registerNoteOpener } = shell;
+  useEffect(() => {
+    registerNoteOpener(note => {
+      setNoteEditorOverlay(note);
+      carouselRef.current?.show('notes');
+    });
+    return () => registerNoteOpener(null);
+  }, [registerNoteOpener, setNoteEditorOverlay]);
+
   const handleArchiveNote = (id: number) => {
     // Close the overlay first so the note can't pop back open if it's
     // restored later while its id is still held here.
     if (noteEditorOverlayId === id) setNoteEditorOverlay(null);
     archiveNote(id);
-  };
-
-  const handleArchiveTag = (tag: Tag) => {
-    state.setSelectedTags(prev => prev.filter(t => t.id !== tag.id));
-    return archiveTag(tag);
-  };
-
-  // A deleted tag is hidden from every item carrying it until it's restored.
-  const handleDeleteTag = async (tag: Tag) => {
-    const deleted = await handlers.handleDeleteTag(tag);
-    if (!deleted) return false;
-    state.setSelectedTags(prev => prev.filter(t => t.id !== tag.id));
-    removeTagFromNotes(tag.id);
-    refetchHabits();
-    showToast('Tag moved to Recently deleted. You can restore it for 30 days.', 'info', {
-      label: 'Undo',
-      onClick: () => {
-        restoreFromTrash('tag', tag.id)
-          .then(() => showToast('Tag restored.', 'success'))
-          .catch(err => {
-            console.error('Undo delete failed:', err);
-            showToast(describeError(err, "Couldn't restore the tag. You can still restore it from Recently deleted."));
-          });
-      },
-    });
-    return true;
   };
 
   const noteTags = useMemo(() => {
@@ -295,7 +225,7 @@ const TaskManager: React.FC = () => {
   }, [allNotes]);
 
   const filteredNotes = useMemo(() => {
-    const lower = state.searchTerm.trim().toLowerCase();
+    const lower = searchTerm.trim().toLowerCase();
     const matching = allNotes.filter(note => {
       const matchesSearch =
         !lower ||
@@ -303,53 +233,22 @@ const TaskManager: React.FC = () => {
         note.content.replace(/<[^>]+>/g, '').toLowerCase().includes(lower);
 
       const matchesTags =
-        state.selectedTags.length === 0 ||
+        selectedTags.length === 0 ||
         (note.tags ?? []).some(noteTag =>
-          state.selectedTags.some(selected => selected.id === noteTag.id)
+          selectedTags.some(selected => selected.id === noteTag.id)
         );
 
       return matchesSearch && matchesTags;
     });
 
-    // Notes always sort by edit recency, independent of whichever task
-    // filter/sort (e.g. Due date) is active. noteSortOrder is its own piece
-    // of state so toggling it never touches the task filter or task order
-    // (default: most recently edited first).
-    const dir = state.noteSortOrder === 'desc' ? 1 : -1;
+    // Notes always sort by edit recency, independent of the Tasks list's
+    // sort. noteOrder is its own piece of state, toggled from the Notes
+    // panel, so it never touches the task view (default: newest first).
+    const dir = noteOrder === 'oldest' ? 1 : -1;
     return [...matching].sort(
       (a, b) => (new Date(a.updated_date).getTime() - new Date(b.updated_date).getTime()) * dir,
     );
-  }, [allNotes, state.searchTerm, state.selectedTags, state.noteSortOrder]);
-
-  // ── Habit handlers ────────────────────────────────────────────────────────────
-
-  const handleUpdateHabit = async (id: number, title: string, habitTags: Tag[], estimatedTime?: number | null) => {
-    try {
-      await updateHabit(id, { title, tags: habitTags, estimated_time: estimatedTime ?? null });
-      refetchHabits();
-    } catch (err) {
-      console.error('Failed to update habit:', err);
-      showToast(describeError(err, "Couldn't update the habit. Please try again."));
-    }
-  };
-
-  const handleCreateHabit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!state.newHabit.title.trim()) return;
-    try {
-      await createHabit({ title: state.newHabit.title.trim(), tags: state.newHabit.tags, estimated_time: state.newHabit.estimated_time ?? null });
-      state.setNewHabit({ title: '', tags: [], estimated_time: null });
-      state.setShowCreateHabitModal(false);
-      if (state.createHabitFromManage) {
-        state.setCreateHabitFromManage(false);
-        state.setShowManageHabitsModal(true);
-      }
-      refetchHabits();
-    } catch (err) {
-      console.error('Failed to create habit:', err);
-      showToast(describeError(err, "Couldn't save the habit. Please try again."));
-    }
-  };
+  }, [allNotes, searchTerm, selectedTags, noteOrder]);
 
   const renderHomePanel = (key: PanelKey, { widthPct }: { widthPct: number }) => {
     if (key === 'tasks') {
@@ -362,13 +261,18 @@ const TaskManager: React.FC = () => {
           onDeleteTask={deleteTask}
           onArchiveTask={archiveTask}
           onUpdatePriority={updatePriority}
-          onEditTask={openEditTaskModal}
+          onEditTask={shell.openEditTask}
           activeTaskCount={activeTaskCount}
           occupiedPriorities={occupiedPriorityLevels}
           compact={widthPct < 40}
           heightPx={panelHeightPx}
           pendingTaskIds={pendingTaskIds}
           canvasSubmitted={{ shows: canvasTaskSync.showsSubmitted, onNotYet: canvasTaskSync.dismiss }}
+          view={taskView}
+          onViewChange={setTaskView}
+          selectedTags={selectedTags}
+          onToggleTag={toggleSelectedTag}
+          onClearTags={() => setSelectedTags([])}
         />
       );
     }
@@ -385,17 +289,21 @@ const TaskManager: React.FC = () => {
           heightPx={panelHeightPx}
           isLoading={notesLoading}
           pendingNoteIds={pendingNoteIds}
-          tagFilter={state.selectedTags}
+          tagFilter={selectedTags}
+          onToggleTag={toggleSelectedTag}
+          onClearTags={() => setSelectedTags([])}
           profile={profile}
           onSaveProfile={saveProfile}
+          noteOrder={noteOrder}
+          onNoteOrderChange={setNoteOrder}
         />
       );
     }
     return (
       <CanvasPanel
         heightPx={panelHeightPx}
-        onOpenSettings={() => openSettings('canvas')}
-        syncToken={canvasSyncToken}
+        onOpenSettings={() => shell.openSettings('canvas')}
+        syncToken={shell.settingsClosedToken}
         addToTasks={isDemo ? undefined : canvasAddToTasks}
         onRefresh={isDemo ? undefined : () => void canvasTaskSync.sync(true)}
       />
@@ -412,50 +320,13 @@ const TaskManager: React.FC = () => {
      * fall through this whole wrapper to it — otherwise this min-h-screen
      * box (which covers the full viewport regardless of how little content
      * it holds) would win hit-testing and swallow the clicks itself.
-     * TaskControls and the header opt back into pointer-events-auto so they
-     * stay usable while doodle mode hides everything else.
+     * The header opts back into pointer-events-auto so it stays usable
+     * while doodle mode hides everything else (the app nav sits outside
+     * this wrapper, in AppShell).
      */}
     <div className={`relative min-h-screen ${doodleMode ? 'pointer-events-none' : ''}`}>
       <DoodleCanvas ref={doodleCanvasRef} active={doodleMode} color={doodleColor} isErasing={doodleErasing} />
 
-      <div className="pointer-events-auto">
-      <TaskControls
-        searchTerm={state.searchTerm}
-        onSearchChange={state.setSearchTerm}
-        filter={state.filter}
-        sortOrder={state.sortOrder}
-        onFilterChange={handlers.handleFilterChange}
-        noteSortOrder={state.noteSortOrder}
-        onNoteSortToggle={() => state.setNoteSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))}
-        selectedTags={state.selectedTags}
-        onTagToggle={handlers.toggleSelectedTag}
-        showTagDropdown={state.showTagDropdown}
-        onTagDropdownToggle={() => state.setShowTagDropdown(prev => !prev)}
-        tags={tags}
-        searchPlaceholder={'Search tasks & notes…'}
-        onCreateTask={() => state.setShowNewTaskModal(true)}
-        onNewNote={async () => {
-          const note = await addNote();
-          setNoteEditorOverlay(note);
-          // The editor opens inside the Notes panel, so bring it on screen.
-          carouselRef.current?.show('notes');
-        }}
-        onViewNotes={() => router.push('/notes')}
-        onViewCalendar={() => router.push('/calendar')}
-        onViewArchive={() => router.push('/archive')}
-        onViewTrash={() => router.push('/trash')}
-        onEditTag={() => handlers.openEditTagModal(tags[0])}
-        onEditHabit={() => state.setShowManageHabitsModal(true)}
-        menuCollapsed={!state.taskSidebarOpen}
-        onToggleMenu={() => state.setTaskSidebarOpen(prev => !prev)}
-        profileName={profile.name}
-        profileAvatar={profile.avatar}
-        onSettings={() => openSettings()}
-        onLogout={handleLogout}
-      />
-      </div>
-
-      <div className={`transition-[margin] duration-200 ease-out ${state.taskSidebarOpen ? 'md:ml-72' : 'md:ml-16'}`}>
         <div className="max-w-[1600px] mx-auto px-2 sm:px-3 md:px-4 lg:px-6 pt-0 pb-4 sm:pb-6 lg:pb-10">
 
           {/*
@@ -466,8 +337,8 @@ const TaskManager: React.FC = () => {
             plain non-positioned div regardless of DOM order and would
             swallow clicks meant for the mode switcher.
           */}
-        <div className="relative z-10 pointer-events-auto flex flex-wrap sm:flex-nowrap justify-between items-end gap-2 pb-2 sm:pb-3 mb-2 sm:mb-3 mt-2 sm:mt-3 border-b border-border-subtle">
-          <div className="w-full sm:w-auto min-w-0">
+        <div className="relative z-10 pointer-events-auto flex flex-wrap xl:flex-nowrap justify-between items-end gap-2 xl:gap-4 pb-2 sm:pb-3 mb-2 sm:mb-3 mt-2 sm:mt-3 border-b border-border-subtle">
+          <div className="min-w-0">
             <p className="flex items-center gap-2 text-[0.6875rem] sm:text-xs font-semibold uppercase tracking-wide whitespace-nowrap text-text-muted">
               <span className="min-w-0 truncate">{todayLabel}</span>
               <span aria-hidden="true" className="text-text-muted/50">&middot;</span>
@@ -478,13 +349,14 @@ const TaskManager: React.FC = () => {
               <span className="min-w-0 truncate">Welcome back{profile.name ? `, ${profile.name}` : ''}</span>
             </h1>
           </div>
-          {/* Centre slot for the focus moment: from sm up it always keeps
-              room for the key-only card (a long greeting truncates instead),
-              and -ml-2 cancels its extra gap. */}
-          <div className="@container relative order-last sm:order-none flex-1 min-w-0 sm:min-w-15 sm:-ml-2 self-stretch">
+          {/* Centre slot for the focus moment: it always keeps room for the
+              key-only card beside the greeting (a long greeting truncates
+              instead), and the negative margin cancels its extra gap. Below
+              xl the controls wrap onto their own full-width row. */}
+          <div className="@container relative flex-1 min-w-15 -ml-2 xl:-ml-4 self-stretch">
             <KeyPressMoment moment={keyPress} placement="header" onDone={clearKeyPress} />
           </div>
-          <div className="flex flex-shrink-0 items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:flex-shrink-0">
             {showDoodleToolbar && (
               <div className={doodleMode ? 'animate-fade-in' : 'animate-fade-out'}>
                 <DoodleToolbar
@@ -496,8 +368,9 @@ const TaskManager: React.FC = () => {
                 />
               </div>
             )}
+            <HeaderSearch value={searchTerm} onChange={setSearchTerm} className="flex-1 min-w-0 sm:max-w-sm xl:flex-none xl:w-60" />
             <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} onOpenMoodCheckin={openMoodCheckin} />
-            <ModeSwitcher mode={mode} onChange={handleModeChange} />
+            <ModeSwitcher mode={mode} onChange={handleModeChange} labels className="w-full sm:w-auto" />
           </div>
         </div>
 
@@ -512,7 +385,7 @@ const TaskManager: React.FC = () => {
                 <CalendarAndStats
                   habits={habits}
                   onToggleHabit={toggleHabit}
-                  onCreateHabit={() => state.setShowManageHabitsModal(true)}
+                  onCreateHabit={shell.openManageHabits}
                   pendingHabitIds={pendingHabitIds}
                   habitsLoading={habitsLoading}
                   stats={stats}
@@ -543,7 +416,6 @@ const TaskManager: React.FC = () => {
           </div>
         )}
       </div>
-      </div>
     </div>
 
       {moodCheckinDate && (
@@ -554,90 +426,6 @@ const TaskManager: React.FC = () => {
           onClose={closeMoodCheckin}
         />
       )}
-
-      <TaskManagerModals
-        // New task
-        showNewTaskModal={state.showNewTaskModal}
-        onCloseNewTaskModal={() => state.setShowNewTaskModal(false)}
-        newTask={state.newTask}
-        onTaskChange={state.setNewTask}
-        onToggleTag={handlers.toggleTag}
-        onSubmitTask={handlers.handleCreateTask}
-        activeTaskCount={activeTaskCount}
-        occupiedPriorityLevels={occupiedPriorityLevels}
-        tags={tags}
-        allTasks={tasks}
-        // Edit task
-        showEditTaskModal={state.showEditTaskModal.status}
-        editTask={state.showEditTaskModal.task}
-        onCloseEditTaskModal={() => state.setShowEditTaskModal({ status: false, task: null })}
-        onEditTaskChange={handleEditTaskChange}
-        onToggleEditTag={handlers.toggleEditTag}
-        onSubmitEditTask={handlers.handleEditTask}
-        // Create tag
-        showCreateTagModal={state.showCreateTagModal}
-        onCloseCreateTagModal={() => state.setShowCreateTagModal(false)}
-        newTag={state.newTag}
-        onTagChange={state.setNewTag}
-        onSubmitTag={handlers.handleCreateTag}
-        // Edit tag
-        editingTag={state.editingTag}
-        showEditTagModal={state.showEditTagModal}
-        onCloseEditTagModal={() => { state.setShowEditTagModal(false); state.setEditingTag(null); }}
-        onDeleteTag={handleDeleteTag}
-        onArchiveTag={handleArchiveTag}
-        onEditTag={handlers.handleEditTag}
-        onOpenCreateTag={() => state.setShowCreateTagModal(true)}
-        // Create habit
-        showCreateHabitModal={state.showCreateHabitModal}
-        onCloseCreateHabitModal={() => {
-          state.setShowCreateHabitModal(false);
-          state.setNewHabit({ title: '', tags: [], estimated_time: null });
-          if (state.createHabitFromManage) {
-            state.setCreateHabitFromManage(false);
-            state.setShowManageHabitsModal(true);
-          }
-        }}
-        newHabit={state.newHabit}
-        onHabitChange={state.setNewHabit}
-        onSubmitHabit={handleCreateHabit}
-        // Manage habits
-        showManageHabitsModal={state.showManageHabitsModal}
-        onCloseManageHabitsModal={() => state.setShowManageHabitsModal(false)}
-        habits={habits}
-        onCreateHabitFromManage={() => {
-          state.setShowManageHabitsModal(false);
-          state.setCreateHabitFromManage(true);
-          state.setShowCreateHabitModal(true);
-        }}
-        onDeleteHabit={deleteHabit}
-        onArchiveHabit={archiveHabit}
-        onUpdateHabit={handleUpdateHabit}
-        onViewHabitHistory={id => { state.setShowManageHabitsModal(false); state.setHistoryFromManageHabits(true); state.setHistoryHabitId(id); }}
-        // Habit history
-        historyHabit={historyHabit}
-        historyShowBackButton={state.historyFromManageHabits}
-        onCloseHabitHistory={() => {
-          state.setHistoryHabitId(null);
-          if (state.historyFromManageHabits) {
-            state.setHistoryFromManageHabits(false);
-            state.setShowManageHabitsModal(true);
-          }
-        }}
-        onToggleHabitDate={toggleHabitDate}
-        // Settings
-        showSettings={state.showSettings}
-        settingsSection={settingsSection}
-        onCloseSettings={() => { state.setShowSettings(false); setCanvasSyncToken(n => n + 1); }}
-        onAccountDeleted={handleLogout}
-        onSignOut={handleLogout}
-        profile={profile}
-        profileLoading={profileLoading}
-        onSaveProfileField={saveProfileField}
-        calendarSettings={calendarSettings}
-        calendarSettingsLoading={calendarSettingsLoading}
-        onSaveCalendarSettings={saveCalendarSettings}
-      />
 
       <KeyPressMoment moment={keyPress} placement="overlay" onDone={clearKeyPress} />
     </>

@@ -886,83 +886,441 @@ html[data-page-style="blank"] body {
     }
   }
 
-  /* Sidebar nav — rows in the left main menu (rail + expanded drawer) */
-  .sidebar-item {
+  /* ── App navigation (components/layout/AppNav.tsx) ─────────────────────
+     md and up: a rail on the left, labels under the icons (76px) or beside
+     them (224px expanded). Below md: a bottom tab bar. The current page's
+     icon sits in an accent pill. */
+  .app-rail {
+    position: fixed;
+    inset-block: 0;
+    left: 0;
+    z-index: 30;
+    width: var(--tm-rail-w);
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem 0.5rem;
+    background-color: var(--tm-surface-overlay);
+    backdrop-filter: blur(8px);
+    border-right: 1px solid var(--tm-border);
+    box-shadow: var(--tm-shadow-nav);
+    transition: width var(--tm-dur-base) var(--tm-ease);
+  }
+  .app-rail[data-expanded] {
+    width: var(--tm-rail-w-expanded);
+    padding-inline: 0.75rem;
+  }
+
+  .rail-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.5rem;
+    margin-bottom: 0.375rem;
+  }
+  .app-rail[data-expanded] .rail-brand {
+    justify-content: flex-start;
+    padding-left: 0.375rem;
+  }
+
+  .rail-new {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    width: 100%;
+    padding: 0.5625rem 0 0.375rem;
+    margin-bottom: 0.625rem;
+    border-radius: var(--tm-radius-cards);
+    background-color: var(--tm-accent);
+    color: var(--tm-accent-text);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    transition: background-color var(--tm-dur-fast) var(--tm-ease);
+  }
+  .rail-new:hover { background-color: var(--tm-accent-hover); }
+  .app-rail[data-expanded] .rail-new {
+    flex-direction: row;
+    gap: 0.625rem;
+    padding: 0.5625rem 0.75rem;
+    font-size: 0.84375rem;
+    border-radius: var(--tm-radius-buttons);
+  }
+
+  .rail-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1875rem;
+    padding: 0.5rem 0 0.375rem;
+    border-radius: 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--tm-text-secondary);
+    text-align: center;
+    transition: background-color var(--tm-dur-fast) var(--tm-ease), color var(--tm-dur-fast) var(--tm-ease);
+  }
+  .rail-item:hover {
+    background-color: var(--tm-surface-raised);
+    color: var(--tm-text-primary);
+  }
+  .rail-item[aria-current="page"] {
+    color: var(--tm-text-primary);
+    font-weight: 700;
+  }
+  .rail-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 1.75rem;
+    border-radius: var(--tm-radius-pills);
+    transition: background-color var(--tm-dur-fast) var(--tm-ease);
+  }
+  .rail-item[aria-current="page"] .rail-pill {
+    background-color: var(--tm-accent-subtle);
+    color: var(--tm-accent);
+  }
+  .app-rail[data-expanded] .rail-item {
+    flex-direction: row;
+    gap: 0.625rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.84375rem;
+    text-align: left;
+  }
+  .app-rail[data-expanded] .rail-item .rail-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .app-rail[data-expanded] .rail-pill { width: 1.75rem; }
+  .app-rail[data-expanded] .rail-item[aria-current="page"] {
+    background-color: var(--tm-accent-subtle);
+    color: var(--tm-accent);
+  }
+  .app-rail[data-expanded] .rail-item[aria-current="page"] .rail-pill { background-color: transparent; }
+
+  .rail-foot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid var(--tm-border);
+  }
+  .app-rail[data-expanded] .rail-foot {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+  .rail-account {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    max-width: 100%;
+    padding: 0.1875rem;
+    border-radius: var(--tm-radius-pills);
+    font-size: 0.84375rem;
+    font-weight: 700;
+    color: var(--tm-text-primary);
+    transition: background-color var(--tm-dur-fast) var(--tm-ease);
+  }
+  .rail-account:hover,
+  .rail-account[aria-expanded="true"] { background-color: var(--tm-surface-raised); }
+  .app-rail[data-expanded] .rail-account {
+    padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+    border-radius: 0.625rem;
+  }
+  .rail-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex-shrink: 0;
+    border-radius: var(--tm-radius-buttons);
+    color: var(--tm-text-secondary);
+    transition: background-color var(--tm-dur-fast) var(--tm-ease), color var(--tm-dur-fast) var(--tm-ease);
+  }
+  .rail-icon-btn:hover {
+    background-color: var(--tm-surface-raised);
+    color: var(--tm-text-primary);
+  }
+  .rail-pop-new { top: 3.75rem; left: calc(100% + 0.5rem); }
+  .rail-pop-account { bottom: 0.75rem; left: calc(100% + 0.5rem); }
+
+  .app-tabbar {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: calc(var(--tm-tabbar-h) + env(safe-area-inset-bottom));
+    padding: 0 0.375rem env(safe-area-inset-bottom);
+    background-color: var(--tm-surface-overlay);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--tm-border);
+  }
+  .tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    width: 4rem;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--tm-text-muted);
+  }
+  .tab-item[aria-current="page"] {
+    color: var(--tm-text-primary);
+    font-weight: 700;
+  }
+  .tab-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 1.875rem;
+    border-radius: var(--tm-radius-pills);
+  }
+  .tab-item[aria-current="page"] .tab-pill {
+    background-color: var(--tm-accent-subtle);
+    color: var(--tm-accent);
+  }
+  .tab-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    margin-top: -1.125rem;
+    border-radius: 1rem;
+    background-color: var(--tm-accent);
+    color: var(--tm-accent-text);
+    box-shadow: var(--tm-shadow-md);
+  }
+
+  /* Popup menus (useMenu) — the New menu, the account menu, the Tags menu */
+  .menu-pop {
+    position: absolute;
+    z-index: 40;
+    min-width: 14rem;
+    padding: 0.375rem;
+    background-color: var(--tm-surface-raised);
+    border: 1px solid var(--tm-border);
+    border-radius: 0.625rem;
+    box-shadow: var(--tm-shadow-lg);
+  }
+  .menu-row {
     display: flex;
     align-items: center;
     gap: 0.625rem;
     width: 100%;
-    padding: 0.5rem 0.625rem;
+    padding: 0.4375rem 0.625rem;
+    border-radius: 0.375rem;
     font-size: 0.8125rem;
-    font-weight: 500;
     color: var(--tm-text-secondary);
-    background-color: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--tm-radius-buttons);
-    cursor: pointer;
     text-align: left;
-    white-space: nowrap;
-    transition: background-color var(--tm-dur-fast) var(--tm-ease),
-                color var(--tm-dur-fast) var(--tm-ease),
-                border-color var(--tm-dur-fast) var(--tm-ease);
   }
-  .sidebar-item:hover {
-    background-color: var(--tm-surface-raised);
+  .menu-row:hover,
+  .menu-row:focus-visible {
+    background-color: var(--tm-surface);
     color: var(--tm-text-primary);
   }
-  .sidebar-item-active {
-    background-color: var(--tm-accent-subtle);
-    color: var(--tm-accent);
-    border-color: transparent;
+  .menu-row-danger,
+  .menu-row-danger:hover { color: var(--tm-danger); }
+  .menu-sep {
+    margin: 0.3125rem 0.25rem;
+    border-top: 1px solid var(--tm-border);
   }
-
-  .sidebar-section-label {
-    padding: 0 0.625rem;
-    margin-bottom: 0.25rem;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--tm-text-muted);
-  }
-
-  .sidebar-section-label-btn {
+  .menu-appearance {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.625rem;
+    padding: 0.375rem 0.625rem;
+    font-size: 0.8125rem;
+    color: var(--tm-text-secondary);
+  }
+
+  /* Phone bottom sheets (AppNav's New and More) */
+  .sheet-overlay { background-color: rgba(0, 0, 0, 0.3); }
+  .sheet-panel {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    max-height: 86vh;
+    overflow-y: auto;
+    padding: 0.5rem 0.875rem calc(1.125rem + env(safe-area-inset-bottom));
+    background-color: var(--tm-surface-raised);
+    border-top-left-radius: 1.125rem;
+    border-top-right-radius: 1.125rem;
+    box-shadow: var(--tm-shadow-xl);
+  }
+  .sheet-grab {
+    width: 2.5rem;
+    height: 0.25rem;
+    margin: 0.25rem auto 0.625rem;
+    border-radius: 2px;
+    background-color: var(--tm-border-strong);
+  }
+  .sheet-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     width: 100%;
-    padding: 0 0.625rem;
-    margin-bottom: 0.25rem;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    padding: 0.75rem 0.5rem;
+    border-radius: var(--tm-radius-buttons);
+    font-size: 0.9375rem;
+    color: var(--tm-text-primary);
+    text-align: left;
+  }
+  .sheet-row:hover { background-color: var(--tm-surface); }
+  .sheet-row[aria-current="page"] { color: var(--tm-accent); font-weight: 700; }
+  .sheet-row.menu-row-danger { color: var(--tm-danger); }
+  .sheet-panel .menu-appearance { padding: 0.5rem; font-size: 0.9375rem; color: var(--tm-text-primary); }
+  .sheet-panel .menu-appearance > span { gap: 0.75rem; }
+  .sheet-panel .menu-appearance > span svg { width: 1.25rem; height: 1.25rem; }
+
+  /* Keyboard hint */
+  .kbd {
+    padding: 0.0625rem 0.3125rem;
+    border: 1px solid var(--tm-border);
+    border-radius: var(--tm-radius-small);
+    background-color: var(--tm-surface);
     color: var(--tm-text-muted);
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 0.6875rem;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .app-rail[data-expanded] .kbd { margin-left: auto; }
+  .rail-new .kbd { background: transparent; border-color: currentColor; color: inherit; }
+
+  /* Small segmented control (Show, Appearance) */
+  .seg {
+    display: inline-flex;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+    border-radius: var(--tm-radius-pills);
+    background-color: var(--tm-surface-raised);
+    border: 1px solid var(--tm-border-subtle);
+  }
+  .seg-btn {
+    padding: 0.3125rem 0.6875rem;
+    border-radius: var(--tm-radius-pills);
+    font-size: 0.78125rem;
+    font-weight: 500;
+    color: var(--tm-text-muted);
+    white-space: nowrap;
+    transition: background-color var(--tm-dur-fast) var(--tm-ease), color var(--tm-dur-fast) var(--tm-ease);
+  }
+  .seg-btn:hover { color: var(--tm-text-primary); }
+  .seg-btn[aria-pressed="true"],
+  .seg-btn[aria-checked="true"] {
+    background-color: var(--tm-accent);
+    color: var(--tm-accent-text);
+  }
+
+  /* Page header search ("/" to focus) */
+  .header-search {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding: 0 0.625rem;
+    border: 1px solid var(--tm-border);
+    border-radius: var(--tm-radius-buttons);
+    background-color: var(--tm-surface-raised);
+    color: var(--tm-text-muted);
+    font-size: 0.8125rem;
+    cursor: text;
+    transition: border-color var(--tm-dur-fast) var(--tm-ease);
+  }
+  .header-search:focus-within { border-color: var(--tm-accent); }
+  .header-search input {
+    flex: 1;
+    min-width: 0;
     background: transparent;
     border: 0;
-    cursor: pointer;
-    transition: color var(--tm-dur-fast) var(--tm-ease);
-  }
-  .sidebar-section-label-btn:hover {
+    outline: 0;
     color: var(--tm-text-primary);
   }
+  .header-search input::placeholder { color: var(--tm-text-muted); }
 
-  /* Main menu — hairline edge + nav elevation, matching the sticky-nav spec */
-  .main-menu {
-    border-right: 1px solid var(--tm-border);
-    box-shadow: var(--tm-shadow-nav);
+  /* Tasks panel toolbar (components/task/TasksToolbar.tsx) and panel headers */
+  .tasks-toolbar,
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.75rem;
+    padding: 0.25rem 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--tm-border-subtle);
   }
-
-  /* Icon slot — plain wrapper, no decorative backing, per the Muted Nav
-     Link component (state reads through color alone). */
-  .icon-dot {
+  .toolbar-control {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    flex-shrink: 0;
+    height: 2rem;
+    padding: 0 0.5rem;
+    border: 1px solid var(--tm-border);
+    border-radius: var(--tm-radius-buttons);
+    background-color: var(--tm-surface-raised);
+    color: var(--tm-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: border-color var(--tm-dur-fast) var(--tm-ease), color var(--tm-dur-fast) var(--tm-ease);
   }
+  .toolbar-control:hover {
+    border-color: var(--tm-border-strong);
+    color: var(--tm-text-primary);
+  }
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 1.75rem;
+    padding: 0 0.625rem;
+    border: 1px solid var(--tm-border);
+    border-radius: var(--tm-radius-pills);
+    background-color: var(--tm-surface-raised);
+    color: var(--tm-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .tag-chip:hover { border-color: var(--tm-border-strong); }
+  .tag-chip-on,
+  .tag-chip[aria-expanded="true"] {
+    background-color: var(--tm-accent-subtle);
+    border-color: transparent;
+    color: var(--tm-accent);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APP SHELL — content offsets for the nav rail / phone tab bar (AppShell.tsx)
+═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --tm-rail-w: 76px;
+  --tm-rail-w-expanded: 224px;
+  --tm-tabbar-h: 64px;
+}
+.app-content {
+  transition: padding-left var(--tm-dur-base) var(--tm-ease);
+}
+@media (min-width: 768px) {
+  .app-content { padding-left: var(--tm-rail-w); }
+  .app-content[data-nav-expanded] { padding-left: var(--tm-rail-w-expanded); }
+}
+@media (max-width: 767px) {
+  .app-content { padding-bottom: calc(var(--tm-tabbar-h) + env(safe-area-inset-bottom)); }
+  /* Toasts clear the tab bar. */
+  html:has(.app-tabbar) { --tm-toast-offset: calc(var(--tm-tabbar-h) + env(safe-area-inset-bottom)); }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -976,4 +1334,6 @@ html[data-page-style="blank"] body {
 .scrollbar-custom::-webkit-scrollbar-thumb {
   background: var(--tm-border);
   border-radius: 99px;
-}
+}/* Scrolls sideways without showing a scrollbar (the Tasks toolbar's chips). */
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }

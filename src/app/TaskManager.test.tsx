@@ -45,13 +45,15 @@ vi.mock('@/app/context/NotesContext', () => ({
     discardDraft: vi.fn(), pendingNoteIds: new Set(), removeTagFromNotes: vi.fn(), archiveSyncToken: 0,
   }),
 }));
-vi.mock('@/app/hooks/useProfile', () => ({
-  useProfile: () => ({ profile: { name: '', avatar: null }, loading: false, loaded: true, saveProfile: vi.fn() }),
+vi.mock('@/app/context/AppShellContext', () => ({
+  useAppShell: () => ({
+    profileState: { profile: { name: '', avatar: null }, loading: false, loaded: true, saveProfile: vi.fn() },
+    calendarSettingsState: { calendarSettings: {}, loading: false, saveCalendarSettings: vi.fn() },
+    openNewTask: vi.fn(), createNote: vi.fn(), openNewHabit: vi.fn(), openEditTask: vi.fn(), openSettings: vi.fn(),
+    openManageTags: vi.fn(), openManageHabits: vi.fn(), openHabitHistory: vi.fn(), requestLogout: vi.fn(),
+    settingsClosedToken: 0, registerNoteOpener: vi.fn(),
+  }),
 }));
-vi.mock('@/app/hooks/useCalendarSettings', () => ({
-  useCalendarSettings: () => ({ calendarSettings: {}, loading: false, saveCalendarSettings: vi.fn() }),
-}));
-vi.mock('@/app/hooks/useRestoreFromTrash', () => ({ useRestoreFromTrash: () => vi.fn() }));
 
 // Only the Canvas panel is on screen, standing in for its rows' "Add to tasks" and its refresh button.
 vi.mock('@/app/components/common/PanelCarousel', async importOriginal => ({
@@ -68,11 +70,12 @@ vi.mock('@/app/components/canvas/CanvasPanel', () => ({
   ),
 }));
 const { Empty } = vi.hoisted(() => ({ Empty: () => null }));
-vi.mock('@/app/components/task/TaskControls', () => ({ TaskControls: Empty }));
 vi.mock('@/app/components/task/TasksPanel', () => ({ default: Empty }));
-vi.mock('@/app/components/notes/NotesPanel', () => ({ default: Empty }));
+vi.mock('@/app/components/notes/NotesPanel', () => ({
+  default: Empty,
+  isNoteOrder: (c: unknown) => c === 'newest' || c === 'oldest',
+}));
 vi.mock('@/app/components/layout/CalendarAndStats', () => ({ default: Empty }));
-vi.mock('@/app/components/layout/TaskManagerModals', () => ({ default: Empty }));
 vi.mock('@/app/components/task/TaskDebriefPanel', () => ({ default: Empty }));
 vi.mock('@/app/components/mood/MoodNudge', () => ({ default: Empty }));
 vi.mock('@/app/components/doodle/DoodleCanvas', () => ({ default: Empty }));
