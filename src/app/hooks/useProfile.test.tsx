@@ -70,18 +70,18 @@ describe('useProfile saveProfileField', () => {
     expect(api.saveProfile).toHaveBeenLastCalledWith({ name: 'Maya', avatar: 'disc-3' });
   });
 
-  it('drops legacy mood settings the server still returns, sending back only daily/weekly/monthly', async () => {
+  it('drops legacy mood settings the server still returns, including daily, sending back only weekly/monthly', async () => {
     api.fetchProfile.mockResolvedValueOnce({
       name: 'Maya',
-      mood_checkins: { daily: true, weekly: true, monthly: false, remind: 'off', show_in_reports: false },
+      mood_checkins: { daily: false, weekly: true, monthly: false, remind: 'off', show_in_reports: false },
     });
     act(() => root.unmount());
     root = createRoot(container);
     await act(async () => root.render(<Probe user={user} onResult={r => { hook = r; }} />));
-    expect(hook.profile.moodCheckins).toEqual({ daily: true, weekly: true, monthly: false });
+    expect(hook.profile.moodCheckins).toEqual({ weekly: true, monthly: false });
     await act(async () => hook.saveProfileField({ moodCheckins: { ...hook.profile.moodCheckins, monthly: true } }));
     expect(api.saveProfile).toHaveBeenLastCalledWith({
-      name: 'Maya', mood_checkins: { daily: true, weekly: true, monthly: true },
+      name: 'Maya', mood_checkins: { weekly: true, monthly: true },
     });
   });
 });

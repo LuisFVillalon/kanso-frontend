@@ -11,6 +11,7 @@ import TimersCard, { TimersOverlay } from '@/app/components/stats/TimersCard';
 import DraggableGrid, { type DragHandleProps } from '@/app/components/common/DraggableGrid';
 import Modal from '@/app/components/common/Modal';
 import { useGridOrder } from '@/app/hooks/useGridOrder';
+import { useDailyMood } from '@/app/hooks/useDailyMood';
 import type { TileSize } from '@/app/components/stats/TileTools';
 import { Habit } from '@/app/types/habit';
 import { StatsData, TagStats } from '@/app/types/task';
@@ -118,6 +119,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
     next => { onSaveProfile({ ...profile, layoutOrder: next }); },
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const showMood = useDailyMood() === true;
 
   // Month/year shown in the 'reserved' (Current Month) overlay — separate
   // from the actual current date so the header's prev/next buttons can page
@@ -135,7 +137,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
   const overlayBody = (id: string) => {
     switch (id) {
       case 'calendar': return <BigPictureOverlay settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
-      case 'reserved': return <CurrentMonthOverlay year={monthViewYear} month={monthViewMonth} showMood={profile.moodCheckins.daily} />;
+      case 'reserved': return <CurrentMonthOverlay year={monthViewYear} month={monthViewMonth} showMood={showMood} />;
       case 'timers': return <TimersOverlay profile={profile} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'tasks': return <TasksOverlay {...tasksProps} />;
       case 'habits': return <HabitsOverlay habits={habits} onToggle={onToggleHabit} pendingHabitIds={pendingHabitIds} />;
@@ -158,7 +160,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
     };
     switch (id) {
       case 'calendar': return <BigPictureCalendar {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
-      case 'reserved': return <CurrentMonthWidget {...tools} showMood={profile.moodCheckins.daily} />;
+      case 'reserved': return <CurrentMonthWidget {...tools} showMood={showMood} />;
       case 'timers': return <TimersCard profile={profile} {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'tasks': return <TasksStatsCard {...tasksProps} {...tools} />;
       case 'habits': return (

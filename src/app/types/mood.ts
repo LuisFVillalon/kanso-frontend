@@ -47,23 +47,27 @@ export interface MoodTags {
   custom: string[];
 }
 
-/** The profile's `mood_checkins` settings, which `/get-profile` returns with defaults filled in. */
+/**
+ * The profile's `mood_checkins` settings, which `/get-profile` returns with
+ * defaults filled in. Daily check-ins aren't here: they follow the
+ * Notifications "Mood check-in reminder" switch (hooks/useDailyMood.ts).
+ */
 export interface MoodCheckinSettings {
-  daily: boolean;
   weekly: boolean;
   monthly: boolean;
 }
 
-/** Daily on, weekly and monthly opt-in — the same defaults the backend fills in. */
+/** Weekly and monthly are opt-in — the same defaults the backend fills in. */
 export const DEFAULT_MOOD_SETTINGS: MoodCheckinSettings = {
-  daily: true,
   weekly: false,
   monthly: false,
 };
 
-/** The known settings from `/get-profile`, defaults filled in; legacy keys it may still carry are dropped, so they are never saved back. */
+/**
+ * The known settings from `/get-profile`, defaults filled in; legacy keys it
+ * may still carry (`daily`, `remind`, ...) are dropped, so they are never saved back.
+ */
 export const moodSettings = (saved?: Partial<MoodCheckinSettings> | null): MoodCheckinSettings => ({
-  daily: saved?.daily ?? DEFAULT_MOOD_SETTINGS.daily,
   weekly: saved?.weekly ?? DEFAULT_MOOD_SETTINGS.weekly,
   monthly: saved?.monthly ?? DEFAULT_MOOD_SETTINGS.monthly,
 });

@@ -11,7 +11,7 @@ import { MOOD_REMINDER_MINUTES_MAX, MOOD_REMINDER_PRESETS } from '@/app/utils/no
 /** Switch labels, in the order the day runs within each group. Other types the server lists aren't offered. */
 const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
   task_reminder:  { label: 'Reminder before a task is due', hint: "At each task's reminder time." },
-  mood_reminder:  { label: 'Mood check-in reminder', hint: "Before you call it a day, if today's mood isn't logged yet." },
+  mood_reminder:  { label: 'Mood check-in reminder', hint: "Log your mood each day; reminds you before you call it a day if it isn't logged yet." },
   mood_missed:    { label: 'Missed mood check-ins', hint: 'When days go by without a mood check-in.' },
 };
 const REMINDER_TYPES = ['task_reminder'];
@@ -159,13 +159,16 @@ const NotificationPreferencesForm: React.FC<Props> = ({
   const typeSwitch = (type: string) => {
     const { label, hint } = TYPE_LABELS[type];
     const on = draft.types[type];
+    const followsOffReminder = type === 'mood_missed' && draft.types.mood_reminder === false;
     const labelId = `notif-type-${type}`;
     return (
       <React.Fragment key={type}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p id={labelId} className="text-sm font-medium text-text-primary">{label}</p>
-            <p className="text-xs text-text-muted">{hint}</p>
+            <p className="text-xs text-text-muted">
+              {followsOffReminder ? 'Follows the Mood check-in reminder, which is off.' : hint}
+            </p>
           </div>
           <button
             type="button"
@@ -173,7 +176,8 @@ const NotificationPreferencesForm: React.FC<Props> = ({
             aria-checked={on}
             aria-labelledby={labelId}
             onClick={() => toggleType(type, label)}
-            className="relative shrink-0 w-10 h-6 rounded-full transition-colors"
+            disabled={followsOffReminder}
+            className="relative shrink-0 w-10 h-6 rounded-full transition-colors disabled:opacity-40"
             style={{ backgroundColor: on ? 'var(--tm-accent)' : 'var(--tm-border)' }}
           >
             <span

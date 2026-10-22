@@ -9,6 +9,7 @@ import { fetchTaskDebrief } from '@/app/lib/backend-api';
 import { DailyDebriefReport, DebriefTaskItem, FocusNextItem } from '@/app/types/debrief';
 import { getPriorityStyle, formatDueDate } from '@/app/utils/taskUtils';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
+import { useDailyMood } from '@/app/hooks/useDailyMood';
 import type { ProfileFields, useProfile } from '@/app/hooks/useProfile';
 import type { Task } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
@@ -107,7 +108,8 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
 
   // A plain link to the mood form, only while the brief is open: the AI
   // brief itself never reads mood check-ins.
-  const mood = profileLoaded && profile.moodCheckins.daily
+  const dailyMood = useDailyMood();
+  const mood = profileLoaded && dailyMood
     ? <BriefMoodLine profile={profile} tasks={tasks} habits={habits} />
     : null;
 

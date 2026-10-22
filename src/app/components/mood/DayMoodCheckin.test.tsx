@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/app/context/ToastContext';
+import { NotificationsContext, type NotificationsContextValue } from '@/app/context/NotificationsContextValue';
 import { DEFAULT_MOOD_SETTINGS, type MoodCheckin } from '@/app/types/mood';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import { announceMoodCheckin } from '@/app/utils/moodCheckinSync';
@@ -113,11 +114,14 @@ describe('DayClosedMoodReminder', () => {
     moodCheckins: DEFAULT_MOOD_SETTINGS,
   } as unknown as ProfileFields;
 
-  const renderReminder = async (props: { profile?: ProfileFields; profileLoaded?: boolean } = {}) => {
+  const renderReminder = async (props: { profile?: ProfileFields; profileLoaded?: boolean; notifications?: Partial<NotificationsContextValue> } = {}) => {
+    const banner = <DayClosedMoodReminder profile={props.profile ?? profile} profileLoaded={props.profileLoaded ?? true} tasks={[]} habits={[]} />;
     await act(async () => {
       root.render(
         <ToastProvider>
-          <DayClosedMoodReminder profile={props.profile ?? profile} profileLoaded={props.profileLoaded ?? true} tasks={[]} habits={[]} />
+          {props.notifications
+            ? <NotificationsContext.Provider value={props.notifications as NotificationsContextValue}>{banner}</NotificationsContext.Provider>
+            : banner}
         </ToastProvider>,
       );
     });
@@ -174,9 +178,12 @@ describe('DayClosedMoodReminder', () => {
     expect(reminder()?.textContent).toContain('How did Wednesday feel?');
   });
 
-  it('stays hidden while daily check-ins are off, and until the profile loads', async () => {
+  it('stays hidden while the mood check-in reminder is off, and until it and the profile load', async () => {
     vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
-    await renderReminder({ profile: { ...profile, moodCheckins: { ...DEFAULT_MOOD_SETTINGS, daily: false } } });
+    const preferences = { types: { mood_reminder: false } } as unknown as NotificationsContextValue['preferences'];
+    await renderReminder({ notifications: { status: 'ready', preferences, preferencesError: false } });
+    expect(reminder()).toBeNull();
+    await renderReminder({ notifications: { status: 'loading', preferences: null, preferencesError: false } });
     expect(reminder()).toBeNull();
     await renderReminder({ profileLoaded: false });
     expect(reminder()).toBeNull();
