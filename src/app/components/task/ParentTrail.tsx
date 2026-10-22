@@ -2,8 +2,6 @@ import React from 'react';
 import { CornerDownRight } from 'lucide-react';
 import { ParentSummary } from '@/app/types/task';
 
-/** Longer trails keep the topmost task and the last ones, with "…" between. */
-const MAX_SHOWN = 3;
 
 const VARIANTS = {
   /** Small and quiet, beside a task's title in the list. */
@@ -15,23 +13,27 @@ const VARIANTS = {
 /**
  * "↳ Apply to Google › Mock interview": the tasks above a linked task, from
  * the topmost down to its own parent (see parentChain). Each one opens that
- * task when `onOpen` is given.
+ * task when `onOpen` is given. A trail longer than `maxShown` keeps the
+ * topmost task (unless `maxShown` is 1) and the closest ones, with "…"
+ * between; the tooltip always has the whole trail.
  */
 const ParentTrail: React.FC<{
   chain: ParentSummary[];
   onOpen?: (id: number) => void;
   variant?: keyof typeof VARIANTS;
+  maxShown?: number;
   className?: string;
-}> = ({ chain, onOpen, variant = 'row', className = '' }) => {
+}> = ({ chain, onOpen, variant = 'row', maxShown = 3, className = '' }) => {
   if (chain.length === 0) return null;
-  const shown: (ParentSummary | null)[] = chain.length > MAX_SHOWN
-    ? [chain[0], null, ...chain.slice(chain.length - (MAX_SHOWN - 1))]
+  const head = maxShown > 1 ? [chain[0]] : [];
+  const shown: (ParentSummary | null)[] = chain.length > maxShown
+    ? [...head, null, ...chain.slice(chain.length - (maxShown - head.length))]
     : chain;
   const fullTrail = chain.map(p => p.title).join(' › ');
 
   return (
     <span
-      className={`inline-flex items-center gap-1 min-w-0 ${VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center gap-1 min-w-0 overflow-hidden ${VARIANTS[variant]} ${className}`}
       title={`Leads up to ${fullTrail}`}
     >
       <CornerDownRight className="w-3 h-3 flex-shrink-0 text-text-muted" aria-label="Leads up to" />
@@ -39,7 +41,7 @@ const ParentTrail: React.FC<{
         <React.Fragment key={p?.id ?? 'more'}>
           {i > 0 && <span aria-hidden>›</span>}
           {p === null ? (
-            <span aria-label={`${chain.length - MAX_SHOWN} more`}>…</span>
+            <span aria-label={`${chain.length - maxShown} more`}>…</span>
           ) : onOpen ? (
             <button
               type="button"

@@ -174,10 +174,12 @@ const LinkedTaskRow: React.FC<{
           >
             {task.title}
           </span>
+          {/* The nesting already shows the rest, so the row names just its own parent. */}
           <ParentTrail
             chain={ancestors.map(a => ({ id: a.id, title: a.title }))}
             onOpen={onEditTask && openAncestor}
-            className="flex-shrink-[2]"
+            maxShown={1}
+            className="flex-shrink-[3]"
           />
         </span>
 

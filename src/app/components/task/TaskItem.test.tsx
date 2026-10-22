@@ -122,12 +122,14 @@ describe('TaskItem linked tasks', () => {
       expect(container.textContent).toContain('1 of 2 done');
     });
 
-    it('opens any task in the trail', () => {
+    it('names just its own parent on a deeper row, which opens it', () => {
       const onEditTask = vi.fn();
       render({ linkedTasks: nested, onEditTask });
       const trail = rowOf('Write up notes').querySelector('[title^="Leads up to"]')!;
-      act(() => trail.querySelector<HTMLButtonElement>('button[aria-label="Open parent task Mock interview"]')!.click());
-      expect(onEditTask).toHaveBeenCalledWith(linkedTasks[1]);
+      expect(trail.textContent).toBe('…›Practice questions');
+      expect(trail.querySelector('button[aria-label="Open parent task Mock interview"]')).toBeNull();
+      act(() => trail.querySelector<HTMLButtonElement>('button[aria-label="Open parent task Practice questions"]')!.click());
+      expect(onEditTask).toHaveBeenCalledWith(practice);
     });
 
     it('collapses and expands one linked task’s own linked tasks', () => {
