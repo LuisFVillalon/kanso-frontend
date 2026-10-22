@@ -3,7 +3,8 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@/app/context/ToastContext';
-import type { MoodCheckin } from '@/app/types/mood';
+import { DEFAULT_MOOD_SETTINGS, type MoodCheckin } from '@/app/types/mood';
+import type { ProfileFields } from '@/app/hooks/useProfile';
 import { announceMoodCheckin } from '@/app/utils/moodCheckinSync';
 
 const api = vi.hoisted(() => ({
@@ -14,7 +15,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 
-import { DayMoodCheckinModal } from '@/app/components/mood/DayMoodCheckin';
+import { DayClosedMoodReminder, DayMoodCheckinModal } from '@/app/components/mood/DayMoodCheckin';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -102,5 +103,83 @@ describe('DayMoodCheckinModal', () => {
     expect(dialogTitle()).toBeUndefined();
     expect(onClose).toHaveBeenCalled();
     expect(document.body.textContent).toContain("Couldn't open your check-in.");
+  });
+});
+
+describe('DayClosedMoodReminder', () => {
+  const profile = {
+    dayStartTime: '08:00',
+    shutoffTime: '18:00',
+    moodCheckins: DEFAULT_MOOD_SETTINGS,
+  } as unknown as ProfileFields;
+
+  const renderReminder = async (props: { profile?: ProfileFields; profileLoaded?: boolean } = {}) => {
+    await act(async () => {
+      root.render(
+        <ToastProvider>
+          <DayClosedMoodReminder profile={props.profile ?? profile} profileLoaded={props.profileLoaded ?? true} tasks={[]} habits={[]} />
+        </ToastProvider>,
+      );
+    });
+  };
+  const reminder = () => [...document.body.querySelectorAll('[role="status"]')].find(el => el.textContent?.includes('called it a day')) ?? null;
+  const logButton = () => [...document.body.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === 'Log today’s mood now');
+
+  it('stays hidden before Call it a day, without loading the check-in', async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 17, 59));
+    await renderReminder();
+    expect(reminder()).toBeNull();
+    expect(api.fetchMoodCheckins).not.toHaveBeenCalled();
+  });
+
+  it("reminds once the day is called off and today's mood isn't logged", async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 18, 0));
+    await renderReminder();
+    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-21', '2026-10-21', ['day']);
+    expect(reminder()?.textContent).toContain('How did today feel?');
+    expect(logButton()).toBeDefined();
+  });
+
+  it('opens the check-in form and is gone once the mood is logged', async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
+    await renderReminder();
+    await click(logButton()!);
+    expect(dialogTitle()).toBe('Daily check-in');
+    await click(byText('Good'));
+    await click(byText('Save check-in'));
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_kind: 'day', period_start: '2026-10-21', mood: 4 }));
+    expect(dialogTitle()).toBeUndefined();
+    expect(reminder()).toBeNull();
+  });
+
+  it('hides when the mood is logged elsewhere', async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
+    await renderReminder();
+    expect(reminder()).not.toBeNull();
+    act(() => announceMoodCheckin({ kind: 'day', start: '2026-10-21', row: checkin(3, '2026-10-21') }));
+    expect(reminder()).toBeNull();
+  });
+
+  it('stays hidden when the mood is already logged', async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
+    api.fetchMoodCheckins.mockResolvedValue([checkin(4, '2026-10-21')]);
+    await renderReminder();
+    expect(reminder()).toBeNull();
+  });
+
+  it("reminds about yesterday in the small hours after a day called off past midnight", async () => {
+    vi.setSystemTime(new Date(2026, 9, 22, 1, 0));
+    await renderReminder({ profile: { ...profile, dayStartTime: '09:00', shutoffTime: '00:30' } });
+    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-21', '2026-10-21', ['day']);
+    expect(reminder()?.textContent).toContain('How did Wednesday feel?');
+  });
+
+  it('stays hidden while daily check-ins are off, and until the profile loads', async () => {
+    vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
+    await renderReminder({ profile: { ...profile, moodCheckins: { ...DEFAULT_MOOD_SETTINGS, daily: false } } });
+    expect(reminder()).toBeNull();
+    await renderReminder({ profileLoaded: false });
+    expect(reminder()).toBeNull();
+    expect(api.fetchMoodCheckins).not.toHaveBeenCalled();
   });
 });

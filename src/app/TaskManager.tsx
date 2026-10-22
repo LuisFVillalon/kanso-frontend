@@ -32,7 +32,7 @@ import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
 import WidgetsArea from '@/app/components/layout/WidgetsArea';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
 import PeriodMoodCheckins from '@/app/components/mood/PeriodMoodCheckins';
-import { DayMoodCheckinModal, daySummaryFrom } from '@/app/components/mood/DayMoodCheckin';
+import { DayClosedMoodReminder, DayMoodCheckinModal, daySummaryFrom } from '@/app/components/mood/DayMoodCheckin';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { checkinDayAt } from '@/app/utils/moodCheckinDay';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -388,6 +388,8 @@ const TaskManager: React.FC = () => {
             {showDebriefPanels && (
               <div className={!doodleMode && !focusMode ? 'animate-fade-in' : 'animate-fade-out'}>
                 <PeriodMoodCheckins profile={profile} profileLoaded={profileLoaded} tasks={tasks} />
+
+                <DayClosedMoodReminder profile={profile} profileLoaded={profileLoaded} tasks={tasks} habits={habits} />
 
                 <TaskDebriefPanel profile={profile} profileLoaded={profileLoaded} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
 

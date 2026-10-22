@@ -93,9 +93,11 @@ const button = (name: string) =>
 const click = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); };
 const dialogTitle = () => document.getElementById('mood-checkin-title')?.textContent;
 
-/** The Focus Next card: the grid cell holding the "Focus Next" heading. */
-const focusNextCard = () =>
-  [...document.body.querySelectorAll('span')].find(el => el.textContent === 'Focus Next')?.closest('.rounded-md');
+const cardWithHeading = (heading: string) =>
+  [...document.body.querySelectorAll('span')].find(el => el.textContent === heading)?.closest('.rounded-md');
+/** Today's Activity Log: its "Rest day" line on a rest day. */
+const activityLogCard = () => cardWithHeading("Today's Activity Log") ?? cardWithHeading('Rest day');
+const focusNextCard = () => cardWithHeading('Focus Next');
 
 describe('TaskDebriefPanel mood chip', () => {
   it("offers to log today's mood at any time, even on a rest day", async () => {
@@ -126,9 +128,23 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(document.querySelector('[role="radio"][aria-label="Low"]')?.getAttribute('aria-checked')).toBe('true');
   });
 
-  it('sits beside Focus Next while the brief is open', async () => {
+  it("sits in Today's Activity Log's header while the brief is open", async () => {
     await render();
-    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
+    expect(activityLogCard()?.contains(button('Log today’s mood'))).toBe(true);
+    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(false);
+  });
+
+  it("sits in Today's Activity Log's header on a work day, beside Overcommitted", async () => {
+    api.fetchTaskDebrief.mockResolvedValue({
+      ...debrief,
+      completed_today_tasks: [{ id: 1, title: 'Draft', priority: null, due_date: null, due_time: null, category: null, estimated_time: 2, tags: [] }],
+      workload: { is_rest_day: false, available_minutes: 60, committed_minutes: 120, utilization_pct: 200, is_overcommitted: true },
+    });
+    await render();
+    const card = activityLogCard()!;
+    expect(card.textContent).toContain('Overcommitted');
+    expect(card.contains(button('Log today’s mood'))).toBe(true);
+    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(false);
   });
 
   it('is hidden while the brief is collapsed, and shows once it opens', async () => {
@@ -136,7 +152,7 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(button('Log today’s mood')).toBeUndefined();
     expect(text()).not.toContain('mood');
     await click(document.querySelector('h2')!.closest('button')!);
-    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
+    expect(activityLogCard()?.contains(button('Log today’s mood'))).toBe(true);
   });
 
   it('is not shown when the brief fails to load', async () => {
@@ -155,7 +171,7 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(api.fetchTaskDebrief).toHaveBeenCalledTimes(2);
     expect(dialogTitle()).toBe('Daily check-in');
     expect(document.querySelector('[role="radio"][aria-label="Good"]')?.getAttribute('aria-checked')).toBe('true');
-    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
+    expect(activityLogCard()?.contains(button('Log today’s mood'))).toBe(true);
   });
 
   it('keeps the last brief and an open check-in form when a refresh fails', async () => {
@@ -167,7 +183,7 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(text()).toContain('Brief unavailable');
     expect(dialogTitle()).toBe('Daily check-in');
     expect(document.querySelector('[role="radio"][aria-label="Good"]')?.getAttribute('aria-checked')).toBe('true');
-    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
+    expect(activityLogCard()?.contains(button('Log today’s mood'))).toBe(true);
   });
 
   it('is hidden while daily check-ins are off, and until the profile loads', async () => {
