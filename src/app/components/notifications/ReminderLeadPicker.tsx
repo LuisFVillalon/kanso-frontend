@@ -87,7 +87,7 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
     if (minutes >= 1 && minutes <= maxMinutes) onChange(minutes);
   };
 
-    return (
+  return (
     <div className="space-y-2">
       <select
         value={selected}
