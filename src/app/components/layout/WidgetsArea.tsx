@@ -6,6 +6,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/components/common/SegmentedTabs';
 import WeekView from '@/app/components/calendar/WeekView';
+import { WEEK_GRID_HEIGHT } from '@/app/components/calendar/WeekGrid';
 
 export type WidgetsView = 'widgets' | 'week';
 export const isWidgetsView = (c: unknown): c is WidgetsView => c === 'widgets' || c === 'week';
@@ -20,7 +21,7 @@ const TABPANEL_ID = 'home-widgets-tabpanel';
 
 /**
  * The home page's widgets section: the widget grid, or the week calendar in
- * its place, switched by the tabs at its top. The choice is remembered on
+ * its place, switched by the tabs at its top right. The choice is remembered on
  * this device, per user.
  */
 const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
@@ -29,16 +30,30 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
 
   return (
     <section aria-label="Widgets" className="space-y-2">
-      <SegmentedTabs
-        label="Widgets or week calendar"
-        tabs={TABS}
-        value={view}
-        onChange={setView}
-        idBase={TABS_ID}
-        panelId={TABPANEL_ID}
-      />
+      <div className="flex justify-end">
+        <SegmentedTabs
+          label="Widgets or week calendar"
+          tabs={TABS}
+          value={view}
+          onChange={setView}
+          idBase={TABS_ID}
+          panelId={TABPANEL_ID}
+        />
+      </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>
-        {view === 'widgets' ? widgets : <div className="mb-4 sm:mb-6"><WeekView /></div>}
+        {/* Both views share one grid cell, and the area always reserves the week calendar's
+            height with room for a wrapped toolbar, so switching doesn't shift the page. */}
+        <div
+          className="grid grid-cols-1 min-h-[calc(var(--week-grid-h)+9rem)] sm:min-h-[calc(var(--week-grid-h)+7.5rem)]"
+          style={{ '--week-grid-h': WEEK_GRID_HEIGHT } as React.CSSProperties}
+        >
+          <div className={`[grid-area:1/1] ${view === 'week' ? 'invisible' : ''}`} inert={view === 'week'} aria-hidden={view === 'week' || undefined}>
+            {widgets}
+          </div>
+          {view === 'week' && (
+            <div className="[grid-area:1/1] mb-4 sm:mb-6"><WeekView /></div>
+          )}
+        </div>
       </div>
     </section>
   );
