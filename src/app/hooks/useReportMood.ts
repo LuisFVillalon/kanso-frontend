@@ -13,11 +13,10 @@ interface Fetched {
 /**
  * Loads the mood check-ins a report period needs — daily, weekly and
  * monthly — whose first day falls in moodFetchRange (a week also pulls in
- * the 4 weeks before its end, a month the week before it). `enabled` false
- * skips the request — the "Show mood in reports" setting is off. Saving or
+ * the 4 weeks before its end, a month the week before it). Saving or
  * deleting a check-in from the report patches the loaded list in place.
  */
-export function useReportMood(period: ReportPeriod, enabled: boolean) {
+export function useReportMood(period: ReportPeriod) {
   const range = moodFetchRange(period);
   const startStr = toLocalDateStr(range.start);
   const endStr = toLocalDateStr(range.end);
@@ -28,7 +27,6 @@ export function useReportMood(period: ReportPeriod, enabled: boolean) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!enabled) return;
     let cancelled = false;
     fetchMoodCheckins(startStr, endStr)
       .then(checkins => {
@@ -42,7 +40,7 @@ export function useReportMood(period: ReportPeriod, enabled: boolean) {
       cancelled = true;
       setError(null);
     };
-  }, [enabled, key, startStr, endStr, attempt]);
+  }, [key, startStr, endStr, attempt]);
 
   const ready = fetched?.key === key ? fetched.checkins : null;
   const failed = !ready && error?.key === key ? error.message : null;
@@ -64,7 +62,7 @@ export function useReportMood(period: ReportPeriod, enabled: boolean) {
 
   return {
     checkins: ready,
-    loading: enabled && !ready && !failed,
+    loading: !ready && !failed,
     error: failed,
     retry,
     replaceDay,

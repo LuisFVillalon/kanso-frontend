@@ -63,7 +63,7 @@ const WorkDayPage: React.FC<Props> = ({
         </div>
       </div>
       <p className="text-xs mt-1" style={{ color: 'var(--tm-text-muted)' }}>
-        Sets your working window, the day timer, and when check-ins nudge you.
+        Sets your working window, the day timer, and when the mood check-in reminder comes.
       </p>
     </div>
 

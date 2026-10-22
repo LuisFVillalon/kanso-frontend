@@ -50,15 +50,11 @@ interface Props {
   date: Date;
   /** The period's saved check-in, when editing one. */
   existing: MoodCheckin | null;
-  /** A face already tapped on the nudge. */
-  initialMood?: number | null;
   /** A day check-in's context strip. */
   summary?: DaySummary | null;
   /** A week or month check-in's context strip, and its suggested mood. */
   periodSummary?: PeriodSummary | null;
   onClose: () => void;
-  /** Offers "Skip today" on a new check-in; without it that button is Cancel. */
-  onSkip?: () => void;
   onSaved: (saved: MoodCheckin, previous: MoodCheckin | null) => void;
   /** Its z-index tier: above the modal it was opened from, if any. */
   layer?: ModalLayer;
@@ -117,16 +113,14 @@ const MoodCheckinModal: React.FC<Props> = ({
   kind = 'day',
   date,
   existing,
-  initialMood = null,
   summary,
   periodSummary,
   onClose,
-  onSkip,
   onSaved,
   layer,
 }) => {
   const editing = existing != null;
-  const [mood, setMood] = useState<number | null>(existing?.mood ?? initialMood);
+  const [mood, setMood] = useState<number | null>(existing?.mood ?? null);
   const [energy, setEnergy] = useState<number | null>(existing?.energy ?? null);
   const [stress, setStress] = useState<number | null>(existing?.stress ?? null);
   const [workload, setWorkload] = useState<number | null>(existing?.workload ?? null);
@@ -437,11 +431,11 @@ const MoodCheckinModal: React.FC<Props> = ({
           <div className="flex gap-3 pt-1">
             <button
               type="button"
-              onClick={!editing && onSkip ? onSkip : onClose}
+              onClick={onClose}
               disabled={busy}
               className="btn btn-secondary flex-1 py-2"
             >
-              {!editing && onSkip ? (kind === 'day' ? 'Skip today' : 'Skip') : 'Cancel'}
+              Cancel
             </button>
             <button
               type="button"

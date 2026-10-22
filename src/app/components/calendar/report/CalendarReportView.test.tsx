@@ -35,14 +35,12 @@ const checkin = (period_start: string, mood: number): MoodCheckin => ({
   created_at: `${period_start}T20:00:00Z`, updated_at: `${period_start}T20:00:00Z`,
 });
 
-const showMood = (show: boolean) =>
-  api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { show_in_reports: show } });
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   // Wednesday: the week is Oct 19–25, three days in.
   vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
-  showMood(true);
+  api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: {} });
   api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
     start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [], habit_completions: [],
   }));
@@ -108,8 +106,8 @@ describe('CalendarReportView mood', () => {
     expect(buttonLabelled(/^Try again$/)).toBeDefined();
   });
 
-  it('leaves mood out when "Show mood in reports" is off', async () => {
-    showMood(false);
+  it('always shows mood, even from a profile still saved with the old "Show mood in reports" off', async () => {
+    api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { show_in_reports: false } });
     api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
       start_date: start, end_date: end, scheduled_tasks: [], note_sessions: [], habit_completions: [],
       completed_tasks: [{
@@ -119,11 +117,10 @@ describe('CalendarReportView mood', () => {
     }));
     await render();
     expect(text()).toContain('1 task finished');
-    expect(text()).not.toContain('Mood over time');
-    expect(text()).not.toContain('Mood & your activity');
-    expect(text()).not.toContain('days logged');
-    expect(container.querySelector('.lg\\:grid-cols-6')).toBeNull();
-    expect(container.querySelector('.lg\\:grid-cols-5')).not.toBeNull();
+    expect(api.fetchMoodCheckins).toHaveBeenCalled();
+    expect(text()).toContain('days logged');
+    expect(text()).toContain('Mood comes from your daily check-ins');
+    expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
   });
 
   it('edits a logged day and logs a hollow one', async () => {
@@ -303,7 +300,7 @@ describe('CalendarReportView mood', () => {
     });
 
     it('offers to log the week when weekly check-ins are on', async () => {
-      api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { show_in_reports: true, weekly: true } });
+      api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { weekly: true } });
       await render();
       expect(text()).toContain('No weekly check-in yet — it’s asked on Sunday.');
       await click(buttonLabelled(/^Log it$/));

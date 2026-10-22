@@ -12,9 +12,11 @@ export const REMINDER_PRESETS = [15, 30, 60, 120, 24 * 60];
 /** The backend always sends a final warning this long before a task is due. */
 export const FINAL_WARNING_MINUTES = 30;
 
-/** The mood reminder's lead choices, in minutes before "Call it a day". */
-export const MOOD_REMINDER_MINUTES = [60, 30];
-export const DEFAULT_MOOD_REMINDER_MINUTES = 60;
+/** The mood reminder's one-click leads, in minutes before "Call it a day". */
+export const MOOD_REMINDER_PRESETS = [15, 30, 60, 120];
+
+/** The backend's cap on the mood reminder's lead: under a day, so it stays on the same day. */
+export const MOOD_REMINDER_MINUTES_MAX = 24 * 60 - 1;
 
 export const isMoodType = (type: string) => type === 'mood_reminder' || type === 'mood_missed';
 

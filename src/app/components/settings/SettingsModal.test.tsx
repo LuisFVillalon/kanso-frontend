@@ -306,13 +306,15 @@ describe('SettingsModal notifications page', () => {
   const loadPreferences = vi.fn(async () => {});
   const groupTitles = () => [...document.querySelectorAll('section[aria-labelledby="settings-page-title"] h3')].map(h => h.textContent);
 
-  it('groups reminders, mood check-ins, quiet hours and other alerts on one page', async () => {
+  it('groups reminders, mood check-ins and quiet hours on one page, with no other alerts or mood nudge settings', async () => {
     notifications.value = { status: 'ready', preferences, preferencesError: null, savePreferences, loadPreferences };
     render('notifications');
-    expect(groupTitles()).toEqual(['Reminders', 'Mood check-ins', 'Quiet hours', 'Other alerts']);
+    expect(groupTitles()).toEqual(['Reminders', 'Mood check-ins', 'Quiet hours']);
     const mood = document.querySelector('section[aria-labelledby="notif-group-mood"]')!;
     expect(mood.querySelector('[aria-labelledby="mood-setting-daily"]')).toBeTruthy();
     expect(mood.querySelector('[aria-labelledby="notif-type-mood_reminder"]')).toBeTruthy();
+    expect(mood.querySelector('select[aria-labelledby="mood-reminder-lead-label"]')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/Dashboard nudge|Show mood in reports|Morning summary/);
 
     // Mood check-ins still save on the profile, and report on this page's indicator.
     await click(mood.querySelector<HTMLButtonElement>('[aria-labelledby="mood-setting-weekly"]')!);

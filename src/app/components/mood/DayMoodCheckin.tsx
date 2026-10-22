@@ -11,7 +11,7 @@ import type { Habit } from '@/app/types/habit';
 import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import type { Task } from '@/app/types/task';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
-import { checkinDayAt } from '@/app/utils/moodNudge';
+import { checkinDayAt } from '@/app/utils/moodCheckinDay';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 
 /**
@@ -111,7 +111,7 @@ export default DayMoodCheckin;
 /**
  * The Daily Brief's mood chip: the check-in day's mood, logged or edited at
  * any time. A day called off past midnight keeps its check-in until the next
- * day starts, as the dashboard nudge does.
+ * day starts.
  */
 export const BriefMoodLine: React.FC<{ profile: ProfileFields; tasks: Task[]; habits: Habit[]; className?: string }> = ({ profile, tasks, habits, className }) => {
   const [now, setNow] = useState(() => new Date());
@@ -119,7 +119,7 @@ export const BriefMoodLine: React.FC<{ profile: ProfileFields; tasks: Task[]; ha
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
-  const date = toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime, 'shutoff').day);
+  const date = toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime));
   return <DayMoodCheckin date={date} variant="brief" summary={daySummaryFrom(date, tasks, habits)} className={className} />;
 };
 

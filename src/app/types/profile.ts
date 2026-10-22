@@ -35,6 +35,6 @@ export interface Profile {
   notes_view_mode?: string | null;
   /** The two home-page panels shown side by side: 'tasks,notes' | 'notes,canvas' | 'canvas,tasks' — see components/common/PanelCarousel.tsx. */
   home_panels?: string | null;
-  /** Which mood check-ins the dashboard nudges for, and when — the backend fills in defaults. */
+  /** Which mood check-ins are on — the backend fills in defaults. */
   mood_checkins?: MoodCheckinSettings | null;
 }

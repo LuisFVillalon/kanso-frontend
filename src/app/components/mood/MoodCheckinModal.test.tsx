@@ -84,12 +84,6 @@ describe('MoodCheckinModal', () => {
     expect(button('Low').getAttribute('aria-checked')).toBe('false');
   });
 
-  it('opens with the face tapped on the nudge already picked', async () => {
-    await render({ initialMood: 2 });
-    expect(button('Low').getAttribute('aria-checked')).toBe('true');
-    expect(saveButton().disabled).toBe(false);
-  });
-
   it('saves a day check-in with only the fields the user filled', async () => {
     const { onSaved } = await render();
     await click(button('Good'));
@@ -117,7 +111,8 @@ describe('MoodCheckinModal', () => {
 
   it('shows the error and stays open when saving fails', async () => {
     api.saveMoodCheckin.mockRejectedValueOnce(new Error('offline'));
-    const { onSaved } = await render({ initialMood: 3 });
+    const { onSaved } = await render();
+    await click(button('Okay'));
     await click(saveButton());
     expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Couldn't save your check-in. Please try again.");
     expect(onSaved).not.toHaveBeenCalled();

@@ -31,7 +31,7 @@ export interface NotificationPreferences {
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   default_reminder_minutes: number;
-  /** How long before "Call it a day" the mood reminder comes: 30 or 60. Absent from older servers. */
+  /** How long before "Call it a day" the mood reminder comes, in minutes (1 to 1439, under a day). Absent from older servers. */
   mood_reminder_minutes?: number;
 }
 

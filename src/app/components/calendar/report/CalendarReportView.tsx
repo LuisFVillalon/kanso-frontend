@@ -99,9 +99,9 @@ const MoodTile: React.FC<{ summary: MoodSummary | null; current: boolean }> = ({
   );
 };
 
-/** `mood` undefined hides the Mood tile ("Show mood in reports" is off); null means it failed to load. */
-const StatTiles: React.FC<{ report: CalendarReport; mood?: MoodSummary | null; current: boolean }> = ({ report, mood, current }) => (
-  <div className={`grid grid-cols-2 sm:grid-cols-3 ${mood === undefined ? 'lg:grid-cols-5' : 'lg:grid-cols-6'} gap-2 sm:gap-3`}>
+/** `mood` null means it failed to load. */
+const StatTiles: React.FC<{ report: CalendarReport; mood: MoodSummary | null; current: boolean }> = ({ report, mood, current }) => (
+  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
     <StatTile
       icon={<CircleCheck className={iconClass} />}
       title="Completed"
@@ -258,21 +258,20 @@ interface ReportBodyProps {
   period: ReportPeriod;
   report: CalendarReport;
   activity: CalendarActivity;
-  /** Null when "Show mood in reports" is off. */
-  mood: ReportMood | null;
+  mood: ReportMood;
   onSelectPeriod: (period: ReportPeriod) => void;
 }
 
 const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, onSelectPeriod }) => {
   const days = elapsedDays(period);
-  const checkins = mood?.checkins;
+  const checkins = mood.checkins;
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
   const periodMood = checkins ? summarizeMood(byDay, period.start, period.end) : null;
   const scope = moodSummaryScope(period);
   const hasMood = !!checkins && days > 0 && hasMoodCheckins(period, scope, byDay, checkins);
   const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
-  if (isEmpty(report) && !hasMood && !mood?.error) {
+  if (isEmpty(report) && !hasMood && !mood.error) {
     return (
       <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
         <CalendarRange className="w-8 h-8 text-text-muted" aria-hidden="true" />
@@ -288,7 +287,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
 
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
-      <StatTiles report={report} mood={mood ? periodMood : undefined} current={current} />
+      <StatTiles report={report} mood={periodMood} current={current} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <div className="lg:col-span-2">
@@ -313,7 +312,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
         </CardShell>
       </div>
 
-      {mood && (mood.error ? (
+      {mood.error ? (
         <div className="card-glass p-4 flex flex-wrap items-center gap-3" role="alert">
           <p className="text-sm text-text-primary flex-1 min-w-0">{mood.error}</p>
           <button type="button" onClick={mood.retry} className="btn btn-secondary py-1.5 px-3">Try again</button>
@@ -330,15 +329,15 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           replaceDay={mood.replaceDay}
           onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
         />
-      ))}
+      )}
     </div>
   );
 };
 
-const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
+const ReportSkeleton: React.FC = () => (
   <div className="flex flex-col gap-3 sm:gap-4" aria-hidden="true">
-    <div className={`grid grid-cols-2 sm:grid-cols-3 ${tiles === 6 ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-2 sm:gap-3`}>
-      {Array.from({ length: tiles }, (_, i) => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+      {Array.from({ length: 6 }, (_, i) => (
         <div key={i} className="h-24 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--tm-surface-raised)' }} />
       ))}
     </div>
@@ -352,15 +351,13 @@ const ReportSkeleton: React.FC<{ tiles: number }> = ({ tiles }) => (
  * Weekly / monthly / yearly report on the /reports page: tasks completed vs
  * planned, estimated hours, time in notes, habit check-ins and streaks, the
  * busiest days and an activity chart — plus mood from the daily, weekly and
- * monthly check-ins, unless "Show mood in reports" is off.
+ * monthly check-ins.
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
   const { report, activity, loading, error, retry } = useCalendarReport(period);
   const { profile, loaded: profileLoaded } = useAppShell().profileState;
-  // Until the profile loads we don't know whether mood is hidden, so it's fetched meanwhile.
-  const moodHidden = profileLoaded && !profile.moodCheckins.show_in_reports;
-  const mood = useReportMood(period, !moodHidden);
+  const mood = useReportMood(period);
 
   const current = periodContaining(period.kind, new Date());
   const isCurrent = isSamePeriod(period, current);
@@ -434,21 +431,21 @@ const CalendarReportView: React.FC = () => {
       ) : loading || !report || !activity || !profileLoaded || mood.loading ? (
         <>
           <span className="sr-only" role="status">Loading report…</span>
-          <ReportSkeleton tiles={moodHidden ? 5 : 6} />
+          <ReportSkeleton />
         </>
       ) : (
         <ReportBody
           period={period}
           report={report}
           activity={activity}
-          mood={moodHidden ? null : { ...mood, settings: profile.moodCheckins }}
+          mood={{ ...mood, settings: profile.moodCheckins }}
           onSelectPeriod={setPeriod}
         />
       )}
 
       <p className="text-[11px] sm:text-xs text-text-muted">
         Completions count by the day a task was checked off; tasks completed before completion times were recorded aren’t counted. Habit streaks are as of today.
-        {!moodHidden && ' Mood comes from your daily check-ins; days without one are left out of every mood number, never counted as neutral.'}
+        {' '}Mood comes from your daily check-ins; days without one are left out of every mood number, never counted as neutral.
       </p>
     </section>
   );

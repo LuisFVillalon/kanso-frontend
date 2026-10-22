@@ -11,8 +11,6 @@ import {
 type Unit = 'minutes' | 'hours' | 'days';
 const UNIT_MINUTES: Record<Unit, number> = { minutes: 1, hours: 60, days: 1440 };
 
-const CUSTOM_ERROR = 'Pick a whole amount from 1 minute up to 7 days.';
-
 const DEFAULT_OPTION = 'default';
 const CUSTOM_OPTION = 'custom';
 
@@ -30,21 +28,29 @@ interface ReminderLeadPickerProps {
   /** Offers a "Default" choice showing this lead; leave out where there is no default to fall back on. */
   defaultMinutes?: number;
   disabled?: boolean;
+  /** Notes when a lead is short enough to leave only the task's final warning; off where there is none. */
+  finalWarningNote?: boolean;
+  /** One-click leads; the task reminder ones unless given. */
+  presets?: number[];
+  /** The largest lead the API accepts; one week unless given. */
+  maxMinutes?: number;
   /** Labels the select, e.g. the id of a visible <label>. */
   'aria-labelledby'?: string;
 }
 
 /**
- * One-click lead times (15 min to 1 day) plus a custom amount, bounded by
- * the backend's 1 minute to 1 week. An invalid custom amount is never sent
+ * One-click lead times (15 min to 1 day by default) plus a custom amount,
+ * bounded by the backend's 1 minute to `maxMinutes` (1 week by default). An invalid custom amount is never sent
  * up: `onChange` only fires with a lead the API accepts, and the amount
  * input stays invalid so the enclosing form won't submit.
  */
 const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
-  value, onChange, defaultMinutes, disabled, 'aria-labelledby': labelledBy,
+  value, onChange, defaultMinutes, disabled, finalWarningNote = true,
+  presets = REMINDER_PRESETS, maxMinutes = REMINDER_MINUTES_MAX, 'aria-labelledby': labelledBy,
 }) => {
   const allowDefault = defaultMinutes !== undefined;
-  const [custom, setCustom] = useState(() => value !== null && !REMINDER_PRESETS.includes(value));
+  const customError = `Pick a whole amount from 1 minute up to ${formatLeadTime(maxMinutes)}.`;
+  const [custom, setCustom] = useState(() => value !== null && !presets.includes(value));
   const [amount, setAmount] = useState(() => (value !== null ? splitLead(value).amount : ''));
   const [unit, setUnit] = useState<Unit>(() => (value !== null ? splitLead(value).unit : 'hours'));
   const errorId = useId();
@@ -58,11 +64,11 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
 
   const parsedAmount = Number(amount);
   const customMinutes = Number.isInteger(parsedAmount) ? parsedAmount * UNIT_MINUTES[unit] : NaN;
-  const customValid = customMinutes >= 1 && customMinutes <= REMINDER_MINUTES_MAX;
+  const customValid = customMinutes >= 1 && customMinutes <= maxMinutes;
 
   useEffect(() => {
-    amountRef.current?.setCustomValidity(customValid ? '' : CUSTOM_ERROR);
-  }, [customValid, custom, disabled]);
+    amountRef.current?.setCustomValidity(customValid ? '' : customError);
+  }, [customValid, customError, custom, disabled]);
 
   const pickOption = (option: string) => {
     if (option === CUSTOM_OPTION) {
@@ -81,7 +87,7 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
     setUnit(nextUnit);
     const n = Number(nextAmount);
     const minutes = Number.isInteger(n) ? n * UNIT_MINUTES[nextUnit] : NaN;
-    if (minutes >= 1 && minutes <= REMINDER_MINUTES_MAX) onChange(minutes);
+    if (minutes >= 1 && minutes <= maxMinutes) onChange(minutes);
   };
 
   const effective = custom ? (customValid ? customMinutes : null) : (value ?? defaultMinutes ?? null);
@@ -96,7 +102,7 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
         className="input-field disabled:opacity-60"
       >
         {allowDefault && <option value={DEFAULT_OPTION}>Default ({formatLeadTime(defaultMinutes)} before)</option>}
-        {REMINDER_PRESETS.map(m => (
+        {presets.map(m => (
           <option key={m} value={m}>{formatLeadTime(m)} before</option>
         ))}
         <option value={CUSTOM_OPTION}>Custom…</option>
@@ -125,17 +131,17 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
           >
             <option value="minutes">minutes before</option>
             <option value="hours">hours before</option>
-            <option value="days">days before</option>
+            {maxMinutes >= UNIT_MINUTES.days && <option value="days">days before</option>}
           </select>
         </div>
       )}
 
       {custom && !disabled && !customValid && (
         <p id={errorId} className="text-xs" style={{ color: 'var(--tm-danger)' }}>
-          {CUSTOM_ERROR}
+          {customError}
         </p>
       )}
-      {!disabled && effective !== null && effective <= FINAL_WARNING_MINUTES && (
+      {finalWarningNote && !disabled && effective !== null && effective <= FINAL_WARNING_MINUTES && (
         <p className="text-xs text-text-muted">
           Leads of {FINAL_WARNING_MINUTES} minutes or less send just the {FINAL_WARNING_MINUTES}-minute final warning.
         </p>

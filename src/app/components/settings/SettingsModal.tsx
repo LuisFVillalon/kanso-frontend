@@ -340,7 +340,6 @@ export default function SettingsModal({
           <MoodCheckinSettingsSection
             value={draft.moodCheckins}
             onChange={changeMood}
-            shutoffTime={draft.shutoffTime}
             loading={profileLoading}
           />
         );
@@ -351,7 +350,6 @@ export default function SettingsModal({
               onSave={notifications.savePreferences}
               track={on.notifications}
               onUndoableChange={offerUndo}
-              moodRemindersOff={draft.moodCheckins.remind === 'off'}
               moodCheckins={moodCheckins}
             />
           );

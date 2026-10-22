@@ -7,7 +7,7 @@ import { DEFAULT_ACCENT, getStoredThemeColor, setStoredThemeColor, resetThemeCol
 import { DEFAULT_PAGE_STYLE, getStoredPageStyle, setStoredPageStyle, resetPageStyle } from '@/app/lib/pageStyle';
 import { getStoredProfileAvatar, setStoredProfileAvatar } from '@/app/lib/avatar';
 import { DEFAULT_DAY_START, DEFAULT_DAY_END, loadStoredRestDays } from '@/app/lib/restDays';
-import { DEFAULT_MOOD_SETTINGS, type MoodCheckinSettings } from '@/app/types/mood';
+import { DEFAULT_MOOD_SETTINGS, moodSettings, type MoodCheckinSettings } from '@/app/types/mood';
 
 export interface ProfileFields {
   name: string;
@@ -65,7 +65,7 @@ export function useProfile(user: User | null) {
   const [profile, setProfile] = useState<ProfileFields>(readLocalDefaults);
   const [loading, setLoading] = useState(false);
   // Whether the first fetchProfile() has settled (either way), so anything
-  // timed off the profile (the mood nudge) doesn't act on the local defaults.
+  // timed off the profile (the mood check-ins) doesn't act on the local defaults.
   const [loaded, setLoaded] = useState(false);
   // The name every saveProfileField request carries, since the endpoint
   // requires one: the newest name sent so far, so a later save of another
@@ -96,7 +96,7 @@ export function useProfile(user: User | null) {
           dashboardView: p.dashboard_view ?? prev.dashboardView,
           notesViewMode: p.notes_view_mode ?? prev.notesViewMode,
           homePanels: p.home_panels ?? prev.homePanels,
-          moodCheckins: { ...DEFAULT_MOOD_SETTINGS, ...p.mood_checkins },
+          moodCheckins: moodSettings(p.mood_checkins),
         }));
         localStorage.setItem('tm_profile_name', p.name);
         if (p.shutoff_time) localStorage.setItem('tm_call_it_a_day', p.shutoff_time);

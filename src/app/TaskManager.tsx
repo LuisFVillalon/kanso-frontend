@@ -31,10 +31,10 @@ import PanelCarousel, {
 import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
 import WidgetsArea from '@/app/components/layout/WidgetsArea';
 import TaskDebriefPanel from '@/app/components/task/TaskDebriefPanel';
-import MoodNudge from '@/app/components/mood/MoodNudge';
+import PeriodMoodCheckins from '@/app/components/mood/PeriodMoodCheckins';
 import { DayMoodCheckinModal, daySummaryFrom } from '@/app/components/mood/DayMoodCheckin';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
-import { checkinDayAt } from '@/app/utils/moodNudge';
+import { checkinDayAt } from '@/app/utils/moodCheckinDay';
 import PageSpinner from '@/app/components/common/PageSpinner';
 import DoodleCanvas, { DoodleCanvasHandle } from '@/app/components/doodle/DoodleCanvas';
 import DoodleToolbar from '@/app/components/doodle/DoodleToolbar';
@@ -173,7 +173,7 @@ const TaskManager: React.FC = () => {
   const [moodCheckinDate, setMoodCheckinDate] = useState<string | null>(null);
   const closeMoodCheckin = useCallback(() => setMoodCheckinDate(null), []);
   const openMoodCheckin = (date?: string) =>
-    setMoodCheckinDate(date ?? toLocalDateStr(checkinDayAt(new Date(), profile.dayStartTime, profile.shutoffTime, 'shutoff').day));
+    setMoodCheckinDate(date ?? toLocalDateStr(checkinDayAt(new Date(), profile.dayStartTime, profile.shutoffTime)));
 
   const { taskGroups, stats } = useTaskFiltering(tasks, taskView, searchTerm, selectedTags);
 
@@ -386,7 +386,7 @@ const TaskManager: React.FC = () => {
           <div className={doodleMode ? 'animate-fade-out' : 'animate-fade-in'}>
             {showDebriefPanels && (
               <div className={!doodleMode && !focusMode ? 'animate-fade-in' : 'animate-fade-out'}>
-                <MoodNudge profile={profile} profileLoaded={profileLoaded} tasks={tasks} habits={habits} onSaveProfile={saveProfile} />
+                <PeriodMoodCheckins profile={profile} profileLoaded={profileLoaded} tasks={tasks} />
 
                 <TaskDebriefPanel profile={profile} profileLoaded={profileLoaded} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
 
