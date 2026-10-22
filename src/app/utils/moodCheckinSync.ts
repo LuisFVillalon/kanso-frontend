@@ -1,6 +1,6 @@
 /**
  * Keeps the places that show a check-in in step when one of them saves,
- * edits or undoes it: the dashboard nudge, the Daily Brief's mood line, the
+ * edits or undoes it: the dashboard nudge, the Daily Brief's mood chip, the
  * calendar day panel and the form a notification opens. In-memory and
  * per-tab; each place still loads its own rows from the server.
  */

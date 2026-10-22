@@ -41,7 +41,7 @@ function tooltipAnchor(segmentCenterPct: number): string {
 
 interface TaskDebriefPanelProps {
   profile: ProfileFields;
-  /** Whether the profile has loaded, so the mood line never shows off the local defaults. */
+  /** Whether the profile has loaded, so the mood chip never shows off the local defaults. */
   profileLoaded: boolean;
   onSaveProfile: ReturnType<typeof useProfile>['saveProfile'];
   tasks: Task[];
@@ -105,6 +105,12 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completionSyncToken]);
 
+  // A plain link to the mood form, only while the brief is open: the AI
+  // brief itself never reads mood check-ins.
+  const mood = profileLoaded && profile.moodCheckins.daily
+    ? <BriefMoodLine profile={profile} tasks={tasks} habits={habits} />
+    : null;
+
   const toggle = () => {
     const next = !open;
     setCollapsed(!next);
@@ -138,16 +144,6 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
         </div>
       </div>
 
-      {/* A plain link to the mood form: the AI brief itself never reads mood check-ins. */}
-      {profileLoaded && profile.moodCheckins.daily && (
-        <BriefMoodLine
-          profile={profile}
-          tasks={tasks}
-          habits={habits}
-          className={open ? 'mx-4 sm:mx-5 mb-3' : 'mx-4 sm:mx-5 mb-4 sm:mb-5'}
-        />
-      )}
-
       {open && (
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-3">
 
@@ -157,7 +153,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
             </p>
           )}
 
-          {status === 'loading' && (
+          {status === 'loading' && !debrief && (
             <div className="space-y-3">
               <SkeletonBar />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -173,7 +169,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
             <p className="text-sm py-2" style={{ color: 'var(--tm-danger)' }}>{error}</p>
           )}
 
-          {status === 'done' && debrief && (
+          {debrief && (
             <div className="space-y-3">
               <WorkloadCard debrief={debrief} />
 
@@ -203,7 +199,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
                   {debrief.due_today_tasks.map(task => <TaskRow key={task.id} task={task} />)}
                 </SectionCard>
 
-                <FocusNextCard items={debrief.focus_next} />
+                <FocusNextCard items={debrief.focus_next} mood={mood} />
               </div>
 
               <TimeByTagCard tasks={tasks} habits={habits} />
@@ -536,15 +532,18 @@ function WorkloadCard({ debrief }: { debrief: DailyDebriefReport }) {
   );
 }
 
-function FocusNextCard({ items }: { items: FocusNextItem[] }) {
+function FocusNextCard({ items, mood }: { items: FocusNextItem[]; mood?: React.ReactNode }) {
   return (
     <div
       className="rounded-md p-3"
       style={{ backgroundColor: 'var(--tm-surface-raised)', border: '1px solid var(--tm-border)' }}
     >
-      <div className="flex items-center gap-1.5 mb-2" style={{ color: 'var(--tm-accent)' }}>
-        <TrendingUp className="w-4 h-4" />
-        <span className="text-xs font-semibold uppercase tracking-wide">Focus Next</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 mb-2">
+        <div className="flex items-center gap-1.5" style={{ color: 'var(--tm-accent)' }}>
+          <TrendingUp className="w-4 h-4" />
+          <span className="text-xs font-semibold uppercase tracking-wide">Focus Next</span>
+        </div>
+        {mood}
       </div>
       {items.length === 0 ? (
         <p className="text-xs text-text-muted py-1">Nothing urgent — you&apos;re on top of it.</p>
