@@ -150,7 +150,6 @@ const TaskManager: React.FC = () => {
     panelAreaRef,
     handleSplitterMouseDown,
     handleHeightSplitterMouseDown,
-    resetPanelHeight,
   } = useSplitPanel(!isLoading && !tagsLoading && showMainContent);
 
   const openNotifiedTask = (taskId: number) => {
@@ -426,13 +425,7 @@ const TaskManager: React.FC = () => {
                 renderPanel={renderHomePanel}
               />
 
-              <DragHandle
-                onMouseDown={handleHeightSplitterMouseDown}
-                onDoubleClick={resetPanelHeight}
-                orientation="row"
-                alwaysVisible
-                label="Drag to resize the panels, double-click to fit the screen"
-              />
+              <DragHandle onMouseDown={handleHeightSplitterMouseDown} orientation="row" alwaysVisible />
             </div>
           </div>
         )}

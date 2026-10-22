@@ -25,7 +25,7 @@ const boxOf = (el: Element) => {
 };
 
 const Probe: React.FC<{ onHeight: (h: number | null) => void }> = ({ onHeight }) => {
-  const { panelHeightPx, splitContainerRef, panelAreaRef, handleHeightSplitterMouseDown, resetPanelHeight } = useSplitPanel();
+  const { panelHeightPx, splitContainerRef, panelAreaRef, handleHeightSplitterMouseDown } = useSplitPanel();
   onHeight(panelHeightPx);
   const height = panelHeightPx ?? 0;
   return (
@@ -36,7 +36,6 @@ const Probe: React.FC<{ onHeight: (h: number | null) => void }> = ({ onHeight })
       <div
         data-top={150 + height + 22}
         data-bottom={150 + height + 30}
-        onDoubleClick={resetPanelHeight}
         onMouseDown={handleHeightSplitterMouseDown}
         data-testid="handle"
       />
@@ -132,13 +131,31 @@ describe('useSplitPanel height', () => {
     expect(localStorage.getItem(KEY)).toBe('1100');
   });
 
-  it('goes back to filling the screen on a double-click', async () => {
-    localStorage.setItem(KEY, '1200');
+  it('never renders a saved height shorter than the screen', async () => {
+    localStorage.setItem(KEY, '400');
+    await render();
+    expect(panelHeightPx).toBe(708);
+  });
+
+  it('grows a saved height to fill a taller window', async () => {
+    localStorage.setItem(KEY, '750');
+    await render();
+    expect(panelHeightPx).toBe(750);
+    await act(async () => {
+      window.innerHeight = 1000;
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(panelHeightPx).toBe(808);
+  });
+
+  it('stops a drag above the bottom of the screen at the fill height', async () => {
     await render();
     await act(async () => {
-      handle().dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      handle().dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      document.dispatchEvent(new MouseEvent('mousemove', { clientY: 500 }));
+      document.dispatchEvent(new MouseEvent('mouseup'));
     });
     expect(panelHeightPx).toBe(708);
-    expect(localStorage.getItem(KEY)).toBeNull();
+    expect(localStorage.getItem(KEY)).toBe('708');
   });
 });

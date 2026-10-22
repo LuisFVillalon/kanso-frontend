@@ -27,10 +27,9 @@ const readSavedHeight = (key: string): number | null => {
   }
 };
 
-const writeSavedHeight = (key: string, height: number | null) => {
+const writeSavedHeight = (key: string, height: number) => {
   try {
-    if (height === null) window.localStorage.removeItem(key);
-    else window.localStorage.setItem(key, JSON.stringify(Math.round(height)));
+    window.localStorage.setItem(key, JSON.stringify(Math.round(height)));
   } catch {
     // e.g. private browsing storage quota — the height just won't be remembered
   }
@@ -49,12 +48,11 @@ const bodyOffset = (split: HTMLElement): number => {
 
 /**
  * The home page's panel split: the Tasks/Notes width share, and the panels'
- * height. Until the user drags the bottom handle the panels reach the bottom
- * of the screen: from where they sit, or once scrolled to when the brief and
- * widgets above push them too far down (recomputed as the window or the
- * content above them changes);
- * a dragged height is remembered on this device per account, and a
- * double-click on the handle goes back to filling the screen.
+ * height. The panels always reach at least the bottom of the screen: from
+ * where they sit, or once scrolled to when the brief and widgets above push
+ * them too far down (recomputed as the window or the content above them
+ * changes). Dragging the bottom handle can only make them longer, and a
+ * dragged height is remembered on this device per account.
  *
  * `enabled` is whether the split is on screen, so it can be measured.
  */
@@ -68,6 +66,7 @@ export const useSplitPanel = (enabled = true) => {
   // Wraps the panels' tabs, the split and the height handle.
   const panelAreaRef = useRef<HTMLDivElement>(null);
   const draggedHeight = useRef<number | null>(null);
+  const fillHeight = useRef<number | null>(null);
 
   // Restored before the first paint, so the panels don't jump. (Read in an
   // effect, not during render: the server has no localStorage.)
@@ -98,7 +97,8 @@ export const useSplitPanel = (enabled = true) => {
       const after = document.documentElement.scrollHeight - (areaRect.bottom + window.scrollY);
       const scrolledTo = window.innerHeight - TOP_GAP_PX - above - below - Math.max(BOTTOM_GAP_PX, after);
       const fill = Math.round(fromHere >= MIN_FIT_HEIGHT ? fromHere : scrolledTo);
-      setFillHeightPx(Math.max(MIN_PANEL_HEIGHT, fill));
+      fillHeight.current = Math.max(MIN_PANEL_HEIGHT, fill);
+      setFillHeightPx(fillHeight.current);
     };
     measure();
     window.addEventListener('resize', measure);
@@ -130,7 +130,7 @@ export const useSplitPanel = (enabled = true) => {
 
   const onHeightResize = useCallback((px: number) => {
     const split = splitContainerRef.current;
-    const height = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, px - (split ? bodyOffset(split) : 0)));
+    const height = Math.min(MAX_PANEL_HEIGHT, Math.max(fillHeight.current ?? MIN_PANEL_HEIGHT, px - (split ? bodyOffset(split) : 0)));
     draggedHeight.current = height;
     setSavedHeightPx(height);
   }, []);
@@ -144,18 +144,12 @@ export const useSplitPanel = (enabled = true) => {
     { anchor: 'top', onResize: onHeightResize, onResizingChange: onHeightResizingChange },
   );
 
-  const resetPanelHeight = useCallback(() => {
-    setSavedHeightPx(null);
-    writeSavedHeight(storageKey, null);
-  }, [storageKey]);
-
   return {
     tasksWidthPct,
-    panelHeightPx: savedHeightPx ?? fillHeightPx,
+    panelHeightPx: savedHeightPx === null ? fillHeightPx : Math.max(savedHeightPx, fillHeightPx ?? 0),
     splitContainerRef,
     panelAreaRef,
     handleSplitterMouseDown,
     handleHeightSplitterMouseDown,
-    resetPanelHeight,
   };
 };
