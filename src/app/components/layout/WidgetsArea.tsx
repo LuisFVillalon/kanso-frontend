@@ -6,7 +6,6 @@ import { useAuth } from '@/app/context/AuthContext';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/components/common/SegmentedTabs';
 import WeekView from '@/app/components/calendar/WeekView';
-import { WEEK_GRID_HEIGHT } from '@/app/components/calendar/WeekGrid';
 
 export type WidgetsView = 'widgets' | 'week';
 export const isWidgetsView = (c: unknown): c is WidgetsView => c === 'widgets' || c === 'week';
@@ -41,18 +40,15 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
         />
       </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>
-        {/* Both views share one grid cell, so the area is as tall as the taller of the widgets
-            and the week calendar's natural height, and switching doesn't shift the page. */}
-        <div
-          className="grid grid-cols-1 min-h-[calc(var(--week-grid-h)+7rem)] sm:min-h-[calc(var(--week-grid-h)+4.5rem)]"
-          style={{ '--week-grid-h': WEEK_GRID_HEIGHT } as React.CSSProperties}
-        >
+        {/* Both views stay mounted in one grid cell, the hidden one invisible, so the area is
+            as tall as the taller of the two and switching doesn't shift the page. */}
+        <div className="grid grid-cols-1">
           <div className={`[grid-area:1/1] ${view === 'week' ? 'invisible' : ''}`} inert={view === 'week'} aria-hidden={view === 'week' || undefined}>
             {widgets}
           </div>
-          {view === 'week' && (
-            <div className="[grid-area:1/1] mb-4 sm:mb-6"><WeekView /></div>
-          )}
+          <div className={`[grid-area:1/1] mb-4 sm:mb-6 ${view === 'widgets' ? 'invisible' : ''}`} inert={view === 'widgets'} aria-hidden={view === 'widgets' || undefined}>
+            <WeekView />
+          </div>
         </div>
       </div>
     </section>

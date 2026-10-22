@@ -27,9 +27,6 @@ const KIND_STYLE: Record<TimedEvent['kind'] | 'habit', { bg: string; edge: strin
   habit: { bg: 'var(--tm-warning-subtle)', edge: 'var(--tm-warning)' },
 };
 
-/** The grid's own height; it scrolls the hours inside. */
-export const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
-
 export const WEEK_LEGEND = [
   { label: 'Planned task', ...KIND_STYLE.task },
   { label: 'Completed', ...KIND_STYLE.completed },
@@ -140,7 +137,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
     <div
       ref={scrollRef}
       className="relative overflow-auto scrollbar-custom rounded-xl border border-border"
-      style={{ backgroundColor: 'var(--tm-surface)', height: WEEK_GRID_HEIGHT }}
+      style={{ backgroundColor: 'var(--tm-surface)', height: 'min(72vh, 760px)', minHeight: 420 }}
     >
       <div className="min-w-[42rem]">
         {/* Day headers + all-day row, pinned to the top while the hours scroll. */}
