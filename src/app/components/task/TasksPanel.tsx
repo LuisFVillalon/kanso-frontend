@@ -98,7 +98,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
       }
       setBanner(id, null);
       if (parent) {
-        const finishesLast = !group.task.completed && parent.linkedDone + 1 === parent.linkedTotal;
+        const finishesLast = !group.task.completed && parent.openInTree === 1;
         setBanner(parent.task.id, finishesLast && !parent.task.completed ? 'alldone' : null);
       }
     }
@@ -123,9 +123,9 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   // A banner shows only while its question still applies (a failed toggle
   // rolls the list back, which quietly drops it). A linked-task question
   // comes before Canvas's. Nested tasks get theirs under their own row.
-  const bannerFor = ({ task, linkedDone, linkedTotal, openInTree }: TaskGroup) => {
+  const bannerFor = ({ task, linkedTotal, openInTree }: TaskGroup) => {
     const kind = banners[task.id];
-    const applies = !task.completed && linkedTotal > 0 && (kind === 'open' ? openInTree > 0 : linkedDone === linkedTotal);
+    const applies = !task.completed && linkedTotal > 0 && (kind === 'open' ? openInTree > 0 : openInTree === 0);
     if (!kind || !applies) {
       if (!canvasSubmitted?.shows(task)) return null;
       return (

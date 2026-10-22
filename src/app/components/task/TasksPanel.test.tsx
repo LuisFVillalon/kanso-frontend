@@ -195,6 +195,17 @@ describe('TasksPanel with linked tasks nested deeper', () => {
     expect(handlers.onToggleComplete).toHaveBeenLastCalledWith(3);
   });
 
+  it('does not suggest completing the card while a task deeper under it is still open', () => {
+    // Mock interview was completed on its own, leaving Practice questions open under it.
+    const completedOpen = { ...open, completed: true };
+    const cover = task(7, 'Cover letter', { parent_task_id: 1, position: 2 });
+    render([parent, done, completedOpen, practice, room, cover]);
+    click('Mark complete: Cover letter');
+    expect(handlers.onToggleComplete).toHaveBeenCalledWith(7);
+    render([parent, done, completedOpen, practice, room, { ...cover, completed: true }]);
+    expect(container.textContent).not.toContain('All linked tasks are done');
+  });
+
   it('opens the parent from a nested row’s trail', () => {
     const onEditTask = vi.fn();
     const tasks = [parent, done, open, practice, room];
