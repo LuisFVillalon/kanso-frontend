@@ -1,7 +1,9 @@
 'use client';
 
 /**
- * Settings → Notifications → Mood check-ins: which check-ins are on. Purely
+ * Settings → Notifications → Mood check-ins: whether the weekly and monthly
+ * check-ins are on (the daily one follows the Mood check-in reminder switch,
+ * hooks/useDailyMood.ts). Purely
  * controlled: SettingsModal saves each change at once (as the profile's
  * `mood_checkins`).
  */
