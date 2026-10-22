@@ -1,5 +1,5 @@
 /**
- * Period math and aggregation behind the calendar page's weekly / monthly /
+ * Period math and aggregation behind the /reports page's weekly / monthly /
  * yearly report. Everything works on the browser's local calendar: periods
  * are local days, and UTC completion/session timestamps from
  * GET /get-calendar-activity are placed on the local day they fall in.
