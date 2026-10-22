@@ -35,6 +35,7 @@ vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
 
 import CanvasPanel from './CanvasPanel';
 import { canvasReadFailure } from '@/app/hooks/useCanvas';
+import { canvasCourseLabel } from '@/app/utils/canvasTasks';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-10-21T19:00:00Z');
@@ -115,6 +116,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  localStorage.clear();
   vi.clearAllMocks();
   vi.useRealTimers();
 });
@@ -336,6 +338,24 @@ describe('CanvasPanel', () => {
       expect(note).toContain('need an access token, if your school allows one');
       await click(button('Canvas settings'));
       expect(onOpenSettings).toHaveBeenCalled();
+    });
+
+    it("names feed courses a token never named, keeping the token's course codes", async () => {
+      await render();
+      expect(canvasCourseLabel('https://sdsu.instructure.com/courses/460/assignments/1')).toBe('Operating Systems');
+      act(() => root.unmount());
+
+      api.fetchCanvasConnection.mockResolvedValue(connected());
+      root = createRoot(container);
+      await render();
+      expect(canvasCourseLabel('https://sdsu.instructure.com/courses/460/assignments/1')).toBe('CS 460');
+      act(() => root.unmount());
+
+      api.fetchCanvasConnection.mockResolvedValue(feedConnection());
+      api.fetchCanvasOverview.mockResolvedValue(feedOverview());
+      root = createRoot(container);
+      await render();
+      expect(canvasCourseLabel('https://sdsu.instructure.com/courses/460/assignments/1')).toBe('CS 460');
     });
 
     it('shows no tabs while the connection is still loading', async () => {

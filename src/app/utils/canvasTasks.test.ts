@@ -152,6 +152,16 @@ describe('canvasCourseLabel', () => {
     expect(canvasCourseLabel(`${HOST}/courses/1002/assignments/1`)).toBe('Linear Algebra');
   });
 
+  it('with onlyNew, adds unnamed courses without renaming remembered ones', () => {
+    rememberCanvasCourseLabels([{ id: 1001, name: 'CS 460: Algorithms', course_code: 'CS 460' }]);
+    rememberCanvasCourseLabels([
+      { id: 1001, name: 'CS 460: Algorithms', course_code: null },
+      { id: 1002, name: 'Linear Algebra', course_code: null },
+    ], { onlyNew: true });
+    expect(canvasCourseLabel(`${HOST}/courses/1001/assignments/1`)).toBe('CS 460');
+    expect(canvasCourseLabel(`${HOST}/courses/1002/assignments/1`)).toBe('Linear Algebra');
+  });
+
   it('is null for an unknown course or a link without one', () => {
     expect(canvasCourseLabel(`${HOST}/courses/5/assignments/1`)).toBeNull();
     expect(canvasCourseLabel(`${HOST}/calendar`)).toBeNull();

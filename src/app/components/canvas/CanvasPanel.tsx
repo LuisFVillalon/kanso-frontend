@@ -135,13 +135,14 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   const tab = tabs.some(t => t.key === selectedTab) ? selectedTab : 'upcoming';
 
   // Task cards added from Canvas name their course from these; the feed has
-  // no course list, only each item's course name.
+  // no course list, only each item's course name, which fills in courses a
+  // token's list never named but doesn't replace their codes.
   useEffect(() => {
     if (courses) {
       rememberCanvasCourseLabels(courses.courses);
     } else if (feed && overview) {
       rememberCanvasCourseLabels([...overview.missing, ...overview.upcoming].flatMap(i =>
-        i.course_id != null && i.course_name ? [{ id: i.course_id, name: i.course_name, course_code: null }] : []));
+        i.course_id != null && i.course_name ? [{ id: i.course_id, name: i.course_name, course_code: null }] : []), { onlyNew: true });
     }
   }, [courses, feed, overview]);
 

@@ -93,10 +93,15 @@ const readLabels = (): Record<string, string> => {
   }
 };
 
-/** Remembers each course's short label (its code, else its name) for canvasCourseLabel. */
-export function rememberCanvasCourseLabels(courses: CanvasCourse[]): void {
+/**
+ * Remembers each course's short label (its code, else its name) for canvasCourseLabel.
+ * With onlyNew, courses that already have a label keep it.
+ */
+export function rememberCanvasCourseLabels(courses: CanvasCourse[], { onlyNew = false } = {}): void {
   const labels = readLabels();
-  for (const course of courses) labels[course.id] = course.course_code ?? course.name;
+  for (const course of courses) {
+    if (!onlyNew || typeof labels[course.id] !== 'string') labels[course.id] = course.course_code ?? course.name;
+  }
   try {
     localStorage.setItem(COURSE_LABELS_KEY, JSON.stringify(labels));
   } catch {
