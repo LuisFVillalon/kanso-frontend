@@ -15,8 +15,6 @@ const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
   mood_missed:    { label: 'Missed mood check-ins', hint: 'When days go by without a mood check-in.' },
 };
 const REMINDER_TYPES = ['task_reminder'];
-/** Types the app no longer offers; an older server may still list them, but they're never saved. */
-const RETIRED_TYPES = ['final_warning'];
 const MOOD_TYPES = ['mood_reminder', 'mood_missed'];
 
 /** The fields of `draft` that differ from `saved`, as a PATCH body. */
@@ -26,7 +24,7 @@ export function preferenceChanges(
 ): NotificationPreferencesUpdate {
   const changes: NotificationPreferencesUpdate = {};
   const types = Object.fromEntries(
-    Object.entries(draft.types).filter(([type, on]) => !RETIRED_TYPES.includes(type) && saved.types[type] !== on),
+    Object.entries(draft.types).filter(([type, on]) => saved.types[type] !== on),
   );
   if (Object.keys(types).length > 0) changes.types = types;
   // Quiet hours are set (or cleared) as a pair.
