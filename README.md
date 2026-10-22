@@ -76,7 +76,7 @@ src/app/
   (app)/                 # Route group sharing the signed-in app shell (navigation rail, global modals)
     layout.tsx           # Wraps every page below in AppShell
     page.tsx             # Spinner while auth loads, then the dashboard (TaskManager)
-    notes/ calendar/ archive/ trash/  # /notes, /calendar, /archive and /trash (Recently deleted) pages
+    notes/ calendar/ reports/ archive/ trash/  # /notes, /calendar, /reports, /archive and /trash (Recently deleted) pages
   TaskManager.tsx        # The dashboard
   login/ signup/ auth/callback/
   error.tsx not-found.tsx opengraph-image.tsx
