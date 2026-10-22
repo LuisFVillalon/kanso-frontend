@@ -139,11 +139,23 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
   });
 
-  it('stays available when the brief fails to load', async () => {
+  it('is not shown when the brief fails to load', async () => {
     api.fetchTaskDebrief.mockRejectedValue(new Error('Brief unavailable'));
     await render();
     expect(text()).toContain('Brief unavailable');
-    expect(button('Log today’s mood')).toBeDefined();
+    expect(button('Log today’s mood')).toBeUndefined();
+  });
+
+  it('keeps an open check-in form while the brief refreshes', async () => {
+    await render();
+    await click(button('Log today’s mood'));
+    await click(button('Good'));
+    api.fetchTaskDebrief.mockReturnValue(new Promise(() => {}));
+    await render({ completionSyncToken: 1 });
+    expect(api.fetchTaskDebrief).toHaveBeenCalledTimes(2);
+    expect(dialogTitle()).toBe('Daily check-in');
+    expect(document.querySelector('[role="radio"][aria-label="Good"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(true);
   });
 
   it('is hidden while daily check-ins are off, and until the profile loads', async () => {

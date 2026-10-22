@@ -153,7 +153,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
             </p>
           )}
 
-          {status === 'loading' && (
+          {status === 'loading' && !debrief && (
             <div className="space-y-3">
               <SkeletonBar />
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -166,13 +166,10 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
           )}
 
           {status === 'error' && (
-            <div className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <p className="text-sm" style={{ color: 'var(--tm-danger)' }}>{error}</p>
-              {mood}
-            </div>
+            <p className="text-sm py-2" style={{ color: 'var(--tm-danger)' }}>{error}</p>
           )}
 
-          {status === 'done' && debrief && (
+          {status !== 'error' && debrief && (
             <div className="space-y-3">
               <WorkloadCard debrief={debrief} />
 
