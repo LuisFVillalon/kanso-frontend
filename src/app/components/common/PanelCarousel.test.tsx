@@ -74,8 +74,10 @@ const render = async (props: HarnessProps = {}) => {
   await act(async () => root.render(<Harness {...props} ref={h => { handle = h; }} />));
 };
 const tabs = () => [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-const tabNamed = (name: string) => tabs().find(t => t.textContent === name)!;
-const selected = () => tabs().filter(t => t.getAttribute('aria-selected') === 'true').map(t => t.textContent);
+const name = (el: HTMLElement) => el.getAttribute('aria-label');
+const tabNamed = (label: string) => tabs().find(t => name(t) === label)!;
+const selected = () => tabs().filter(t => t.getAttribute('aria-selected') === 'true').map(name);
+const arrows = () => [...container.querySelectorAll<HTMLButtonElement>('button:not([role="tab"]):not([data-counter])')];
 const click = async (el: HTMLElement) => { await act(async () => { el.click(); }); };
 const slot = (key: PanelKey) => container.querySelector<HTMLElement>(`[data-panel="${key}"]`);
 const visible = (key: PanelKey) => !!slot(key)?.className.includes('split-slot');
@@ -103,10 +105,12 @@ afterEach(() => {
 });
 
 describe('PanelCarousel', () => {
-  it('labels each tab with the panels it shows and marks the one on screen', async () => {
+  it('names each icon tab after the panels it shows and marks the one on screen', async () => {
     await render();
     expect(container.querySelector('[role="tablist"]')!.getAttribute('aria-label')).toBe('Home panels');
-    expect(tabs().map(t => t.textContent)).toEqual(['Tasks & Notes', 'Notes & Canvas', 'Canvas & Tasks']);
+    expect(tabs().map(name)).toEqual(['Tasks & Notes', 'Notes & Canvas', 'Canvas & Tasks']);
+    expect(tabs().map(t => t.title)).toEqual(['Tasks & Notes', 'Notes & Canvas', 'Canvas & Tasks']);
+    expect(tabs().every(t => t.textContent === '' && t.querySelector('svg'))).toBe(true);
     expect(selected()).toEqual(['Tasks & Notes']);
     expect(split().getAttribute('role')).toBe('tabpanel');
     expect(split().getAttribute('aria-labelledby')).toBe(tabNamed('Tasks & Notes').id);
@@ -121,6 +125,19 @@ describe('PanelCarousel', () => {
     expect(visible('notes')).toBe(false);
     await click(tabNamed('Canvas & Tasks'));
     expect(changes).toEqual(['canvas,tasks']);
+  });
+
+  it('cycles through the choices with the previous and next arrows, wrapping at the ends', async () => {
+    await render();
+    const [prev, next] = arrows();
+    expect(name(prev)).toBe('Previous: Canvas & Tasks');
+    expect(name(next)).toBe('Next: Notes & Canvas');
+    await click(prev);
+    expect(selected()).toEqual(['Canvas & Tasks']);
+    await click(next);
+    await click(next);
+    expect(changes).toEqual(['canvas,tasks', 'tasks,notes', 'notes,canvas']);
+    expect(name(next)).toBe('Next: Canvas & Tasks');
   });
 
   it('moves the selection with the arrow keys, Home and End, focusing the new tab', async () => {
@@ -143,16 +160,19 @@ describe('PanelCarousel', () => {
   it('shows one panel per tab on a phone', async () => {
     media.phone = true;
     await render({ initial: 'notes,canvas' });
-    expect(tabs().map(t => t.textContent)).toEqual(['Tasks', 'Notes', 'Canvas']);
+    expect(tabs().map(name)).toEqual(['Tasks', 'Notes', 'Canvas']);
     expect(selected()).toEqual(['Notes']);
     await click(tabNamed('Tasks'));
     expect(changes).toEqual(['tasks,notes']);
+    await click(arrows()[0]);
+    expect(selected()).toEqual(['Canvas']);
   });
 
   describe('without Canvas connected', () => {
     it('shows Tasks and Notes with no tabs on a wide screen, even when Canvas was saved', async () => {
       await render({ initial: 'canvas,tasks', available: NO_CANVAS });
       expect(container.querySelector('[role="tablist"]')).toBeNull();
+      expect(arrows()).toEqual([]);
       expect(split().getAttribute('role')).toBeNull();
       expect(visible('tasks') && visible('notes')).toBe(true);
       expect(slot('canvas')).toBeNull();
@@ -162,9 +182,12 @@ describe('PanelCarousel', () => {
     it('offers only Tasks and Notes on a phone, falling back to Tasks', async () => {
       media.phone = true;
       await render({ initial: 'canvas,tasks', available: NO_CANVAS });
-      expect(tabs().map(t => t.textContent)).toEqual(['Tasks', 'Notes']);
+      expect(tabs().map(name)).toEqual(['Tasks', 'Notes']);
       expect(selected()).toEqual(['Tasks']);
       expect(slot('canvas')).toBeNull();
+      await click(arrows()[1]);
+      await click(arrows()[1]);
+      expect(selected()).toEqual(['Tasks']);
     });
   });
 
