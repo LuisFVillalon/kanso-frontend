@@ -308,6 +308,20 @@ describe('NotificationPreferencesForm', () => {
       expect(lead().disabled).toBe(true);
     });
 
+    it('greys out Missed mood check-ins while the reminder is off, keeping its saved value', async () => {
+      const onSave = render(moodPrefs());
+      await click(switchFor('Mood check-in reminder'));
+      const missed = switchFor('Missed mood check-ins');
+      expect(missed.disabled).toBe(true);
+      expect(missed.getAttribute('aria-checked')).toBe('true');
+      expect(document.body.textContent).toContain('Follows the Mood check-in reminder');
+      await click(missed);
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(onSave).toHaveBeenCalledWith({ types: { mood_reminder: false } });
+      await click(switchFor('Mood check-in reminder'));
+      expect(switchFor('Missed mood check-ins').disabled).toBe(false);
+    });
+
     it('has no lead choice, and never sends one, when the server has no such preference', async () => {
       const onSave = render(prefs({ types: { ...prefs().types, mood_reminder: true } }));
       expect(document.getElementById('mood-reminder-lead-label')).toBeNull();
