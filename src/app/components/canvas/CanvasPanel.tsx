@@ -348,7 +348,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     );
   }
 
-  const showTabs = tabs.length > 1
+  const showTabs = tabs.length > 1 && (isDemo || !!connection)
     && (status === 'loading' || (status === 'ready' && !!courses && courses.courses.length > 0));
 
   return (

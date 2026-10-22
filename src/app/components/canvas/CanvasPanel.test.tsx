@@ -338,6 +338,14 @@ describe('CanvasPanel', () => {
       expect(onOpenSettings).toHaveBeenCalled();
     });
 
+    it('shows no tabs while the connection is still loading', async () => {
+      api.fetchCanvasConnection.mockReturnValue(new Promise(() => {}));
+      await render();
+      expect(panelStatus()).toBe('loading');
+      expect(container.querySelector('[role="tablist"]')).toBeNull();
+      expect(button('Announcements')).toBeUndefined();
+    });
+
     it('treats a feed Canvas stopped serving as Reconnect, without reading Canvas', async () => {
       api.fetchCanvasConnection.mockResolvedValue(feedConnection({ status: 'invalid', last_error_at: inDays(-3) }));
       await render();
@@ -371,6 +379,14 @@ describe('CanvasPanel', () => {
     expect(button('Courses')).toBeTruthy();
     expect(button('Announcements')).toBeTruthy();
     expect(container.querySelector('[data-testid="canvas-feed-note"]')).toBeNull();
+  });
+
+  it('shows the tabs for a token while its data loads', async () => {
+    api.fetchCanvasOverview.mockReturnValue(new Promise(() => {}));
+    await render();
+    expect(panelStatus()).toBe('loading');
+    expect(button('Courses')).toBeTruthy();
+    expect(button('Announcements')).toBeTruthy();
   });
 
   describe('demo sandbox', () => {

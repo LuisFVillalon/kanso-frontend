@@ -156,6 +156,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
   // Announcements load the first time their tab opens, then with every reload.
   useEffect(() => {
     if (!wantAnnouncements || status !== 'ready' || announcements || announcementsError) return;
+    if (!isDemo && !(connection && canvasCan(connection, 'announcements'))) return;
     let cancelled = false;
     fetchCanvasAnnouncements().then(
       result => { if (!cancelled) setAnnouncements(result); },
@@ -167,7 +168,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
       },
     );
     return () => { cancelled = true; };
-  }, [wantAnnouncements, status, announcements, announcementsError, fail]);
+  }, [wantAnnouncements, status, announcements, announcementsError, isDemo, connection, fail]);
 
   const loadAnnouncements = useCallback(() => {
     wantAnnouncementsRef.current = true;
