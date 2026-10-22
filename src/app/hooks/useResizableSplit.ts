@@ -27,7 +27,8 @@ export function useResizableSplit(
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault();
-      e.currentTarget.setPointerCapture?.(e.pointerId);
+      const { pointerId } = e;
+      e.currentTarget.setPointerCapture?.(pointerId);
       isDragging.current = true;
       onResizingChange?.(true);
       const isVertical = anchor === 'top' || anchor === 'bottom';
@@ -35,7 +36,7 @@ export function useResizableSplit(
       document.body.style.userSelect = 'none';
 
       const onMove = (ev: PointerEvent) => {
-        if (!isDragging.current || !containerRef.current) return;
+        if (ev.pointerId !== pointerId || !isDragging.current || !containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
         let raw: number;
         switch (anchor) {
@@ -49,7 +50,8 @@ export function useResizableSplit(
         onResize(raw);
       };
 
-      const onUp = () => {
+      const onUp = (ev: PointerEvent) => {
+        if (ev.pointerId !== pointerId) return;
         isDragging.current = false;
         onResizingChange?.(false);
         document.body.style.cursor = '';

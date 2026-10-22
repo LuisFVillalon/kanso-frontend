@@ -161,9 +161,15 @@ describe('WeekView', { timeout: 30_000 }, () => {
     await act(async () => {
       handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 7 }));
       document.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'touch', pointerId: 7, clientY: 1200 }));
-      document.dispatchEvent(new PointerEvent('pointercancel', { pointerType: 'touch', pointerId: 7 }));
+      document.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'touch', pointerId: 8, clientY: 1500 }));
+      document.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'touch', pointerId: 8 }));
     });
     expect(onResize).toHaveBeenLastCalledWith(1104);
+    expect(onResizeEnd).not.toHaveBeenCalled();
+
+    await act(async () => {
+      document.dispatchEvent(new PointerEvent('pointercancel', { pointerType: 'touch', pointerId: 7 }));
+    });
     expect(onResizeEnd).toHaveBeenCalledTimes(1);
     vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
   });
