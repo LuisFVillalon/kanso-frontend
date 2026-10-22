@@ -6,6 +6,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/components/common/SegmentedTabs';
 import WeekView from '@/app/components/calendar/WeekView';
+import { WEEK_GRID_HEIGHT } from '@/app/components/calendar/WeekGrid';
 
 export type WidgetsView = 'widgets' | 'week';
 export const isWidgetsView = (c: unknown): c is WidgetsView => c === 'widgets' || c === 'week';
@@ -40,14 +41,17 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
         />
       </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>
-        {/* The widgets stay in the flow either way, so the area keeps their height and
-            switching doesn't shift the page; the week calendar overlays them and scrolls inside. */}
-        <div className="relative min-h-80">
-          <div className={view === 'week' ? 'invisible' : undefined} inert={view === 'week'} aria-hidden={view === 'week' || undefined}>
+        {/* Both views share one grid cell, so the area is as tall as the taller of the widgets
+            and the week calendar's natural height, and switching doesn't shift the page. */}
+        <div
+          className="grid grid-cols-1 min-h-[calc(var(--week-grid-h)+7rem)] sm:min-h-[calc(var(--week-grid-h)+4.5rem)]"
+          style={{ '--week-grid-h': WEEK_GRID_HEIGHT } as React.CSSProperties}
+        >
+          <div className={`[grid-area:1/1] ${view === 'week' ? 'invisible' : ''}`} inert={view === 'week'} aria-hidden={view === 'week' || undefined}>
             {widgets}
           </div>
           {view === 'week' && (
-            <div className="absolute inset-0 mb-4 sm:mb-6 overflow-y-auto"><WeekView /></div>
+            <div className="[grid-area:1/1] mb-4 sm:mb-6"><WeekView /></div>
           )}
         </div>
       </div>
