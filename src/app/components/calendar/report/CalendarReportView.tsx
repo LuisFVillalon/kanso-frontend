@@ -40,6 +40,7 @@ import {
 import { hasMoodCheckins, indexDayCheckins, moodSummaryScope, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportMoodSection from './ReportMoodSection';
+import ReportTagBreakdown from './ReportTagBreakdown';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
   { kind: 'week', label: 'Week' },
@@ -289,6 +290,8 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     <div className="flex flex-col gap-3 sm:gap-4">
       <StatTiles report={report} mood={periodMood} current={current} />
 
+      <ReportTagBreakdown period={period} activity={activity} />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         <div className="lg:col-span-2">
           <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={period.kind === 'year' ? 'Activity by month' : 'Activity by day'}>
@@ -349,9 +352,9 @@ const ReportSkeleton: React.FC = () => (
 
 /**
  * Weekly / monthly / yearly report on the /reports page: tasks completed vs
- * planned, estimated hours, time in notes, habit check-ins and streaks, the
- * busiest days and an activity chart — plus mood from the daily, weekly and
- * monthly check-ins.
+ * planned, estimated hours, time in notes, habit check-ins and streaks, how
+ * much each tag took, the busiest days and an activity chart — plus mood from
+ * the daily, weekly and monthly check-ins.
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
