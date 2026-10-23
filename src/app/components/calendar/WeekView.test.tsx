@@ -109,6 +109,71 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(grid().classList.contains('min-h-0')).toBe(true);
   });
 
+  it('colors each legend kind with its own week color', async () => {
+    await render();
+    const swatches = [...container.querySelectorAll<HTMLElement>('ul[aria-label="Legend"] li span')];
+    expect(swatches.map(s => s.parentElement!.textContent)).toEqual(['Planned task', 'Completed', 'Note session', 'Habit']);
+    expect(swatches.map(s => s.style.backgroundColor)).toEqual([
+      'var(--tm-week-task)', 'var(--tm-week-completed)', 'var(--tm-week-note)', 'var(--tm-week-habit)',
+    ]);
+  });
+
+  it('has no resize handle unless the parent takes the height', async () => {
+    await render();
+    expect(container.querySelector('.cursor-row-resize')).toBeNull();
+    expect((container.firstElementChild as HTMLElement).style.minHeight).toBe('');
+  });
+
+  it('drags taller from the handle, with the bottom edge at the pointer', async () => {
+    const onResize = vi.fn();
+    const onResizeEnd = vi.fn();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    await render({ heightPx: 900, onResize, onResizeEnd });
+    expect((container.firstElementChild as HTMLElement).style.minHeight).toBe('900px');
+    // The default grid keeps its height and grows into a taller box.
+    expect(container.querySelector('.overflow-auto.rounded-xl')!.classList.contains('grow')).toBe(true);
+
+    await act(async () => {
+      container.querySelector('.cursor-row-resize')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointermove', { clientY: 1100 }));
+    });
+    // 1100 pointer − 100 top + half the handle.
+    expect(onResize).toHaveBeenLastCalledWith(1004);
+    expect(onResizeEnd).not.toHaveBeenCalled();
+
+    await act(async () => {
+      document.dispatchEvent(new PointerEvent('pointermove', { clientY: 9000 }));
+      document.dispatchEvent(new PointerEvent('pointerup'));
+    });
+    expect(onResize).toHaveBeenLastCalledWith(2400);
+    expect(onResizeEnd).toHaveBeenCalledTimes(1);
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
+  });
+
+  it('drags taller with a finger on a touch screen', async () => {
+    const onResize = vi.fn();
+    const onResizeEnd = vi.fn();
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    await render({ heightPx: 900, onResize, onResizeEnd });
+    const handle = container.querySelector<HTMLElement>('.cursor-row-resize')!;
+    expect(handle.classList.contains('touch-none')).toBe(true);
+
+    await act(async () => {
+      handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', pointerId: 7 }));
+      document.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'touch', pointerId: 7, clientY: 1200 }));
+      document.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'touch', pointerId: 8, clientY: 1500 }));
+      document.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'touch', pointerId: 8 }));
+    });
+    expect(onResize).toHaveBeenLastCalledWith(1104);
+    expect(onResizeEnd).not.toHaveBeenCalled();
+
+    await act(async () => {
+      document.dispatchEvent(new PointerEvent('pointercancel', { pointerType: 'touch', pointerId: 7 }));
+    });
+    expect(onResizeEnd).toHaveBeenCalledTimes(1);
+    vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
+  });
+
   it('loads the Monday–Sunday week containing today and plots its activity', async () => {
     mocks.tasks = [task({ id: 3, title: 'Essay', due_date: '2026-10-22', due_time: '14:00', estimated_time: 1 })];
     await render();

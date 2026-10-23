@@ -148,8 +148,8 @@ const TaskManager: React.FC = () => {
     panelHeightPx,
     splitContainerRef,
     panelAreaRef,
-    handleSplitterMouseDown,
-    handleHeightSplitterMouseDown,
+    handleSplitterPointerDown,
+    handleHeightSplitterPointerDown,
   } = useSplitPanel(!isLoading && !tagsLoading && showMainContent);
 
   const openNotifiedTask = (taskId: number) => {
@@ -423,11 +423,11 @@ const TaskManager: React.FC = () => {
                 available={homePanelKeys}
                 leftWidthPct={tasksWidthPct}
                 splitRef={splitContainerRef}
-                onSplitterMouseDown={handleSplitterMouseDown}
+                onSplitterPointerDown={handleSplitterPointerDown}
                 renderPanel={renderHomePanel}
               />
 
-              <DragHandle onMouseDown={handleHeightSplitterMouseDown} orientation="row" alwaysVisible />
+              <DragHandle onPointerDown={handleHeightSplitterPointerDown} orientation="row" alwaysVisible />
             </div>
           </div>
         )}

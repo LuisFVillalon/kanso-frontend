@@ -131,7 +131,7 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
         </div>
       </div>
 
-      {sidebarOpen && <DragHandle onMouseDown={handleLeftDragStart} />}
+      {sidebarOpen && <DragHandle onPointerDown={handleLeftDragStart} />}
 
       {/* Editor panel */}
       <div className={`flex-1 flex-col min-w-0 ${mobileView === 'list' ? 'hidden sm:flex' : 'flex'}`}>

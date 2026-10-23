@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { CalendarRange, ChevronLeft, ChevronRight, GalleryHorizontal, LayoutGrid, Loader2 } from 'lucide-react';
 import { useCalendarViewMode } from '@/app/hooks/useCalendarViewMode';
 import { useDailyMood } from '@/app/hooks/useDailyMood';
+import { useWeekCalendarHeight } from '@/app/hooks/useWeekCalendarHeight';
 import { useYearCalendarData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import PageSpinner from '@/app/components/common/PageSpinner';
@@ -24,6 +25,7 @@ const CalendarView: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [carouselDate, setCarouselDate] = useState<Date | null>(() => new Date());
   const [viewMode, setViewMode] = useCalendarViewMode();
+  const weekHeight = useWeekCalendarHeight();
 
   const todayStr = toLocalDateStr(today);
   const atToday = year === today.getFullYear() && (viewMode !== 'carousel' || carouselMonth === today.getMonth());
@@ -117,7 +119,7 @@ const CalendarView: React.FC = () => {
 
       <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 pb-6 sm:pb-10">
         {viewMode === 'week' ? (
-          <WeekView />
+          <WeekView {...weekHeight} />
         ) : viewMode === 'carousel' ? (
           <div className="flex flex-col lg:flex-row gap-4 items-stretch">
             <div className="lg:flex-1 lg:min-w-0">

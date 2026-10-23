@@ -64,7 +64,7 @@ const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Har
       available={available}
       leftWidthPct={50}
       splitRef={splitRef}
-      onSplitterMouseDown={() => {}}
+      onSplitterPointerDown={() => {}}
       renderPanel={key => <Counter name={key} />}
     />
   );

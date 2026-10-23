@@ -116,7 +116,7 @@ export const useSplitPanel = (enabled = true) => {
     };
   }, [enabled]);
 
-  const handleSplitterMouseDown = useResizableSplit(
+  const handleSplitterPointerDown = useResizableSplit(
     splitContainerRef as React.RefObject<HTMLElement>,
     {
       anchor: 'left',
@@ -139,7 +139,7 @@ export const useSplitPanel = (enabled = true) => {
     writeSavedHeight(storageKey, draggedHeight.current);
     draggedHeight.current = null;
   }, [storageKey]);
-  const handleHeightSplitterMouseDown = useResizableSplit(
+  const handleHeightSplitterPointerDown = useResizableSplit(
     splitContainerRef as React.RefObject<HTMLElement>,
     { anchor: 'top', onResize: onHeightResize, onResizingChange: onHeightResizingChange },
   );
@@ -149,7 +149,7 @@ export const useSplitPanel = (enabled = true) => {
     panelHeightPx: savedHeightPx === null ? fillHeightPx : Math.max(savedHeightPx, fillHeightPx ?? 0),
     splitContainerRef,
     panelAreaRef,
-    handleSplitterMouseDown,
-    handleHeightSplitterMouseDown,
+    handleSplitterPointerDown,
+    handleHeightSplitterPointerDown,
   };
 };

@@ -20,14 +20,17 @@ const GRID_COLUMNS = `${GUTTER_REM}rem repeat(7, minmax(0, 1fr))`;
 
 const minutesToPx = (minutes: number) => (minutes * HOUR_PX) / 60;
 
+/** A kind's block tint: a little of its color over the surface, so tints differ by hue too. */
+const kindStyle = (color: string) => ({ bg: `color-mix(in srgb, ${color} 14%, var(--tm-surface))`, edge: color });
+
 const KIND_STYLE: Record<TimedEvent['kind'] | 'habit', { bg: string; edge: string }> = {
-  task: { bg: 'var(--tm-accent-subtle)', edge: 'var(--tm-accent)' },
-  completed: { bg: 'var(--tm-success-subtle)', edge: 'var(--tm-success)' },
-  note: { bg: 'var(--tm-accent-2-subtle)', edge: 'var(--tm-accent-2)' },
-  habit: { bg: 'var(--tm-warning-subtle)', edge: 'var(--tm-warning)' },
+  task: kindStyle('var(--tm-week-task)'),
+  completed: kindStyle('var(--tm-week-completed)'),
+  note: kindStyle('var(--tm-week-note)'),
+  habit: kindStyle('var(--tm-week-habit)'),
 };
 
-/** The grid's own height; it scrolls the hours inside. */
+/** The grid's own height; it scrolls the hours inside. A taller box (a dragged week view) stretches it. */
 const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
 
 export const WEEK_LEGEND = [
@@ -141,7 +144,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
   return (
     <div
       ref={scrollRef}
-      className={`relative overflow-auto scrollbar-custom rounded-xl border border-border ${fill ? 'flex-1 min-h-0' : ''}`}
+      className={`relative overflow-auto scrollbar-custom rounded-xl border border-border ${fill ? 'flex-1 min-h-0' : 'grow'}`}
       style={{ backgroundColor: 'var(--tm-surface)', height: fill ? undefined : WEEK_GRID_HEIGHT }}
     >
       <div className="min-w-[42rem]">

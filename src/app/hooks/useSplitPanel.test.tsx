@@ -25,7 +25,7 @@ const boxOf = (el: Element) => {
 };
 
 const Probe: React.FC<{ onHeight: (h: number | null) => void }> = ({ onHeight }) => {
-  const { panelHeightPx, splitContainerRef, panelAreaRef, handleHeightSplitterMouseDown } = useSplitPanel();
+  const { panelHeightPx, splitContainerRef, panelAreaRef, handleHeightSplitterPointerDown } = useSplitPanel();
   onHeight(panelHeightPx);
   const height = panelHeightPx ?? 0;
   return (
@@ -36,7 +36,7 @@ const Probe: React.FC<{ onHeight: (h: number | null) => void }> = ({ onHeight })
       <div
         data-top={150 + height + 22}
         data-bottom={150 + height + 30}
-        onMouseDown={handleHeightSplitterMouseDown}
+        onPointerDown={handleHeightSplitterPointerDown}
         data-testid="handle"
       />
     </div>
@@ -123,9 +123,9 @@ describe('useSplitPanel height', () => {
   it('remembers a dragged height, with the list ending at the pointer', async () => {
     await render();
     await act(async () => {
-      handle().dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      document.dispatchEvent(new MouseEvent('mousemove', { clientY: 1250 }));
-      document.dispatchEvent(new MouseEvent('mouseup'));
+      handle().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointermove', { clientY: 1250 }));
+      document.dispatchEvent(new PointerEvent('pointerup'));
     });
     expect(panelHeightPx).toBe(1100);
     expect(localStorage.getItem(KEY)).toBe('1100');
@@ -151,9 +151,9 @@ describe('useSplitPanel height', () => {
   it('stops a drag above the bottom of the screen at the fill height', async () => {
     await render();
     await act(async () => {
-      handle().dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      document.dispatchEvent(new MouseEvent('mousemove', { clientY: 500 }));
-      document.dispatchEvent(new MouseEvent('mouseup'));
+      handle().dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointermove', { clientY: 500 }));
+      document.dispatchEvent(new PointerEvent('pointerup'));
     });
     expect(panelHeightPx).toBe(708);
     expect(localStorage.getItem(KEY)).toBe('708');
