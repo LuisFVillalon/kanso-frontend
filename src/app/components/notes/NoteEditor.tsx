@@ -469,29 +469,15 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       style={{ backgroundColor: 'var(--tm-surface)' }}
     >
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      {focusMode ? (
-        <div className="absolute top-3 right-4 z-10 flex items-center gap-2">
-          <NoteSaveStatus status={saveStatus} savedAt={savedAt} onRetry={saveNoteNow} />
-          <button
-            type="button"
-            onClick={() => setFocusMode(false)}
-            title="Leave focus mode (Esc)"
-            className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-sm font-medium outline-none focus-visible:ring-2 transition-colors text-[var(--tm-text-secondary)] hover:text-[var(--tm-text-primary)] hover:bg-[var(--tm-surface-raised)]"
-            style={{ ...RING_STYLE, border: '1px solid var(--tm-border)' }}
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-            Leave focus
-          </button>
-        </div>
-      ) : (
+      {/* Focus mode keeps the toolbar, trading the panel and sidebar toggles for Leave focus. */}
         <EditorToolbar
           editor={editor}
           sidebarOpen={sidebarOpen}
-          onToggleSidebar={onToggleSidebar}
+          onToggleSidebar={focusMode ? undefined : onToggleSidebar}
           showFormatting={!compact}
           onPickImage={pickImage}
           onEditLink={openLinkEditor}
-          breadcrumb={!compact && (
+          breadcrumb={!compact && !focusMode && (
             <div className="flex items-center gap-1.5 min-w-0 px-1.5 text-sm" style={{ color: 'var(--tm-text-muted)' }}>
               {folder && (
                 <>
@@ -506,7 +492,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         >
           <NoteSaveStatus status={saveStatus} savedAt={savedAt} onRetry={saveNoteNow} />
 
-          {roomy && wordCount > 0 && (
+          {!focusMode && roomy && wordCount > 0 && (
             <button
               type="button"
               data-note-details-trigger
@@ -521,7 +507,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </button>
           )}
 
-          {roomy && (
+          {!focusMode && roomy && (
             <ToolbarButton toggle active={outlineOpen} title="Outline" onClick={toggleOutline}>
               <ListTree className="w-4 h-4" />
             </ToolbarButton>
@@ -530,9 +516,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           {roomy && startFocusMode && (
             <span className="contents" onAnimationEnd={focusKeyPressed ? finishFocusKey : undefined}>
               <ToolbarButton
-                toggle={false}
+                toggle
+                active={focusMode}
                 title="Focus mode (Ctrl+Shift+F)"
-                onClick={pressFocusKey}
+                onClick={focusMode ? () => setFocusMode(false) : pressFocusKey}
                 className={focusKeyPressed ? 'kanso-key-press kanso-key-press-now' : ''}
               >
                 <KansoMark className="w-[18px] h-[18px]" />
@@ -540,7 +527,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </span>
           )}
 
-          {showExtendedActions && (
+          {!focusMode && showExtendedActions && (
             <button
               type="button"
               onClick={handleGetResources}
@@ -561,31 +548,43 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </button>
           )}
 
-          {roomy && showExtendedActions && (
+          {!focusMode && roomy && showExtendedActions && (
             <NoteExportMenu onDownloadPdf={handleDownloadPDF} pdfLoading={pdfLoading} />
           )}
 
-          <div data-note-details-trigger className="contents">
-            <NoteMoreMenu
-              onDownloadPdf={!roomy && showExtendedActions ? handleDownloadPDF : undefined}
-              pdfLoading={pdfLoading}
-              onShowDetails={toggleDetails}
-              outlineOpen={outlineOpen}
-              onToggleOutline={roomy ? undefined : toggleOutline}
-              onFocusMode={roomy ? undefined : startFocusMode}
-            />
-          </div>
+          {focusMode ? (
+            <button
+              type="button"
+              onClick={() => setFocusMode(false)}
+              title="Leave focus mode (Esc)"
+              className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-sm font-medium outline-none focus-visible:ring-2 transition-colors shrink-0 text-[var(--tm-text-secondary)] hover:text-[var(--tm-text-primary)] hover:bg-[var(--tm-surface)]"
+              style={{ ...RING_STYLE, border: '1px solid var(--tm-border)' }}
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+              Leave focus
+            </button>
+          ) : (
+            <div data-note-details-trigger className="contents">
+              <NoteMoreMenu
+                onDownloadPdf={!roomy && showExtendedActions ? handleDownloadPDF : undefined}
+                pdfLoading={pdfLoading}
+                onShowDetails={toggleDetails}
+                outlineOpen={outlineOpen}
+                onToggleOutline={roomy ? undefined : toggleOutline}
+                onFocusMode={roomy ? undefined : startFocusMode}
+              />
+            </div>
+          )}
 
-          {details && <NoteDetails stats={details} onClose={closeDetails} />}
+          {details && !focusMode && <NoteDetails stats={details} onClose={closeDetails} />}
         </EditorToolbar>
-      )}
 
       {/* ── Main content: editor column + side panel ─────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Editor column */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* ── Title ──────────────────────────────────────────────────────── */}
-          <div className={`px-6 sm:px-10 pb-2 ${focusMode ? `pt-14 ${FOCUS_COLUMN}` : 'pt-6'}`}>
+          <div className={`px-6 sm:px-10 pb-2 pt-6 ${focusMode ? FOCUS_COLUMN : ''}`}>
             <input
               type="text"
               value={title}
@@ -664,7 +663,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </div>
           </div>
 
-          {compact && !focusMode && (
+          {compact && (
             <BottomFormattingBar editor={editor} onPickImage={pickImage} onEditLink={openLinkEditor} />
           )}
         </div>
