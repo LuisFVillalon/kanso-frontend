@@ -15,13 +15,17 @@ vi.mock('./DaySummaryPanel', () => ({
   default: ({ date }: { date: Date | null }) => <p data-testid="summary">{date ? date.toDateString() : 'no day'}</p>,
 }));
 vi.mock('./MonthCalendar', () => ({
-  default: ({ year, month, onSelectDay }: { year: number; month: number; onSelectDay: (d: Date) => void }) => (
-    <button type="button" data-testid="month" onClick={() => onSelectDay(new Date(year, month, 1))}>
-      month {year}-{month + 1}
-    </button>
+  default: ({ year, month, onSelectDay, selectedDate, onNavigate }: {
+    year: number; month: number; onSelectDay: (d: Date) => void; selectedDate?: Date | null; onNavigate?: (d: Date) => void;
+  }) => (
+    <div>
+      <button type="button" data-testid="month" data-selected={selectedDate ? selectedDate.toDateString() : ''} onClick={() => onSelectDay(new Date(year, month, 1))}>
+        month {year}-{month + 1}
+      </button>
+      <button type="button" data-testid="navigate" onClick={() => onNavigate?.(new Date(year, month + 1, 2))}>navigate</button>
+    </div>
   ),
 }));
-vi.mock('./DayDetailModal', () => ({ default: () => null }));
 vi.mock('@/app/lib/backend-api', () => ({}));
 
 import CalendarView from './CalendarView';
@@ -41,7 +45,9 @@ const labelled = (label: string) => container.querySelector<HTMLButtonElement>(`
 const todayButton = () => [...container.querySelectorAll('button')].find(b => b.textContent === 'Today');
 const button = (title: string) => container.querySelector<HTMLButtonElement>(`button[title="${title}"]`)!;
 const pressed = () =>
-  [...container.querySelectorAll('button[aria-pressed="true"]')].map(b => b.getAttribute('title'));
+  [...container.querySelectorAll('button[title][aria-pressed="true"]')].map(b => b.getAttribute('title'));
+const summary = () => container.querySelector('[data-testid="summary"]')!.textContent;
+const stripMonth = (name: string) => container.querySelector<HTMLButtonElement>(`button[aria-label^="${name} "]`)!;
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -63,10 +69,14 @@ afterEach(() => {
 });
 
 describe('CalendarView', () => {
-  it('opens on All Months on a first visit', () => {
+  it('opens on Month on a first visit, with today picked', () => {
     render();
-    expect(pressed()).toEqual(['All months view']);
-    expect(container.textContent).toContain('month');
+    expect(pressed()).toEqual(['Month view']);
+    expect(months()).toEqual(['month 2026-10']);
+    expect(summary()).toBe('Wed Oct 21 2026');
+    expect(container.querySelector('[data-testid="month"]')!.getAttribute('data-selected')).toBe('Wed Oct 21 2026');
+    expect(button('Carousel view')).toBeNull();
+    expect(button('All months view')).toBeNull();
   });
 
   it('reopens in the view the user last left it in', () => {
@@ -79,9 +89,9 @@ describe('CalendarView', () => {
     expect(pressed()).toEqual(['Week view']);
     expect(container.textContent).toContain('week view');
 
-    act(() => button('Carousel view').click());
+    act(() => button('Month view').click());
     remount();
-    expect(pressed()).toEqual(['Carousel view']);
+    expect(pressed()).toEqual(['Month view']);
   });
 
   it('remembers the view per account', () => {
@@ -90,18 +100,25 @@ describe('CalendarView', () => {
 
     auth.user = { id: 'user-2' };
     remount();
-    expect(pressed()).toEqual(['All months view']);
+    expect(pressed()).toEqual(['Month view']);
+  });
+
+  it.each(['carousel', 'all'])('opens Month for a device that last used the retired %s view', legacy => {
+    localStorage.setItem(`${CALENDAR_VIEW_KEY_PREFIX}:user-1`, JSON.stringify(legacy));
+    render();
+    expect(pressed()).toEqual(['Month view']);
+    expect(months()).toEqual(['month 2026-10']);
   });
 
   it('ignores a stored view it does not know, and survives unreadable storage', () => {
     localStorage.setItem(`${CALENDAR_VIEW_KEY_PREFIX}:user-1`, '"report"');
     render();
-    expect(pressed()).toEqual(['All months view']);
+    expect(pressed()).toEqual(['Month view']);
 
     const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
     remount();
-    expect(pressed()).toEqual(['All months view']);
+    expect(pressed()).toEqual(['Month view']);
     act(() => button('Week view').click());
     expect(pressed()).toEqual(['Week view']);
     getItem.mockRestore();
@@ -114,41 +131,36 @@ describe('CalendarView', () => {
     expect(container.querySelector('[aria-label="Reports"]')).toBeNull();
   });
 
-  it('pages All Months through past and future years and back to this year', () => {
+  it('pages through past and future years and back to today', () => {
     render();
-    expect(months()).toHaveLength(12);
-    expect(months()[0]).toBe('month 2026-1');
     expect(todayButton()).toBeUndefined();
 
     act(() => labelled('Previous year').click());
     act(() => labelled('Previous year').click());
     expect(container.querySelector('h2')!.textContent).toBe('2024');
-    expect(months()[0]).toBe('month 2024-1');
+    expect(months()).toEqual(['month 2024-10']);
+    expect(stripMonth('January').getAttribute('aria-label')).toMatch(/^January 2024/);
     expect(yearData).toHaveBeenLastCalledWith(2024);
     expect(container.querySelector('[aria-label="Loading 2024 habits"]')).toBeTruthy();
+    expect(summary()).toBe('no day');
 
     act(() => todayButton()!.click());
     act(() => labelled('Next year').click());
-    expect(months()[11]).toBe('month 2027-12');
+    expect(months()).toEqual(['month 2027-10']);
     expect(yearData).toHaveBeenLastCalledWith(2027);
 
     act(() => todayButton()!.click());
-    expect(months()[0]).toBe('month 2026-1');
+    expect(months()).toEqual(['month 2026-10']);
+    expect(summary()).toBe('Wed Oct 21 2026');
     expect(todayButton()).toBeUndefined();
   });
 
-  it('steps the carousel across year boundaries and keeps the year in the header', () => {
+  it('steps months across year boundaries and keeps the year in the header', () => {
     render();
-    act(() => button('Carousel view').click());
-    expect(months()).toEqual(['month 2026-10']);
-    expect(container.querySelector('[data-testid="summary"]')!.textContent).toBe('Wed Oct 21 2026');
-
     for (let i = 0; i < 3; i++) act(() => labelled('Next month').click());
     expect(months()).toEqual(['month 2027-1']);
     expect(container.querySelector('h2')!.textContent).toBe('2027');
     expect(yearData).toHaveBeenLastCalledWith(2027);
-    // Today's summary isn't in 2027's data, so the picked day is cleared.
-    expect(container.querySelector('[data-testid="summary"]')!.textContent).toBe('no day');
 
     act(() => labelled('Previous month').click());
     expect(months()).toEqual(['month 2026-12']);
@@ -157,17 +169,50 @@ describe('CalendarView', () => {
 
     act(() => todayButton()!.click());
     expect(months()).toEqual(['month 2026-10']);
-    expect(container.querySelector('[data-testid="summary"]')!.textContent).toBe('Wed Oct 21 2026');
+    expect(summary()).toBe('Wed Oct 21 2026');
   });
 
-  it('reopens a remembered view on the current year, not a previously browsed one', () => {
+  it('drops the picked day when paging to another month in the same year', () => {
     render();
-    act(() => button('Carousel view').click());
+    act(() => labelled('Next month').click());
+    expect(months()).toEqual(['month 2026-11']);
+    expect(summary()).toBe('no day');
+    expect(todayButton()).toBeDefined();
+
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="month"]')!.click());
+    expect(summary()).toBe('Sun Nov 01 2026');
+  });
+
+  it('focuses a month from the year strip, and picks a day from it', () => {
+    render();
+    expect(stripMonth('October').getAttribute('aria-pressed')).toBe('true');
+
+    act(() => stripMonth('March').click());
+    expect(months()).toEqual(['month 2026-3']);
+    expect(stripMonth('March').getAttribute('aria-pressed')).toBe('true');
+    expect(stripMonth('October').getAttribute('aria-pressed')).toBe('false');
+    expect(summary()).toBe('no day');
+
+    act(() => container.querySelector<HTMLElement>('[data-date="2026-06-15"]')!.click());
+    expect(months()).toEqual(['month 2026-6']);
+    expect(summary()).toBe('Mon Jun 15 2026');
+  });
+
+  it('follows keyboard movement into another month', () => {
+    render();
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="navigate"]')!.click());
+    expect(months()).toEqual(['month 2026-11']);
+    expect(summary()).toBe('Mon Nov 02 2026');
+    expect(stripMonth('November').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('reopens a remembered view on the current month, not a previously browsed one', () => {
+    render();
     act(() => labelled('Previous year').click());
     expect(months()).toEqual(['month 2025-10']);
 
     remount();
-    expect(pressed()).toEqual(['Carousel view']);
+    expect(pressed()).toEqual(['Month view']);
     expect(months()).toEqual(['month 2026-10']);
   });
 });

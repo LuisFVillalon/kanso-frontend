@@ -168,8 +168,8 @@ const ListSection: React.FC<ListSectionProps> = ({ title, isEmpty, emptyText, ch
 );
 
 // Full day-detail body (summary tiles, habit/task/note lists, charts) shared
-// by the DayDetailModal (year-grid click) and DaySummaryPanel (carousel
-// click) so both surfaces stay in sync when this content changes.
+// by the DayDetailModal (dashboard month tile click) and DaySummaryPanel
+// (calendar page) so both surfaces stay in sync when this content changes.
 const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHabits, dayData, variant = 'page' }) => {
   const habitsCompleted = data?.habitsCompleted ?? [];
   const tasksDue = data?.tasksDue ?? [];

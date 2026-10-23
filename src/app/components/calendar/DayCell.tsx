@@ -3,6 +3,7 @@
 import React from 'react';
 import { SquareCheck, FileText } from 'lucide-react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 interface DayCellProps {
   date: Date;
@@ -12,15 +13,19 @@ interface DayCellProps {
   /** Month accent hue — used for the holiday dot. */
   hue: string;
   holidayName?: string;
+  /** The picked day, shown in the day panel beside the grid. Undefined where the grid has no picked day. */
+  isSelected?: boolean;
+  /** Roving tab stop: 0 for the grid's one focusable day, -1 for the rest. */
+  tabIndex?: number;
 }
 
 const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}` : hours.toFixed(1));
 
 // A single day cell in a month grid — day number plus compact indicators for
 // habits completed (colored dots, tag color), tasks due + estimated hours,
-// and notes edited. Deliberately terse (a full year is ~365 of these on
-// screen at once); the click-to-expand DayDetailModal carries the full text.
-const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, holidayName }) => {
+// and notes edited. Deliberately terse; the day panel beside the calendar
+// page's month (or the dashboard tile's DayDetailModal) carries the full text.
+const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, holidayName, isSelected, tabIndex }) => {
   const habitDots = data?.habitsCompleted ?? [];
   const taskCount = data?.tasksDue.length ?? 0;
   const hours = data?.estimatedHours ?? 0;
@@ -34,19 +39,22 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
     <button
       type="button"
       onClick={() => onSelect(date)}
+      data-date={toLocalDateStr(date)}
+      aria-pressed={isSelected}
+      tabIndex={tabIndex}
       title={holidayName ?? date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
       aria-label={`${date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}${holidayName ? ` — ${holidayName}` : ''}${hasContent ? ' — has activity' : ''}`}
       className="relative flex flex-col text-left rounded-md p-1 sm:p-1.5 transition-transform duration-150 ease-in-out hover:z-10 hover:-translate-y-px"
       style={{
         minHeight: 60,
-        backgroundColor: 'var(--tm-surface)',
-        border: '1px solid var(--tm-border-subtle)',
-        boxShadow: isToday ? '0 0 0 1.5px var(--tm-accent)' : 'none',
+        backgroundColor: isSelected ? 'var(--tm-accent-subtle)' : 'var(--tm-surface)',
+        border: `1px solid ${isSelected ? 'var(--tm-accent)' : 'var(--tm-border-subtle)'}`,
+        boxShadow: isToday || isSelected ? '0 0 0 1.5px var(--tm-accent)' : 'none',
       }}
     >
       <span
         className="text-[10px] sm:text-[11px] font-semibold leading-none"
-        style={{ color: isToday ? 'var(--tm-accent)' : 'var(--tm-text-secondary)' }}
+        style={{ color: isToday || isSelected ? 'var(--tm-accent)' : 'var(--tm-text-secondary)' }}
       >
         {date.getDate()}
       </span>

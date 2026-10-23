@@ -1,49 +1,46 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CalendarRange, ChevronLeft, ChevronRight, GalleryHorizontal, LayoutGrid, Loader2 } from 'lucide-react';
+import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useCalendarViewMode } from '@/app/hooks/useCalendarViewMode';
 import { useDailyMood } from '@/app/hooks/useDailyMood';
 import { useWeekCalendarHeight } from '@/app/hooks/useWeekCalendarHeight';
 import { useYearCalendarData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import PageSpinner from '@/app/components/common/PageSpinner';
-import MonthCalendar from './MonthCalendar';
 import MonthCarousel from './MonthCarousel';
 import DaySummaryPanel from './DaySummaryPanel';
-import DayDetailModal from './DayDetailModal';
 import WeekView from './WeekView';
+import YearStrip from './YearStrip';
 
-// All Months and Carousel share the browsed year, so switching between them
-// keeps the user's place. It isn't persisted: the page always reopens on today.
+// The Month view: the year at a glance on top, the focused month below it and
+// the picked day's summary beside it. The browsed year and month aren't
+// persisted: the page always reopens on today.
 const CalendarView: React.FC = () => {
   const today = new Date();
   const [year, setYear] = useState(() => today.getFullYear());
-  const [carouselMonth, setCarouselMonth] = useState(() => today.getMonth());
+  const [month, setMonth] = useState(() => today.getMonth());
   const { dayData, habits, loading, yearLoading } = useYearCalendarData(year);
   const showMood = useDailyMood() === true;
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [carouselDate, setCarouselDate] = useState<Date | null>(() => new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() => new Date());
   const [viewMode, setViewMode] = useCalendarViewMode();
   const weekHeight = useWeekCalendarHeight();
 
   const todayStr = toLocalDateStr(today);
-  const atToday = year === today.getFullYear() && (viewMode !== 'carousel' || carouselMonth === today.getMonth());
+  const atToday = year === today.getFullYear() && month === today.getMonth();
 
-  // dayData only covers the displayed year, so drop a picked carousel day
-  // from another year rather than showing it as empty.
-  const showYear = (nextYear: number) => {
+  // The panel only ever shows a day from the month on screen, so paging away
+  // drops the picked day rather than leaving the panel on another month.
+  const showMonth = (nextYear: number, nextMonth: number) => {
     setYear(nextYear);
-    setCarouselDate(d => (d && d.getFullYear() !== nextYear ? null : d));
+    setMonth(nextMonth);
+    setSelectedDate(d => (d && (d.getFullYear() !== nextYear || d.getMonth() !== nextMonth) ? null : d));
   };
-  const showMonth = (nextYear: number, month: number) => {
-    showYear(nextYear);
-    setCarouselMonth(month);
+  const pickDay = (date: Date) => {
+    showMonth(date.getFullYear(), date.getMonth());
+    setSelectedDate(date);
   };
-  const goToToday = () => {
-    showMonth(today.getFullYear(), today.getMonth());
-    setCarouselDate(today);
-  };
+  const goToToday = () => pickDay(today);
 
   if (loading) return <PageSpinner />;
 
@@ -53,13 +50,13 @@ const CalendarView: React.FC = () => {
         <h1 className="text-2xl sm:text-3xl text-text-primary">Calendar</h1>
         {viewMode !== 'week' && (
           <div className="flex items-center gap-1">
-            <button type="button" onClick={() => showYear(year - 1)} className="btn btn-ghost p-2" aria-label="Previous year" title="Previous year">
+            <button type="button" onClick={() => showMonth(year - 1, month)} className="btn btn-ghost p-2" aria-label="Previous year" title="Previous year">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <h2 className="min-w-[3.5rem] text-center text-base sm:text-lg text-text-primary tabular-nums" aria-live="polite">
               {year}
             </h2>
-            <button type="button" onClick={() => showYear(year + 1)} className="btn btn-ghost p-2" aria-label="Next year" title="Next year">
+            <button type="button" onClick={() => showMonth(year + 1, month)} className="btn btn-ghost p-2" aria-label="Next year" title="Next year">
               <ChevronRight className="w-4 h-4" />
             </button>
             {!atToday && (
@@ -88,31 +85,17 @@ const CalendarView: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('carousel')}
-            aria-pressed={viewMode === 'carousel'}
-            title="Carousel view"
+            onClick={() => setViewMode('month')}
+            aria-pressed={viewMode === 'month'}
+            title="Month view"
             className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-              viewMode === 'carousel'
+              viewMode === 'month'
                 ? 'bg-surface-raised text-text-primary shadow-sm'
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            <GalleryHorizontal className="w-4 h-4" />
-            <span className="hidden sm:inline">Carousel</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('all')}
-            aria-pressed={viewMode === 'all'}
-            title="All months view"
-            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-colors ${
-              viewMode === 'all'
-                ? 'bg-surface-raised text-text-primary shadow-sm'
-                : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            <LayoutGrid className="w-4 h-4" />
-            <span className="hidden sm:inline">All Months</span>
+            <CalendarDays className="w-4 h-4" />
+            <span className="hidden sm:inline">Month</span>
           </button>
         </div>
       </div>
@@ -120,56 +103,44 @@ const CalendarView: React.FC = () => {
       <div className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 pb-6 sm:pb-10">
         {viewMode === 'week' ? (
           <WeekView {...weekHeight} />
-        ) : viewMode === 'carousel' ? (
-          <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-            <div className="lg:flex-1 lg:min-w-0">
-              <MonthCarousel
-                year={year}
-                month={carouselMonth}
-                onChangeMonth={showMonth}
-                dayData={dayData}
-                todayStr={todayStr}
-                onSelectDay={setCarouselDate}
-              />
-            </div>
-            <div className="lg:flex-1 lg:min-w-0">
-              <DaySummaryPanel
-                date={carouselDate}
-                data={carouselDate ? dayData.get(toLocalDateStr(carouselDate)) : undefined}
-                totalHabits={habits.length}
-                allHabits={habits}
-                dayData={dayData}
-                showMood={showMood}
-              />
-            </div>
-          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
-            {Array.from({ length: 12 }, (_, month) => (
-              <MonthCalendar
-                key={month}
-                year={year}
-                month={month}
-                dayData={dayData}
-                todayStr={todayStr}
-                onSelectDay={setSelectedDate}
-              />
-            ))}
-          </div>
+          <>
+            <YearStrip
+              year={year}
+              focusedMonth={month}
+              dayData={dayData}
+              todayStr={todayStr}
+              selectedDate={selectedDate}
+              onFocusMonth={m => showMonth(year, m)}
+              onSelectDay={pickDay}
+            />
+            <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+              <div className="lg:flex-1 lg:min-w-0">
+                <MonthCarousel
+                  year={year}
+                  month={month}
+                  onChangeMonth={showMonth}
+                  dayData={dayData}
+                  todayStr={todayStr}
+                  onSelectDay={pickDay}
+                  selectedDate={selectedDate}
+                  onNavigate={pickDay}
+                />
+              </div>
+              <div className="lg:flex-1 lg:min-w-0">
+                <DaySummaryPanel
+                  date={selectedDate}
+                  data={selectedDate ? dayData.get(toLocalDateStr(selectedDate)) : undefined}
+                  totalHabits={habits.length}
+                  allHabits={habits}
+                  dayData={dayData}
+                  showMood={showMood}
+                />
+              </div>
+            </div>
+          </>
         )}
       </div>
-
-      {selectedDate && (
-        <DayDetailModal
-          date={selectedDate}
-          data={dayData.get(toLocalDateStr(selectedDate))}
-          totalHabits={habits.length}
-          allHabits={habits}
-          dayData={dayData}
-          onClose={() => setSelectedDate(null)}
-          showMood={showMood}
-        />
-      )}
     </div>
   );
 };
