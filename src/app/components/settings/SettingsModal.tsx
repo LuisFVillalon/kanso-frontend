@@ -32,6 +32,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useToast } from '@/app/context/ToastContext';
+import { describeError } from '@/app/lib/backend-api';
 import { applyThemeColor } from '@/app/lib/theme';
 import { applyPageStyle } from '@/app/lib/pageStyle';
 import Modal from '@/app/components/common/Modal';
@@ -49,7 +50,7 @@ import SecurityPage from '@/app/components/settings/pages/SecurityPage';
 import { useFieldAutosave, useSaveTracker, type SaveStatus, type TrackSave } from '@/app/components/settings/autosave';
 import { useOptionalNotifications } from '@/app/context/NotificationsContextValue';
 import type { ProfileFields } from '@/app/hooks/useProfile';
-import type { CalendarSettings } from '@/app/types/calendar';
+import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
 import type { MoodCheckinSettings } from '@/app/types/mood';
 
 interface Props {
@@ -65,6 +66,11 @@ interface Props {
   calendarSettings: CalendarSettings;
   calendarSettingsLoading: boolean;
   onSaveCalendarSettings: (changes: Partial<Omit<CalendarSettings, 'id'>>) => Promise<CalendarSettings>;
+  archivedTerms: ArchivedTerm[];
+  /** Archives the current term. Throws when it couldn't. */
+  onArchiveTerm: () => Promise<unknown>;
+  /** Deletes an archived term for good. Throws when it couldn't. */
+  onDeleteArchivedTerm: (id: number) => Promise<void>;
   /** The page to show when the modal opens, e.g. 'canvas' from the Canvas panel. */
   initialSection?: SettingsSection;
 }
@@ -104,7 +110,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Your days',
     items: [
       { page: 'workday', label: 'Work day and rest', icon: Clock, lede: 'When your day runs and which days are off.' },
-      { page: 'term', label: 'Term Tracker', icon: Hourglass, lede: 'The countdown on your dashboard.' },
+      { page: 'term', label: 'Term Tracker', icon: Hourglass, lede: 'The countdown on your dashboard, and your terms on the calendar.' },
     ],
   },
   {
@@ -163,6 +169,9 @@ export default function SettingsModal({
   calendarSettings,
   calendarSettingsLoading,
   onSaveCalendarSettings,
+  archivedTerms,
+  onArchiveTerm,
+  onDeleteArchivedTerm,
   initialSection,
 }: Props) {
   const { user, isDemo } = useAuth();
@@ -227,6 +236,9 @@ export default function SettingsModal({
     dismissUndo.current = showToast(message, 'info', { label: 'Undo', onClick: undo });
   }, [showToast]);
 
+  // The Term Tracker page's archive confirm; reset on open below.
+  const [termDialogOpen, setTermDialogOpen] = useState(false);
+
   // This component stays mounted while closed (renders null below rather
   // than being conditionally rendered by its parent), so each open starts
   // from the requested page and the committed values.
@@ -238,6 +250,7 @@ export default function SettingsModal({
     setPhoneView(requested ? 'page' : 'menu');
     resetProfileEdits();
     resetTermEdits();
+    setTermDialogOpen(false);
   }, [isOpen, initialSection, resetProfileEdits, resetTermEdits]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -298,6 +311,32 @@ export default function SettingsModal({
     termAutosave.set(on.term, key, value, { debounce: true, skipSave: key !== 'title' && !value });
   };
 
+  const termDraft = termAutosave.value;
+  const archiveCurrentTerm = async () => {
+    // Edits still waiting for their pause save first, so the term archived is the one on screen.
+    const unsaved = (Object.keys(termDraft) as (keyof TermTrackerDraft)[])
+      .filter(key => termDraft[key] !== calendarSettings[key]);
+    resetTermEdits();
+    try {
+      if (unsaved.length > 0) {
+        await onSaveCalendarSettings(Object.fromEntries(unsaved.map(key => [key, termDraft[key]])));
+      }
+      await onArchiveTerm();
+    } catch (err) {
+      showToast(describeError(err, "Couldn't archive the term. Try again."), 'error');
+      throw err;
+    }
+    showToast(`${termDraft.title || 'Term'} archived. It stays on your month calendars.`, 'success');
+  };
+  const deleteArchivedTerm = async (id: number) => {
+    try {
+      await onDeleteArchivedTerm(id);
+    } catch (err) {
+      showToast(describeError(err, "Couldn't delete the archived term. Try again."), 'error');
+      throw err;
+    }
+  };
+
   const pageBody = (() => {
     switch (currentPage) {
       case 'profile':
@@ -334,7 +373,18 @@ export default function SettingsModal({
           />
         );
       case 'term':
-        return <BigPictureSettingsSection value={termAutosave.value} onChange={changeTermField} loading={calendarSettingsLoading} />;
+        return (
+          <BigPictureSettingsSection
+            value={termDraft}
+            onChange={changeTermField}
+            loading={calendarSettingsLoading}
+            canArchive={calendarSettings.id !== 0 && !!termDraft.start_date && !!termDraft.end_date}
+            onArchive={archiveCurrentTerm}
+            archivedTerms={archivedTerms}
+            onDeleteArchived={deleteArchivedTerm}
+            onDialogChange={setTermDialogOpen}
+          />
+        );
       case 'notifications': {
         const moodCheckins = (
           <MoodCheckinSettingsSection
@@ -407,7 +457,7 @@ export default function SettingsModal({
   return (
     <Modal
       onClose={handleClose}
-      closeOnEscape={!signOutOpen && !securityDialogOpen}
+      closeOnEscape={!signOutOpen && !securityDialogOpen && !termDialogOpen}
       panelClassName="modal-panel w-full max-w-4xl h-[min(42rem,calc(100dvh-2rem))] flex overflow-hidden"
     >
       <div role="dialog" aria-modal="true" aria-label="Settings" className="flex flex-1 min-w-0 min-h-0">

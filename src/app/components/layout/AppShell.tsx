@@ -50,7 +50,10 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const profileState = useProfile(user);
   const calendarSettingsState = useCalendarSettings(user);
   const { profile, loading: profileLoading, saveProfileField } = profileState;
-  const { calendarSettings, loading: calendarSettingsLoading, saveCalendarSettings } = calendarSettingsState;
+  const {
+    calendarSettings, loading: calendarSettingsLoading, saveCalendarSettings,
+    archivedTerms, archiveCurrentTerm, removeArchivedTerm,
+  } = calendarSettingsState;
   const [navExpanded, setNavExpanded] = useNavExpanded();
 
   const state = useAppModalState();
@@ -342,6 +345,9 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           calendarSettings={calendarSettings}
           calendarSettingsLoading={calendarSettingsLoading}
           onSaveCalendarSettings={saveCalendarSettings}
+          archivedTerms={archivedTerms}
+          onArchiveTerm={archiveCurrentTerm}
+          onDeleteArchivedTerm={removeArchivedTerm}
         />
       )}
 

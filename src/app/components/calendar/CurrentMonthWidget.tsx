@@ -3,6 +3,9 @@
 import React, { useState } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { useYearCalendarData, type DayData } from '@/app/hooks/useYearCalendarData';
+import { useCalendarTerms } from '@/app/hooks/useCalendarSettings';
+import { termColor, termOnDay } from '@/app/lib/termPeriods';
+import type { TermPeriod } from '@/app/types/calendar';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { monthCells } from '@/app/utils/monthGrid';
 import { CardShell } from '@/app/components/stats/CardShell';
@@ -30,9 +33,10 @@ interface CompactMonthGridProps {
   dayData: Map<string, DayData>;
   todayStr: string;
   onSelectDay: (date: Date) => void;
+  terms: TermPeriod[];
 }
 
-const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, todayStr, onSelectDay }) => (
+const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, todayStr, onSelectDay, terms }) => (
   <div className="grid grid-cols-7 grid-rows-6 gap-[2px] w-full h-full">
     {cells.map((date, i) => {
       if (!date) return <div key={i} />;
@@ -42,12 +46,16 @@ const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, tod
       const hasTasks = !!data && (data.tasksDue.length > 0 || data.tasksCompleted.length > 0);
       const hasHabits = !!data && data.habitsCompleted.length > 0;
       const busy = hasTasks || hasHabits;
+      const term = termOnDay(terms, dateStr);
       return (
         <button
           type="button"
           key={dateStr}
           onClick={() => onSelectDay(date)}
-          className="rounded-[4px] flex flex-col items-center justify-center gap-[2px] min-w-0 min-h-0"
+          data-date={dateStr}
+          title={term?.title}
+          aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}${term ? ` — ${term.title}` : ''}`}
+          className="relative rounded-[4px] flex flex-col items-center justify-center gap-[2px] min-w-0 min-h-0"
           style={{
             border: isToday ? '1px solid var(--tm-accent)' : '1px solid var(--tm-border-subtle)',
             backgroundColor: busy ? 'var(--tm-accent-subtle)' : 'var(--tm-surface)',
@@ -61,6 +69,14 @@ const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, tod
               {hasTasks && <span className="w-[3px] h-[3px] rounded-full" style={{ backgroundColor: 'var(--tm-accent)' }} />}
               {hasHabits && <span className="w-[3px] h-[3px] rounded-full" style={{ backgroundColor: 'var(--tm-success)' }} />}
             </span>
+          )}
+          {term && (
+            <span
+              aria-hidden
+              data-term-band
+              className="absolute left-[2px] right-[2px] bottom-[1px] h-[2px] rounded-full"
+              style={{ backgroundColor: termColor(term), opacity: term.archived ? 0.55 : 0.75 }}
+            />
           )}
         </button>
       );
@@ -79,10 +95,13 @@ interface CurrentMonthWidgetProps {
  * Compact dashboard tile: a dense 6×7 day grid for the current month (task/
  * habit presence as dots, today outlined) — distinct from MonthCalendar's
  * richer per-day cells, which are sized for the full page/overlay, not a
- * 168px-row tile. Clicking a day still opens the same DayDetailModal.
+ * 168px-row tile. Days inside a term (the current Term Tracker or an
+ * archived term) get a thin band along their foot. Clicking a day still
+ * opens the same DayDetailModal.
  */
 const CurrentMonthWidget: React.FC<CurrentMonthWidgetProps> = ({ onExpand, dragHandleProps, showMood = false }) => {
   const { dayData, habits, loading } = useYearCalendarData();
+  const terms = useCalendarTerms();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const now = new Date();
@@ -105,7 +124,7 @@ const CurrentMonthWidget: React.FC<CurrentMonthWidgetProps> = ({ onExpand, dragH
           ))}
         </div>
         <div className="flex-1 min-h-0">
-          <CompactMonthGrid cells={cells} dayData={dayData} todayStr={todayStr} onSelectDay={setSelectedDate} />
+          <CompactMonthGrid cells={cells} dayData={dayData} todayStr={todayStr} onSelectDay={setSelectedDate} terms={terms} />
         </div>
       </div>
 
@@ -135,6 +154,7 @@ interface CurrentMonthOverlayProps {
 /** Full-detail body rendered inside the shared expand overlay. Year/month are controlled by the overlay header's nav buttons in CalendarAndStats. */
 export const CurrentMonthOverlay: React.FC<CurrentMonthOverlayProps> = ({ year, month, showMood = false }) => {
   const { dayData, habits, loading } = useYearCalendarData();
+  const terms = useCalendarTerms();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   const now = new Date();
@@ -163,6 +183,7 @@ export const CurrentMonthOverlay: React.FC<CurrentMonthOverlayProps> = ({ year, 
         dayData={dayData}
         todayStr={todayStr}
         onSelectDay={setSelectedDate}
+        terms={terms}
       />
 
       {selectedDate && (

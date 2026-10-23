@@ -10,7 +10,7 @@
 
 import { Note, NoteSession } from "../types/notes";
 import { LinkedRemoveMode, LinkedTaskRef, Tag, Task } from "../types/task";
-import { CalendarSettings } from "../types/calendar";
+import { ArchivedTerm, CalendarSettings } from "../types/calendar";
 import { CalendarActivity } from "../types/activity";
 import { Habit, HabitHistoryEntry } from "../types/habit";
 import { Profile } from "../types/profile";
@@ -564,6 +564,33 @@ export async function updateCalendarSettings(
     body: JSON.stringify(changes),
   });
   await assertOk(res, "updateCalendarSettings");
+  return res.json();
+}
+
+/** The user's archived terms, earliest first. */
+export async function fetchArchivedTerms(): Promise<ArchivedTerm[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-archived-terms`, { headers });
+  await assertOk(res, "fetchArchivedTerms");
+  return res.json();
+}
+
+/**
+ * Moves the current term into the archived terms. The current term is gone
+ * afterwards (get-calendar-settings answers 404) until the user sets a new one.
+ */
+export async function archiveTerm(): Promise<ArchivedTerm> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/archive-term`, { method: "POST", headers });
+  await assertOk(res, "archiveTerm");
+  return res.json();
+}
+
+/** Deletes an archived term for good. */
+export async function deleteArchivedTerm(id: number): Promise<ArchivedTerm> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/del-archived-term/${id}`, { method: "DELETE", headers });
+  await assertOk(res, "deleteArchivedTerm");
   return res.json();
 }
 

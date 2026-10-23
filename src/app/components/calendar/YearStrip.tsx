@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
+import type { TermPeriod } from '@/app/types/calendar';
+import { termColor, termOnDay, termsInRange } from '@/app/lib/termPeriods';
 import { MONTH_NAMES } from '@/app/lib/monthPersonality';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import { monthCells } from '@/app/utils/monthGrid';
@@ -15,7 +17,11 @@ interface YearStripProps {
   selectedDate: Date | null;
   onFocusMonth: (month: number) => void;
   onSelectDay: (date: Date) => void;
+  /** Term periods to underline across their days (the current term and archived ones). */
+  terms?: TermPeriod[];
 }
+
+const NO_TERMS: TermPeriod[] = [];
 
 // Shade steps for 0 (nothing) to 4 (busiest). A day's activity is its habits
 // completed, tasks due and notes edited, so past and future days both read.
@@ -26,9 +32,10 @@ const activityLevel = (d: DayData | undefined): number => {
   return n === 0 ? 0 : n <= 2 ? 1 : n <= 4 ? 2 : n <= 7 ? 3 : 4;
 };
 
-const Square: React.FC<{ level: number; outline?: string; dateStr?: string }> = ({ level, outline, dateStr }) => (
+const Square: React.FC<{ level: number; outline?: string; dateStr?: string; term?: TermPeriod }> = ({ level, outline, dateStr, term }) => (
   <span
     data-date={dateStr}
+    data-term={term?.title}
     className="relative block aspect-square rounded-[2px] overflow-hidden"
     style={{
       backgroundColor: 'var(--tm-border-subtle)',
@@ -38,24 +45,30 @@ const Square: React.FC<{ level: number; outline?: string; dateStr?: string }> = 
     {level > 0 && (
       <span className="absolute inset-0" style={{ backgroundColor: 'var(--tm-accent)', opacity: LEVEL_OPACITY[level] }} />
     )}
+    {term && (
+      <span aria-hidden className="absolute inset-x-0 bottom-0 h-[2px]" style={{ backgroundColor: termColor(term) }} />
+    )}
   </span>
 );
 
 // The year at a glance above the focused month: twelve mini months shaded by
 // activity. Clicking a month focuses it; clicking one of its days also picks
-// that day. Each month is a single button (its days are pointer targets
+// that day. Days inside a term (current or archived) are underlined in the
+// term's color. Each month is a single button (its days are pointer targets
 // only), so the strip adds 12 tab stops, not 365 — the focused month's grid
 // carries day-by-day keyboard movement.
-const YearStrip: React.FC<YearStripProps> = ({ year, focusedMonth, dayData, todayStr, selectedDate, onFocusMonth, onSelectDay }) => {
+const YearStrip: React.FC<YearStripProps> = ({ year, focusedMonth, dayData, todayStr, selectedDate, onFocusMonth, onSelectDay, terms = NO_TERMS }) => {
   const selectedStr = selectedDate ? toLocalDateStr(selectedDate) : null;
   const months = useMemo(
     () => Array.from({ length: 12 }, (_, month) => {
       const cells = monthCells(year, month);
       const tasks = cells.reduce((sum, d) => sum + (d ? dayData.get(toLocalDateStr(d))?.tasksDue.length ?? 0 : 0), 0);
-      return { month, cells, tasks };
+      const monthTerms = termsInRange(terms, toLocalDateStr(new Date(year, month, 1)), toLocalDateStr(new Date(year, month + 1, 0)));
+      return { month, cells, tasks, monthTerms };
     }),
-    [year, dayData],
+    [year, dayData, terms],
   );
+  const yearTerms = useMemo(() => termsInRange(terms, `${year}-01-01`, `${year}-12-31`), [terms, year]);
 
   // On narrow screens the strip scrolls sideways; keep the focused month in view.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -83,12 +96,22 @@ const YearStrip: React.FC<YearStripProps> = ({ year, focusedMonth, dayData, toda
           ))}
           More
         </span>
+        {yearTerms.length > 0 && (
+          <span className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[10px] text-text-muted">
+            {yearTerms.map(term => (
+              <span key={`${term.title}-${term.start_date}-${term.archived}`} className="flex items-center gap-1">
+                <span aria-hidden className="w-2.5 h-[2px] rounded-full" style={{ backgroundColor: termColor(term) }} />
+                {term.title}{term.archived ? ' (archived)' : ''}
+              </span>
+            ))}
+          </span>
+        )}
       </div>
       <div
         ref={scrollRef}
         className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-custom lg:grid lg:grid-cols-12 lg:overflow-visible lg:pb-0"
       >
-        {months.map(({ month, cells, tasks }) => {
+        {months.map(({ month, cells, tasks, monthTerms }) => {
           const focused = month === focusedMonth;
           const isCurrentMonth = cells.some(d => d && toLocalDateStr(d) === todayStr);
           return (
@@ -97,7 +120,7 @@ const YearStrip: React.FC<YearStripProps> = ({ year, focusedMonth, dayData, toda
               type="button"
               onClick={handleClick(month)}
               aria-pressed={focused}
-              aria-label={`${MONTH_NAMES[month]} ${year}, ${tasks} ${tasks === 1 ? 'task' : 'tasks'} due`}
+              aria-label={`${MONTH_NAMES[month]} ${year}, ${tasks} ${tasks === 1 ? 'task' : 'tasks'} due${monthTerms.map(t => `, ${t.title}`).join('')}`}
               className="flex-[0_0_5.75rem] lg:flex-auto min-w-0 snap-center flex flex-col gap-1.5 rounded-lg p-1.5 text-left transition-colors"
               style={{
                 backgroundColor: focused ? 'var(--tm-surface-raised)' : 'var(--tm-surface)',
@@ -116,7 +139,15 @@ const YearStrip: React.FC<YearStripProps> = ({ year, focusedMonth, dayData, toda
                   if (!date) return <span key={i} />;
                   const dateStr = toLocalDateStr(date);
                   const outline = dateStr === selectedStr ? 'var(--tm-text-primary)' : dateStr === todayStr ? 'var(--tm-accent)' : undefined;
-                  return <Square key={dateStr} dateStr={dateStr} level={activityLevel(dayData.get(dateStr))} outline={outline} />;
+                  return (
+                    <Square
+                      key={dateStr}
+                      dateStr={dateStr}
+                      level={activityLevel(dayData.get(dateStr))}
+                      outline={outline}
+                      term={termOnDay(monthTerms, dateStr)}
+                    />
+                  );
                 })}
               </span>
             </button>

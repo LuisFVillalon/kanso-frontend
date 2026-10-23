@@ -87,4 +87,29 @@ describe('MonthCalendar', () => {
     expect(cell('2026-10-21').hasAttribute('aria-pressed')).toBe(false);
     expect(cell('2026-10-21').hasAttribute('tabindex')).toBe(false);
   });
+
+  it("marks the term's days and names the terms touching the month", () => {
+    act(() => root.render(
+      <MonthCalendar
+        year={2026}
+        month={4}
+        dayData={new Map()}
+        todayStr="2026-10-21"
+        onSelectDay={() => {}}
+        terms={[
+          { title: 'Spring 2026', start_date: '2026-01-20', end_date: '2026-05-15', archived: true },
+          { title: 'Summer session', start_date: '2026-05-26', end_date: '2026-08-07', archived: false },
+          { title: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-18', archived: false },
+        ]}
+      />,
+    ));
+    const band = (date: string) => cell(date).querySelector('[data-term-band]');
+    expect(band('2026-05-15')).not.toBeNull();
+    expect(cell('2026-05-15').getAttribute('aria-label')).toContain('Spring 2026');
+    expect(band('2026-05-16')).toBeNull();
+    expect(band('2026-05-26')).not.toBeNull();
+    const chips = [...container.querySelectorAll('[data-term]')].map(c => c.textContent);
+    expect(chips).toEqual(['Spring 2026· Jan 20 – May 15, 2026 · archived', 'Summer session· May 26 – Aug 7, 2026']);
+  });
 });
+

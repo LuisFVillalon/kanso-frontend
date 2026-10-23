@@ -3,7 +3,7 @@ import React, { act, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProfileFields } from '@/app/hooks/useProfile';
-import type { CalendarSettings } from '@/app/types/calendar';
+import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
 import { DEFAULT_MOOD_SETTINGS } from '@/app/types/mood';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -35,7 +35,12 @@ const api = vi.hoisted(() => {
       super(detail);
     }
   }
-  return { ApiError, updatePassword: vi.fn(), deleteAccount: vi.fn() };
+  return {
+    ApiError,
+    updatePassword: vi.fn(),
+    deleteAccount: vi.fn(),
+    describeError: (_err: unknown, fallback: string) => fallback,
+  };
 });
 vi.mock('@/app/lib/backend-api', () => api);
 
@@ -70,11 +75,15 @@ const onAccountDeleted = vi.fn();
 const onSignOut = vi.fn();
 const onSaveProfileField = vi.fn<(patch: Partial<ProfileFields>) => Promise<void>>();
 const onSaveCalendarSettings = vi.fn(async (changes: Partial<Omit<CalendarSettings, 'id'>>) => ({ ...calendarSettings, ...changes }));
+const springTerm: ArchivedTerm = { id: 7, title: 'Spring 2026', start_date: '2026-01-20', end_date: '2026-05-15', archived_at: '2026-05-20T00:00:00Z' };
+const onArchiveTerm = vi.fn<() => Promise<void>>();
+const onDeleteArchivedTerm = vi.fn<(id: number) => Promise<void>>();
 
 /** Commits each successful save to the props, as TaskManager's hooks do. */
 function Harness({ initialSection }: { initialSection?: SettingsSection }) {
   const [saved, setSaved] = useState(profile);
   const [term, setTerm] = useState(calendarSettings);
+  const [archived, setArchived] = useState([springTerm]);
   return (
     <SettingsModal
       isOpen
@@ -93,6 +102,16 @@ function Harness({ initialSection }: { initialSection?: SettingsSection }) {
         const next = await onSaveCalendarSettings(changes);
         setTerm(next);
         return next;
+      }}
+      archivedTerms={archived}
+      onArchiveTerm={async () => {
+        await onArchiveTerm();
+        setArchived(prev => [...prev, { ...term, archived_at: '2026-12-19T00:00:00Z' }]);
+        setTerm({ id: 0, title: 'Term Tracker', start_date: '2026-10-01', end_date: '2026-12-31' });
+      }}
+      onDeleteArchivedTerm={async id => {
+        await onDeleteArchivedTerm(id);
+        setArchived(prev => prev.filter(t => t.id !== id));
       }}
       initialSection={initialSection}
     />
@@ -272,6 +291,56 @@ describe('SettingsModal autosave', () => {
     act(() => typeInto(field('term-end-date'), ''));
     await pause();
     expect(onSaveCalendarSettings).toHaveBeenCalledOnce();
+  });
+
+  it('archives the term after a confirm that says it stays on the calendars', async () => {
+    render('term');
+    await click(button('Archive term'));
+    const dialog = document.querySelector('[role="alertdialog"]')!;
+    expect(dialog.textContent).toContain('Archive Fall 2026?');
+    expect(dialog.textContent).toContain('Aug 24 – Dec 18, 2026 stays marked on your month calendars');
+    await click(button('Archive'));
+    expect(onArchiveTerm).toHaveBeenCalledOnce();
+    expect(onSaveCalendarSettings).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(field('term-title').value).toBe('Term Tracker');
+    // Nothing saved yet for the next term, so there is nothing to archive.
+    expect(button('Archive term').disabled).toBe(true);
+    const list = document.querySelector('ul[aria-label="Archived terms"]')!;
+    expect(list.textContent).toContain('Spring 2026');
+    expect(list.textContent).toContain('Fall 2026');
+  });
+
+  it('saves an edit still waiting for its pause before archiving, so the term on screen is archived', async () => {
+    render('term');
+    act(() => typeInto(field('term-title'), 'Fall 2026 (CS)'));
+    await click(button('Archive term'));
+    await click(button('Archive'));
+    expect(onSaveCalendarSettings).toHaveBeenCalledWith({ title: 'Fall 2026 (CS)' });
+    expect(onArchiveTerm).toHaveBeenCalledOnce();
+    expect(onSaveCalendarSettings.mock.invocationCallOrder[0]).toBeLessThan(onArchiveTerm.mock.invocationCallOrder[0]);
+    // The debounced save was taken over, not sent again after the archive.
+    await pause();
+    expect(onSaveCalendarSettings).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the archive confirm open and says so when archiving fails', async () => {
+    onArchiveTerm.mockRejectedValueOnce(new Error('offline'));
+    render('term');
+    await click(button('Archive term'));
+    await click(button('Archive'));
+    expect(document.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Couldn't archive the term. Try again.");
+  });
+
+  it('deletes an archived term after a second click', async () => {
+    render('term');
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Delete Spring 2026"]')!);
+    expect(onDeleteArchivedTerm).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Delete for good?');
+    await click(button('Delete'));
+    expect(onDeleteArchivedTerm).toHaveBeenCalledWith(7);
+    expect(document.querySelector('ul[aria-label="Archived terms"]')).toBeNull();
   });
 
   it('offers Undo for a rest day, which saves the days back', async () => {

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { useCalendarTerms } from '@/app/hooks/useCalendarSettings';
 import { useCalendarViewMode } from '@/app/hooks/useCalendarViewMode';
 import { useDailyMood } from '@/app/hooks/useDailyMood';
 import { useWeekCalendarHeight } from '@/app/hooks/useWeekCalendarHeight';
@@ -14,7 +15,8 @@ import WeekView from './WeekView';
 import YearStrip from './YearStrip';
 
 // The Month view: the year at a glance on top, the focused month below it and
-// the picked day's summary beside it. The browsed year and month aren't
+// the picked day's summary beside it. Both mark the term periods (the current
+// Term Tracker and any archived terms). The browsed year and month aren't
 // persisted: the page always reopens on today.
 const CalendarView: React.FC = () => {
   const today = new Date();
@@ -25,6 +27,7 @@ const CalendarView: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(() => new Date());
   const [viewMode, setViewMode] = useCalendarViewMode();
   const weekHeight = useWeekCalendarHeight();
+  const terms = useCalendarTerms();
 
   const todayStr = toLocalDateStr(today);
   const atToday = year === today.getFullYear() && month === today.getMonth();
@@ -113,6 +116,7 @@ const CalendarView: React.FC = () => {
               selectedDate={selectedDate}
               onFocusMonth={m => showMonth(year, m)}
               onSelectDay={pickDay}
+              terms={terms}
             />
             <div className="flex flex-col lg:flex-row gap-4 items-stretch">
               <div className="lg:flex-1 lg:min-w-0">
@@ -125,6 +129,7 @@ const CalendarView: React.FC = () => {
                   onSelectDay={pickDay}
                   selectedDate={selectedDate}
                   onNavigate={pickDay}
+                  terms={terms}
                 />
               </div>
               <div className="lg:flex-1 lg:min-w-0">
