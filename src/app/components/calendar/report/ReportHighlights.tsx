@@ -8,8 +8,8 @@ import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import {
   analyseCorrelation,
-  CORRELATION_LABELS,
   dailyActivity,
+  describeLinkBrief,
   MOOD_METRICS,
   moodActivityPoints,
   type CalendarReport,
@@ -18,7 +18,6 @@ import {
 } from '@/app/utils/calendarReport';
 import { PATTERN_MIN_DAYS, type MoodSummary } from '@/app/utils/moodReport';
 import { buildTagBreakdown, collectTagItems, UNTAGGED_KEY } from '@/app/utils/tagReport';
-import { METRIC_INFO } from './ReportMoodRelationChart';
 import { formatTagHours } from './ReportTagBreakdown';
 import type { ReportView } from './CalendarReportView';
 import type { MoodView } from './ReportMoodSection';
@@ -131,10 +130,10 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
       icon: <ChartScatter className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />,
       title: 'Mood & your activity',
       text: metric
-        ? `${CORRELATION_LABELS[result.level]} with ${METRIC_INFO[metric].label.toLowerCase()} ${scopeLabel}`
+        ? describeLinkBrief(metric, result, scopeLabel)
         : n < PATTERN_MIN_DAYS
-          ? `Shows up after about ${PATTERN_MIN_DAYS} days with a check-in — ${n} so far`
-          : `No clear link with tasks, note time or habits ${scopeLabel}`,
+          ? `Check in on a few more days to see a pattern — ${n} of about ${PATTERN_MIN_DAYS} so far`
+          : `No clear link between your mood and your tasks, note time or habits ${scopeLabel}`,
     });
   }
   if (topTag) {

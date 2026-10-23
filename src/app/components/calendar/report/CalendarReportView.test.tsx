@@ -177,7 +177,7 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Mood & your activity');
     expect(text()).toContain('Not enough data');
     expect(text()).toContain('2 days with a check-in');
-    expect(text()).toContain('Patterns between mood and tasks show up after about 10 days with a check-in — 2 so far this month.');
+    expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
     expect(text()).toContain('Tags & mood');
   });
@@ -196,12 +196,12 @@ describe('CalendarReportView mood', () => {
     await openPatterns();
     expect(text()).toContain('20 days with a check-in');
     // Tasks never varied.
-    expect(text()).toContain('Your number of tasks completed barely changed');
+    expect(text()).toContain('Your number of tasks completed was about the same every day');
 
     // The mood metric switch, not the Habits tab.
     await click([...document.querySelectorAll('[aria-label="Compare mood with"] button')].find(b => b.textContent === 'Habits')!);
-    expect(text()).toContain('This month, your mood tended to be higher on days with more habits checked off.');
-    expect(text()).toContain('Based on 20 days, so treat it as a hint.');
+    expect(text()).toContain('This month, you tended to feel better on days you checked off');
+    expect(text()).toContain('This is based on only 20 days, so take it as a hint.');
     expect(text()).toContain('Moderate link');
     expect(text()).toContain('↑ together');
     expect(text()).toContain('Shows what tends to move together — not what causes what.');
@@ -219,6 +219,10 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
     expect(text()).toContain('Your usual is your typical mood across all 20 check-ins this month.');
     expect(text()).not.toContain('overall');
+
+    // The Overview names the link with its direction.
+    await openTab('Overview');
+    expect(text()).toContain('Moderate link: better mood on days with more habits checked off this month');
   });
 
   it('shows a tag row’s sentence under it on tap, one row at a time', async () => {
