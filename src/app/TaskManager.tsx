@@ -27,7 +27,7 @@ import type { TaskFormData } from '@/app/components/task/TaskFormFields';
 import NotesPanel, { isNoteOrder, type NoteOrder } from '@/app/components/notes/NotesPanel';
 import CanvasPanel from '@/app/components/canvas/CanvasPanel';
 import PanelCarousel, {
-  DEFAULT_HOME_PANELS, isHomePanels, type HomePanels, type PanelCarouselHandle, type PanelKey,
+  DEFAULT_HOME_PANELS, isHomePanels, isPanelKey, type HomePanels, type PanelCarouselHandle, type PanelKey,
 } from '@/app/components/common/PanelCarousel';
 import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
 import WidgetsArea from '@/app/components/layout/WidgetsArea';
@@ -46,7 +46,7 @@ import { useDayComplete } from '@/app/hooks/useDayComplete';
 import { DEFAULT_ACCENT, getStoredThemeColor } from '@/app/lib/theme';
 
 const TaskManager: React.FC = () => {
-  const { isDemo } = useAuth();
+  const { isDemo, dataUserId } = useAuth();
   const showToast = useToast();
   const shell = useAppShell();
   const doodleCanvasRef = useRef<DoodleCanvasHandle>(null);
@@ -62,7 +62,7 @@ const TaskManager: React.FC = () => {
     profile.appMode as AppMode | null,
     next => { saveProfile({ ...profile, appMode: next }); },
   );
-  // The two home-page panels side by side (see PanelCarousel); Tasks + Notes until the user switches.
+  // The home-page panels on a wide screen (see PanelCarousel); Tasks + Notes until the user switches.
   const [homePanels, setHomePanels] = usePersistedPref<HomePanels>(
     'tm-home-panels',
     DEFAULT_HOME_PANELS,
@@ -70,6 +70,8 @@ const TaskManager: React.FC = () => {
     profile.homePanels as HomePanels | null,
     next => { saveProfile({ ...profile, homePanels: next }); },
   );
+  // The one panel a phone shows, remembered on this device so it leaves the wide screen's alone.
+  const [phonePanel, setPhonePanel] = usePersistedPref<PanelKey>(`tm-home-phone-panel:${dataUserId ?? 'guest'}`, 'tasks', isPanelKey);
   const carouselRef = useRef<PanelCarouselHandle>(null);
   const focusMode = mode === 'focus';
   const doodleMode = mode === 'doodle';
@@ -84,7 +86,7 @@ const TaskManager: React.FC = () => {
   // Tasks added from Canvas: synced on load and on a Canvas panel refresh.
   const canvasTaskSync = useCanvasTaskSync({ enabled: !isLoading && !isDemo, tasks, refreshTasks });
   // The Canvas panel is only offered with Canvas connected. Until the first
-  // check answers, a saved pair that includes it keeps it, so it doesn't flicker away.
+  // check answers, saved panels that include it keep it, so it doesn't flicker away.
   const canvasConnected = useCanvasConnected({ isDemo, syncToken: shell.settingsClosedToken });
   const homePanelKeys: PanelKey[] = (canvasConnected ?? homePanels.includes('canvas'))
     ? ['tasks', 'notes', 'canvas']
@@ -156,11 +158,11 @@ const TaskManager: React.FC = () => {
   });
 
   const {
-    tasksWidthPct,
+    panelWidths,
     panelHeightPx,
     splitContainerRef,
     panelAreaRef,
-    handleSplitterPointerDown,
+    handleDividerPointerDown,
     handleHeightSplitterPointerDown,
   } = useSplitPanel(!isLoading && !tagsLoading && showMainContent);
 
@@ -429,16 +431,18 @@ const TaskManager: React.FC = () => {
               </div>
             )}
 
-            {/* Tasks, Notes & Canvas — two at a time in the resizable split */}
+            {/* Tasks, Notes & Canvas — each on or off, side by side in the resizable split */}
             <div ref={panelAreaRef} className="space-y-4">
               <PanelCarousel
                 ref={carouselRef}
                 value={homePanels}
                 onChange={setHomePanels}
+                phoneValue={phonePanel}
+                onPhoneChange={setPhonePanel}
                 available={homePanelKeys}
-                leftWidthPct={tasksWidthPct}
+                panelWidths={panelWidths}
                 splitRef={splitContainerRef}
-                onSplitterPointerDown={handleSplitterPointerDown}
+                onDividerPointerDown={handleDividerPointerDown}
                 renderPanel={renderHomePanel}
               />
 

@@ -12,6 +12,11 @@ const TOP_GAP_PX = 8;
 // screen from where they sit (pushed down by the brief and widgets) instead
 // fill the screen once scrolled to.
 const MIN_FIT_HEIGHT = 360;
+// The narrowest two panels get by dragging the divider, in % of the split.
+const MIN_HALF_PCT = 5;
+// The narrowest a column gets with three panels, so its toolbar and titles
+// still fit, unless the split is too narrow to give each one that much.
+const MIN_COLUMN_PX = 340;
 
 export const PANEL_HEIGHT_KEY_PREFIX = 'tm-home-panel-height';
 
@@ -47,8 +52,9 @@ const bodyOffset = (split: HTMLElement): number => {
 };
 
 /**
- * The home page's panel split: the Tasks/Notes width share, and the panels'
- * height. The panels always reach at least the bottom of the screen: from
+ * The home page's panel split: the panels' width shares (two side by side,
+ * or three in columns, each dragged with the dividers between them), and
+ * their height. The panels always reach at least the bottom of the screen: from
  * where they sit, or once scrolled to when the brief and widgets above push
  * them too far down (recomputed as the window or the content above them
  * changes). Dragging the bottom handle can only make them longer, and a
@@ -59,7 +65,10 @@ const bodyOffset = (split: HTMLElement): number => {
 export const useSplitPanel = (enabled = true) => {
   const { user } = useAuth();
   const storageKey = `${PANEL_HEIGHT_KEY_PREFIX}:${user?.id ?? 'anon'}`;
-  const [tasksWidthPct, setTasksWidthPct] = useState(50);
+  // Where the dividers sit, in % of the split from its left edge, for two and for three panels.
+  const [twoDivider, setTwoDivider] = useState(50);
+  const [threeDividers, setThreeDividers] = useState<[number, number]>([100 / 3, 200 / 3]);
+  const dragging = useRef<{ count: number; index: number } | null>(null);
   const [fillHeightPx, setFillHeightPx] = useState<number | null>(null);
   const [savedHeightPx, setSavedHeightPx] = useState<number | null>(null);
   const splitContainerRef = useRef<HTMLDivElement>(null);
@@ -116,17 +125,35 @@ export const useSplitPanel = (enabled = true) => {
     };
   }, [enabled]);
 
-  const handleSplitterPointerDown = useResizableSplit(
+  const onDividerResize = useCallback((px: number) => {
+    const split = splitContainerRef.current;
+    const divider = dragging.current;
+    if (!split || !divider) return;
+    const { width } = split.getBoundingClientRect();
+    const pct = (px / width) * 100;
+    const min = divider.count === 3 ? Math.min(100 / 3, (MIN_COLUMN_PX / width) * 100) : MIN_HALF_PCT;
+    const clamp = (lo: number, hi: number) => Math.min(hi, Math.max(lo, pct));
+    if (divider.count === 2) setTwoDivider(clamp(min, 100 - min));
+    else if (divider.count === 3) {
+      setThreeDividers(([left, right]) =>
+        divider.index === 0 ? [clamp(min, right - min), right] : [left, clamp(left + min, 100 - min)]);
+    }
+  }, []);
+  const startDividerDrag = useResizableSplit(
     splitContainerRef as React.RefObject<HTMLElement>,
-    {
-      anchor: 'left',
-      onResize: (px) => {
-        if (!splitContainerRef.current) return;
-        const { width } = splitContainerRef.current.getBoundingClientRect();
-        setTasksWidthPct(Math.min(95, Math.max(5, (px / width) * 100)));
-      },
-    },
+    { anchor: 'left', onResize: onDividerResize },
   );
+  const handleDividerPointerDown = useCallback((count: number, index: number, e: React.PointerEvent) => {
+    dragging.current = { count, index };
+    startDividerDrag(e);
+  }, [startDividerDrag]);
+
+  /** Each panel's share of the split, in %, for `count` panels side by side. */
+  const panelWidths = useCallback((count: number): number[] => {
+    if (count === 2) return [twoDivider, 100 - twoDivider];
+    if (count === 3) return [threeDividers[0], threeDividers[1] - threeDividers[0], 100 - threeDividers[1]];
+    return [100];
+  }, [twoDivider, threeDividers]);
 
   const onHeightResize = useCallback((px: number) => {
     const split = splitContainerRef.current;
@@ -145,11 +172,11 @@ export const useSplitPanel = (enabled = true) => {
   );
 
   return {
-    tasksWidthPct,
+    panelWidths,
     panelHeightPx: savedHeightPx === null ? fillHeightPx : Math.max(savedHeightPx, fillHeightPx ?? 0),
     splitContainerRef,
     panelAreaRef,
-    handleSplitterPointerDown,
+    handleDividerPointerDown,
     handleHeightSplitterPointerDown,
   };
 };

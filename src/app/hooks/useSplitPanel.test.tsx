@@ -21,7 +21,8 @@ let panelHeightPx: number | null;
 const boxOf = (el: Element) => {
   const top = Number(el.getAttribute('data-top') ?? 0);
   const bottom = Number(el.getAttribute('data-bottom') ?? 0);
-  return { top, bottom, left: 0, right: 800, width: 800, height: bottom - top, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
+  const width = Number(el.getAttribute('data-width') ?? 800);
+  return { top, bottom, left: 0, right: width, width, height: bottom - top, x: 0, y: top, toJSON: () => ({}) } as DOMRect;
 };
 
 const Probe: React.FC<{ onHeight: (h: number | null) => void }> = ({ onHeight }) => {
@@ -157,5 +158,71 @@ describe('useSplitPanel height', () => {
     });
     expect(panelHeightPx).toBe(708);
     expect(localStorage.getItem(KEY)).toBe('708');
+  });
+});
+
+describe('useSplitPanel widths', () => {
+  let widths: (count: number) => number[];
+
+  // The split is 1700px wide, so 170px is 10% of it and a 340px column 20%.
+  const WidthProbe: React.FC<{ onWidths: (w: (count: number) => number[]) => void; width?: number }> = ({ onWidths, width = 1700 }) => {
+    const { panelWidths, splitContainerRef, handleDividerPointerDown } = useSplitPanel();
+    onWidths(panelWidths);
+    return (
+      <div ref={splitContainerRef} data-width={width}>
+        {[0, 1].map(i => (
+          <div key={i} data-testid={`divider-${i}`} onPointerDown={e => handleDividerPointerDown(3, i, e)} />
+        ))}
+        <div data-testid="divider-two" onPointerDown={e => handleDividerPointerDown(2, 0, e)} />
+      </div>
+    );
+  };
+
+  const drag = async (testId: string, clientX: number) => {
+    await act(async () => {
+      container.querySelector(`[data-testid="${testId}"]`)!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX }));
+      document.dispatchEvent(new PointerEvent('pointerup'));
+    });
+  };
+
+  beforeEach(async () => {
+    await act(async () => root.render(<WidthProbe onWidths={w => { widths = w; }} />));
+  });
+
+  it('splits evenly until a divider is dragged', () => {
+    expect(widths(1)).toEqual([100]);
+    expect(widths(2)).toEqual([50, 50]);
+    expect(widths(3).map(Math.round)).toEqual([33, 33, 33]);
+  });
+
+  it('moves the divider between two panels, keeping each at least 5% wide', async () => {
+    await drag('divider-two', 510);
+    expect(widths(2)).toEqual([30, 70]);
+    await drag('divider-two', 1700);
+    expect(widths(2)).toEqual([95, 5]);
+  });
+
+  it('moves either divider between three columns, keeping each column at least 340px wide', async () => {
+    await drag('divider-0', 170);
+    expect(widths(3).map(Math.round)).toEqual([20, 47, 33]);
+    await drag('divider-1', 850);
+    expect(widths(3)).toEqual([20, 30, 50]);
+    await drag('divider-0', 765);
+    expect(widths(3)).toEqual([30, 20, 50]);
+    await drag('divider-1', 1690);
+    expect(widths(3)).toEqual([30, 50, 20]);
+  });
+
+  it('keeps three columns even on a split too narrow for 340px each', async () => {
+    await act(async () => root.render(<WidthProbe width={600} onWidths={w => { widths = w; }} />));
+    await drag('divider-0', 0);
+    await drag('divider-1', 600);
+    expect(widths(3).map(Math.round)).toEqual([33, 33, 33]);
+  });
+
+  it('keeps the two-panel and three-column widths apart', async () => {
+    await drag('divider-two', 510);
+    expect(widths(3).map(Math.round)).toEqual([33, 33, 33]);
   });
 });
