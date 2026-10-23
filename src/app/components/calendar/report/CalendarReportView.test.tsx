@@ -275,7 +275,9 @@ describe('CalendarReportView mood', () => {
       api.fetchMoodCheckins.mockResolvedValue([full('2026-10-19', 2, 1, 5), full('2026-10-20', 4, null, null), full('2026-10-21', 5, 5, 1)]);
       await render();
       await openTab('Mood');
-      expect(text()).toContain('Each line is one feeling from your daily check-ins; line them up to see how they move together.');
+      expect(text()).toContain('Mood, energy and stress from your daily check-ins, one line each.');
+      expect(text()).toContain('Each line shows how you felt day to day.');
+      expect(text()).toContain('No check-in yet');
       for (const word of ['Rough', 'Okay', 'Great', 'Drained', 'Steady', 'Charged', 'Calm', 'Some', 'Maxed']) expect(text()).toContain(word);
       expect(dots('mood').map(d => d.dataset.day)).toEqual(['2026-10-19', '2026-10-20', '2026-10-21']);
       // A skipped energy or stress is a gap, never a zero.
@@ -355,6 +357,7 @@ describe('CalendarReportView mood', () => {
       await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
       expect(text()).toContain('Fewer than 8 days');
+      expect(text()).toContain('Each dot shows how a month felt overall.');
       const opacity = (series: string, day: string) => dots(series).find(d => d.dataset.day === day)?.style.opacity;
       for (const series of ['mood', 'energy', 'stress']) {
         expect(opacity(series, '2026-09')).toBe('1');
