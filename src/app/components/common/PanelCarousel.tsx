@@ -88,6 +88,8 @@ interface PanelCarouselProps {
   available: readonly PanelKey[];
   /** Each panel's share of the split, in %, for `count` panels side by side. */
   panelWidths: (count: number) => number[];
+  /** Whether the dividers between `count` panels side by side can be dragged; they're hidden when not. */
+  dividersMovable: (count: number) => boolean;
   splitRef: React.RefObject<HTMLDivElement | null>;
   /** Starts dragging divider `index` (0 is the leftmost) between `count` panels. */
   onDividerPointerDown: (count: number, index: number, e: React.PointerEvent) => void;
@@ -145,7 +147,7 @@ function PanelToggles({ available, on, onToggle }: PanelTogglesProps) {
 }
 
 const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(function PanelCarousel(
-  { value, onChange, phoneValue, onPhoneChange, available, panelWidths, splitRef, onDividerPointerDown, renderPanel },
+  { value, onChange, phoneValue, onPhoneChange, available, panelWidths, dividersMovable, splitRef, onDividerPointerDown, renderPanel },
   ref,
 ) {
   const phone = useSyncExternalStore(subscribePhone, isPhoneNow, () => false);
@@ -153,6 +155,7 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
   const phoneShown = phonePanel(phoneValue, available);
   const shown = phone ? [phoneShown] : on;
   const widths = panelWidths(shown.length);
+  const dividerCount = dividersMovable(shown.length) ? shown.length - 1 : 0;
 
   // Panels mount the first time they're shown and then stay mounted.
   const [mounted, setMounted] = useState<PanelKey[]>(() => shown);
@@ -200,7 +203,7 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
           const i = shown.indexOf(key);
           if (i < 0) return <div key={key} data-panel={key} className="hidden">{renderPanel(key, { widthPct: 0 })}</div>;
           // The dividers' width comes out of the panels evenly, so the shares add up to the split.
-          const dividers = DIVIDER_PX * (shown.length - 1);
+          const dividers = DIVIDER_PX * dividerCount;
           return (
             <div
               key={key}
@@ -212,7 +215,7 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
             </div>
           );
         })}
-        {shown.slice(1).map((_, i) => (
+        {shown.slice(1, dividerCount + 1).map((_, i) => (
           <div key={`divider-${i}`} data-divider={i} className="hidden md:flex shrink-0" style={{ order: i * 2 + 1 }}>
             <DragHandle onPointerDown={e => onDividerPointerDown(shown.length, i, e)} />
           </div>

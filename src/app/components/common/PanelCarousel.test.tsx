@@ -61,10 +61,10 @@ const Counter: React.FC<{ name: PanelKey; widthPct: number }> = ({ name, widthPc
   return <button type="button" data-counter={name} data-width={widthPct} onClick={() => setCount(c => c + 1)}>{name}:{count}</button>;
 };
 
-interface HarnessProps { initial?: HomePanels; initialPhone?: PanelKey; available?: PanelKey[] }
+interface HarnessProps { initial?: HomePanels; initialPhone?: PanelKey; available?: PanelKey[]; movable?: boolean }
 
 const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Harness(
-  { initial = 'tasks,notes', initialPhone = 'tasks', available = ALL },
+  { initial = 'tasks,notes', initialPhone = 'tasks', available = ALL, movable = true },
   ref,
 ) {
   const [value, setValue] = useState<HomePanels>(initial);
@@ -81,6 +81,7 @@ const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Har
       onPhoneChange={next => { phoneChanges.push(next); setPhoneValue(next); }}
       available={available}
       panelWidths={count => (count === 3 ? [20, 30, 50] : count === 2 ? [60, 40] : [100])}
+      dividersMovable={() => movable}
       splitRef={splitRef}
       onDividerPointerDown={(count, index) => { drags.push([count, index]); }}
       renderPanel={(key, { widthPct }) => <Counter name={key} widthPct={widthPct} />}
@@ -167,6 +168,12 @@ describe('PanelCarousel', () => {
     expect(slot('notes')!.querySelector('[data-counter]')!.getAttribute('data-width')).toBe('30');
     expect(dividers().map(d => d.style.order)).toEqual(['1', '3']);
     expect([slot('tasks')!.style.order, slot('notes')!.style.order, slot('canvas')!.style.order]).toEqual(['0', '2', '4']);
+  });
+
+  it('leaves out the dividers, and their width, when they can\'t be dragged', async () => {
+    await render({ initial: 'tasks,notes,canvas', movable: false });
+    expect(dividers()).toEqual([]);
+    expect([width('tasks'), width('notes'), width('canvas')]).toEqual(['calc(20% - 0px)', 'calc(30% - 0px)', 'calc(50% - 0px)']);
   });
 
   it('starts dragging the divider that was grabbed', async () => {

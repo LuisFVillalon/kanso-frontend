@@ -164,16 +164,21 @@ describe('useSplitPanel height', () => {
 describe('useSplitPanel widths', () => {
   let widths: (count: number) => number[];
 
-  // The split is 1700px wide, so 170px is 10% of it and a 340px column 20%.
-  const WidthProbe: React.FC<{ onWidths: (w: (count: number) => number[]) => void; width?: number }> = ({ onWidths, width = 1700 }) => {
-    const { panelWidths, splitContainerRef, handleDividerPointerDown } = useSplitPanel();
+  let movable: (count: number) => boolean;
+
+  // The split is 1200px wide, so 120px is 10% of it and a 240px column 20%.
+  const WidthProbe: React.FC<{ onWidths: (w: (count: number) => number[]) => void; width?: number }> = ({ onWidths, width = 1200 }) => {
+    const { panelWidths, dividersMovable, splitContainerRef, panelAreaRef, handleDividerPointerDown } = useSplitPanel();
     onWidths(panelWidths);
+    movable = dividersMovable;
     return (
-      <div ref={splitContainerRef} data-width={width}>
-        {[0, 1].map(i => (
-          <div key={i} data-testid={`divider-${i}`} onPointerDown={e => handleDividerPointerDown(3, i, e)} />
-        ))}
-        <div data-testid="divider-two" onPointerDown={e => handleDividerPointerDown(2, 0, e)} />
+      <div ref={panelAreaRef} data-width={width}>
+        <div ref={splitContainerRef} data-width={width}>
+          {[0, 1].map(i => (
+            <div key={i} data-testid={`divider-${i}`} onPointerDown={e => handleDividerPointerDown(3, i, e)} />
+          ))}
+          <div data-testid="divider-two" onPointerDown={e => handleDividerPointerDown(2, 0, e)} />
+        </div>
       </div>
     );
   };
@@ -197,32 +202,45 @@ describe('useSplitPanel widths', () => {
   });
 
   it('moves the divider between two panels, keeping each at least 5% wide', async () => {
-    await drag('divider-two', 510);
+    await drag('divider-two', 360);
     expect(widths(2)).toEqual([30, 70]);
-    await drag('divider-two', 1700);
+    await drag('divider-two', 1200);
     expect(widths(2)).toEqual([95, 5]);
   });
 
-  it('moves either divider between three columns, keeping each column at least 340px wide', async () => {
-    await drag('divider-0', 170);
+  it('moves either divider between three columns, keeping each column at least 240px wide', async () => {
+    expect(movable(3)).toBe(true);
+    await drag('divider-0', 120);
     expect(widths(3).map(Math.round)).toEqual([20, 47, 33]);
-    await drag('divider-1', 850);
+    await drag('divider-1', 600);
     expect(widths(3)).toEqual([20, 30, 50]);
-    await drag('divider-0', 765);
+    await drag('divider-0', 540);
     expect(widths(3)).toEqual([30, 20, 50]);
-    await drag('divider-1', 1690);
+    await drag('divider-1', 1190);
     expect(widths(3)).toEqual([30, 50, 20]);
   });
 
-  it('keeps three columns even on a split too narrow for 340px each', async () => {
-    await act(async () => root.render(<WidthProbe width={600} onWidths={w => { widths = w; }} />));
+  it('moves the three columns\' dividers on a laptop-sized split', async () => {
+    await act(async () => root.render(<WidthProbe width={950} onWidths={w => { widths = w; }} />));
+    await act(async () => { window.dispatchEvent(new Event('resize')); });
+    expect(movable(3)).toBe(true);
     await drag('divider-0', 0);
-    await drag('divider-1', 600);
+    expect(widths(3)[0] * 9.5).toBeCloseTo(240);
+    await drag('divider-1', 950);
+    expect(widths(3)[2] * 9.5).toBeCloseTo(240);
+  });
+
+  it('keeps three columns even, without movable dividers, on a split too narrow for 240px each', async () => {
+    await drag('divider-0', 120);
+    await act(async () => root.render(<WidthProbe width={700} onWidths={w => { widths = w; }} />));
+    await act(async () => { window.dispatchEvent(new Event('resize')); });
+    expect(movable(3)).toBe(false);
+    expect(movable(2)).toBe(true);
     expect(widths(3).map(Math.round)).toEqual([33, 33, 33]);
   });
 
   it('keeps the two-panel and three-column widths apart', async () => {
-    await drag('divider-two', 510);
+    await drag('divider-two', 360);
     expect(widths(3).map(Math.round)).toEqual([33, 33, 33]);
   });
 });

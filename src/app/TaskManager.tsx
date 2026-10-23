@@ -159,6 +159,7 @@ const TaskManager: React.FC = () => {
 
   const {
     panelWidths,
+    dividersMovable,
     panelHeightPx,
     splitContainerRef,
     panelAreaRef,
@@ -441,6 +442,7 @@ const TaskManager: React.FC = () => {
                 onPhoneChange={setPhonePanel}
                 available={homePanelKeys}
                 panelWidths={panelWidths}
+                dividersMovable={dividersMovable}
                 splitRef={splitContainerRef}
                 onDividerPointerDown={handleDividerPointerDown}
                 renderPanel={renderHomePanel}

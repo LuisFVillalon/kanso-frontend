@@ -15,8 +15,9 @@ const MIN_FIT_HEIGHT = 360;
 // The narrowest two panels get by dragging the divider, in % of the split.
 const MIN_HALF_PCT = 5;
 // The narrowest a column gets with three panels, so its toolbar and titles
-// still fit, unless the split is too narrow to give each one that much.
-const MIN_COLUMN_PX = 340;
+// still fit (Tasks switches to its compact layout). A split too narrow to
+// give each column more than this keeps them even, without dividers.
+const MIN_COLUMN_PX = 240;
 
 export const PANEL_HEIGHT_KEY_PREFIX = 'tm-home-panel-height';
 
@@ -71,6 +72,7 @@ export const useSplitPanel = (enabled = true) => {
   const dragging = useRef<{ count: number; index: number } | null>(null);
   const [fillHeightPx, setFillHeightPx] = useState<number | null>(null);
   const [savedHeightPx, setSavedHeightPx] = useState<number | null>(null);
+  const [splitWidthPx, setSplitWidthPx] = useState<number | null>(null);
   const splitContainerRef = useRef<HTMLDivElement>(null);
   // Wraps the panels' tabs, the split and the height handle.
   const panelAreaRef = useRef<HTMLDivElement>(null);
@@ -90,6 +92,7 @@ export const useSplitPanel = (enabled = true) => {
     const area = panelAreaRef.current;
     if (!enabled || !split || !area) return;
     const measure = () => {
+      setSplitWidthPx(split.getBoundingClientRect().width);
       const bodies = [...split.querySelectorAll<HTMLElement>(`[${PANEL_BODY_ATTR}]`)].filter(b => b.offsetParent !== null);
       const areaRect = area.getBoundingClientRect();
       const bodyTop = split.getBoundingClientRect().top + bodyOffset(split);
@@ -148,12 +151,19 @@ export const useSplitPanel = (enabled = true) => {
     startDividerDrag(e);
   }, [startDividerDrag]);
 
+  /** Whether the dividers between `count` panels side by side can be dragged. */
+  const dividersMovable = useCallback((count: number): boolean =>
+    count !== 3 || splitWidthPx === null || splitWidthPx > 3 * MIN_COLUMN_PX, [splitWidthPx]);
+
   /** Each panel's share of the split, in %, for `count` panels side by side. */
   const panelWidths = useCallback((count: number): number[] => {
     if (count === 2) return [twoDivider, 100 - twoDivider];
-    if (count === 3) return [threeDividers[0], threeDividers[1] - threeDividers[0], 100 - threeDividers[1]];
+    if (count === 3) {
+      if (!dividersMovable(3)) return [100 / 3, 100 / 3, 100 / 3];
+      return [threeDividers[0], threeDividers[1] - threeDividers[0], 100 - threeDividers[1]];
+    }
     return [100];
-  }, [twoDivider, threeDividers]);
+  }, [twoDivider, threeDividers, dividersMovable]);
 
   const onHeightResize = useCallback((px: number) => {
     const split = splitContainerRef.current;
@@ -173,6 +183,7 @@ export const useSplitPanel = (enabled = true) => {
 
   return {
     panelWidths,
+    dividersMovable,
     panelHeightPx: savedHeightPx === null ? fillHeightPx : Math.max(savedHeightPx, fillHeightPx ?? 0),
     splitContainerRef,
     panelAreaRef,
