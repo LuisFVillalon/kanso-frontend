@@ -27,10 +27,10 @@ const note: Note = {
 let container: HTMLDivElement;
 let root: Root;
 
-const render = (onUpdate: Update, extended = true) =>
+const render = (onUpdate: Update, extended = true, showExport = extended) =>
   act(() => root.render(
     <ToastProvider>
-      <NoteEditor note={note} allTags={[]} onUpdate={onUpdate} onToggleSidebar={vi.fn()} showExtendedActions={extended} />
+      <NoteEditor note={note} allTags={[]} onUpdate={onUpdate} onToggleSidebar={vi.fn()} showExtendedActions={extended} showExport={showExport} />
     </ToastProvider>,
   ));
 
@@ -138,8 +138,7 @@ describe('NoteEditor toolbar', () => {
   it('puts the note in the first row and formatting in a second row, in the prototype\'s order', () => {
     render(vi.fn<Update>().mockResolvedValue(true));
     const row = formattingRow();
-    expect(row?.className).toContain('overflow-x-auto');
-    expect(row?.className).not.toContain('flex-wrap ');
+    expect(byLabel('More formatting')).toBeNull();
     const labels = Array.from(row!.querySelectorAll('button')).map(b => b.getAttribute('aria-label'));
     expect(labels).toEqual([
       'Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)',
@@ -200,10 +199,10 @@ describe('NoteEditor toolbar', () => {
     expect(menuItems('More note actions')).toEqual(['Note details']);
   });
 
-  it('leaves Export, focus mode and Resources out of the home-panel overlay', () => {
-    render(vi.fn<Update>().mockResolvedValue(true), false);
+  it('keeps Export but leaves focus mode and Resources out of the home-panel note', () => {
+    render(vi.fn<Update>().mockResolvedValue(true), false, true);
     expect(menuItems('More note actions')).toEqual(['Note details']);
-    expect(byLabel('Export')).toBeNull();
+    expect(menuItems('Export')).toEqual(['Download PDF']);
     expect(byLabel('Focus mode (Ctrl+Shift+F)')).toBeNull();
     expect(byLabel('Resources')).toBeNull();
     expect(byLabel('Outline')).not.toBeNull();
@@ -216,6 +215,29 @@ describe('NoteEditor toolbar', () => {
     expect(byLabel('Export')).toBeNull();
     expect(byLabel('Outline')).toBeNull();
     expect(menuItems('More note actions')).toEqual(['Download PDF', 'Note details', 'Outline', 'Focus modeCtrl+Shift+F']);
+  });
+
+  it('folds the formatting groups that don\'t fit into More formatting, last first, instead of clipping them', () => {
+    // Each group lays out 100px wide in a 300px row: room for two groups and the ⋯ button.
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-tool-group') ? 100 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.querySelector(':scope > [data-tool-group]') ? 300 : 0;
+    });
+    render(vi.fn<Update>().mockResolvedValue(true));
+    const row = formattingRow()!;
+    expect(row.querySelectorAll('[data-tool-group]')).toHaveLength(2);
+    expect(row.contains(byLabel('Undo (Ctrl+Z)'))).toBe(true);
+    expect(byLabel('Bold (Ctrl+B)')).toBeNull();
+
+    act(() => byLabel('More formatting')!.click());
+    const folded = container.querySelector('[role="group"][aria-label="More formatting"]')!;
+    for (const label of ['Bold (Ctrl+B)', 'Checklist (Ctrl+Shift+9)', 'Insert image', 'Justify (Ctrl+Shift+J)']) {
+      expect(folded.contains(byLabel(label)), label).toBe(true);
+    }
+    act(() => (byLabel('Bold (Ctrl+B)') as HTMLButtonElement).click());
+    expect(byLabel('Bold (Ctrl+B)')!.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('keeps the phone layout: a slim top bar and formatting in a bar under the note', () => {

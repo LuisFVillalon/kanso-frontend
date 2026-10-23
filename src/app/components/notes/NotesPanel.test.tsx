@@ -6,6 +6,12 @@ import type { Tag } from '@/app/types/task';
 import type { Note } from '@/app/types/notes';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 vi.mock('@/app/lib/supabase', () => ({ supabase: {} }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('./NoteEditor', () => ({
+  default: ({ note, showExport }: { note: Note; showExport?: boolean }) => (
+    <div data-testid="note-editor" data-export={String(!!showExport)}>{note.title}</div>
+  ),
+}));
 
 import NotesPanel from './NotesPanel';
 
@@ -86,5 +92,91 @@ describe('NotesPanel tag filter indicator', () => {
     expect(container.querySelector('[aria-label="Tag filter"]')).toBeNull();
     expect(text()).toContain('Lecture notes');
     expect(text()).toContain('Workout plan');
+  });
+});
+
+// The home page's wiring of the open note: TaskManager holds which note is open.
+const OpenNoteHarness: React.FC<{ viewMode: 'cards' | 'folders' }> = ({ viewMode }) => {
+  const [open, setOpen] = useState<Note | null>(null);
+  return (
+    <NotesPanel
+      notes={notes}
+      tags={[school, gym]}
+      noteEditorOverlay={open}
+      onUpdateNote={vi.fn()}
+      onDeleteNote={vi.fn()}
+      onArchiveNote={vi.fn()}
+      onEditorChange={setOpen}
+      tagFilter={[]}
+      onToggleTag={vi.fn()}
+      onClearTags={vi.fn()}
+      profile={{ notesViewMode: viewMode } as unknown as ProfileFields}
+      onSaveProfile={vi.fn()}
+      noteOrder="newest"
+      onNoteOrderChange={vi.fn()}
+    />
+  );
+};
+
+const renderOpen = (viewMode: 'cards' | 'folders') => act(() => root.render(<OpenNoteHarness viewMode={viewMode} />));
+/** Clicks the innermost element showing exactly this text (a card, folder or file icon). */
+const clickText = (value: string) => act(() => {
+  const matches = Array.from(document.body.querySelectorAll<HTMLElement>('*')).filter(el => el.textContent === value);
+  matches[matches.length - 1].click();
+});
+const anyLabel = (label: string) => document.body.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`);
+const editor = () => document.body.querySelector<HTMLElement>('[data-testid="note-editor"]');
+/** Panel notes stay inside the Notes panel; centered ones portal over the whole page. */
+const openIn = () => {
+  const shown = editor();
+  if (!shown) return null;
+  return container.contains(shown) ? 'panel' : 'centered';
+};
+
+describe('NotesPanel opening a note', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it('opens a note from the cards in the Notes panel, with Export', () => {
+    renderOpen('cards');
+    clickText('Lecture notes');
+    expect(openIn()).toBe('panel');
+    expect(editor()!.dataset.export).toBe('true');
+    expect(anyLabel('Expand')).not.toBeNull();
+  });
+
+  it('opens a note from a folder the same way, and leads back to the folder', () => {
+    renderOpen('folders');
+    clickText('School');
+    clickText('Lecture notes');
+    expect(openIn()).toBe('panel');
+    expect(editor()!.dataset.export).toBe('true');
+    act(() => anyLabel('Back to School')!.click());
+    expect(editor()).toBeNull();
+    expect(text()).toContain('1 note');
+  });
+
+  it('expands to the centered view, goes back to the panel, and remembers the choice for the next note', () => {
+    renderOpen('cards');
+    clickText('Lecture notes');
+    act(() => anyLabel('Expand')!.click());
+    expect(openIn()).toBe('centered');
+    expect(JSON.parse(window.localStorage.getItem('tm-note-open-mode')!)).toBe('centered');
+    act(() => anyLabel('Close')!.click());
+    expect(editor()).toBeNull();
+
+    clickText('Workout plan');
+    expect(openIn()).toBe('centered');
+    act(() => anyLabel('Back to panel')!.click());
+    expect(openIn()).toBe('panel');
+    expect(JSON.parse(window.localStorage.getItem('tm-note-open-mode')!)).toBe('panel');
+  });
+
+  it('opens folder notes centered too once the choice is centered', () => {
+    window.localStorage.setItem('tm-note-open-mode', JSON.stringify('centered'));
+    renderOpen('folders');
+    clickText('Gym');
+    clickText('Workout plan');
+    expect(openIn()).toBe('centered');
+    expect(anyLabel('Back to Gym')).not.toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useId, useLayoutEffect, us
 import { useEditorState, type Editor } from '@tiptap/react';
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight,
-  Bold, ChevronDown, Code, Highlighter, Image as ImageIcon, Italic, Link2, List, ListChecks, ListOrdered,
+  Bold, ChevronDown, Code, Ellipsis, Highlighter, Image as ImageIcon, Italic, Link2, List, ListChecks, ListOrdered,
   Minus, PanelLeftClose, PanelLeftOpen, Plus, Quote, Redo2, Strikethrough, Table as TableIcon, Underline, Undo2, X,
 } from 'lucide-react';
 
@@ -178,35 +178,41 @@ interface MenuPanelProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'sty
   placement: MenuPlacement;
   anchorRef: React.RefObject<HTMLElement | null>;
   panelRef?: React.RefObject<HTMLDivElement | null>;
-  /** Which edge of the trigger a top-bar panel lines up with. */
+  /** Which edge of the trigger the panel lines up with. */
   align?: 'start' | 'end';
 }
 
-/** True inside a row that scrolls sideways: its menus must be placed on screen, or the row would clip them. */
-const ScrollingRowContext = createContext(false);
+/** True inside a row that clips its overflow: its menus must be placed on screen, or the row would clip them. */
+const ClippingRowContext = createContext(false);
 
 /**
  * A dropdown's panel. Below a top bar it hangs under its trigger. In a row
- * that scrolls sideways (the formatting row, the phone's bottom bar) it would
- * be clipped, so it is placed on screen with fixed positioning instead, under
- * the trigger or above the bottom bar, kept inside the viewport.
+ * that clips its overflow (the formatting row, the phone's bottom bar) it
+ * would be cut off, so it is placed on screen with fixed positioning instead,
+ * under the trigger or above the bottom bar, kept inside the viewport or modal.
  */
 export const MenuPanel: React.FC<MenuPanelProps> = ({ placement, anchorRef, panelRef, align = 'start', className = '', children, ...rest }) => {
   const ownRef = useRef<HTMLDivElement>(null);
   const ref = panelRef ?? ownRef;
   const [fixedPos, setFixedPos] = useState<React.CSSProperties | null>(null);
-  const fixed = useContext(ScrollingRowContext) || placement === 'above';
+  const fixed = useContext(ClippingRowContext) || placement === 'above';
 
   useLayoutEffect(() => {
     if (!fixed) return;
     const anchor = anchorRef.current?.getBoundingClientRect();
     const width = ref.current?.offsetWidth ?? 0;
     if (!anchor) return;
-    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
+    // Inside a modal, its overlay (with its backdrop-filter) is what fixed
+    // positioning is relative to, and a panel-scoped overlay is clipped to its
+    // panel: place the menu within that frame, elsewhere within the viewport.
+    const frame = anchorRef.current?.closest('.modal-overlay')?.getBoundingClientRect()
+      ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    const start = align === 'end' ? anchor.right - width : anchor.left;
+    const left = Math.max(frame.left + 8, Math.min(start, frame.right - width - 8)) - frame.left;
     setFixedPos(placement === 'above'
-      ? { position: 'fixed', left, bottom: window.innerHeight - anchor.top + 6 }
-      : { position: 'fixed', left, top: anchor.bottom + 6 });
-  }, [fixed, placement, anchorRef, ref]);
+      ? { position: 'fixed', left, bottom: frame.bottom - anchor.top + 6 }
+      : { position: 'fixed', left, top: anchor.bottom + 6 - frame.top });
+  }, [fixed, placement, align, anchorRef, ref]);
 
   // A fixed panel sizes to its content, so it can be measured and kept on screen.
   const placeClass = fixed ? 'w-max max-w-[calc(100vw-1rem)]' : `absolute top-full mt-1.5 ${align === 'end' ? 'right-0' : 'left-0'}`;
@@ -759,8 +765,124 @@ const UndoRedo: React.FC<{ editor: Editor | null; state: ControlsState; placemen
   </>
 );
 
+// ─── OverflowRow ──────────────────────────────────────────────────────────────
+
+/** A run of related tools; a row shows or folds it whole. */
+interface ToolGroup {
+  key: string;
+  node: React.ReactNode;
+}
+
+/** The gap between a row's groups (gap-0.5). */
+const GROUP_GAP = 2;
+
 /**
- * The top bar's formatting row, every tool one click away: undo, redo |
+ * A formatting row that never clips: the groups that don't fit its width
+ * fold, last first, into a ⋯ menu at its end. Widths are measured while a
+ * group is in the row and remembered while it's folded.
+ */
+const OverflowRow: React.FC<{ groups: ToolGroup[]; placement: MenuPlacement }> = ({ groups, placement }) => {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const widths = useRef(new Map<string, number>());
+  const [shown, setShown] = useState(groups.length);
+
+  const fit = () => {
+    const row = rowRef.current;
+    // Not laid out yet (or hidden): nothing to fit against.
+    if (!row || row.clientWidth === 0) return;
+    row.querySelectorAll<HTMLElement>('[data-tool-group]').forEach(el => {
+      widths.current.set(el.dataset.toolGroup!, el.offsetWidth);
+    });
+    const style = getComputedStyle(row);
+    const room = row.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+    const sizes = groups.map(g => widths.current.get(g.key) ?? 0);
+    const total = sizes.reduce((sum, width, i) => sum + width + (i > 0 ? GROUP_GAP : 0), 0);
+    if (total <= room) {
+      setShown(groups.length);
+      return;
+    }
+    let used = (placement === 'above' ? 40 : 32) + GROUP_GAP;
+    let count = 0;
+    while (count < groups.length && used + sizes[count] + GROUP_GAP <= room) {
+      used += sizes[count] + GROUP_GAP;
+      count++;
+    }
+    setShown(count);
+  };
+  // Every render: a group's width changes with its state (the text style's label).
+  const fitRef = useRef(fit);
+  useLayoutEffect(() => {
+    fitRef.current = fit;
+    fit();
+  });
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => fitRef.current());
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, []);
+
+  const folded = groups.slice(shown);
+  return (
+    <div ref={rowRef} className="flex flex-nowrap items-center gap-0.5 min-w-0 flex-1 overflow-hidden">
+      {groups.slice(0, shown).map(({ key, node }, i) => (
+        <div key={key} data-tool-group={key} className="flex items-center gap-0.5 shrink-0">
+          {i > 0 && <Divider />}
+          {node}
+        </div>
+      ))}
+      {folded.length > 0 && <FoldedTools groups={folded} placement={placement} />}
+    </div>
+  );
+};
+
+/** The ⋯ menu holding the formatting groups that didn't fit the row. */
+const FoldedTools: React.FC<{ groups: ToolGroup[]; placement: MenuPlacement }> = ({ groups, placement }) => {
+  const { open, setOpen, containerRef, triggerRef } = usePopover<HTMLButtonElement>();
+  const menuId = useId();
+
+  return (
+    <div ref={containerRef} className="relative shrink-0 ml-auto">
+      <button
+        ref={triggerRef}
+        type="button"
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => setOpen(v => !v)}
+        title="More formatting"
+        aria-label="More formatting"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls={menuId}
+        className={triggerClass(open, placement)}
+        style={triggerStyle(open)}
+      >
+        <Ellipsis className={placement === 'above' ? 'w-[18px] h-[18px]' : 'w-4 h-4'} />
+      </button>
+
+      {open && (
+        <MenuPanel
+          anchorRef={triggerRef}
+          placement={placement}
+          align="end"
+          id={menuId}
+          role="group"
+          aria-label="More formatting"
+          className="p-1.5"
+        >
+          <div className="flex flex-wrap items-center gap-1 max-w-[16rem]">
+            {groups.map(({ key, node }) => (
+              <div key={key} className="flex items-center gap-0.5">{node}</div>
+            ))}
+          </div>
+        </MenuPanel>
+      )}
+    </div>
+  );
+};
+
+/**
+ * The top bar's formatting tools, every tool one click away: undo, redo |
  * text style | bold, italic, underline, strikethrough, highlight | lists,
  * checklist | table, image, link, quote, code block | alignment.
  */
@@ -774,35 +896,50 @@ const FormattingRow: React.FC<FormattingControlsProps> = ({ editor, onPickImage,
   );
 
   return (
-    <>
-      <UndoRedo editor={editor} state={state} placement={placement} iconSize="w-4 h-4" />
-      <Divider />
-      <HeadingPicker editor={editor} state={state} placement={placement} />
-      <Divider />
-      {markToggles(state).map(button)}
-      {button({ key: 'strike', title: 'Strikethrough (Ctrl+Shift+S)', Icon: Strikethrough, active: state.strike, run: e => e.chain().focus().toggleStrike().run() })}
-      <HighlightPicker editor={editor} state={state} placement={placement} />
-      <Divider />
-      {listToggles(state).map(button)}
-      <Divider />
-      <TablePicker editor={editor} state={state} placement={placement} />
-      <ToolbarButton toggle={false} title="Insert image" onClick={onPickImage}>
-        <ImageIcon className="w-4 h-4" />
-      </ToolbarButton>
-      <ToolbarButton toggle={false} active={state.link} title="Link (Ctrl+K)" onClick={onEditLink}>
-        <Link2 className="w-4 h-4" />
-      </ToolbarButton>
-      {button({ key: 'quote', title: 'Quote (Ctrl+Shift+B)', Icon: Quote, active: state.blockquote, run: e => e.chain().focus().toggleBlockquote().run() })}
-      {button({ key: 'code', title: 'Code block (Ctrl+Alt+C)', Icon: Code, active: state.codeBlock, run: e => e.chain().focus().toggleCodeBlock().run() })}
-      <Divider />
-      {ALIGNMENTS.map(({ value, label, shortcut, Icon }) => button({
-        key: value,
-        title: `${label} (${shortcut})`,
-        Icon,
-        active: state.alignment === value,
-        run: e => e.chain().focus().setTextAlign(value).run(),
-      }))}
-    </>
+    <OverflowRow
+      placement={placement}
+      groups={[
+        { key: 'history', node: <UndoRedo editor={editor} state={state} placement={placement} iconSize="w-4 h-4" /> },
+        { key: 'style', node: <HeadingPicker editor={editor} state={state} placement={placement} /> },
+        {
+          key: 'marks',
+          node: (
+            <>
+              {markToggles(state).map(button)}
+              {button({ key: 'strike', title: 'Strikethrough (Ctrl+Shift+S)', Icon: Strikethrough, active: state.strike, run: e => e.chain().focus().toggleStrike().run() })}
+              <HighlightPicker editor={editor} state={state} placement={placement} />
+            </>
+          ),
+        },
+        { key: 'lists', node: listToggles(state).map(button) },
+        {
+          key: 'insert',
+          node: (
+            <>
+              <TablePicker editor={editor} state={state} placement={placement} />
+              <ToolbarButton toggle={false} title="Insert image" onClick={onPickImage}>
+                <ImageIcon className="w-4 h-4" />
+              </ToolbarButton>
+              <ToolbarButton toggle={false} active={state.link} title="Link (Ctrl+K)" onClick={onEditLink}>
+                <Link2 className="w-4 h-4" />
+              </ToolbarButton>
+              {button({ key: 'quote', title: 'Quote (Ctrl+Shift+B)', Icon: Quote, active: state.blockquote, run: e => e.chain().focus().toggleBlockquote().run() })}
+              {button({ key: 'code', title: 'Code block (Ctrl+Alt+C)', Icon: Code, active: state.codeBlock, run: e => e.chain().focus().toggleCodeBlock().run() })}
+            </>
+          ),
+        },
+        {
+          key: 'align',
+          node: ALIGNMENTS.map(({ value, label, shortcut, Icon }) => button({
+            key: value,
+            title: `${label} (${shortcut})`,
+            Icon,
+            active: state.alignment === value,
+            run: e => e.chain().focus().setTextAlign(value).run(),
+          })),
+        },
+      ]}
+    />
   );
 };
 
@@ -821,19 +958,32 @@ const BottomFormattingControls: React.FC<FormattingControlsProps> = ({ editor, o
   );
 
   return (
-    <>
-      <HeadingPicker editor={editor} state={state} placement={placement} />
-      <Divider />
-      {markToggles(state).map(button)}
-      <HighlightPicker editor={editor} state={state} placement={placement} />
-      <Divider />
-      {listToggles(state).map(button)}
-      <Divider />
-      <InsertMenu editor={editor} state={state} placement={placement} onPickImage={onPickImage} onEditLink={onEditLink} />
-      <AlignMenu editor={editor} state={state} placement={placement} />
-      <Divider />
-      <UndoRedo editor={editor} state={state} placement={placement} iconSize={iconSize} />
-    </>
+    <OverflowRow
+      placement={placement}
+      groups={[
+        { key: 'style', node: <HeadingPicker editor={editor} state={state} placement={placement} /> },
+        {
+          key: 'marks',
+          node: (
+            <>
+              {markToggles(state).map(button)}
+              <HighlightPicker editor={editor} state={state} placement={placement} />
+            </>
+          ),
+        },
+        { key: 'lists', node: listToggles(state).map(button) },
+        {
+          key: 'insert',
+          node: (
+            <>
+              <InsertMenu editor={editor} state={state} placement={placement} onPickImage={onPickImage} onEditLink={onEditLink} />
+              <AlignMenu editor={editor} state={state} placement={placement} />
+            </>
+          ),
+        },
+        { key: 'history', node: <UndoRedo editor={editor} state={state} placement={placement} iconSize={iconSize} /> },
+      ]}
+    />
   );
 };
 
@@ -852,8 +1002,8 @@ interface EditorToolbarProps extends FormattingControlsProps {
 
 /**
  * The note editor's top bar, two rows by job. The first is about the note:
- * sidebar, where it lives, and its actions. The second is only formatting and
- * scrolls sideways when it doesn't fit, rather than wrapping. On phones and
+ * sidebar, where it lives, and its actions. The second is only formatting;
+ * tools that don't fit fold into a ⋯ menu at its end. On phones and
  * narrow editors NoteEditor moves formatting to a bottom bar instead.
  */
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({
@@ -892,26 +1042,26 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
     </div>
 
     {showFormatting && (
-      <ScrollingRowContext.Provider value>
+      <ClippingRowContext.Provider value>
         <div
           role="toolbar"
           aria-label="Text formatting"
-          className="flex flex-nowrap items-center gap-0.5 px-3 sm:px-4 py-1.5 border-b border-border-subtle overflow-x-auto scrollbar-none"
+          className="flex items-center px-3 sm:px-4 py-1.5 border-b border-border-subtle"
           style={{ backgroundColor: 'var(--tm-surface)' }}
         >
           <FormattingRow editor={editor} onPickImage={onPickImage} onEditLink={onEditLink} />
         </div>
-      </ScrollingRowContext.Provider>
+      </ClippingRowContext.Provider>
     )}
   </div>
 );
 
-/** The phone's formatting bar, docked under the note and scrolling sideways when it doesn't fit. */
+/** The phone's formatting bar, docked under the note; tools that don't fit fold into a ⋯ menu. */
 export const BottomFormattingBar: React.FC<FormattingControlsProps> = props => (
   <div
     role="toolbar"
     aria-label="Formatting"
-    className="shrink-0 flex items-center gap-0.5 px-2 py-1.5 border-t border-border-subtle overflow-x-auto scrollbar-none"
+    className="shrink-0 flex items-center px-2 py-1.5 border-t border-border-subtle"
     style={{ backgroundColor: 'var(--tm-surface-raised)', paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
   >
     <BottomFormattingControls {...props} />

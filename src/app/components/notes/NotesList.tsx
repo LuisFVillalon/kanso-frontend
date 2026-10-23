@@ -16,7 +16,6 @@ interface NotesListProps {
   onSearchChange: (term: string) => void;
   onSelectNote: (note: Note) => void;
   onNewNote: () => void | Promise<void>;
-  onUpdateNote: (id: number, changes: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) => void | Promise<boolean>;
   onDeleteNote: (id: number) => void;
   onArchiveNote: (id: number) => void;
   pendingNoteIds?: Set<number>;
@@ -35,7 +34,6 @@ const NotesList: React.FC<NotesListProps> = ({
   onSearchChange,
   onSelectNote,
   onNewNote,
-  onUpdateNote,
   onDeleteNote,
   onArchiveNote,
   pendingNoteIds,
@@ -287,8 +285,6 @@ const NotesList: React.FC<NotesListProps> = ({
           tag={tagFolderOverlay}
           notes={folderNotes}
           activeNoteId={activeNoteId}
-          allTags={allTags}
-          onUpdate={onUpdateNote}
           onDeleteNote={onDeleteNote}
           onArchiveNote={onArchiveNote}
           onClose={() => setTagFolderOverlay(null)}

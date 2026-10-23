@@ -122,7 +122,6 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
             onSearchChange={setSearchTerm}
             onSelectNote={handleSelectNote}
             onNewNote={handleNewNote}
-            onUpdateNote={updateNote}
             onDeleteNote={handleRemoveNote(deleteNote)}
             onArchiveNote={handleRemoveNote(archiveNote)}
             pendingNoteIds={pendingNoteIds}
