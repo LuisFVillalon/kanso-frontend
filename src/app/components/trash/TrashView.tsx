@@ -30,6 +30,9 @@ const FILTERS: Filter[] = ['all', 'task', 'note', 'tag', 'habit'];
 // Few enough days left to call out.
 const SOON_DAYS = 3;
 
+// Purge requests in flight at once during Delete all forever.
+const PURGE_CONCURRENCY = 4;
+
 const displayTitle = (item: TrashItem) => item.title || (item.kind === 'note' ? 'Untitled Note' : 'Untitled');
 
 /**
@@ -49,6 +52,7 @@ const TrashView: React.FC = () => {
   const [restoringKeys, setRestoringKeys] = useState<Set<string>>(new Set());
   const [pendingPurge, setPendingPurge] = useState<TrashItem | null>(null);
   const [purging, setPurging] = useState(false);
+  const [confirmPurgeAll, setConfirmPurgeAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +143,54 @@ const TrashView: React.FC = () => {
     }
   };
 
+  // Deletes forever every item the current filter shows. A task's purge takes
+  // the subtasks deleted with it, so those aren't purged on their own.
+  const purgeAll = async () => {
+    const shown = visible;
+    const covered = new Set<number>();
+    shown.forEach(i => {
+      if (i.kind === 'task') deletedWithTask(items, i.id).forEach(id => { if (id !== i.id) covered.add(id); });
+    });
+    const roots = shown.filter(i => i.kind !== 'task' || !covered.has(i.id));
+    setPurging(true);
+    const failed = new Set<string>();
+    let next = 0;
+    const worker = async () => {
+      while (next < roots.length) {
+        const item = roots[next++];
+        try {
+          await purgeFromTrash(item.kind, item.id);
+        } catch (err) {
+          console.error('Delete forever failed:', err);
+          const ids = item.kind === 'task' ? deletedWithTask(items, item.id) : new Set([item.id]);
+          affectedKeys(item, ids).forEach(k => failed.add(k));
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PURGE_CONCURRENCY, roots.length) }, worker));
+    try {
+      setItems(await fetchTrash());
+    } catch (err) {
+      console.error('Failed to reload recently deleted items:', err);
+      const shownKeys = new Set(shown.map(trashKey));
+      setItems(prev => prev.filter(i => !shownKeys.has(trashKey(i)) || failed.has(trashKey(i))));
+    }
+    setPurging(false);
+    setConfirmPurgeAll(false);
+    const failedCount = shown.filter(i => failed.has(trashKey(i))).length;
+    if (failedCount === 0) {
+      showToast(`Deleted ${countLabel(shown.length)} forever.`, 'success');
+    } else {
+      showToast(`Deleted ${shown.length - failedCount} of ${shown.length}; ${failedCount} failed, try again.`);
+    }
+  };
+
+  // "12 notes", "1 task", "5 items".
+  const countLabel = (n: number) => {
+    const noun = filter === 'all' ? (n === 1 ? 'item' : 'items') : (n === 1 ? filter : KINDS[filter].plural.toLowerCase());
+    return `${n} ${noun}`;
+  };
+
   if (status === 'loading') return <PageSpinner />;
 
   const now = new Date();
@@ -189,6 +241,22 @@ const TrashView: React.FC = () => {
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {status === 'ready' && visible.length > 0 && (
+          <div className="flex justify-end mb-3">
+            <button
+              type="button"
+              onClick={() => setConfirmPurgeAll(true)}
+              disabled={restoringKeys.size > 0}
+              aria-label={`Delete all ${filter === 'all' ? 'items' : KINDS[filter].plural.toLowerCase()} forever`}
+              className="btn btn-outline px-2.5 py-1.5 text-sm gap-1.5 disabled:opacity-50"
+              style={{ color: 'var(--tm-danger)' }}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete all forever
+            </button>
           </div>
         )}
 
@@ -311,6 +379,37 @@ const TrashView: React.FC = () => {
             >
               {purging && <Loader2 className="w-4 h-4 animate-spin" />}
               {purging ? 'Deleting…' : 'Delete forever'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmPurgeAll && (
+        <Modal
+          onClose={() => { if (!purging) setConfirmPurgeAll(false); }}
+          layer="top"
+          panelClassName="modal-panel max-w-sm w-full p-6 space-y-4"
+        >
+          <p className="text-center text-text-primary">Delete {countLabel(visible.length)} forever?</p>
+          <p className="text-center text-sm text-text-muted">This can&apos;t be undone.</p>
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setConfirmPurgeAll(false)}
+              disabled={purging}
+              className="btn btn-secondary flex-1 py-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={purgeAll}
+              disabled={purging}
+              className="btn flex-1 py-2 text-white flex items-center justify-center gap-1.5 disabled:cursor-wait"
+              style={{ backgroundColor: 'var(--tm-danger)' }}
+            >
+              {purging && <Loader2 className="w-4 h-4 animate-spin" />}
+              {purging ? 'Deleting…' : 'Delete all forever'}
             </button>
           </div>
         </Modal>
