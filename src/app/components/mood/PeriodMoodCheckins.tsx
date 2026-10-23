@@ -46,7 +46,7 @@ const PeriodMoodCheckins: React.FC<Props> = ({ profile, profileLoaded, tasks }) 
   }, []);
 
   const settings = profile.moodCheckins;
-  const day = checkinDayAt(now, profile.dayStartTime, profile.shutoffTime);
+  const day = checkinDayAt(now, profile.dayStartTime, profile.shutoffTime, profile.dayWindows);
   const dayKey = toLocalDateStr(day);
   const periodsOn = profileLoaded ? PERIOD_KINDS.filter(kind => settings[SETTING[kind]] && endsPeriod(kind, day)) : [];
 

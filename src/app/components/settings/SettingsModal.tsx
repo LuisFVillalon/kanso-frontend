@@ -50,6 +50,7 @@ import SecurityPage from '@/app/components/settings/pages/SecurityPage';
 import { useFieldAutosave, useSaveTracker, type SaveStatus, type TrackSave } from '@/app/components/settings/autosave';
 import { useOptionalNotifications } from '@/app/context/NotificationsContextValue';
 import type { ProfileFields } from '@/app/hooks/useProfile';
+import type { DayWindow } from '@/app/types/profile';
 import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
 import type { MoodCheckinSettings } from '@/app/types/mood';
 
@@ -296,6 +297,23 @@ export default function SettingsModal({
     offerUndo(`${label} is ${resting ? 'now' : 'no longer'} a rest day.`, () => toggleRestDay(day, false));
   };
 
+  const changeDayWindow = (day: number, window: DayWindow | null) => {
+    const before = getProfileField('dayWindows');
+    const next = { ...before };
+    if (window) next[String(day)] = window;
+    else delete next[String(day)];
+    setProfileField(on.workday, 'dayWindows', next, { debounce: window !== null });
+    if (window) return;
+    const label = REST_DAY_OPTIONS.find(o => o.day === day)!.label;
+    offerUndo(`${label} uses the default hours again.`, () => setProfileField(on.workday, 'dayWindows', before));
+  };
+
+  const clearDayWindows = () => {
+    const before = getProfileField('dayWindows');
+    setProfileField(on.workday, 'dayWindows', {});
+    offerUndo('Every day has the same hours again.', () => setProfileField(on.workday, 'dayWindows', before));
+  };
+
   const changeMood = (next: MoodCheckinSettings) => {
     const before = getProfileField('moodCheckins');
     setProfileField(on.notifications, 'moodCheckins', next);
@@ -366,9 +384,12 @@ export default function SettingsModal({
             dayStartTime={draft.dayStartTime}
             shutoffTime={draft.shutoffTime}
             restDays={draft.restDays}
+            dayWindows={draft.dayWindows}
             onDayStartChange={time => setProfileField(on.workday, 'dayStartTime', time, { debounce: true, skipSave: !time })}
             onShutoffChange={time => setProfileField(on.workday, 'shutoffTime', time, { debounce: true, skipSave: !time })}
             onToggleRestDay={day => toggleRestDay(day)}
+            onDayWindowChange={changeDayWindow}
+            onClearDayWindows={clearDayWindows}
             loading={profileLoading}
           />
         );

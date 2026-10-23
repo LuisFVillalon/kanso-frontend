@@ -60,6 +60,7 @@ const profile: ProfileFields = {
   dayStartTime: '08:30',
   shutoffTime: '18:00',
   restDays: [0],
+  dayWindows: {},
   layoutOrder: null,
   layoutSizes: null,
   appMode: null,
@@ -81,8 +82,8 @@ const onArchiveTerm = vi.fn<() => Promise<void>>();
 const onDeleteArchivedTerm = vi.fn<(id: number) => Promise<void>>();
 
 /** Commits each successful save to the props, as TaskManager's hooks do. */
-function Harness({ initialSection }: { initialSection?: SettingsSection }) {
-  const [saved, setSaved] = useState(profile);
+function Harness({ initialSection, initialProfile }: { initialSection?: SettingsSection; initialProfile: ProfileFields }) {
+  const [saved, setSaved] = useState(initialProfile);
   const [term, setTerm] = useState(calendarSettings);
   const [archived, setArchived] = useState([springTerm]);
   return (
@@ -119,8 +120,8 @@ function Harness({ initialSection }: { initialSection?: SettingsSection }) {
   );
 }
 
-const render = (initialSection?: SettingsSection) => {
-  act(() => root.render(<ToastProvider><Harness initialSection={initialSection} /></ToastProvider>));
+const render = (initialSection?: SettingsSection, overrides: Partial<ProfileFields> = {}) => {
+  act(() => root.render(<ToastProvider><Harness initialSection={initialSection} initialProfile={{ ...profile, ...overrides }} /></ToastProvider>));
 };
 
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
@@ -354,6 +355,95 @@ describe('SettingsModal autosave', () => {
     await click(button('Undo'));
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ restDays: [0] });
     expect(document.querySelector('[aria-label="Saturday"]')!.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  describe('different hours on some days', () => {
+    const differentHours = () => document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="settings-day-windows-label"]')!;
+    const input = (label: string) => document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+
+    it('lists each work day with the default hours, saving a day only once it changes', async () => {
+      render('workday');
+      expect(differentHours().getAttribute('aria-checked')).toBe('false');
+      expect(input('Monday starts')).toBeNull();
+      await click(differentHours());
+      expect(differentHours().getAttribute('aria-checked')).toBe('true');
+      // Sunday is a rest day, so it has no row.
+      expect(input('Sunday starts')).toBeNull();
+      expect(input('Monday starts').value).toBe('08:30');
+      expect(input('Monday: call it a day').value).toBe('18:00');
+      expect(onSaveProfileField).not.toHaveBeenCalled();
+
+      await act(async () => typeInto(input('Monday: call it a day'), '14:00'));
+      await pause();
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: { '1': { start: '08:30', end: '14:00' } } });
+      expect(input('Tuesday: call it a day').value).toBe('18:00');
+    });
+
+    it('saves a window that runs past midnight', async () => {
+      render('workday');
+      await click(differentHours());
+      await act(async () => typeInto(input('Friday: call it a day'), '02:00'));
+      await pause();
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: { '5': { start: '08:30', end: '02:00' } } });
+      expect(input('Friday: call it a day').getAttribute('aria-invalid')).toBeNull();
+    });
+
+    it("doesn't save a window missing a time", async () => {
+      render('workday');
+      await click(differentHours());
+      await act(async () => typeInto(input('Friday: call it a day'), ''));
+      await pause();
+      expect(onSaveProfileField).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain('Pick both times.');
+      expect(input('Friday: call it a day').getAttribute('aria-invalid')).toBe('true');
+    });
+
+    it('lists the default hours without an error when they run past midnight', async () => {
+      render('workday', { dayStartTime: '20:00', shutoffTime: '02:00' });
+      await click(differentHours());
+      expect(input('Monday starts').value).toBe('20:00');
+      expect(input('Monday: call it a day').value).toBe('02:00');
+      expect(input('Monday: call it a day').getAttribute('aria-invalid')).toBeNull();
+      await act(async () => typeInto(input('Monday starts'), '19:00'));
+      await pause();
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: { '1': { start: '19:00', end: '02:00' } } });
+    });
+
+    it("stays off when only a rest day has its own hours, and turning it on and off clears them", async () => {
+      render('workday', { dayWindows: { '0': { start: '10:00', end: '16:00' } } });
+      expect(differentHours().getAttribute('aria-checked')).toBe('false');
+      await click(differentHours());
+      expect(onSaveProfileField).not.toHaveBeenCalled();
+      await click(differentHours());
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: {} });
+    });
+
+    it('puts a day back on the default hours, with Undo', async () => {
+      render('workday');
+      await click(differentHours());
+      await act(async () => typeInto(input('Monday starts'), '10:00'));
+      await pause();
+      await click(document.querySelector<HTMLButtonElement>('[aria-label="Monday: same as default"]')!);
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: {} });
+      expect(input('Monday starts').value).toBe('08:30');
+      expect(document.body.textContent).toContain('Monday uses the default hours again.');
+      await click(button('Undo'));
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: { '1': { start: '10:00', end: '18:00' } } });
+      expect(input('Monday starts').value).toBe('10:00');
+    });
+
+    it('turning it off gives every day the default hours again', async () => {
+      render('workday');
+      await click(differentHours());
+      await act(async () => typeInto(input('Monday starts'), '10:00'));
+      await pause();
+      await click(differentHours());
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: {} });
+      expect(input('Monday starts')).toBeNull();
+      await click(button('Undo'));
+      expect(differentHours().getAttribute('aria-checked')).toBe('true');
+      expect(input('Monday starts').value).toBe('10:00');
+    });
   });
 
   it('offers Undo for a mood check-in switch', async () => {

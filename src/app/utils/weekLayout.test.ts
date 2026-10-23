@@ -12,6 +12,7 @@ import {
   TimedEvent,
   weekDays,
   workDayMarks,
+  type WindowMinutes,
 } from './weekLayout';
 
 // Mon 19 Oct 2026, local midnight.
@@ -255,44 +256,79 @@ describe('workDayMarks', () => {
   const saturday = new Date(2026, 9, 24);
   const sunday = new Date(2026, 9, 25);
   const weekend = [0, 6];
+  const every = (start: number, end: number) => (): WindowMinutes => [start, end];
 
   it('washes out the hours outside the window on a work day', () => {
-    expect(workDayMarks(monday, weekend, 480, 1320)).toEqual({
-      rest: false, off: [[0, 480], [1320, 1440]], opensAt: 480, closesAt: 1320,
+    expect(workDayMarks(monday, weekend, every(480, 1320))).toEqual({
+      rest: false, off: [[0, 480], [1320, 1440]], opensAt: 480, closesAt: [1320],
     });
   });
 
   it('leaves a rest day off all day, with no window lines', () => {
-    expect(workDayMarks(saturday, weekend, 480, 1320)).toEqual({
-      rest: true, off: [[0, 1440]], opensAt: null, closesAt: null,
+    expect(workDayMarks(saturday, weekend, every(480, 1320))).toEqual({
+      rest: true, off: [[0, 1440]], opensAt: null, closesAt: [],
     });
   });
 
   it('carries a window that runs past midnight into the next day, rest day or not', () => {
     // 6 PM – 2 AM: Friday's window closes on Saturday morning.
-    expect(workDayMarks(saturday, weekend, 1080, 120)).toEqual({
-      rest: true, off: [[120, 1440]], opensAt: null, closesAt: 120,
+    expect(workDayMarks(saturday, weekend, every(1080, 120))).toEqual({
+      rest: true, off: [[120, 1440]], opensAt: null, closesAt: [120],
     });
     // Saturday was off, so nothing spills into Sunday.
-    expect(workDayMarks(sunday, weekend, 1080, 120)).toEqual({
-      rest: true, off: [[0, 1440]], opensAt: null, closesAt: null,
+    expect(workDayMarks(sunday, weekend, every(1080, 120))).toEqual({
+      rest: true, off: [[0, 1440]], opensAt: null, closesAt: [],
     });
     // Sunday was off, so Monday's only window is its own.
-    expect(workDayMarks(monday, weekend, 1080, 120)).toEqual({
-      rest: false, off: [[0, 1080]], opensAt: 1080, closesAt: null,
+    expect(workDayMarks(monday, weekend, every(1080, 120))).toEqual({
+      rest: false, off: [[0, 1080]], opensAt: 1080, closesAt: [],
     });
-    expect(workDayMarks(new Date(2026, 9, 20), weekend, 1080, 120)).toEqual({
-      rest: false, off: [[120, 1080]], opensAt: 1080, closesAt: 120,
+    expect(workDayMarks(new Date(2026, 9, 20), weekend, every(1080, 120))).toEqual({
+      rest: false, off: [[120, 1080]], opensAt: 1080, closesAt: [120],
     });
   });
 
   it('closes a window that ends at midnight at the bottom of its own day', () => {
-    expect(workDayMarks(monday, weekend, 480, 0)).toEqual({
-      rest: false, off: [[0, 480]], opensAt: 480, closesAt: 1440,
+    expect(workDayMarks(monday, weekend, every(480, 0))).toEqual({
+      rest: false, off: [[0, 480]], opensAt: 480, closesAt: [1440],
+    });
+  });
+
+  it("uses each weekday's own window", () => {
+    // Mondays 10 AM – 4 PM, every other day 8 AM – 10 PM.
+    const windowOn = (weekday: number): WindowMinutes => (weekday === 1 ? [600, 960] : [480, 1320]);
+    expect(workDayMarks(monday, weekend, windowOn)).toEqual({
+      rest: false, off: [[0, 600], [960, 1440]], opensAt: 600, closesAt: [960],
+    });
+    expect(workDayMarks(new Date(2026, 9, 20), weekend, windowOn)).toEqual({
+      rest: false, off: [[0, 480], [1320, 1440]], opensAt: 480, closesAt: [1320],
+    });
+  });
+
+  it("closes both the previous day's late window and the day's own", () => {
+    // Every day runs 6 PM – 2 AM except Tuesday, 9 AM – 5 PM.
+    const windowOn = (weekday: number): WindowMinutes => (weekday === 2 ? [540, 1020] : [1080, 120]);
+    expect(workDayMarks(new Date(2026, 9, 20), weekend, windowOn)).toEqual({
+      rest: false, off: [[120, 540], [1020, 1440]], opensAt: 540, closesAt: [120, 1020],
+    });
+    // Tuesday's window ends the same day, so nothing spills into Wednesday.
+    expect(workDayMarks(new Date(2026, 9, 21), weekend, windowOn)).toEqual({
+      rest: false, off: [[0, 1080]], opensAt: 1080, closesAt: [],
+    });
+  });
+
+  it("carries a day's own window that runs past midnight into the next day", () => {
+    // Tuesdays 8 PM – 2 AM, every other day 8 AM – 4 PM.
+    const windowOn = (weekday: number): WindowMinutes => (weekday === 2 ? [1200, 120] : [480, 960]);
+    expect(workDayMarks(new Date(2026, 9, 20), weekend, windowOn)).toEqual({
+      rest: false, off: [[0, 1200]], opensAt: 1200, closesAt: [],
+    });
+    expect(workDayMarks(new Date(2026, 9, 21), weekend, windowOn)).toEqual({
+      rest: false, off: [[120, 480], [960, 1440]], opensAt: 480, closesAt: [120, 960],
     });
   });
 
   it('marks every day a work day when there are no rest days', () => {
-    expect(workDayMarks(sunday, [], 540, 1020).rest).toBe(false);
+    expect(workDayMarks(sunday, [], every(540, 1020)).rest).toBe(false);
   });
 });

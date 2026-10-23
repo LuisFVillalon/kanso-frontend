@@ -7,6 +7,7 @@ import { CardShell } from '@/app/components/stats/CardShell';
 import { parseLocalDate, formatLongDate } from '@/app/utils/dateUtils';
 import { useMidnightTick } from '@/app/hooks/useMidnightTick';
 import type { ProfileFields } from '@/app/hooks/useProfile';
+import { dayWindowOn } from '@/app/lib/restDays';
 import { isInTerm, termEndInstant } from '@/app/utils/termProgress';
 import { computeDayRun, type DayKind, type DayRunState } from '@/app/utils/dayRuns';
 import TileTools from './TileTools';
@@ -274,11 +275,11 @@ const DayRunTimers: React.FC<{ restDays: number[] }> = ({ restDays }) => {
 };
 
 // ── Daily window timer (from the user's profile) ───────────────────────────────
-// Settings → Work day and rest lets the user set "Day starts at" (localStorage only,
-// `tm_day_start_time`) and "Call it a day at" (persisted to the backend
-// profile as `shutoff_time`). This is that same daily window: while `now`
-// falls inside it, it counts down to the shutoff time; otherwise it shows
-// the fixed length of the window (e.g. 08:00–22:00 → 14h 0m).
+// Settings → Work day and rest lets the user set "Day starts" and "Call it a
+// day" (the profile's `day_start_time` / `shutoff_time`), and optionally
+// different hours on some weekdays (`day_windows`). This is today's window:
+// while `now` falls inside it, it counts down to the shutoff time; otherwise
+// it shows the fixed length of the window (e.g. 08:00–22:00 → 14h 0m).
 
 const timeStringToMinutes = (hm: string): number => {
   const [h, m] = hm.split(':').map(Number);
@@ -294,13 +295,18 @@ const buildTimeOnDate = (base: Date, hm: string): Date => {
 interface DailyWindowState {
   active: boolean;
   parts: PeriodParts;
+  /** Today's window, "HH:MM" each. */
+  start: string;
+  end: string;
 }
 
-// Whether `now` falls inside the [dayStart, dayEnd) window on a non-rest
+// Whether `now` falls inside today's [dayStart, dayEnd) window on a non-rest
 // day, and the countdown-or-fixed-length parts to show for it — shared by
 // the expanded DailyWindowTimer card and the compact tile's daily-window
 // row so the two can never disagree about whether the window is active.
-const computeDailyWindow = (now: Date, dayStart: string, dayEnd: string, restDays: number[]): DailyWindowState => {
+const computeDailyWindow = (now: Date, profile: ProfileFields): DailyWindowState => {
+  const { start: dayStart, end: dayEnd } = dayWindowOn(now.getDay(), profile.dayStartTime, profile.shutoffTime, profile.dayWindows);
+  const { restDays } = profile;
   const startMinutes = timeStringToMinutes(dayStart);
   const endMinutes = timeStringToMinutes(dayEnd);
   const nowMinutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
@@ -319,21 +325,15 @@ const computeDailyWindow = (now: Date, dayStart: string, dayEnd: string, restDay
     milliseconds: 0,
   };
 
-  return { active, parts: active ? shortDiffParts(now, buildTimeOnDate(now, dayEnd)) : periodLength };
+  return { active, parts: active ? shortDiffParts(now, buildTimeOnDate(now, dayEnd)) : periodLength, start: dayStart, end: dayEnd };
 };
 
-interface DailyWindowTimerProps {
-  dayStart: string;
-  dayEnd: string;
-  restDays: number[];
-}
-
-// dayStart/dayEnd/restDays come from the shared useProfile hook (see
+// The profile comes from the shared useProfile hook (see
 // TaskManager.tsx), threaded down via TimersCardProps below — reading them
 // as props instead of an independent localStorage/fetchProfile snapshot
 // means this stays in sync if the user edits them in Settings while this
 // card is already mounted, which the old snapshot-on-mount version couldn't.
-const DailyWindowTimer: React.FC<DailyWindowTimerProps> = ({ dayStart, dayEnd, restDays }) => {
+const DailyWindowTimer: React.FC<{ profile: ProfileFields }> = ({ profile }) => {
   const [now, setNow] = useState<Date>(new Date());
 
   useEffect(() => {
@@ -341,13 +341,13 @@ const DailyWindowTimer: React.FC<DailyWindowTimerProps> = ({ dayStart, dayEnd, r
     return () => clearInterval(interval);
   }, []);
 
-  const { active, parts } = computeDailyWindow(now, dayStart, dayEnd, restDays);
+  const { active, parts, start, end } = computeDailyWindow(now, profile);
 
   return (
     <PeriodTimerCard
       icon={active ? <Grid2x2 className="w-3.5 h-3.5" /> : <Blinds className="w-3.5 h-3.5" />}
       label="Daily Window"
-      labelSuffix={`(${dayStart} – ${dayEnd})`}
+      labelSuffix={`(${start} – ${end})`}
       active={active}
       parts={parts}
       color="var(--tm-warning)"
@@ -490,7 +490,7 @@ const TimersCard: React.FC<TimersCardProps> = ({ profile, settings, settingsLoad
   if (loading) return <TimersCardSkeleton />;
 
   const { work, off } = describeDayRuns(now, profile.restDays);
-  const { active: dailyActive, parts: dailyParts } = computeDailyWindow(now, profile.dayStartTime, profile.shutoffTime, profile.restDays);
+  const { active: dailyActive, parts: dailyParts } = computeDailyWindow(now, profile);
 
   return (
     <CardShell
@@ -547,7 +547,7 @@ export const TimersOverlay: React.FC<{ profile: ProfileFields; settings: Calenda
     <div className="flex flex-col gap-3">
       {inSession ? (
         <>
-          <DailyWindowTimer dayStart={profile.dayStartTime} dayEnd={profile.shutoffTime} restDays={profile.restDays} />
+          <DailyWindowTimer profile={profile} />
           <DayRunTimers restDays={profile.restDays} />
           <CountdownClock key={end.getTime()} endDate={end} />
         </>

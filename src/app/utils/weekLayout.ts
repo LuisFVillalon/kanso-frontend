@@ -309,25 +309,37 @@ export interface WorkDayMarks {
   off: [number, number][];
   /** Minute the day's own window opens, or null on a rest day. */
   opensAt: number | null;
-  /** Minute a window closes on this day, or null when none does. */
-  closesAt: number | null;
+  /** Minutes a window closes on this day, earliest first: the previous day's when it ran past midnight, then the day's own. */
+  closesAt: number[];
 }
 
+/** A day's work window as [start, end) minutes; an end at or before the start runs past midnight. */
+export type WindowMinutes = [number, number];
+
 /**
- * Where the work window falls on `day`: it opens at `startMin` on each day
- * that isn't a rest day and closes at `endMin`. A window that ends at or
- * before it starts runs past midnight, so its tail (and its close) lands on
- * the next day, rest day or not. One that ends at midnight closes at the
- * bottom of its own day.
+ * Where the work window falls on `day`: on each day that isn't a rest day it
+ * opens and closes at that weekday's window from `windowOn` (0=Sun..6=Sat).
+ * A window that ends at or before it starts runs past midnight, so its tail
+ * (and its close) lands on the next day, rest day or not. One that ends at
+ * midnight closes at the bottom of its own day.
  */
-export function workDayMarks(day: Date, restDays: number[], startMin: number, endTime: number): WorkDayMarks {
-  const endMin = endTime === 0 && startMin > 0 ? MINUTES_PER_DAY : endTime;
-  const rest = restDays.includes(day.getDay());
-  const previousRest = restDays.includes((day.getDay() + 6) % 7);
-  const pastMidnight = endMin <= startMin;
+export function workDayMarks(day: Date, restDays: number[], windowOn: (weekday: number) => WindowMinutes): WorkDayMarks {
+  const span = (weekday: number) => {
+    const [startMin, endTime] = windowOn(weekday);
+    const endMin = endTime === 0 && startMin > 0 ? MINUTES_PER_DAY : endTime;
+    return { startMin, endMin, pastMidnight: endMin <= startMin };
+  };
+  const weekday = day.getDay();
+  const previousWeekday = (weekday + 6) % 7;
+  const rest = restDays.includes(weekday);
+  const previousRest = restDays.includes(previousWeekday);
+  const { startMin, endMin, pastMidnight } = span(weekday);
+  const previous = span(previousWeekday);
+  // The previous day's window running into this one, if it does.
+  const spill = previous.pastMidnight && !previousRest ? previous.endMin : null;
 
   const windows: [number, number][] = [];
-  if (pastMidnight && !previousRest) windows.push([0, endMin]);
+  if (spill !== null) windows.push([0, spill]);
   if (!rest) windows.push([startMin, pastMidnight ? MINUTES_PER_DAY : endMin]);
 
   const off: [number, number][] = [];
@@ -342,6 +354,9 @@ export function workDayMarks(day: Date, restDays: number[], startMin: number, en
     rest,
     off,
     opensAt: rest ? null : startMin,
-    closesAt: (pastMidnight ? !previousRest : !rest) ? endMin : null,
+    closesAt: [
+      ...(spill === null ? [] : [spill]),
+      ...(!rest && !pastMidnight ? [endMin] : []),
+    ],
   };
 }

@@ -56,3 +56,21 @@ describe('CountdownClock', () => {
     expect(countdownSeconds()).toBe('56');
   });
 });
+
+describe('Daily window', () => {
+  const dailyWindowLabel = () =>
+    [...container.querySelectorAll('span')].find(s => s.textContent?.startsWith('('))?.textContent;
+
+  it("shows today's own window when the day has one", () => {
+    // Tuesday.
+    const tuesdayHours = { ...profile, dayStartTime: '08:00', shutoffTime: '22:00', dayWindows: { '2': { start: '10:00', end: '16:00' } } } as ProfileFields;
+    act(() => root.render(<TimersOverlay profile={tuesdayHours} settings={settings} settingsLoading={false} />));
+    expect(dailyWindowLabel()).toBe('(10:00 – 16:00)');
+  });
+
+  it('shows the every-day window on a day without its own', () => {
+    const mondayHours = { ...profile, dayStartTime: '08:00', shutoffTime: '22:00', dayWindows: { '1': { start: '10:00', end: '16:00' } } } as ProfileFields;
+    act(() => root.render(<TimersOverlay profile={mondayHours} settings={settings} settingsLoading={false} />));
+    expect(dailyWindowLabel()).toBe('(08:00 – 22:00)');
+  });
+});

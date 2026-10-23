@@ -1,5 +1,14 @@
 import type { MoodCheckinSettings } from './mood';
 
+/** One weekday's own work window, "HH:MM" each; an end at or before the start runs past midnight (00:00 is midnight). */
+export interface DayWindow {
+  start: string;
+  end: string;
+}
+
+/** Weekdays with their own window, keyed "0".."6" (0=Sun, as rest_days); the rest use day_start_time / shutoff_time. */
+export type DayWindows = Partial<Record<string, DayWindow>>;
+
 /**
  * The authenticated user's profile record, backed by the `/get-profile` /
  * `/save-profile` endpoints. `name` is required; every other field is
@@ -21,6 +30,8 @@ export interface Profile {
   day_start_time?: string | null;
   /** Day-of-week indices (0=Sun..6=Sat, JS Date#getDay()) treated as rest days. */
   rest_days?: number[] | null;
+  /** Per-weekday work windows overriding day_start_time / shutoff_time. Absent from older servers. */
+  day_windows?: DayWindows | null;
   /** Dashboard card ordering — see hooks/useGridOrder.ts and ProfileFields.layoutOrder in useProfile.ts. */
   layout_order?: string[] | null;
   /** Legacy dashboard tile sizes ('S'|'M'|'W'|'L' per widget id) — no longer user-editable; tile sizes are now fixed in CalendarAndStats.tsx. Kept for backward-compat profile payloads. See ProfileFields.layoutSizes in useProfile.ts. */
