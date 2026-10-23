@@ -36,6 +36,8 @@ export function useNoteAutosave(noteId: number | null, onSave: SaveNote) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bumped by every save and every note switch; only the newest save may set the status.
   const generation = useRef(0);
+  // The newest save to carry each field; only that save decides whether the field still needs retrying.
+  const carrier = useRef<Partial<Record<keyof NoteChanges, number>>>({});
 
   useEffect(() => {
     onSaveRef.current = onSave;
@@ -45,6 +47,8 @@ export function useNoteAutosave(noteId: number | null, onSave: SaveNote) {
     const retried = failed.current?.id === id ? failed.current.changes : {};
     const payload = { ...retried, ...changes };
     const mine = ++generation.current;
+    const fields = Object.keys(payload) as (keyof NoteChanges)[];
+    for (const field of fields) carrier.current[field] = mine;
     setStatus('saving');
     let ok: boolean;
     try {
@@ -52,12 +56,15 @@ export function useNoteAutosave(noteId: number | null, onSave: SaveNote) {
     } catch {
       ok = false;
     }
-    if (ok) {
-      if (failed.current?.id === id) failed.current = null;
-    } else {
-      failed.current = { id, changes: payload };
+    const remaining: NoteChanges = failed.current?.id === id ? { ...failed.current.changes } : {};
+    for (const field of fields) {
+      if (carrier.current[field] !== mine) continue;
+      if (ok) delete remaining[field];
+      else Object.assign(remaining, { [field]: payload[field] });
     }
-    if (mine === generation.current) {
+    if (Object.keys(remaining).length > 0) failed.current = { id, changes: remaining };
+    else if (failed.current?.id === id) failed.current = null;
+    if (mine === generation.current && pending.current?.id !== id) {
       setStatus(ok ? 'saved' : 'error');
       if (ok) setSavedAt(new Date());
     }

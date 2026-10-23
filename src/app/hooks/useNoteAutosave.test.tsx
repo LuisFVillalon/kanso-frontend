@@ -117,6 +117,43 @@ describe('useNoteAutosave', () => {
     expect(latest.current!.savedAt).toBeNull();
   });
 
+  it('does not resend old content when an older save fails after a newer one already saved it', async () => {
+    let failFirst!: (ok: boolean) => void;
+    const onSave = vi.fn<Save>()
+      .mockImplementationOnce(() => new Promise<boolean>(resolve => { failFirst = resolve; }))
+      .mockResolvedValue(true);
+    render(1, onSave);
+    act(() => latest.current!.schedule({ content: '<p>old</p>' }));
+    act(() => { vi.advanceTimersByTime(AUTOSAVE_DELAY_MS); });
+    act(() => latest.current!.schedule({ content: '<p>new</p>' }));
+    act(() => { vi.advanceTimersByTime(AUTOSAVE_DELAY_MS); });
+    await settle();
+    await act(async () => { failFirst(false); await Promise.resolve(); });
+
+    act(() => latest.current!.schedule({ title: 'Renamed' }));
+    act(() => { vi.advanceTimersByTime(AUTOSAVE_DELAY_MS); });
+    await settle();
+    expect(onSave).toHaveBeenLastCalledWith(1, { title: 'Renamed' });
+  });
+
+  it('keeps showing saving when an earlier save lands while a newer edit still waits', async () => {
+    let finishFirst!: (ok: boolean) => void;
+    const onSave = vi.fn<Save>()
+      .mockImplementationOnce(() => new Promise<boolean>(resolve => { finishFirst = resolve; }))
+      .mockResolvedValue(true);
+    render(1, onSave);
+    act(() => latest.current!.schedule({ content: '<p>a</p>' }));
+    act(() => { vi.advanceTimersByTime(AUTOSAVE_DELAY_MS); });
+    act(() => latest.current!.schedule({ content: '<p>ab</p>' }));
+    await act(async () => { finishFirst(true); await Promise.resolve(); });
+    expect(latest.current!.status).toBe('saving');
+
+    act(() => { vi.advanceTimersByTime(AUTOSAVE_DELAY_MS); });
+    await settle();
+    expect(onSave).toHaveBeenLastCalledWith(1, { content: '<p>ab</p>' });
+    expect(latest.current!.status).toBe('saved');
+  });
+
   it('does nothing without a note', () => {
     const onSave = vi.fn<Save>().mockResolvedValue(true);
     render(null, onSave);

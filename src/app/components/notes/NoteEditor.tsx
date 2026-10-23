@@ -86,7 +86,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const [linkEditorOpen, setLinkEditorOpen]   = useState(false);
   const [details, setDetails]                 = useState<NoteStats | null>(null);
   const [focusMode, setFocusMode]             = useState(false);
-  const [openedAt, setOpenedAt]               = useState(() => Date.now());
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -188,9 +187,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   });
 
   const { pdfLoading, pdfError, downloadPDF } = useNotePdfExport({ editor, title });
-  // Time spent in this note on earlier visits (closed note_sessions rows); the
-  // hook also opens and closes this visit's session on the backend.
-  const pastSeconds = useNoteSession(note);
+  // Time spent in this note on earlier visits (closed note_sessions rows) and
+  // the visible time of this visit; the hook also opens and closes this
+  // visit's session on the backend.
+  const { pastSeconds, visitSeconds } = useNoteSession(note);
 
   // Sync to active note — update title + editor content. Edits still queued
   // for the previous note are sent by useNoteAutosave, not dropped.
@@ -201,7 +201,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     setResourcesData(null);
     setLinkEditorOpen(false);
     setDetails(null);
-    setOpenedAt(Date.now());
     if (editor) {
       editor.commands.setContent(note?.content ?? '', { emitUpdate: false });
       setWordCount(countWords(editor.getText()));
@@ -353,7 +352,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     setDetails({
       words: wordCount,
       characters: editor?.state.doc.textContent.length ?? 0,
-      timeSpentSeconds: pastSeconds + Math.max(0, Math.round((Date.now() - openedAt) / 1000)),
+      timeSpentSeconds: pastSeconds + visitSeconds(),
       savedAt,
     });
   };

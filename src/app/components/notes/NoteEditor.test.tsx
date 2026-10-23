@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Note } from '@/app/types/notes';
 
 vi.mock('@/app/lib/supabase', () => ({ supabase: {} }));
-vi.mock('@/app/hooks/useNoteSession', () => ({ useNoteSession: () => 0 }));
+vi.mock('@/app/hooks/useNoteSession', () => ({ useNoteSession: () => ({ pastSeconds: 0, visitSeconds: () => 0 }) }));
 vi.mock('@/app/context/TasksContext', () => ({
   useTasksContext: () => ({ addTask: vi.fn(), discardTask: vi.fn() }),
 }));

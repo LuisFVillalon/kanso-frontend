@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Note } from '@/app/types/notes';
 import { supabase } from '@/app/lib/supabase';
 import { startNoteSession, endNoteSession, endNoteSessionKeepalive, fetchNoteTimeSpent } from '@/app/lib/backend-api';
@@ -10,8 +10,9 @@ import { startNoteSession, endNoteSession, endNoteSessionKeepalive, fetchNoteTim
  * backend (`note_sessions`: started_at/ended_at) once the note has a real
  * backend id, and closing it whenever the note stops being actively viewed —
  * on note switch, unmount, the tab being backgrounded, or the tab closing.
- * Returns the sum of all *closed* sessions for this note, refreshed each
- * time a new session opens.
+ * Returns `pastSeconds`, the sum of all *closed* sessions for this note
+ * when it opened, and `visitSeconds()`, the time the tab has been visible
+ * since then.
  *
  * A brand-new note is a local-only draft (negative temp `id`, see
  * useNotes.ts) until the user's first edit persists it — by design, so
@@ -26,6 +27,8 @@ export function useNoteSession(note: Note | null) {
   // Keyed by note id so a stale total from the previously open (or
   // not-yet-persisted) note never flashes while the current one loads.
   const [fetched, setFetched] = useState<{ noteId: number; totalSeconds: number } | null>(null);
+  // This visit's visible time: closed segments in `ms`, plus the open one since `since`.
+  const visit = useRef<{ ms: number; since: number | null }>({ ms: 0, since: null });
 
   useEffect(() => {
     if (effectiveNoteId == null) return;
@@ -42,6 +45,7 @@ export function useNoteSession(note: Note | null) {
     let generation = 0;
     let currentSessionId: number | null = null;
     let accessToken: string | null = null;
+    visit.current = { ms: 0, since: document.visibilityState === 'hidden' ? null : Date.now() };
 
     const beginSession = () => {
       const myGeneration = ++generation;
@@ -84,8 +88,14 @@ export function useNoteSession(note: Note | null) {
     // time spent on the note. Coming back to the foreground opens a fresh
     // segment.
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') endSession(true);
-      else beginSession();
+      const { ms, since } = visit.current;
+      if (document.visibilityState === 'hidden') {
+        if (since != null) visit.current = { ms: ms + Date.now() - since, since: null };
+        endSession(true);
+      } else {
+        if (since == null) visit.current = { ms, since: Date.now() };
+        beginSession();
+      }
     };
     // Fallback for the actual unload path in case visibilitychange doesn't
     // fire first (still best-effort — a hard crash/force-quit can't be
@@ -100,8 +110,15 @@ export function useNoteSession(note: Note | null) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handlePageHide);
       endSession(false);
+      visit.current = { ms: 0, since: null };
     };
   }, [effectiveNoteId]);
 
-  return effectiveNoteId != null && fetched?.noteId === effectiveNoteId ? fetched.totalSeconds : 0;
+  const visitSeconds = useCallback(() => {
+    const { ms, since } = visit.current;
+    return Math.round((ms + (since == null ? 0 : Date.now() - since)) / 1000);
+  }, []);
+
+  const pastSeconds = effectiveNoteId != null && fetched?.noteId === effectiveNoteId ? fetched.totalSeconds : 0;
+  return { pastSeconds, visitSeconds };
 }

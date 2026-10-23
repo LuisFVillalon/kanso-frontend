@@ -122,7 +122,7 @@ const TagFolderOverlay: React.FC<TagFolderOverlayProps> = ({
             allTags={allTags}
             onUpdate={async (id, changes) => {
               const ok = await onUpdate(id, changes);
-              setSelectedNote(prev => prev ? { ...prev, ...changes } : prev);
+              setSelectedNote(prev => prev?.id === id ? { ...prev, ...changes } : prev);
               return ok !== false;
             }}
           />
