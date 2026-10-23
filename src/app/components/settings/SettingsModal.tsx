@@ -43,6 +43,7 @@ import MoodCheckinSettingsSection, { MOOD_GROUP, MOOD_TOGGLES } from '@/app/comp
 import NotificationPreferencesForm from '@/app/components/settings/NotificationPreferencesForm';
 import SettingsGroup from '@/app/components/settings/SettingsGroup';
 import CanvasIntegrationSection from '@/app/components/settings/CanvasIntegrationSection';
+import { useCanvasTabHidden } from '@/app/hooks/useCanvasTabHidden';
 import ProfilePage from '@/app/components/settings/pages/ProfilePage';
 import WorkDayPage, { REST_DAY_OPTIONS } from '@/app/components/settings/pages/WorkDayPage';
 import AppearancePage from '@/app/components/settings/pages/AppearancePage';
@@ -179,7 +180,8 @@ export default function SettingsModal({
   termRollover,
   initialSection,
 }: Props) {
-  const { user, isDemo } = useAuth();
+  const { user, isDemo, dataUserId } = useAuth();
+  const [canvasTabHidden, setCanvasTabHidden] = useCanvasTabHidden(dataUserId);
   const showToast = useToast();
   const notifications = useOptionalNotifications();
   // Hidden where the API refuses notifications, as the bell is.
@@ -498,7 +500,7 @@ export default function SettingsModal({
           />
         );
       case 'canvas':
-        return <CanvasIntegrationSection isDemo={isDemo} />;
+        return <CanvasIntegrationSection isDemo={isDemo} homeCanvasTab={{ hidden: canvasTabHidden, onChange: setCanvasTabHidden }} />;
     }
   })();
 

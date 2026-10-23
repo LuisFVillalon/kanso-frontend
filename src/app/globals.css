@@ -17,6 +17,7 @@
   --tm-surface:          #FBF8F1;  /* Cards, panels */
   --tm-surface-raised:   #FFFDF8;  /* Menus, modals */
   --tm-surface-overlay:  rgba(251, 248, 241, 0.92);
+  --tm-strip:            #EAE3D5;  /* The home panels' tab strip, set back from the paper */
 
   /* Borders — hairlines between cards */
   --tm-border-subtle:    rgba(25, 24, 23, 0.06);
@@ -135,6 +136,7 @@
     --tm-surface:          #24221F;
     --tm-surface-raised:   #2C2A26;
     --tm-surface-overlay:  rgba(36, 34, 31, 0.92);
+    --tm-strip:            #1E1D1B;
     --tm-border-subtle:    rgba(237, 230, 214, 0.06);
     --tm-border:           rgba(237, 230, 214, 0.12);
     --tm-border-strong:    rgba(237, 230, 214, 0.22);
@@ -191,6 +193,7 @@
   --tm-surface:          #24221F;
   --tm-surface-raised:   #2C2A26;
   --tm-surface-overlay:  rgba(36, 34, 31, 0.92);
+  --tm-strip:            #1E1D1B;
   --tm-border-subtle:    rgba(237, 230, 214, 0.06);
   --tm-border:           rgba(237, 230, 214, 0.12);
   --tm-border-strong:    rgba(237, 230, 214, 0.22);
@@ -263,6 +266,21 @@
   .split-slot { width: var(--slot-w, 100%); overflow: hidden; }
 }
 
+/* The panels' tab strip: the tab you're on is the panel's own paper, curving
+   out into it at the foot like a browser tab; the others sit back in the strip. */
+.panel-tab-on { background-color: var(--tm-surface); }
+.panel-tab-on::before,
+.panel-tab-on::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+}
+.panel-tab-on::before { left: -10px; background: radial-gradient(circle at 0 0, transparent 10px, var(--tm-surface) 10.5px); }
+.panel-tab-on::after { right: -10px; background: radial-gradient(circle at 100% 0, transparent 10px, var(--tm-surface) 10.5px); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    TAILWIND TOKEN REGISTRATION
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -270,6 +288,7 @@
   --color-bg:               var(--tm-bg);
   --color-surface:          var(--tm-surface);
   --color-surface-raised:   var(--tm-surface-raised);
+  --color-strip:            var(--tm-strip);
   --color-border-subtle:    var(--tm-border-subtle);
   --color-border:           var(--tm-border);
   --color-border-strong:    var(--tm-border-strong);

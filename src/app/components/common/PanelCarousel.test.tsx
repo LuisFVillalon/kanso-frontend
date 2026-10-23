@@ -3,7 +3,7 @@ import React, { act, useImperativeHandle, useRef, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PanelCarousel, {
-  inOrder, isHomePanels, isPanelOrder, movePanel, parseHomePanels, phonePanel, restorePanels, toHomePanels, widePanels,
+  inOrder, isHomePanels, isPanelOrder, movePanel, parseHomePanels, phonePanel, restorePanels, stripItems, toHomePanels, widePanels,
   type HomePanels, type PanelCarouselHandle, type PanelKey,
 } from './PanelCarousel';
 
@@ -75,6 +75,15 @@ describe('panel order', () => {
   });
 });
 
+describe('stripItems', () => {
+  it('gathers the split\'s panels into one tab where the first of them sits', () => {
+    expect(stripItems(ALL, ['tasks', 'notes'])).toEqual([{ split: true, keys: ['tasks', 'notes'] }, { split: false, key: 'canvas' }]);
+    expect(stripItems(ALL, ['tasks', 'canvas'])).toEqual([{ split: true, keys: ['tasks', 'canvas'] }, { split: false, key: 'notes' }]);
+    expect(stripItems(['notes', 'canvas', 'tasks'], ['tasks', 'canvas'])).toEqual([{ split: false, key: 'notes' }, { split: true, keys: ['canvas', 'tasks'] }]);
+    expect(stripItems(NO_CANVAS, [])).toEqual([{ split: false, key: 'tasks' }, { split: false, key: 'notes' }]);
+  });
+});
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 let container: HTMLDivElement;
@@ -85,6 +94,7 @@ let splitChanges: HomePanels[];
 let phoneChanges: PanelKey[];
 let orderChanges: PanelKey[][];
 let drags: [number, number][];
+let ghostCalls: string[];
 let panelRenders: number;
 let handle: PanelCarouselHandle | null;
 
@@ -101,10 +111,12 @@ interface HarnessProps {
   initialOrder?: PanelKey[];
   available?: PanelKey[];
   movable?: boolean;
+  /** Offers the "+ Canvas" tab, and lets it be closed. */
+  offerCanvas?: boolean;
 }
 
 const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Harness(
-  { initial = 'tasks,notes', initialSplit = 'tasks,notes', initialPhone = 'tasks', initialOrder = ALL, available = ALL, movable = true },
+  { initial = 'tasks,notes', initialSplit = 'tasks,notes', initialPhone = 'tasks', initialOrder = ALL, available = ALL, movable = true, offerCanvas = false },
   ref,
 ) {
   const [value, setValue] = useState<HomePanels>(initial);
@@ -126,6 +138,8 @@ const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Har
       phoneValue={phoneValue}
       onPhoneChange={next => { phoneChanges.push(next); setPhoneValue(next); }}
       available={available}
+      onConnectCanvas={offerCanvas ? () => { ghostCalls.push('connect'); } : undefined}
+      onHideCanvasTab={offerCanvas ? () => { ghostCalls.push('hide'); } : undefined}
       panelWidths={count => (count === 3 ? [20, 30, 50] : count === 2 ? [60, 40] : [100])}
       dividersMovable={() => movable}
       splitRef={splitRef}
@@ -138,14 +152,17 @@ const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Har
 const render = async (props: HarnessProps = {}) => {
   await act(async () => root.render(<Harness {...props} ref={h => { handle = h; }} />));
 };
-/** A button by its accessible name (the panel controls are icon-only). */
+/** A button by its accessible name (the tab controls are icon-only). */
 const control = (name: string) =>
   [...container.querySelectorAll<HTMLButtonElement>('button')].find(b => b.getAttribute('aria-label') === name) ?? null;
-const controlNames = (key: PanelKey) =>
-  [...slot(key)!.querySelectorAll<HTMLButtonElement>('[role="group"] button')].map(b => b.getAttribute('aria-label'));
-const rails = () => [...container.querySelectorAll<HTMLElement>('[data-rail]')].map(r => r.dataset.rail);
 const tabs = () => [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-const tab = (label: string) => tabs().find(t => t.getAttribute('aria-label') === label)!;
+/** A tab's name: its label, or the words on it. */
+const tabName = (t: HTMLElement) => t.getAttribute('aria-label') ?? t.textContent;
+const tab = (name: string) => tabs().find(t => tabName(t) === name)!;
+const selectedTabs = () => tabs().filter(t => t.getAttribute('aria-selected') === 'true').map(tabName);
+/** The wide screen's tabs, left to right, the split tab as its panels in brackets. */
+const strip = () => [...container.querySelectorAll<HTMLElement>('[data-drop-kind="strip"]')]
+  .map(el => (el.dataset.splitTab ? `[${el.dataset.splitTab}]` : el.dataset.dropKey));
 const click = async (el: HTMLElement | null) => { await act(async () => { el!.click(); }); };
 const slot = (key: PanelKey) => container.querySelector<HTMLElement>(`[data-panel="${key}"]`);
 /** On a wide screen, the panels in the split; on a phone, the one not inert. */
@@ -155,24 +172,29 @@ const width = (key: PanelKey) => slot(key)!.style.getPropertyValue('--slot-w');
 const dividers = () => [...container.querySelectorAll<HTMLElement>('[data-divider]')];
 /** The panels on screen, left to right as their CSS order places them. */
 const placed = () => onScreen().sort((a, b) => Number(slot(a)!.style.order) - Number(slot(b)!.style.order));
-const grip = (key: PanelKey) => container.querySelector<HTMLElement>(`[data-reorder-grip="${key}"]`)!;
+/** The tab, or half of the split tab, that drags `key`. */
+const handleOf = (key: PanelKey, kind = 'strip') => container.querySelector<HTMLElement>(`[data-drop-kind="${kind}"][data-drop-key="${key}"]`)!;
 const announced = () => container.querySelector('[role="status"]')!.textContent;
 const indicator = () => {
   const bar = container.querySelector<HTMLElement>('[data-drop-indicator]');
   return bar && [bar.closest<HTMLElement>('[data-drop-key]')!.dataset.dropKey, bar.dataset.dropIndicator];
 };
-/** Lays the drop targets out 100 px apart: across for panels and tabs, down for rails. */
+/** Lays each kind of drop target out 100 px apart, left to right in the DOM's order (a phone's by its CSS order). */
 const layOut = () => {
-  const at = (el: HTMLElement, left: number, top: number, w: number, h: number) => {
-    el.getBoundingClientRect = () => ({ left, top, right: left + w, bottom: top + h, width: w, height: h, x: left, y: top, toJSON: () => ({}) });
+  const at = (el: HTMLElement, left: number) => {
+    el.getBoundingClientRect = () => ({ left, top: 0, right: left + 100, bottom: 40, width: 100, height: 40, x: left, y: 0, toJSON: () => ({}) });
   };
-  const across = [...container.querySelectorAll<HTMLElement>('[data-drop-kind="panel"], [data-drop-kind="tab"]')]
-    .sort((a, b) => Number(a.style.order || 0) - Number(b.style.order || 0));
-  across.forEach((el, i) => at(el, i * 100, 0, 100, 400));
-  container.querySelectorAll<HTMLElement>('[data-drop-kind="rail"]').forEach((el, i) => at(el, 1000, i * 100, 40, 100));
+  for (const kind of ['strip', 'half', 'tab']) {
+    container.querySelectorAll<HTMLElement>(`[data-drop-kind="${kind}"]`).forEach((el, i) => at(el, i * 100));
+  }
 };
 const pointer = async (type: string, target: EventTarget, x: number, y: number) => {
   await act(async () => { target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })); });
+};
+/** Presses a tab with the mouse and moves it far enough to pick it up. */
+const pickUp = async (el: HTMLElement, x: number) => {
+  await pointer('pointerdown', el, x, 10);
+  await pointer('pointermove', el, x + 15, 10);
 };
 const key = async (el: EventTarget, k: string, init: KeyboardEventInit = {}) => {
   await act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init })); });
@@ -185,6 +207,7 @@ beforeEach(() => {
   phoneChanges = [];
   orderChanges = [];
   drags = [];
+  ghostCalls = [];
   panelRenders = 0;
   handle = null;
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -205,68 +228,101 @@ afterEach(() => {
 });
 
 describe('PanelCarousel', () => {
-  it('shows the panels on, each with a header to show it alone or hide it, and the hidden ones as rails', async () => {
+  it('shows a tab for each panel, the panels side by side sharing one split tab', async () => {
     await render();
     expect(onScreen()).toEqual(['tasks', 'notes']);
     expect(slot('tasks')!.getAttribute('aria-label')).toBe('Tasks');
-    expect(controlNames('tasks')).toEqual(['Show only Tasks', 'Hide Tasks']);
-    expect(controlNames('notes')).toEqual(['Show only Notes', 'Hide Notes']);
-    expect(rails()).toEqual(['canvas']);
-    expect(container.querySelector('[role="group"][aria-label="Hidden panels"]')).not.toBeNull();
-    expect(control('Show only Canvas')!.dataset.tip).toBe('Show only Canvas');
-    expect(container.querySelector('[role="tab"]')).toBeNull();
+    expect(strip()).toEqual(['[tasks,notes]', 'canvas']);
+    expect(tabs().map(tabName)).toEqual(['Tasks + Notes side by side', 'Tasks', 'Notes', 'Canvas']);
+    expect(selectedTabs()).toEqual(['Tasks + Notes side by side']);
+    const panel = container.querySelector('[role="tabpanel"]')!;
+    expect(panel.getAttribute('aria-labelledby')).toBe(tab('Tasks + Notes side by side').id);
+    expect(tabs().every(t => t.getAttribute('aria-controls') === panel.id)).toBe(true);
+    expect(tab('Tasks').getAttribute('aria-describedby')).toContain(tab('Tasks + Notes side by side').id);
+    expect(container.querySelector('[role="tablist"]')!.getAttribute('aria-label')).toBe('Home panels');
+    expect(container.querySelector('[data-canvas-ghost]')).toBeNull();
   });
 
-  it('hides a panel from its header, giving the others its width, down to one panel filling the split', async () => {
+  it('shows a panel alone from its tab in one click, keeping the split tab to go back to', async () => {
     await render();
-    await click(control('Hide Notes'));
-    expect(changes).toEqual(['tasks']);
-    expect(onScreen()).toEqual(['tasks']);
-    expect(width('tasks')).toBe('calc(100% - 0px)');
+    await click(tab('Canvas'));
+    expect(changes).toEqual(['canvas']);
+    expect(splitChanges).toEqual(['tasks,notes']);
+    expect(onScreen()).toEqual(['canvas']);
+    expect(width('canvas')).toBe('calc(100% - 0px)');
     expect(dividers()).toEqual([]);
-    expect(rails()).toEqual(['notes', 'canvas']);
-  });
-
-  it('keeps the last panel on: a panel shown alone has no hide, only the way back to the split', async () => {
-    await render({ initial: 'notes' });
-    expect(control('Hide Notes')).toBeNull();
-    expect(controlNames('notes')).toEqual(['Back to Tasks + Notes']);
-    await click(control('Back to Tasks + Notes'));
-    expect(changes).toEqual(['tasks,notes']);
+    expect(strip()).toEqual(['[tasks,notes]', 'canvas']);
+    expect(selectedTabs()).toEqual(['Canvas']);
+    expect(tab('Tasks + Notes side by side').dataset.tip).toBe('Back to Tasks + Notes');
+    await click(tab('Tasks + Notes side by side'));
+    expect(changes).toEqual(['canvas', 'tasks,notes']);
     expect(onScreen()).toEqual(['tasks', 'notes']);
   });
 
-  it('maximizes a panel, then restores the split it came from', async () => {
-    await render({ initial: 'tasks,notes,canvas' });
-    expect(rails()).toEqual([]);
-    await click(control('Show only Canvas'));
-    expect(changes).toEqual(['canvas']);
+  it('shows only one panel of the split from its half of the split tab, then goes back to the split', async () => {
+    await render({ initial: 'tasks,notes,canvas', initialSplit: 'tasks,notes,canvas' });
+    expect(strip()).toEqual(['[tasks,notes,canvas]']);
+    await click(tab('Notes'));
+    expect(changes).toEqual(['notes']);
     expect(splitChanges).toEqual(['tasks,notes,canvas']);
-    expect(onScreen()).toEqual(['canvas']);
-    expect(rails()).toEqual(['tasks', 'notes']);
-    await click(control('Back to Tasks + Notes + Canvas'));
-    expect(changes).toEqual(['canvas', 'tasks,notes,canvas']);
+    expect(onScreen()).toEqual(['notes']);
+    expect(selectedTabs()).toEqual(['Notes']);
+    await click(tab('Notes'));
+    expect(changes).toEqual(['notes']);
+    await click(tab('Tasks + Notes + Canvas side by side'));
+    expect(changes).toEqual(['notes', 'tasks,notes,canvas']);
     expect(onScreen()).toEqual(['tasks', 'notes', 'canvas']);
   });
 
-  it('shows a hidden panel alone from its rail, or beside the others with its +', async () => {
-    await render();
-    await click(control('Show only Canvas'));
-    expect(changes).toEqual(['canvas']);
-    expect(controlNames('canvas')).toEqual(['Back to Tasks + Notes']);
-    await click(control('Add Tasks beside the others'));
-    expect(changes).toEqual(['canvas', 'tasks,canvas']);
-    expect(splitChanges.at(-1)).toBe('tasks,canvas');
+  it('takes a panel out of the split, down to no split at all', async () => {
+    await render({ initial: 'tasks,notes,canvas', initialSplit: 'tasks,notes,canvas' });
+    await click(control('Take Notes out of the split'));
+    expect(changes).toEqual(['tasks,canvas']);
+    expect(splitChanges).toEqual(['tasks,canvas']);
     expect(onScreen()).toEqual(['tasks', 'canvas']);
-    expect(rails()).toEqual(['notes']);
-    const rail = container.querySelector('[data-rail="notes"]')!;
-    expect([...rail.querySelectorAll('button')].map(b => b.getAttribute('aria-label')))
-      .toEqual(['Move Notes', 'Add Notes beside the others', 'Show only Notes']);
+    expect(strip()).toEqual(['[tasks,canvas]', 'notes']);
+    await click(control('Take Canvas out of the split'));
+    expect(changes).toEqual(['tasks,canvas', 'tasks']);
+    expect(onScreen()).toEqual(['tasks']);
+    expect(strip()).toEqual(['tasks', 'notes', 'canvas']);
+    expect(selectedTabs()).toEqual(['Tasks']);
+  });
+
+  it('leaves a panel shown alone on screen when the split it belongs to loses a panel', async () => {
+    await render({ initial: 'tasks' });
+    expect(selectedTabs()).toEqual(['Tasks']);
+    await click(control('Take Notes out of the split'));
+    expect(splitChanges).toEqual(['tasks']);
+    expect(changes).toEqual([]);
+    expect(strip()).toEqual(['tasks', 'notes', 'canvas']);
+    expect(selectedTabs()).toEqual(['Tasks']);
+  });
+
+  it('adds a panel to the split from its tab, or opens it beside the one panel with no split yet', async () => {
+    await render();
+    await click(control('Add Canvas to the split'));
+    expect(changes).toEqual(['tasks,notes,canvas']);
+    expect(strip()).toEqual(['[tasks,notes,canvas]']);
+    act(() => root.unmount());
+    root = createRoot(container);
+    changes = [];
+    await render({ initial: 'notes', initialSplit: 'notes' });
+    expect(strip()).toEqual(['tasks', 'notes', 'canvas']);
+    expect(control('Open Notes beside Notes')).toBeNull();
+    await click(control('Open Tasks beside Notes'));
+    expect(changes).toEqual(['tasks,notes']);
+    expect(strip()).toEqual(['[tasks,notes]', 'canvas']);
+  });
+
+  it('keeps the last panel on: a panel alone with no split has nothing to take out or close', async () => {
+    await render({ initial: 'notes', initialSplit: 'notes', available: NO_CANVAS });
+    expect([...container.querySelectorAll('button')].map(b => b.getAttribute('aria-label')).filter(Boolean))
+      .toEqual(['Open Tasks beside Notes']);
   });
 
   it('shows three panels in columns with a divider between each, saved in Tasks, Notes, Canvas order', async () => {
-    await render({ initial: 'notes,canvas' });
-    await click(control('Add Tasks beside the others'));
+    await render({ initial: 'notes,canvas', initialSplit: 'notes,canvas' });
+    await click(control('Add Tasks to the split'));
     expect(changes).toEqual(['tasks,notes,canvas']);
     expect(onScreen()).toEqual(['tasks', 'notes', 'canvas']);
     expect([width('tasks'), width('notes'), width('canvas')]).toEqual(
@@ -295,26 +351,81 @@ describe('PanelCarousel', () => {
   it('reads an older saved pair as the panels it names', async () => {
     await render({ initial: 'canvas,tasks' });
     expect(onScreen()).toEqual(['tasks', 'canvas']);
-    await click(control('Add Notes beside the others'));
+    expect(strip()).toEqual(['[tasks,canvas]', 'notes']);
+    await click(control('Add Notes to the split'));
     expect(changes).toEqual(['tasks,notes,canvas']);
   });
 
+  describe('from the keyboard', () => {
+    it('is one tab stop, on the selected tab, with the arrow keys moving between tabs', async () => {
+      await render({ initial: 'canvas' });
+      expect(tabs().filter(t => t.tabIndex === 0).map(tabName)).toEqual(['Canvas']);
+      tab('Canvas').focus();
+      await key(tab('Canvas'), 'ArrowRight');
+      expect(document.activeElement).toBe(tab('Tasks + Notes side by side'));
+      await key(document.activeElement!, 'ArrowRight');
+      expect(document.activeElement).toBe(tab('Tasks'));
+      expect(tabs().filter(t => t.tabIndex === 0).map(tabName)).toEqual(['Tasks']);
+      await key(document.activeElement!, 'End');
+      expect(document.activeElement).toBe(tab('Canvas'));
+      await key(document.activeElement!, 'Home');
+      expect(document.activeElement).toBe(tab('Tasks + Notes side by side'));
+      await key(document.activeElement!, 'ArrowLeft');
+      expect(document.activeElement).toBe(tab('Canvas'));
+      expect(changes).toEqual([]);
+    });
+
+    it('adds a tab to the split with Shift+Enter, and takes a half out with Delete', async () => {
+      await render();
+      await key(tab('Canvas'), 'Enter', { shiftKey: true });
+      expect(changes).toEqual(['tasks,notes,canvas']);
+      await key(tab('Notes'), 'Delete');
+      expect(changes).toEqual(['tasks,notes,canvas', 'tasks,canvas']);
+      expect(strip()).toEqual(['[tasks,canvas]', 'notes']);
+    });
+
+    it('has no number-key shortcuts', async () => {
+      await render();
+      for (const k of ['1', '2', '3', '0']) {
+        await key(tab('Tasks'), k);
+        await key(window, k);
+      }
+      expect(changes).toEqual([]);
+    });
+  });
+
   describe('without Canvas connected', () => {
-    it('offers Tasks and Notes, with no Canvas rail and no way back to a split that needs it', async () => {
+    it('offers Tasks and Notes, with no Canvas tab and no split that needs it', async () => {
       await render({ initial: 'tasks,canvas', initialSplit: 'tasks,canvas', available: NO_CANVAS });
       expect(onScreen()).toEqual(['tasks']);
       expect(slot('canvas')).toBeNull();
-      expect(rails()).toEqual(['notes']);
-      expect(controlNames('tasks')).toEqual([]);
-      await click(control('Add Notes beside the others'));
+      expect(strip()).toEqual(['tasks', 'notes']);
+      expect(control('Connect Canvas')).toBeNull();
+      await click(control('Open Notes beside Tasks'));
       expect(changes).toEqual(['tasks,notes']);
     });
 
     it('falls back to Tasks and Notes when only Canvas was on', async () => {
       await render({ initial: 'canvas', available: NO_CANVAS });
       expect(onScreen()).toEqual(['tasks', 'notes']);
-      expect(rails()).toEqual([]);
+      expect(strip()).toEqual(['[tasks,notes]']);
       expect(changes).toEqual([]);
+    });
+
+    it('offers a "+ Canvas" tab beside the others that connects it, and can be closed', async () => {
+      await render({ available: NO_CANVAS, offerCanvas: true });
+      const ghost = container.querySelector('[data-canvas-ghost]')!;
+      expect(ghost.closest('[role="tablist"]')).toBeNull();
+      expect(ghost.textContent).toBe('Canvas');
+      await click(control('Connect Canvas'));
+      await click(control('Close the Canvas tab'));
+      expect(ghostCalls).toEqual(['connect', 'hide']);
+      expect(changes).toEqual([]);
+    });
+
+    it('leaves the "+ Canvas" tab out once Canvas is connected', async () => {
+      await render({ offerCanvas: true });
+      expect(container.querySelector('[data-canvas-ghost]')).toBeNull();
     });
   });
 
@@ -328,12 +439,12 @@ describe('PanelCarousel', () => {
       return el;
     };
 
-    it('shows one panel, picked from icon tabs, without touching the wide screen\'s panels', async () => {
+    it('shows one panel, picked from labelled tabs, without touching the wide screen\'s panels', async () => {
       await render({ initial: 'tasks,notes,canvas', initialPhone: 'notes' });
-      expect(container.querySelector('[role="group"]')).toBeNull();
-      expect(rails()).toEqual([]);
-      expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Tasks', 'Notes', 'Canvas']);
-      expect(tabs().map(t => t.textContent)).toEqual(['', '', '']);
+      expect(container.querySelector('[data-split-tab]')).toBeNull();
+      expect(container.querySelector('[role="tablist"]')!.getAttribute('aria-label')).toBe('Home panel');
+      expect(tabs().map(tabName)).toEqual(['Tasks', 'Notes', 'Canvas']);
+      expect(tabs().every(t => !t.hasAttribute('aria-label'))).toBe(true);
       expect(tab('Notes').getAttribute('aria-selected')).toBe('true');
       expect(onScreen()).toEqual(['notes']);
       expect(slot('notes')!.getAttribute('role')).toBe('tabpanel');
@@ -378,14 +489,14 @@ describe('PanelCarousel', () => {
 
     it('moves between tabs with the arrow keys', async () => {
       await render();
-      await act(async () => { tab('Tasks').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); });
+      await key(tab('Tasks'), 'ArrowLeft');
       expect(phoneChanges).toEqual(['canvas']);
       expect(document.activeElement).toBe(tab('Canvas'));
     });
 
     it('lays the tabs and the swipe track out in the saved order', async () => {
       await render({ initialOrder: ['canvas', 'tasks', 'notes'] });
-      expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Canvas', 'Tasks', 'Notes']);
+      expect(tabs().map(tabName)).toEqual(['Canvas', 'Tasks', 'Notes']);
       expect([slot('canvas')!.style.order, slot('tasks')!.style.order, slot('notes')!.style.order]).toEqual(['0', '1', '2']);
       const el = track();
       const scrollTo = vi.fn();
@@ -406,7 +517,7 @@ describe('PanelCarousel', () => {
       await pointer('pointerup', window, 30, 20);
       await click(tab('Canvas'));
       expect(orderChanges).toEqual([['canvas', 'tasks', 'notes']]);
-      expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Canvas', 'Tasks', 'Notes']);
+      expect(tabs().map(tabName)).toEqual(['Canvas', 'Tasks', 'Notes']);
       expect(phoneChanges).toEqual([]);
       expect(announced()).toBe('Canvas moved to position 1 of 3.');
       vi.useRealTimers();
@@ -441,33 +552,79 @@ describe('PanelCarousel', () => {
       vi.useRealTimers();
     });
 
-    it('moves the picked tab with Alt and an arrow key', async () => {
+    it('moves the picked tab with Shift (or Alt) and an arrow key', async () => {
       await render({ initialPhone: 'notes' });
-      await key(tab('Notes'), 'ArrowLeft', { altKey: true });
+      await key(tab('Notes'), 'ArrowLeft', { shiftKey: true });
       expect(orderChanges).toEqual([['notes', 'tasks', 'canvas']]);
       expect(phoneChanges).toEqual([]);
       expect(tab('Notes').getAttribute('aria-selected')).toBe('true');
       expect(announced()).toBe('Notes moved to position 1 of 3.');
       await key(tab('Notes'), 'ArrowLeft', { altKey: true });
       expect(orderChanges).toHaveLength(1);
+      await key(tab('Notes'), 'ArrowRight', { altKey: true });
+      expect(orderChanges.at(-1)).toEqual(['tasks', 'notes', 'canvas']);
     });
 
-    it('offers only Tasks and Notes without Canvas, falling back to Tasks', async () => {
-      await render({ initialPhone: 'canvas', available: NO_CANVAS });
-      expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Tasks', 'Notes']);
+    it('offers only Tasks and Notes without Canvas, falling back to Tasks, with the "+ Canvas" tab when offered', async () => {
+      await render({ initialPhone: 'canvas', available: NO_CANVAS, offerCanvas: true });
+      expect(tabs().map(tabName)).toEqual(['Tasks', 'Notes']);
       expect(onScreen()).toEqual(['tasks']);
       expect(slot('canvas')).toBeNull();
+      await click(control('Connect Canvas'));
+      expect(ghostCalls).toEqual(['connect']);
     });
   });
 
   describe('reordering', () => {
-    it('drags a panel by its grip to the other side of another, showing where it will land', async () => {
+    it('drags a tab to a new place, showing where it will land', async () => {
+      await render({ initial: 'tasks', initialSplit: 'tasks' });
+      layOut();
+      await pickUp(handleOf('canvas'), 250);
+      expect(document.body.textContent).toContain('Moving Canvas');
+      expect(handleOf('canvas').className).toContain('opacity-40');
+      await pointer('pointermove', window, 30, 10);
+      expect(indicator()).toEqual(['tasks', 'before']);
+      await pointer('pointerup', window, 30, 10);
+      expect(orderChanges).toEqual([['canvas', 'tasks', 'notes']]);
+      expect(strip()).toEqual(['canvas', 'tasks', 'notes']);
+      expect(indicator()).toBeNull();
+      expect(announced()).toBe('Canvas moved to position 1 of 3.');
+      expect(changes).toEqual([]);
+    });
+
+    it('doesn\'t pick a tab up until the mouse moves, so a click still picks it', async () => {
+      await render({ initial: 'tasks', initialSplit: 'tasks' });
+      await pointer('pointerdown', handleOf('canvas'), 250, 10);
+      await pointer('pointermove', handleOf('canvas'), 254, 10);
+      expect(document.body.textContent).not.toContain('Moving Canvas');
+      await pointer('pointerup', handleOf('canvas'), 254, 10);
+      await click(tab('Canvas'));
+      expect(changes).toEqual(['canvas']);
+    });
+
+    it('moves a tab past the split tab as a whole', async () => {
+      await render();
+      layOut();
+      await pickUp(handleOf('canvas'), 150);
+      await pointer('pointermove', window, 20, 10);
+      expect(indicator()).toEqual(['tasks', 'before']);
+      await pointer('pointerup', window, 20, 10);
+      expect(orderChanges).toEqual([['canvas', 'tasks', 'notes']]);
+      expect(strip()).toEqual(['canvas', '[tasks,notes]']);
+      layOut();
+      await pickUp(handleOf('canvas'), 50);
+      await pointer('pointermove', window, 190, 10);
+      expect(indicator()).toEqual(['tasks', 'after']);
+      await pointer('pointerup', window, 190, 10);
+      expect(orderChanges.at(-1)).toEqual(['tasks', 'notes', 'canvas']);
+      expect(strip()).toEqual(['[tasks,notes]', 'canvas']);
+    });
+
+    it('drags a half of the split tab within the split, moving its panel without remounting it', async () => {
       await render({ initial: 'tasks,notes,canvas' });
       await click(container.querySelector<HTMLElement>('[data-counter="notes"]')!);
       layOut();
-      expect(grip('notes').dataset.tip).toBe('Drag to reorder');
-      await pointer('pointerdown', grip('notes'), 150, 10);
-      expect(slot('notes')!.className).toContain('opacity-50');
+      await pickUp(handleOf('notes', 'half'), 150);
       await pointer('pointermove', window, 30, 10);
       expect(indicator()).toEqual(['tasks', 'before']);
       await pointer('pointermove', window, 280, 10);
@@ -475,7 +632,7 @@ describe('PanelCarousel', () => {
       await pointer('pointerup', window, 280, 10);
       expect(orderChanges).toEqual([['tasks', 'canvas', 'notes']]);
       expect(placed()).toEqual(['tasks', 'canvas', 'notes']);
-      expect(indicator()).toBeNull();
+      expect(tabs().map(tabName)).toEqual(['Tasks + Canvas + Notes side by side', 'Tasks', 'Canvas', 'Notes']);
       expect(announced()).toBe('Notes moved to position 3 of 3.');
       // The panel moved without remounting, and the widths stay with the places.
       expect(slot('notes')!.textContent).toContain('notes:1');
@@ -487,7 +644,7 @@ describe('PanelCarousel', () => {
     it('moves the ghost without re-rendering the panels until the drop target changes', async () => {
       await render({ initial: 'tasks,notes,canvas' });
       layOut();
-      await pointer('pointerdown', grip('notes'), 150, 10);
+      await pickUp(handleOf('notes', 'half'), 150);
       await pointer('pointermove', window, 30, 10);
       const ghost = [...document.body.querySelectorAll<HTMLElement>('[aria-hidden]')].find(el => el.textContent === 'Moving Notes')!;
       const renders = panelRenders;
@@ -502,10 +659,10 @@ describe('PanelCarousel', () => {
       await pointer('pointerup', window, 280, 10);
     });
 
-    it('puts a dragged panel back when Escape is pressed', async () => {
+    it('puts a dragged tab back when Escape is pressed', async () => {
       await render();
       layOut();
-      await pointer('pointerdown', grip('tasks'), 50, 10);
+      await pickUp(handleOf('tasks', 'half'), 50);
       await pointer('pointermove', window, 180, 10);
       expect(indicator()).toEqual(['notes', 'after']);
       // Released in the same task as Escape, before a render.
@@ -518,82 +675,58 @@ describe('PanelCarousel', () => {
       expect(announced()).toBe('Moving Tasks cancelled.');
     });
 
-    it('leaves the order alone when a panel is dropped where it was', async () => {
-      await render();
+    it('leaves the order alone when a tab is dropped where it was', async () => {
+      await render({ initial: 'tasks', initialSplit: 'tasks' });
       layOut();
-      await pointer('pointerdown', grip('tasks'), 50, 10);
+      await pickUp(handleOf('tasks'), 30);
       await pointer('pointermove', window, 60, 10);
       await pointer('pointerup', window, 60, 10);
       expect(orderChanges).toEqual([]);
     });
 
-    it('moves a panel with the arrow keys on its grip, keeping focus there', async () => {
-      await render({ initial: 'tasks,notes,canvas' });
-      expect(grip('tasks').getAttribute('aria-label')).toBe('Move Tasks');
-      grip('tasks').focus();
-      await key(grip('tasks'), 'ArrowRight');
-      expect(placed()).toEqual(['notes', 'tasks', 'canvas']);
-      expect(announced()).toBe('Tasks moved to position 2 of 3.');
-      await key(grip('tasks'), 'End');
-      expect(placed()).toEqual(['notes', 'canvas', 'tasks']);
-      await key(grip('tasks'), 'ArrowRight');
-      expect(orderChanges).toHaveLength(2);
-      await key(grip('canvas'), 'Home');
-      expect(placed()).toEqual(['canvas', 'notes', 'tasks']);
-      expect(document.activeElement).toBe(grip('tasks'));
-    });
-
-    it('has no grip on a panel shown alone', async () => {
-      await render({ initial: 'notes' });
-      expect(container.querySelector('[data-panel="notes"] [data-reorder-grip]')).toBeNull();
-    });
-
-    it('drops a rail among the panels, showing that panel there', async () => {
+    it('moves a tab with Shift and an arrow key, past the split tab as a whole, keeping focus on it', async () => {
       await render();
-      layOut();
-      await pointer('pointerdown', grip('canvas'), 1020, 50);
-      await pointer('pointermove', window, 120, 10);
-      expect(indicator()).toEqual(['notes', 'before']);
-      await pointer('pointerup', window, 120, 10);
-      expect(orderChanges).toEqual([['tasks', 'canvas', 'notes']]);
-      expect(changes).toEqual(['tasks,notes,canvas']);
-      expect(placed()).toEqual(['tasks', 'canvas', 'notes']);
-      expect(rails()).toEqual([]);
+      tab('Canvas').focus();
+      expect(tab('Canvas').getAttribute('aria-keyshortcuts')).toContain('Shift+ArrowLeft');
+      await key(tab('Canvas'), 'ArrowLeft', { shiftKey: true });
+      expect(orderChanges).toEqual([['canvas', 'tasks', 'notes']]);
+      expect(strip()).toEqual(['canvas', '[tasks,notes]']);
+      expect(announced()).toBe('Canvas moved to position 1 of 3.');
+      expect(document.activeElement).toBe(tab('Canvas'));
+      await key(tab('Canvas'), 'ArrowLeft', { shiftKey: true });
+      expect(orderChanges).toHaveLength(1);
+      await key(tab('Canvas'), 'ArrowRight', { shiftKey: true });
+      expect(orderChanges.at(-1)).toEqual(['tasks', 'notes', 'canvas']);
     });
 
-    it('reorders the rails among themselves, by dragging or with the up and down arrows', async () => {
-      await render({ initial: 'tasks' });
-      expect(rails()).toEqual(['notes', 'canvas']);
-      layOut();
-      await pointer('pointerdown', grip('canvas'), 1020, 150);
-      await pointer('pointermove', window, 1020, 20);
-      expect(indicator()).toEqual(['notes', 'before']);
-      await pointer('pointerup', window, 1020, 20);
-      expect(rails()).toEqual(['canvas', 'notes']);
-      expect(changes).toEqual([]);
-      grip('canvas').focus();
-      await key(grip('canvas'), 'ArrowDown');
-      expect(rails()).toEqual(['notes', 'canvas']);
-      expect(document.activeElement).toBe(grip('canvas'));
-      expect(announced()).toBe('Canvas moved to position 2 of 2.');
+    it('moves a half within the split with Shift and an arrow key', async () => {
+      await render();
+      tab('Tasks').focus();
+      await key(tab('Tasks'), 'ArrowRight', { shiftKey: true });
+      expect(orderChanges).toEqual([['notes', 'tasks', 'canvas']]);
+      expect(placed()).toEqual(['notes', 'tasks']);
+      expect(announced()).toBe('Tasks moved to position 2 of 2.');
+      expect(document.activeElement).toBe(tab('Tasks'));
+      await key(tab('Tasks'), 'ArrowRight', { shiftKey: true });
+      expect(orderChanges).toHaveLength(1);
     });
 
-    it('lays the panels and rails out in the saved order, and adds a panel back in its place', async () => {
-      await render({ initial: 'canvas,tasks', initialOrder: ['canvas', 'notes', 'tasks'] });
+    it('lays the tabs and panels out in the saved order, and adds a panel back in its place', async () => {
+      await render({ initial: 'canvas,tasks', initialSplit: 'canvas,tasks', initialOrder: ['canvas', 'notes', 'tasks'] });
       expect(placed()).toEqual(['canvas', 'tasks']);
-      await click(control('Add Notes beside the others'));
+      expect(strip()).toEqual(['[canvas,tasks]', 'notes']);
+      await click(control('Add Notes to the split'));
       expect(changes).toEqual(['tasks,notes,canvas']);
       expect(placed()).toEqual(['canvas', 'notes', 'tasks']);
-      await click(control('Hide Canvas'));
-      await click(control('Hide Notes'));
-      expect(rails()).toEqual(['canvas', 'notes']);
+      await click(control('Take Canvas out of the split'));
+      expect(strip()).toEqual(['canvas', '[notes,tasks]']);
     });
 
-    it('keeps the last panel on, maximize and restore working in any order', async () => {
+    it('shows a panel alone and restores the split in any order', async () => {
       await render({ initial: 'tasks,notes,canvas', initialOrder: ['notes', 'canvas', 'tasks'] });
-      await click(control('Show only Canvas'));
-      expect(rails()).toEqual(['notes', 'tasks']);
-      await click(control('Back to Tasks + Notes + Canvas'));
+      await click(tab('Canvas'));
+      expect(onScreen()).toEqual(['canvas']);
+      await click(tab('Notes + Canvas + Tasks side by side'));
       expect(placed()).toEqual(['notes', 'canvas', 'tasks']);
     });
   });
@@ -602,10 +735,10 @@ describe('PanelCarousel', () => {
     await render();
     await click(container.querySelector<HTMLElement>('[data-counter="tasks"]')!);
     expect(slot('canvas')).toBeNull();
-    await click(control('Hide Tasks'));
+    await click(tab('Notes'));
     expect(visible('tasks')).toBe(false);
     expect(slot('tasks')!.textContent).toBe('tasks:1');
-    await click(control('Add Tasks beside the others'));
+    await click(tab('Tasks + Notes side by side'));
     expect(slot('tasks')!.textContent).toContain('tasks:1');
   });
 
@@ -614,11 +747,11 @@ describe('PanelCarousel', () => {
     await click(container.querySelector<HTMLElement>('[data-counter="tasks"]')!);
     media.phone = true;
     await render();
-    expect(tabs().length).toBe(3);
+    expect(tabs().map(tabName)).toEqual(['Tasks', 'Notes', 'Canvas']);
     expect(slot('tasks')!.textContent).toBe('tasks:1');
     media.phone = false;
     await render();
-    expect(tabs().length).toBe(0);
+    expect(container.querySelector('[data-split-tab]')).not.toBeNull();
     expect(slot('tasks')!.textContent).toContain('tasks:1');
   });
 

@@ -781,11 +781,28 @@ const CoursesToShow: React.FC<{
 interface Props {
   /** Demo sandboxes can't connect Canvas (the backend refuses them with 403). */
   isDemo: boolean;
+  /** Whether the home page's "+ Canvas" tab, offered while Canvas isn't connected, is closed. */
+  homeCanvasTab?: { hidden: boolean; onChange: (hidden: boolean) => void };
 }
+
+/** Not connected: the home page's "+ Canvas" tab, closed there by someone who doesn't use Canvas, and opened again here. */
+const HomeCanvasTabNote: React.FC<{ hidden: boolean; onChange: (hidden: boolean) => void }> = ({ hidden, onChange }) => (
+  <p className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
+    {hidden ? 'The Canvas tab is closed on your home page. ' : 'Not using Canvas? You can close the Canvas tab on your home page. '}
+    <button
+      type="button"
+      onClick={() => onChange(!hidden)}
+      className="font-medium hover:underline"
+      style={{ color: 'var(--tm-accent)' }}
+    >
+      {hidden ? 'Show it again' : 'Close it'}
+    </button>
+  </p>
+);
 
 type Mode = 'view' | 'replace' | 'remove';
 
-const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
+const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) => {
   const [connection, setConnection] = useState<CanvasConnection | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState<string | null>(null);
@@ -988,6 +1005,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
         {intro}
         {noticeEl}
         {connectOptions('connect')}
+        {homeCanvasTab && <HomeCanvasTabNote {...homeCanvasTab} />}
       </div>
     );
   }

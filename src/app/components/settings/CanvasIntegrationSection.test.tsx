@@ -177,6 +177,27 @@ describe('CanvasIntegrationSection', () => {
     expect(note).toContain('Anyone with the link can see your Canvas calendar');
   });
 
+  it('opens the home page\'s closed Canvas tab again, or closes it, while not connected', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(notConnected);
+    const changes: boolean[] = [];
+    const renderTab = (hidden: boolean) => act(async () => root.render(
+      <CanvasIntegrationSection isDemo={false} homeCanvasTab={{ hidden, onChange: next => { changes.push(next); } }} />,
+    ));
+    await renderTab(true);
+    expect(text()).toContain('The Canvas tab is closed on your home page.');
+    await click(button('Show it again'));
+    await renderTab(false);
+    expect(text()).toContain('Not using Canvas? You can close the Canvas tab on your home page.');
+    await click(button('Close it'));
+    expect(changes).toEqual([false, true]);
+  });
+
+  it('says nothing about the home page\'s Canvas tab once connected', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected());
+    await act(async () => root.render(<CanvasIntegrationSection isDemo={false} homeCanvasTab={{ hidden: true, onChange: () => {} }} />));
+    expect(text()).not.toContain('Canvas tab');
+  });
+
   it('offers the access token as the other way to connect, and back', async () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     await render();
