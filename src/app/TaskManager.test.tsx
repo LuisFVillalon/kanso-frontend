@@ -19,7 +19,8 @@ vi.mock('@/app/lib/backend-api', () => api);
 const auth = vi.hoisted(() => ({ isDemo: false, user: { id: 'u1' }, dataUserId: 'u1', signOut: vi.fn() }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
-vi.mock('@/app/context/ToastContext', () => ({ useToast: () => vi.fn() }));
+const showToast = vi.hoisted(() => vi.fn());
+vi.mock('@/app/context/ToastContext', () => ({ useToast: () => showToast }));
 
 const linkedTask: Task = {
   id: 1, title: 'Problem Set 6', description: '', completed: false, priority: null, due_date: null, due_time: null,
@@ -46,11 +47,12 @@ vi.mock('@/app/context/NotesContext', () => ({
     discardDraft: vi.fn(), pendingNoteIds: new Set(), removeTagFromNotes: vi.fn(), archiveSyncToken: 0,
   }),
 }));
+const shell = vi.hoisted(() => ({ openSettings: vi.fn() }));
 vi.mock('@/app/context/AppShellContext', () => ({
   useAppShell: () => ({
     profileState: { profile: { name: '', avatar: null }, loading: false, loaded: true, saveProfile: vi.fn() },
     calendarSettingsState: { calendarSettings: {}, loading: false, saveCalendarSettings: vi.fn() },
-    openNewTask: vi.fn(), createNote: vi.fn(), openNewHabit: vi.fn(), openEditTask: vi.fn(), openSettings: vi.fn(),
+    openNewTask: vi.fn(), createNote: vi.fn(), openNewHabit: vi.fn(), openEditTask: vi.fn(), openSettings: shell.openSettings,
     openManageTags: vi.fn(), openManageHabits: vi.fn(), openHabitHistory: vi.fn(), requestLogout: vi.fn(),
     settingsClosedToken: 0, registerNoteOpener: vi.fn(),
   }),
@@ -60,7 +62,7 @@ vi.mock('@/app/context/AppShellContext', () => ({
 // The panels offered, on and on a phone are listed on the wrapper, with a button for a phone's pick.
 vi.mock('@/app/components/common/PanelCarousel', async importOriginal => ({
   ...(await importOriginal<object>()),
-  default: ({ renderPanel, available, value, phoneValue, onPhoneChange, order, onOrderChange }: {
+  default: ({ renderPanel, available, value, phoneValue, onPhoneChange, order, onOrderChange, onConnectCanvas, onHideCanvasTab }: {
     renderPanel: (key: 'canvas', opts: { widthPct: number }) => React.ReactNode;
     available: string[];
     value: string;
@@ -68,10 +70,14 @@ vi.mock('@/app/components/common/PanelCarousel', async importOriginal => ({
     onPhoneChange: (next: 'notes') => void;
     order: string[];
     onOrderChange: (next: string[]) => void;
+    onConnectCanvas?: () => void;
+    onHideCanvasTab?: () => void;
   }) => (
     <div data-available={available.join(',')} data-value={value} data-phone={phoneValue} data-order={order.join(',')}>
       <button type="button" data-phone-pick onClick={() => onPhoneChange('notes')} />
       <button type="button" data-reorder onClick={() => onOrderChange(['canvas', 'tasks', 'notes'])} />
+      {onConnectCanvas && <button type="button" data-connect-canvas onClick={onConnectCanvas} />}
+      <button type="button" data-hide-canvas-tab onClick={onHideCanvasTab} />
       {renderPanel('canvas', { widthPct: 50 })}
     </div>
   ),
@@ -168,6 +174,30 @@ describe('TaskManager home panels', () => {
     api.fetchCanvasConnection.mockResolvedValue({ connected: false });
     await render();
     expect(availablePanels()).toBe('tasks,notes');
+  });
+
+  it('offers a "+ Canvas" tab that opens Settings → Canvas until it is closed, remembered per user', async () => {
+    api.fetchCanvasConnection.mockResolvedValue({ connected: false });
+    await render();
+    await act(async () => container.querySelector<HTMLElement>('[data-connect-canvas]')!.click());
+    expect(shell.openSettings).toHaveBeenCalledWith('canvas');
+    await act(async () => container.querySelector<HTMLElement>('[data-hide-canvas-tab]')!.click());
+    expect(container.querySelector('[data-connect-canvas]')).toBeNull();
+    expect(localStorage.getItem('tm-home-canvas-tab-hidden:u1')).toBe('true');
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Settings → Canvas'), 'info', expect.objectContaining({ label: 'Undo' }));
+    await act(async () => showToast.mock.calls[0][2].onClick());
+    expect(container.querySelector('[data-connect-canvas]')).not.toBeNull();
+    expect(localStorage.getItem('tm-home-canvas-tab-hidden:u1')).toBeNull();
+  });
+
+  it('offers no "+ Canvas" tab while Canvas is connected, or before the check answers', async () => {
+    await render();
+    expect(container.querySelector('[data-connect-canvas]')).toBeNull();
+    api.fetchCanvasConnection.mockReturnValue(new Promise(() => {}));
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render();
+    expect(container.querySelector('[data-connect-canvas]')).toBeNull();
   });
 
   it('keeps a saved Canvas pair while the connection check fails', async () => {

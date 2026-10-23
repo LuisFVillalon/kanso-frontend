@@ -17,6 +17,7 @@ import { useMountTransition } from '@/app/hooks/useMountTransition';
 import { useCanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { useCanvasTaskSync } from '@/app/hooks/useCanvasTaskSync';
 import { useCanvasConnected } from '@/app/hooks/useCanvasConnected';
+import { useCanvasTabHidden } from '@/app/hooks/useCanvasTabHidden';
 import { Note } from '@/app/types/notes';
 import { taskToEditForm } from '@/app/utils/taskUtils';
 import DragHandle from '@/app/components/common/DragHandle';
@@ -95,6 +96,15 @@ const TaskManager: React.FC = () => {
   const homePanelKeys: PanelKey[] = (canvasConnected ?? homePanels.includes('canvas'))
     ? ['tasks', 'notes', 'canvas']
     : ['tasks', 'notes'];
+  // Without Canvas connected, a "+ Canvas" tab offers it until the user closes it.
+  const [canvasTabHidden, setCanvasTabHidden] = useCanvasTabHidden(dataUserId);
+  const hideCanvasTab = () => {
+    setCanvasTabHidden(true);
+    showToast('Canvas tab closed. You can bring it back in Settings → Canvas.', 'info', {
+      label: 'Undo',
+      onClick: () => setCanvasTabHidden(false),
+    });
+  };
 
   // The key-press moment: plays when checking off a task settles today's
   // plan, and when the user switches into focus mode.
@@ -436,7 +446,7 @@ const TaskManager: React.FC = () => {
               </div>
             )}
 
-            {/* Tasks, Notes & Canvas — side by side in the resizable split, hidden ones as rails */}
+            {/* Tasks, Notes & Canvas — tabs over the resizable split */}
             <div ref={panelAreaRef} className="space-y-4">
               <PanelCarousel
                 ref={carouselRef}
@@ -449,6 +459,8 @@ const TaskManager: React.FC = () => {
                 phoneValue={phonePanel}
                 onPhoneChange={setPhonePanel}
                 available={homePanelKeys}
+                onConnectCanvas={canvasConnected === false && !canvasTabHidden ? () => shell.openSettings('canvas') : undefined}
+                onHideCanvasTab={hideCanvasTab}
                 panelWidths={panelWidths}
                 dividersMovable={dividersMovable}
                 splitRef={splitContainerRef}
