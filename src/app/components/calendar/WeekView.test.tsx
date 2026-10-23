@@ -64,7 +64,7 @@ const activityFor = (start: string, end: string): CalendarActivity => ({
   habit_completions: [{ habit_id: 5, habit_title: 'Run', date: '2026-10-21', estimated_time: null }],
 });
 
-type Schedule = Pick<ProfileFields, 'dayStartTime' | 'shutoffTime' | 'restDays'>;
+type Schedule = Pick<ProfileFields, 'dayStartTime' | 'shutoffTime' | 'restDays'> & Partial<Pick<ProfileFields, 'dayWindows'>>;
 
 const DEFAULT_SCHEDULE: Schedule = { dayStartTime: '08:00', shutoffTime: '22:00', restDays: [0, 6] };
 
@@ -165,6 +165,19 @@ describe('WeekView', { timeout: 30_000 }, () => {
       ...Array(5).fill('Work day, work window closes at 2:00 AM, opens at 6:00 PM'),
     ]);
     expect(container.querySelectorAll('[data-rest-day]')).toHaveLength(1);
+  });
+
+  it("opens and closes each day at that day's own window", async () => {
+    await renderWithSchedule({
+      dayStartTime: '08:00', shutoffTime: '22:00', restDays: [0, 6],
+      dayWindows: { '1': { start: '10:00', end: '16:00' }, '5': { start: '09:00', end: '13:00' } },
+    });
+    expect(daySchedules()).toEqual([
+      'Work day, work window opens at 10:00 AM, closes at 4:00 PM',
+      ...Array(3).fill('Work day, work window opens at 8:00 AM, closes at 10:00 PM'),
+      'Work day, work window opens at 9:00 AM, closes at 1:00 PM',
+      'Rest day', 'Rest day',
+    ]);
   });
 
   it('has no resize handle unless the parent takes the height', async () => {

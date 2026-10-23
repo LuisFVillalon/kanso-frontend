@@ -189,7 +189,7 @@ const TaskManager: React.FC = () => {
   const [moodCheckinDate, setMoodCheckinDate] = useState<string | null>(null);
   const closeMoodCheckin = useCallback(() => setMoodCheckinDate(null), []);
   const openMoodCheckin = (date?: string) =>
-    setMoodCheckinDate(date ?? toLocalDateStr(checkinDayAt(new Date(), profile.dayStartTime, profile.shutoffTime)));
+    setMoodCheckinDate(date ?? toLocalDateStr(checkinDayAt(new Date(), profile.dayStartTime, profile.shutoffTime, profile.dayWindows)));
 
   const { visibleTasks, stats } = useTaskFiltering(tasks, taskView, searchTerm, selectedTags);
 

@@ -136,7 +136,7 @@ const NotificationPreferencesForm: React.FC<Props> = ({
         maxMinutes={MOOD_REMINDER_MINUTES_MAX}
       />
       <p className="text-xs text-text-muted mt-1">
-        Counts back from your &ldquo;Call it a day&rdquo; time, not from a task&rsquo;s due time. A lead longer than your working day sends it at the start of the day.
+        Counts back from that day&rsquo;s &ldquo;Call it a day&rdquo; time, not from a task&rsquo;s due time. A lead longer than your working day sends it at the start of the day.
       </p>
     </div>
   );

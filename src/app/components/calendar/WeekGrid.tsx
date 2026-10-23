@@ -282,7 +282,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                   />
                 ))}
                 {marks.opensAt !== null && <WindowEdge minutes={marks.opensAt} edge="opens" />}
-                {marks.closesAt !== null && <WindowEdge minutes={marks.closesAt} edge="closes" />}
+                {marks.closesAt.map(minutes => <WindowEdge key={minutes} minutes={minutes} edge="closes" />)}
 
                 {Array.from({ length: SLOTS_PER_DAY }, (_, slot) => {
                   const minutes = slot * SLOT_MINUTES;
@@ -346,7 +346,7 @@ const edgeTime = (minutes: number) => (minutes >= MINUTES_PER_DAY ? 'midnight' :
 const workDayText = ({ rest, opensAt, closesAt }: WorkDayMarks): string => {
   const edges = [
     ...(opensAt === null ? [] : [{ at: opensAt, text: `opens at ${formatMinutes(opensAt)}` }]),
-    ...(closesAt === null ? [] : [{ at: closesAt, text: `closes at ${edgeTime(closesAt)}` }]),
+    ...closesAt.map(at => ({ at, text: `closes at ${edgeTime(at)}` })),
   ].sort((x, y) => x.at - y.at);
   const day = rest ? 'Rest day' : 'Work day';
   return edges.length ? `${day}, work window ${edges.map(e => e.text).join(', ')}` : day;

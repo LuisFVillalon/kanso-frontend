@@ -126,7 +126,7 @@ function useMinuteClock(): Date {
  */
 export const BriefMoodLine: React.FC<{ profile: ProfileFields; tasks: Task[]; habits: Habit[]; className?: string }> = ({ profile, tasks, habits, className }) => {
   const now = useMinuteClock();
-  const date = toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime));
+  const date = toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime, profile.dayWindows));
   return <DayMoodCheckin date={date} variant="brief" summary={daySummaryFrom(date, tasks, habits)} className={className} />;
 };
 
@@ -139,8 +139,8 @@ export const BriefMoodLine: React.FC<{ profile: ProfileFields; tasks: Task[]; ha
 export const DayClosedMoodReminder: React.FC<{ profile: ProfileFields; profileLoaded: boolean; tasks: Task[]; habits: Habit[] }> = ({ profile, profileLoaded, tasks, habits }) => {
   const now = useMinuteClock();
   const dailyMood = useDailyMood();
-  const closed = profileLoaded && dailyMood && dayCalledOffAt(now, profile.dayStartTime, profile.shutoffTime);
-  const date = closed ? toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime)) : null;
+  const closed = profileLoaded && dailyMood && dayCalledOffAt(now, profile.dayStartTime, profile.shutoffTime, profile.dayWindows);
+  const date = closed ? toLocalDateStr(checkinDayAt(now, profile.dayStartTime, profile.shutoffTime, profile.dayWindows)) : null;
   const { checkin } = useDayMoodCheckin(date);
   const onSaved = useMoodCheckinSaved();
   // The form stays on the day it was opened for, even if the clock rolls past it.

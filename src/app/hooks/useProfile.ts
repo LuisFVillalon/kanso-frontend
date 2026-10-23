@@ -6,7 +6,8 @@ import { fetchProfile, saveProfile as saveProfileApi } from '@/app/lib/backend-a
 import { DEFAULT_ACCENT, getStoredThemeColor, setStoredThemeColor, resetThemeColor } from '@/app/lib/theme';
 import { DEFAULT_PAGE_STYLE, getStoredPageStyle, setStoredPageStyle, resetPageStyle } from '@/app/lib/pageStyle';
 import { getStoredProfileAvatar, setStoredProfileAvatar } from '@/app/lib/avatar';
-import { DEFAULT_DAY_START, DEFAULT_DAY_END, loadStoredRestDays } from '@/app/lib/restDays';
+import { DAY_WINDOWS_KEY, DEFAULT_DAY_START, DEFAULT_DAY_END, cleanDayWindows, loadStoredDayWindows, loadStoredRestDays } from '@/app/lib/restDays';
+import type { DayWindows } from '@/app/types/profile';
 import { DEFAULT_MOOD_SETTINGS, moodSettings, type MoodCheckinSettings } from '@/app/types/mood';
 
 export interface ProfileFields {
@@ -17,6 +18,8 @@ export interface ProfileFields {
   dayStartTime: string;
   shutoffTime: string;
   restDays: number[];
+  /** Weekdays with their own work window; the others use dayStartTime / shutoffTime. */
+  dayWindows: DayWindows;
   layoutOrder: string[] | null;
   layoutSizes: Record<string, string> | null;
   appMode: string | null;
@@ -35,6 +38,7 @@ const readLocalDefaults = (): ProfileFields => ({
   dayStartTime: (typeof window !== 'undefined' ? localStorage.getItem('tm_day_start_time') : null) ?? DEFAULT_DAY_START,
   shutoffTime: (typeof window !== 'undefined' ? localStorage.getItem('tm_call_it_a_day') : null) ?? DEFAULT_DAY_END,
   restDays: loadStoredRestDays(),
+  dayWindows: loadStoredDayWindows(),
   // Not read from localStorage here — useGridOrder/usePersistedPref own
   // their own local caches independently and resolve them on their own.
   // These are purely the backend-authoritative values, populated once
@@ -89,6 +93,8 @@ export function useProfile(user: User | null) {
           pageStyle: p.page_style ?? prev.pageStyle,
           dayStartTime: p.day_start_time ?? prev.dayStartTime,
           restDays: p.rest_days ?? prev.restDays,
+          // Absent from servers that don't have the field yet; null there means none.
+          dayWindows: p.day_windows === undefined ? prev.dayWindows : cleanDayWindows(p.day_windows),
           layoutOrder: p.layout_order ?? prev.layoutOrder,
           layoutSizes: p.layout_sizes ?? prev.layoutSizes,
           appMode: p.app_mode ?? prev.appMode,
@@ -102,6 +108,7 @@ export function useProfile(user: User | null) {
         if (p.shutoff_time) localStorage.setItem('tm_call_it_a_day', p.shutoff_time);
         if (p.day_start_time) localStorage.setItem('tm_day_start_time', p.day_start_time);
         if (p.rest_days) localStorage.setItem('tm_rest_days', JSON.stringify(p.rest_days));
+        if (p.day_windows !== undefined) localStorage.setItem(DAY_WINDOWS_KEY, JSON.stringify(cleanDayWindows(p.day_windows)));
         if (p.avatar) setStoredProfileAvatar(p.avatar);
         if (p.theme_accent) setStoredThemeColor(p.theme_accent);
         if (p.page_style) setStoredPageStyle(p.page_style);
@@ -125,6 +132,7 @@ export function useProfile(user: User | null) {
         page_style: next.pageStyle,
         day_start_time: next.dayStartTime,
         rest_days: next.restDays,
+        day_windows: next.dayWindows,
         layout_order: next.layoutOrder,
         layout_sizes: next.layoutSizes,
         app_mode: next.appMode,
@@ -139,6 +147,7 @@ export function useProfile(user: User | null) {
       localStorage.setItem('tm_day_start_time', next.dayStartTime);
       localStorage.setItem('tm_call_it_a_day', next.shutoffTime);
       localStorage.setItem('tm_rest_days', JSON.stringify(next.restDays));
+      localStorage.setItem(DAY_WINDOWS_KEY, JSON.stringify(next.dayWindows));
       setStoredProfileAvatar(next.avatar);
       if (next.themeAccent === DEFAULT_ACCENT) resetThemeColor();
       else setStoredThemeColor(next.themeAccent);
@@ -167,6 +176,7 @@ export function useProfile(user: User | null) {
     if (patch.pageStyle !== undefined) body.page_style = patch.pageStyle;
     if (patch.dayStartTime !== undefined) body.day_start_time = patch.dayStartTime;
     if (patch.restDays !== undefined) body.rest_days = patch.restDays;
+    if (patch.dayWindows !== undefined) body.day_windows = patch.dayWindows;
     if (patch.moodCheckins !== undefined) body.mood_checkins = patch.moodCheckins;
     try {
       await saveProfileApi(body);
@@ -179,6 +189,7 @@ export function useProfile(user: User | null) {
     if (patch.dayStartTime !== undefined) localStorage.setItem('tm_day_start_time', patch.dayStartTime);
     if (patch.shutoffTime !== undefined) localStorage.setItem('tm_call_it_a_day', patch.shutoffTime);
     if (patch.restDays !== undefined) localStorage.setItem('tm_rest_days', JSON.stringify(patch.restDays));
+    if (patch.dayWindows !== undefined) localStorage.setItem(DAY_WINDOWS_KEY, JSON.stringify(patch.dayWindows));
     if (patch.avatar !== undefined) setStoredProfileAvatar(patch.avatar);
     if (patch.themeAccent !== undefined) {
       if (patch.themeAccent === DEFAULT_ACCENT) resetThemeColor();

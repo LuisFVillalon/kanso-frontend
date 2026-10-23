@@ -84,4 +84,47 @@ describe('useProfile saveProfileField', () => {
       name: 'Maya', mood_checkins: { weekly: true, monthly: true },
     });
   });
+
+  it('saves days with their own window and caches them', async () => {
+    const dayWindows = { '1': { start: '10:00', end: '16:00' } };
+    await act(async () => hook.saveProfileField({ dayWindows }));
+    expect(api.saveProfile).toHaveBeenLastCalledWith({ name: 'Maya', day_windows: dayWindows });
+    expect(hook.profile.dayWindows).toEqual(dayWindows);
+    expect(JSON.parse(localStorage.getItem('tm_day_windows')!)).toEqual(dayWindows);
+  });
+});
+
+describe('useProfile day windows', () => {
+  const remount = async () => {
+    act(() => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<Probe user={user} onResult={r => { hook = r; }} />));
+  };
+
+  it("loads the server's windows, dropping malformed ones", async () => {
+    api.fetchProfile.mockResolvedValueOnce({
+      name: 'Maya',
+      day_windows: {
+        '1': { start: '10:00', end: '16:00' },
+        '2': { start: '17:00', end: '09:00' },
+        '9': { start: '10:00', end: '16:00' },
+      },
+    });
+    await remount();
+    expect(hook.profile.dayWindows).toEqual({ '1': { start: '10:00', end: '16:00' } });
+  });
+
+  it('treats a null field as no days with their own window', async () => {
+    localStorage.setItem('tm_day_windows', JSON.stringify({ '1': { start: '10:00', end: '16:00' } }));
+    api.fetchProfile.mockResolvedValueOnce({ name: 'Maya', day_windows: null });
+    await remount();
+    expect(hook.profile.dayWindows).toEqual({});
+  });
+
+  it("keeps the cached windows when the server doesn't have the field", async () => {
+    localStorage.setItem('tm_day_windows', JSON.stringify({ '1': { start: '10:00', end: '16:00' } }));
+    api.fetchProfile.mockResolvedValueOnce({ name: 'Maya' });
+    await remount();
+    expect(hook.profile.dayWindows).toEqual({ '1': { start: '10:00', end: '16:00' } });
+  });
 });

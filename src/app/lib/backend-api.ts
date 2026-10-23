@@ -13,7 +13,7 @@ import { LinkedRemoveMode, LinkedTaskRef, Tag, Task } from "../types/task";
 import { ArchivedTerm, CalendarSettings } from "../types/calendar";
 import { CalendarActivity } from "../types/activity";
 import { Habit, HabitHistoryEntry } from "../types/habit";
-import { Profile } from "../types/profile";
+import { DayWindows, Profile } from "../types/profile";
 import { MoodCheckin, MoodCheckinSave, MoodCheckinSettings, MoodPeriodKind, MoodTags } from "../types/mood";
 import { Drawing } from "../types/drawing";
 import { DailyDebriefReport } from "../types/debrief";
@@ -816,6 +816,7 @@ export async function saveProfile(profile: {
   page_style?: string | null;
   day_start_time?: string | null;
   rest_days?: number[] | null;
+  day_windows?: DayWindows | null;
   layout_order?: string[] | null;
   layout_sizes?: Record<string, string> | null;
   app_mode?: string | null;

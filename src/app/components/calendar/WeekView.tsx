@@ -27,6 +27,7 @@ import {
   startOfWeek,
   weekDays,
   workDayMarks,
+  type WindowMinutes,
 } from '@/app/utils/weekLayout';
 import WeekGrid, { WEEK_LEGEND, WORK_DAY_LEGEND } from './WeekGrid';
 
@@ -132,15 +133,20 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     onResizingChange: handleResizingChange,
   });
 
-  const { dayStartTime, shutoffTime, restDays } = useAppShell().profileState.profile;
+  const { dayStartTime, shutoffTime, restDays, dayWindows } = useAppShell().profileState.profile;
   const dayStartMinutes = toMinutesOr(dayStartTime, DEFAULT_DAY_START);
   const dayEndMinutes = toMinutesOr(shutoffTime, DEFAULT_DAY_END);
 
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
-  const workDays = useMemo(
-    () => days.map(day => workDayMarks(day, restDays, dayStartMinutes, dayEndMinutes)),
-    [days, restDays, dayStartMinutes, dayEndMinutes],
-  );
+  const workDays = useMemo(() => {
+    const windowOn = (weekday: number): WindowMinutes => {
+      const own = dayWindows?.[String(weekday)];
+      return own
+        ? [toMinutesOr(own.start, DEFAULT_DAY_START), toMinutesOr(own.end, DEFAULT_DAY_END)]
+        : [dayStartMinutes, dayEndMinutes];
+    };
+    return days.map(day => workDayMarks(day, restDays, windowOn));
+  }, [days, restDays, dayWindows, dayStartMinutes, dayEndMinutes]);
   const todayStr = toLocalDateStr(now);
   const todayIndex = days.findIndex(d => toLocalDateStr(d) === todayStr);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();

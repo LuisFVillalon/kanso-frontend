@@ -44,6 +44,29 @@ describe('dayCalledOffAt', () => {
   });
 });
 
+describe('days with their own window', () => {
+  // Every day 9 AM – 12:30 AM, except Wednesdays (3) 8 AM – 4 PM.
+  const windows = { '3': { start: '08:00', end: '16:00' } };
+
+  it("uses each day's own window for the check-in day", () => {
+    // Tuesday's window runs past midnight into Wednesday's small hours.
+    expect(toLocalDateStr(checkinDayAt(at(0, 15, 21), '09:00', '00:30', windows))).toBe('2026-10-20');
+    // Wednesday starts at 8, not 9.
+    expect(toLocalDateStr(checkinDayAt(at(8, 30, 21), '09:00', '00:30', windows))).toBe('2026-10-21');
+    // Wednesday ends the same day, so Thursday's small hours are Thursday's.
+    expect(toLocalDateStr(checkinDayAt(at(0, 15, 22), '09:00', '00:30', windows))).toBe('2026-10-22');
+  });
+
+  it("calls the day off at that day's own shutoff", () => {
+    expect(dayCalledOffAt(at(15, 59, 21), '09:00', '00:30', windows)).toBe(false);
+    expect(dayCalledOffAt(at(16, 0, 21), '09:00', '00:30', windows)).toBe(true);
+    // Tuesday's late window still closes at 12:30 AM on Wednesday.
+    expect(dayCalledOffAt(at(0, 30, 21), '09:00', '00:30', windows)).toBe(true);
+    // Thursday's runs past midnight, so it isn't called off on Thursday itself.
+    expect(dayCalledOffAt(at(23, 0, 22), '09:00', '00:30', windows)).toBe(false);
+  });
+});
+
 describe('endsPeriod', () => {
   it('ends the Mon–Sun week on Sunday', () => {
     expect(endsPeriod('week', new Date(2026, 9, 25))).toBe(true);
