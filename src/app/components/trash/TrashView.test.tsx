@@ -133,6 +133,42 @@ describe('TrashView', () => {
     expect(titles()).not.toContain('Old');
   });
 
+  const confirmAll = () => [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === 'Delete all forever')!;
+
+  it('deletes everything the filter shows forever after confirmation', async () => {
+    api.purgeFromTrash.mockResolvedValue(undefined);
+    await renderView(trash);
+    await click(button('Tasks'));
+    await click(button('Delete all tasks forever'));
+    expect(api.purgeFromTrash).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Delete 2 tasks forever?');
+
+    api.fetchTrash.mockResolvedValue(trash.filter(i => i.kind !== 'task'));
+    await click(confirmAll());
+    // The subtask goes with its parent's purge.
+    expect(api.purgeFromTrash.mock.calls).toEqual([['task', 12]]);
+    expect(titles()).toEqual([]);
+    expect(showToast).toHaveBeenCalledWith('Deleted 2 tasks forever.', 'success');
+  });
+
+  it('keeps the items that failed and says how many', async () => {
+    api.purgeFromTrash.mockImplementation((kind: string) => (kind === 'tag' ? Promise.reject(new Error('boom')) : Promise.resolve()));
+    await renderView(trash);
+    await click(button('Delete all items forever'));
+    expect(document.body.textContent).toContain('Delete 5 items forever?');
+    api.fetchTrash.mockRejectedValue(new Error('offline'));
+    await click(confirmAll());
+    expect(api.purgeFromTrash).toHaveBeenCalledTimes(4);
+    expect(titles()).toEqual(['Old']);
+    expect(showToast).toHaveBeenCalledWith('Deleted 4 of 5; 1 failed, try again.');
+  });
+
+  it('hides Delete all forever when nothing is shown', async () => {
+    await renderView(trash.filter(i => i.kind !== 'habit'));
+    await click(button('Habits'));
+    expect(document.body.textContent).not.toContain('Delete all forever');
+  });
+
   it('shows an empty state with the 30-day explanation', async () => {
     await renderView([]);
     expect(document.body.textContent).toContain('Nothing recently deleted');
