@@ -57,13 +57,21 @@ vi.mock('@/app/context/AppShellContext', () => ({
 }));
 
 // Only the Canvas panel is on screen, standing in for its rows' "Add to tasks" and its refresh button.
-// The panels offered are listed on the wrapper.
+// The panels offered, on and on a phone are listed on the wrapper, with a button for a phone's pick.
 vi.mock('@/app/components/common/PanelCarousel', async importOriginal => ({
   ...(await importOriginal<object>()),
-  default: ({ renderPanel, available }: {
+  default: ({ renderPanel, available, value, phoneValue, onPhoneChange }: {
     renderPanel: (key: 'canvas', opts: { widthPct: number }) => React.ReactNode;
     available: string[];
-  }) => <div data-available={available.join(',')}>{renderPanel('canvas', { widthPct: 50 })}</div>,
+    value: string;
+    phoneValue: string;
+    onPhoneChange: (next: 'notes') => void;
+  }) => (
+    <div data-available={available.join(',')} data-value={value} data-phone={phoneValue}>
+      <button type="button" data-phone-pick onClick={() => onPhoneChange('notes')} />
+      {renderPanel('canvas', { widthPct: 50 })}
+    </div>
+  ),
 }));
 vi.mock('@/app/components/canvas/CanvasPanel', () => ({
   default: ({ addToTasks, onRefresh }: { addToTasks?: unknown; onRefresh?: () => void }) => (
@@ -164,6 +172,18 @@ describe('TaskManager home panels', () => {
     api.fetchCanvasConnection.mockRejectedValue(new Error('offline'));
     await render();
     expect(availablePanels()).toBe('tasks,notes,canvas');
+  });
+
+  it("remembers a phone's pick on this device, apart from the wide screen's panels", async () => {
+    localStorage.setItem('tm-home-panels', JSON.stringify('tasks,notes,canvas'));
+    await render();
+    const carousel = container.querySelector('[data-available]')!;
+    expect(carousel.getAttribute('data-value')).toBe('tasks,notes,canvas');
+    expect(carousel.getAttribute('data-phone')).toBe('tasks');
+    await act(async () => container.querySelector<HTMLElement>('[data-phone-pick]')!.click());
+    expect(carousel.getAttribute('data-phone')).toBe('notes');
+    expect(localStorage.getItem('tm-home-phone-panel:u1')).toBe('"notes"');
+    expect(localStorage.getItem('tm-home-panels')).toBe('"tasks,notes,canvas"');
   });
 
   it('offers the sample Canvas data to a demo user without checking a connection', async () => {
