@@ -48,20 +48,28 @@ export const isCanvasItemDone = ({ submission: sub }: CanvasItem) =>
   !!(sub?.excused || (!sub?.missing && (sub?.submitted || sub?.graded)));
 
 /**
+ * The tag named after a class, which Add to tasks starts with: the user's own
+ * tag of that name (whatever its case) when there is one, else a new one
+ * (id 0) the backend creates with the task. Null for a class with no label.
+ */
+export function canvasClassTag(classLabel: string | null, tags: Tag[]): Tag | null {
+  const name = classLabel?.trim();
+  if (!name) return null;
+  return tags.find(t => t.name.trim().toLowerCase() === name.toLowerCase()) ?? { id: 0, name, color: DEFAULT_ACCENT };
+}
+
+/**
  * The task an item becomes: its title, its due date and time in local time,
- * the course's tag (the user's own tag of that name when there is one, else a
- * new one the backend creates) and the assignment it follows.
+ * the tags the user chose (a new one, id 0, is created by the backend) and
+ * the assignment it follows.
  */
 export function canvasTaskForm(
   item: CanvasItem,
   assignmentId: number,
-  courseLabel: string | null,
   tags: Tag[],
   now: Date = new Date(),
 ): BaseTaskForm {
   const due = item.due_at ? new Date(item.due_at) : null;
-  const name = courseLabel?.trim();
-  const tag = name ? tags.find(t => t.name.trim().toLowerCase() === name.toLowerCase()) ?? { id: 0, name, color: DEFAULT_ACCENT } : null;
   return {
     id: 0,
     title: item.title,
@@ -69,7 +77,7 @@ export function canvasTaskForm(
     priority: null,
     due_date: due ? toLocalDateStr(due) : null,
     due_time: due ? toLocalTimeStr(due) : null,
-    tags: tag ? [tag] : [],
+    tags,
     created_date: now,
     canvas_assignment_id: assignmentId,
     canvas_html_url: item.html_url,
@@ -109,10 +117,14 @@ export function rememberCanvasCourseLabels(courses: CanvasCourse[], { onlyNew = 
   }
 }
 
+/** The remembered label of a course, or null. */
+export function rememberedCourseLabel(courseId: number | string): string | null {
+  const label = readLabels()[courseId];
+  return typeof label === 'string' ? label : null;
+}
+
 /** The remembered label of the course a Canvas link is in, or null. */
 export function canvasCourseLabel(htmlUrl: string | null | undefined): string | null {
   const course = pathOf(htmlUrl)?.match(COURSE_PATH);
-  if (!course) return null;
-  const label = readLabels()[course[1]];
-  return typeof label === 'string' ? label : null;
+  return course ? rememberedCourseLabel(course[1]) : null;
 }

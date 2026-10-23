@@ -5,10 +5,9 @@ import {
 } from 'lucide-react';
 import type { CanvasAssignment, CanvasCourseSummary, CanvasModule, CanvasModuleItem } from '@/app/types/canvas';
 import { useCanvasCourse, type CanvasCourseView } from '@/app/hooks/useCanvas';
-import type { CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { formatNumber, formatShortDate, scoreLabel } from '@/app/utils/canvas';
-import CanvasItemRow, { CanvasLink, CanvasStatusChip, type CourseLookup } from './CanvasItemRow';
-import { CourseGrade, GradeBar } from './CanvasCourses';
+import CanvasItemRow, { CanvasLink, CanvasStatusChip, type CanvasRowAdd, type CourseLookup } from './CanvasItemRow';
+import { CourseGrade, GradeBar } from './CanvasClasses';
 
 type CourseTab = CanvasCourseView | 'grades';
 
@@ -95,7 +94,7 @@ const Assignments: React.FC<{
   assignments: CanvasAssignment[];
   course: CourseLookup;
   now: Date;
-  addToTasks?: CanvasAddToTasks;
+  addToTasks?: CanvasRowAdd;
 }> = ({ assignments, course, now, addToTasks }) => {
   const isPast = (a: CanvasAssignment) => !!a.due_at && new Date(a.due_at) < now;
   const groups = [
@@ -157,7 +156,7 @@ interface CanvasCourseDetailProps {
   refreshNonce: number;
   onFail: (err: unknown) => void;
   onBack: () => void;
-  addToTasks?: CanvasAddToTasks;
+  addToTasks?: CanvasRowAdd;
 }
 
 /** One course opened from the Courses tab: grade, then Modules, Assignments & quizzes, and Grades. */

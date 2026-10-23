@@ -1,3 +1,5 @@
+import type { Tag } from './task';
+
 /**
  * "invalid" means Canvas rejected the token or feed link, or the token
  * expired: the user has to reconnect.
@@ -20,6 +22,8 @@ export type CanvasConnectionType = 'token' | 'feed';
 export interface CanvasCapabilities {
   /** GET /canvas/overview's upcoming list. */
   upcoming: boolean;
+  /** GET /canvas/classes; left out by a backend from before it. */
+  classes?: boolean;
   /** Its missing and recently_graded lists. */
   missing: boolean;
   recently_graded: boolean;
@@ -203,7 +207,15 @@ export interface CanvasAnnouncement {
   html_url: string | null;
 }
 
+/**
+ * How far ahead Upcoming reaches from the start of today: the next 7 days,
+ * or everything Canvas has coming (about 13 months).
+ */
+export type CanvasRange = 'week' | 'all';
+
 export interface CanvasOverview extends CanvasReadMeta {
+  /** Left out by a backend from before the range, which always sends the 7 days. */
+  range?: CanvasRange;
   start: string;
   end: string;
   /** Due in [start, end), soonest first. */
@@ -218,6 +230,33 @@ export interface CanvasCourses extends CanvasReadMeta {
   courses: CanvasCourseSummary[];
 }
 
+/**
+ * One of the user's classes, with what's due in it: a token's course, or a
+ * course a calendar feed's items belong to, which Canvas names by its code.
+ */
+export interface CanvasClassSummary {
+  id: number;
+  /** The course code ("CS 460-01"), else a token course's name. */
+  code: string;
+  /** The full name and term; null for a calendar feed, which doesn't carry them. */
+  name: string | null;
+  term: string | null;
+  html_url: string | null;
+  /** Unticked under "Courses to show" (hidden from the panel). */
+  hidden: boolean;
+  /** Items due from the start of today through the next 7 days. */
+  due_this_week: number;
+  /** Every item due from today on. */
+  upcoming: number;
+  /** The soonest item due from now on. */
+  next_due: CanvasItem | null;
+}
+
+export interface CanvasClasses extends CanvasReadMeta {
+  /** By code. */
+  classes: CanvasClassSummary[];
+}
+
 export interface CanvasModules extends CanvasReadMeta {
   course_id: number;
   modules: CanvasModule[];
@@ -230,6 +269,13 @@ export interface CanvasAssignments extends CanvasReadMeta {
 
 export interface CanvasAnnouncements extends CanvasReadMeta {
   announcements: CanvasAnnouncement[];
+}
+
+/** The tags a class's tasks start with when added from Canvas ("Use these tags for every CS 460 task"). */
+export interface CanvasCourseTags {
+  course_id: number;
+  /** In the order chosen; tags in the trash are left out. */
+  tags: Tag[];
 }
 
 /** One open task added from Canvas, after POST /canvas/linked-tasks/sync. */

@@ -23,7 +23,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, CalendarSync, Check, CircleAlert, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Link2,
+  AlertTriangle, Award, CalendarSync, Check, CircleAlert, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Link2,
   Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2,
 } from 'lucide-react';
 import {
@@ -31,6 +31,7 @@ import {
   connectCanvas,
   connectCanvasFeed,
   describeError,
+  fetchCanvasClasses,
   fetchCanvasConnection,
   fetchCanvasCourses,
   removeCanvasConnection,
@@ -212,6 +213,21 @@ const FeedNote = () => (
       assignments and due dates only: no grades, submissions, announcements or course files. Anyone with the link can
       see your Canvas calendar, so keep it private like a password. kanso stores it encrypted and never shows it
       again.
+    </p>
+  </div>
+);
+
+/** What a calendar feed connection leaves out, said once here rather than across the Canvas panel. */
+const TokenExtrasNote = () => (
+  <div
+    className="flex gap-2 items-start rounded-lg px-3 py-2.5 text-xs"
+    style={{ backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-text-secondary)' }}
+    data-testid="canvas-token-extras-note"
+  >
+    <Award className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: 'var(--tm-accent)' }} />
+    <p>
+      Connecting with an access token instead, if your school allows it, also shows your grades, modules,
+      announcements and whether you&apos;ve handed work in. Use Replace to switch.
     </p>
   </div>
 );
@@ -722,12 +738,18 @@ const CoursesToShow: React.FC<{
   courses: CanvasCourse[];
   hidden: number[];
   disabled: boolean;
+  /** A calendar feed's classes, found in its due dates, rather than a token's course list. */
+  fromFeed: boolean;
   onToggle: (courseId: number) => void;
-}> = ({ courses, hidden, disabled, onToggle }) => (
+}> = ({ courses, hidden, disabled, fromFeed, onToggle }) => (
   <fieldset>
     <legend className="text-xs font-medium text-text-muted mb-1">Courses to show</legend>
     {courses.length === 0 ? (
-      <p className="text-sm text-text-secondary">Canvas didn&apos;t list any active courses for your account.</p>
+      <p className="text-sm text-text-secondary">
+        {fromFeed
+          ? 'Your Canvas calendar has no class work on it yet.'
+          : <>Canvas didn&apos;t list any active courses for your account.</>}
+      </p>
     ) : (
       <>
         <p className="text-xs text-text-muted mb-1.5">Hide courses you don&apos;t need on the home page, like trainings or sandboxes.</p>
@@ -784,16 +806,22 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
     if (!isDemo) void load();
   }, [isDemo, load]);
 
-  // The course list comes from Canvas through the backend; until that route
-  // answers (or while the token is rejected, or with the calendar feed, which
-  // has no courses), "Courses to show" stays hidden.
-  const coursesKey = connection?.connected && connection.status !== 'invalid' && canvasCan(connection, 'courses')
-    ? `${connection.base_url}#${connection.canvas_user_id}`
+  // The course list comes from Canvas through the backend: a token's
+  // courses, or the classes a calendar feed's due dates belong to. Until that
+  // route answers (or while the connection is rejected, or with a backend
+  // that can't list a feed's classes), "Courses to show" stays hidden.
+  const listsClasses = !!connection && !canvasCan(connection, 'courses') && canvasCan(connection, 'classes');
+  const coursesKey = connection?.connected && connection.status !== 'invalid'
+    && (canvasCan(connection, 'courses') || listsClasses)
+    ? `${connection.base_url}#${connection.canvas_user_id}#${listsClasses ? 'classes' : 'courses'}`
     : null;
   useEffect(() => {
     if (!coursesKey) return;
     let cancelled = false;
-    fetchCanvasCourses().then(
+    const list: Promise<CanvasCourse[]> = coursesKey.endsWith('#classes')
+      ? fetchCanvasClasses().then(r => r.classes.map(c => ({ id: c.id, name: c.name ?? '', course_code: c.code })))
+      : fetchCanvasCourses();
+    list.then(
       list => { if (!cancelled) setCourses({ key: coursesKey, list }); },
       () => { if (!cancelled) setCourses(null); },
     );
@@ -1083,9 +1111,11 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo }) => {
           courses={visibleCourses}
           hidden={connection.hidden_course_ids}
           disabled={busy !== null}
+          fromFeed={feed}
           onToggle={courseId => void handleToggleCourse(courseId)}
         />
       )}
+      {feed && <TokenExtrasNote />}
       {feed ? <FeedNote /> : <SecurityNote />}
     </div>
   );

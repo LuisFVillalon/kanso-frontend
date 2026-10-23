@@ -4,7 +4,8 @@ import type { CanvasAssignment, CanvasItem } from '@/app/types/canvas';
 import type { Tag } from '@/app/types/task';
 import { DEFAULT_ACCENT } from '@/app/lib/theme';
 import {
-  canvasAssignmentId, canvasCourseLabel, canvasTaskForm, isCanvasItemDone, rememberCanvasCourseLabels,
+  canvasAssignmentId, canvasClassTag, canvasCourseLabel, canvasTaskForm, isCanvasItemDone, rememberCanvasCourseLabels,
+  rememberedCourseLabel,
 } from './canvasTasks';
 
 const HOST = 'https://sdsu.instructure.com';
@@ -94,7 +95,7 @@ describe('canvasTaskForm', () => {
   const tags: Tag[] = [{ id: 3, name: 'cs 460', color: '#123456' }];
 
   it('maps the title, due_at in local time and the link', () => {
-    const form = canvasTaskForm(item(), 9876, 'MATH 254', []);
+    const form = canvasTaskForm(item(), 9876, []);
     expect(form).toMatchObject({
       title: 'Problem Set 6',
       description: '',
@@ -108,37 +109,47 @@ describe('canvasTaskForm', () => {
   });
 
   it("keeps an all-day feed item's day as canvas_due_date, and none for a timed item", () => {
-    expect(canvasTaskForm(item({ day: '2026-10-23', linkable: true }), 9876, null, []).canvas_due_date).toBe('2026-10-23');
-    expect(canvasTaskForm(item(), 9876, null, []).canvas_due_date).toBeNull();
+    expect(canvasTaskForm(item({ day: '2026-10-23', linkable: true }), 9876, []).canvas_due_date).toBe('2026-10-23');
+    expect(canvasTaskForm(item(), 9876, []).canvas_due_date).toBeNull();
   });
 
   it('sends no canvas_due_at for an item without a due date', () => {
-    expect(canvasTaskForm(item({ due_at: null }), 9876, null, []).canvas_due_at).toBeNull();
+    expect(canvasTaskForm(item({ due_at: null }), 9876, []).canvas_due_at).toBeNull();
   });
 
   it('keeps the local day when due_at is already the next day in UTC', () => {
     const lateNight = new Date(2026, 11, 31, 23, 30);
-    const form = canvasTaskForm(item({ due_at: lateNight.toISOString() }), 1, null, []);
+    const form = canvasTaskForm(item({ due_at: lateNight.toISOString() }), 1, []);
     expect(form.due_date).toBe('2026-12-31');
     expect(form.due_time).toBe('23:30');
   });
 
   it('leaves the date and time empty without a due date', () => {
-    const form = canvasTaskForm(item({ due_at: null }), 1, null, []);
+    const form = canvasTaskForm(item({ due_at: null }), 1, []);
     expect(form.due_date).toBeNull();
     expect(form.due_time).toBeNull();
   });
 
-  it("uses the user's own tag of the course's name, whatever its case", () => {
-    expect(canvasTaskForm(item(), 1, 'CS 460', tags).tags).toEqual([tags[0]]);
+  it('carries the chosen tags, new ones included', () => {
+    const chosen = [tags[0], { id: 0, name: 'Exam prep', color: '#7C3AED' }];
+    expect(canvasTaskForm(item(), 1, chosen).tags).toEqual(chosen);
+  });
+});
+
+describe('canvasClassTag', () => {
+  const tags: Tag[] = [{ id: 3, name: 'cs 460', color: '#123456' }];
+
+  it("is the user's own tag of the class's name, whatever its case", () => {
+    expect(canvasClassTag('CS 460', tags)).toEqual(tags[0]);
   });
 
-  it('names a new tag after the course when the user has none', () => {
-    expect(canvasTaskForm(item(), 1, ' MATH 254 ', tags).tags).toEqual([{ id: 0, name: 'MATH 254', color: DEFAULT_ACCENT }]);
+  it('is a new tag named after the class when the user has none', () => {
+    expect(canvasClassTag(' MATH 254 ', tags)).toEqual({ id: 0, name: 'MATH 254', color: DEFAULT_ACCENT });
   });
 
-  it('has no tag without a course', () => {
-    expect(canvasTaskForm(item(), 1, null, tags).tags).toEqual([]);
+  it('is null without a class', () => {
+    expect(canvasClassTag(null, tags)).toBeNull();
+    expect(canvasClassTag('  ', tags)).toBeNull();
   });
 });
 
@@ -160,6 +171,12 @@ describe('canvasCourseLabel', () => {
     ], { onlyNew: true });
     expect(canvasCourseLabel(`${HOST}/courses/1001/assignments/1`)).toBe('CS 460');
     expect(canvasCourseLabel(`${HOST}/courses/1002/assignments/1`)).toBe('Linear Algebra');
+  });
+
+  it('names a remembered course by its id', () => {
+    rememberCanvasCourseLabels([{ id: 1001, name: 'CS 460: Algorithms', course_code: 'CS 460' }]);
+    expect(rememberedCourseLabel(1001)).toBe('CS 460');
+    expect(rememberedCourseLabel(5)).toBeNull();
   });
 
   it('is null for an unknown course or a link without one', () => {

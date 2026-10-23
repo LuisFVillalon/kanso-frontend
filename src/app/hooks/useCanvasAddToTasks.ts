@@ -6,7 +6,7 @@ import { useTasksContext } from '@/app/context/TasksContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useToast } from '@/app/context/ToastContext';
 import type { CanvasItem } from '@/app/types/canvas';
-import type { Task } from '@/app/types/task';
+import type { NewTag, Tag, Task } from '@/app/types/task';
 import { canvasAssignmentId, canvasTaskForm, isCanvasItemDone } from '@/app/utils/canvasTasks';
 
 /** What a Canvas item row offers: "Add to tasks", "In tasks", or nothing. */
@@ -14,18 +14,27 @@ export type CanvasAddState = { kind: 'add'; pending: boolean } | { kind: 'added'
 
 export interface CanvasAddToTasks {
   stateOf: (item: CanvasItem) => CanvasAddState;
-  add: (item: CanvasItem, courseLabel: string | null) => Promise<void>;
+  /** Adds the item with `tags` (a new tag has id 0); resolves to the task, or null when it wasn't added. */
+  add: (item: CanvasItem, tags: Tag[]) => Promise<Task | null>;
+  /** The user's tags, for the tag picker. */
+  tags: Tag[];
+  /** Creates a tag on its own (choosing a class's tags without adding a task); null when it failed. */
+  createTag: (tag: NewTag) => Promise<Tag | null>;
 }
+
+/** "CS, Exam prep" or "no tags", for the toast. */
+const tagNames = (tags: Tag[]) => (tags.length ? tags.map(t => t.name).join(', ') : 'no tags');
 
 /**
  * "Add to tasks" for the Canvas panel: turns an assignment into a task that
- * follows it (see canvasTaskForm), then offers Undo. An assignment an open
- * task already follows shows "In tasks"; if the backend still finds one
- * (a 409), the toast offers to show it through `onShowTask`.
+ * follows it with the tags the user picked (see canvasTaskForm), then offers
+ * Undo. An assignment an open task already follows shows "In tasks"; if the
+ * backend still finds one (a 409), the toast offers to show it through
+ * `onShowTask`.
  */
 export function useCanvasAddToTasks(onShowTask: (taskId: number) => void): CanvasAddToTasks {
   const { tasks, addTask, discardTask } = useTasksContext();
-  const { tags, setTags } = useTagsContext();
+  const { tags, setTags, addTag } = useTagsContext();
   const showToast = useToast();
   const pendingRef = useRef<Set<number>>(new Set());
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
@@ -55,19 +64,20 @@ export function useCanvasAddToTasks(onShowTask: (taskId: number) => void): Canva
     setPendingIds(new Set(pendingRef.current));
   };
 
-  const add = useCallback(async (item: CanvasItem, courseLabel: string | null) => {
+  const add = useCallback(async (item: CanvasItem, chosen: Tag[]) => {
     const assignmentId = canvasAssignmentId(item);
-    if (assignmentId == null || pendingRef.current.has(assignmentId) || linked.has(assignmentId)) return;
+    if (assignmentId == null || pendingRef.current.has(assignmentId) || linked.has(assignmentId)) return null;
     setPending(assignmentId, true);
     try {
-      const created = await addTask(canvasTaskForm(item, assignmentId, courseLabel, tags));
-      if (!created) return;
-      // The backend creates the course's tag when the user has none of that name.
+      const created = await addTask(canvasTaskForm(item, assignmentId, chosen));
+      if (!created) return null;
+      // The backend creates any tag the user has none of that name of.
       setTags(prev => [...prev, ...created.tags.filter(t => !prev.some(p => p.id === t.id))]);
-      showToast(`Added "${item.title}" to your tasks.`, 'success', {
+      showToast(`Added "${item.title}" to your tasks with ${tagNames(created.tags)}.`, 'success', {
         label: 'Undo',
         onClick: () => { void discardTask(created); },
       });
+      return created;
     } catch (err) {
       // addTask toasts every other failure itself.
       if (err instanceof CanvasTaskExistsError) {
@@ -75,10 +85,13 @@ export function useCanvasAddToTasks(onShowTask: (taskId: number) => void): Canva
       } else {
         console.error('Add to tasks failed:', err);
       }
+      return null;
     } finally {
       setPending(assignmentId, false);
     }
-  }, [linked, addTask, tags, setTags, showToast, discardTask, onShowTask]);
+  }, [linked, addTask, setTags, showToast, discardTask, onShowTask]);
 
-  return { stateOf, add };
+  const createTag = useCallback(async (tag: NewTag) => (await addTag(tag)) || null, [addTag]);
+
+  return { stateOf, add, tags, createTag };
 }

@@ -23,6 +23,7 @@ const api = vi.hoisted(() => {
     updateCanvasHiddenCourses: vi.fn(),
     removeCanvasConnection: vi.fn(),
     fetchCanvasCourses: vi.fn(),
+    fetchCanvasClasses: vi.fn(),
   };
 });
 vi.mock('@/app/lib/backend-api', () => api);
@@ -481,6 +482,41 @@ describe('CanvasIntegrationSection', () => {
     expect(text()).toContain("Canvas can't be connected to a demo sandbox.");
     expect(text()).toContain("Canvas isn't available for this account.");
     expect(text()).not.toContain('in the demo');
+  });
+
+  it('tells a feed connection what an access token would add, and says nothing of it for a token', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected());
+    await render();
+    const note = container.querySelector('[data-testid="canvas-token-extras-note"]')?.textContent;
+    expect(note).toContain('access token instead, if your school allows it, also shows your grades, modules');
+    expect(note).toContain('announcements');
+    act(() => root.unmount());
+    root = createRoot(container);
+    api.fetchCanvasConnection.mockResolvedValue(connected());
+    await render();
+    expect(container.querySelector('[data-testid="canvas-token-extras-note"]')).toBeNull();
+  });
+
+  it("lists a feed's classes under Courses to show and saves the hidden ones", async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected({
+      capabilities: { ...feedConnected().capabilities!, classes: true }, hidden_course_ids: [3],
+    }));
+    api.fetchCanvasClasses.mockResolvedValue({
+      fetched_at: NOW.toISOString(), busy: false, stale: false, sample: false,
+      classes: [
+        { id: 1, code: 'CS 460-01', name: null, term: null, html_url: null, hidden: false, due_this_week: 1, upcoming: 4, next_due: null },
+        { id: 3, code: 'ART 157-02', name: null, term: null, html_url: null, hidden: true, due_this_week: 0, upcoming: 2, next_due: null },
+      ],
+    });
+    api.updateCanvasHiddenCourses.mockResolvedValue(feedConnected({ hidden_course_ids: [1, 3] }));
+    await render();
+    expect(api.fetchCanvasCourses).not.toHaveBeenCalled();
+    expect(text()).toContain('Courses to show');
+    expect(text()).toContain('CS 460-01');
+    const boxes = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    expect([...boxes].map(b => b.checked)).toEqual([true, false]);
+    await click(boxes[0]);
+    expect(api.updateCanvasHiddenCourses).toHaveBeenCalledWith([1, 3]);
   });
 
   it('leaves out Courses to show while the courses route does not answer', async () => {

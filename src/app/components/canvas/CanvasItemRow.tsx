@@ -4,7 +4,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import TaskStatusChip from '@/app/components/task/TaskStatusChip';
-import type { CanvasAddState, CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
+import type { CanvasAddState } from '@/app/hooks/useCanvasAddToTasks';
 import type { CanvasItem, CanvasItemKind } from '@/app/types/canvas';
 import { dueLabel, formatNumber, itemStatus, type CanvasItemStatus } from '@/app/utils/canvas';
 
@@ -20,6 +20,13 @@ const KIND_ICONS: Record<CanvasItemKind, LucideIcon> = {
 
 /** A course's short label and color, looked up from the course list. */
 export type CourseLookup = (courseId: number | null) => { label: string | null; color: string };
+
+/** What item rows need for Add to tasks: each item's state, and opening the tag picker for one. */
+export interface CanvasRowAdd {
+  stateOf: (item: CanvasItem) => CanvasAddState;
+  /** Opens the tag picker for `item`; `classLabel` names its class and its Canvas tag. */
+  open: (item: CanvasItem, classLabel: string | null) => void;
+}
 
 /** An item's status chip: the task status chips, and a neutral one for excused work. */
 export const CanvasStatusChip: React.FC<{ status: CanvasItemStatus }> = ({ status }) =>
@@ -91,7 +98,7 @@ interface CanvasItemRowProps {
   course: CourseLookup;
   now: Date;
   /** Offers "Add to tasks" on assignments with work left; left out, the row offers nothing. */
-  addToTasks?: CanvasAddToTasks;
+  addToTasks?: CanvasRowAdd;
 }
 
 const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, addToTasks }) => {
@@ -100,7 +107,7 @@ const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, addToT
   const { label: courseLabel, color } = course(item.course_id);
   const addState = addToTasks?.stateOf(item) ?? null;
   const add = addState && (
-    <AddToTasks item={item} state={addState} onAdd={() => void addToTasks!.add(item, courseLabel ?? item.course_name)} />
+    <AddToTasks item={item} state={addState} onAdd={() => addToTasks!.open(item, courseLabel ?? item.course_name)} />
   );
   return (
     <div className="flex gap-2.5 items-start p-2.5 rounded-[10px] border border-border bg-surface">
@@ -118,7 +125,9 @@ const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, addToT
           {item.title}
         </CanvasLink>
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-xs text-text-muted">
-          {(courseLabel ?? item.course_name) && <CourseDot label={(courseLabel ?? item.course_name)!} color={color} />}
+          {(courseLabel ?? item.course_name)
+            ? <CourseDot label={(courseLabel ?? item.course_name)!} color={color} />
+            : item.course_id == null && <span>Your calendar</span>}
           {item.due_at && (
             <span className="inline-flex items-center gap-1">
               <Clock className="w-3 h-3" />

@@ -24,12 +24,15 @@ import { AppNotification, NotificationPreferences, NotificationPreferencesUpdate
 import {
   CanvasAnnouncements,
   CanvasAssignments,
+  CanvasClasses,
   CanvasConnection,
   CanvasCourse,
   CanvasCourses,
+  CanvasCourseTags,
   CanvasLinkedTaskSync,
   CanvasModules,
   CanvasOverview,
+  CanvasRange,
 } from "../types/canvas";
 import type { StructuredNoteContent } from "../utils/noteContentExtractor";
 import { supabase } from "./supabase";
@@ -972,9 +975,10 @@ export async function fetchCanvasCourses(): Promise<CanvasCourse[]> {
 // that when the copy is under 30 seconds old). A rejected or expired token
 // fails with canvas_token_invalid (409): "Reconnect Canvas".
 
-const canvasReadQuery = (refresh: boolean, withTimeZone = true) => {
+const canvasReadQuery = (refresh: boolean, withTimeZone = true, extra: Record<string, string> = {}) => {
   const params = new URLSearchParams();
   if (withTimeZone) params.set("tz", Intl.DateTimeFormat().resolvedOptions().timeZone);
+  for (const [key, value] of Object.entries(extra)) params.set(key, value);
   if (refresh) params.set("refresh", "true");
   const query = params.toString();
   return query ? `?${query}` : "";
@@ -987,9 +991,14 @@ async function fetchCanvasRead<T>(path: string, context: string): Promise<T> {
   return res.json();
 }
 
-/** Work due from the start of today through the next 7 days, missing work and recently graded work. */
-export function fetchCanvasOverview(refresh = false): Promise<CanvasOverview> {
-  return fetchCanvasRead(`overview${canvasReadQuery(refresh)}`, "fetchCanvasOverview");
+/**
+ * Missing work, recently graded work and the work due from the start of today
+ * over `range`: the next 7 days, or everything Canvas has coming ("all", about
+ * 13 months). A backend from before the range sends the 7 days either way.
+ */
+export function fetchCanvasOverview(refresh = false, range: CanvasRange = "week"): Promise<CanvasOverview> {
+  const extra: Record<string, string> = range === "week" ? {} : { range };
+  return fetchCanvasRead(`overview${canvasReadQuery(refresh, true, extra)}`, "fetchCanvasOverview");
 }
 
 /** The active courses shown on the home page, with current grades. */
@@ -1010,6 +1019,38 @@ export function fetchCanvasAssignments(courseId: number, refresh = false): Promi
 /** The last 14 days of announcements from the shown courses, newest first, as plain text. */
 export function fetchCanvasAnnouncements(refresh = false): Promise<CanvasAnnouncements> {
   return fetchCanvasRead(`announcements${canvasReadQuery(refresh)}`, "fetchCanvasAnnouncements");
+}
+
+/**
+ * The user's classes by code, hidden ones included (marked hidden), each
+ * with how much is due this week and in all and what's due next.
+ */
+export function fetchCanvasClasses(refresh = false): Promise<CanvasClasses> {
+  return fetchCanvasRead(`classes${canvasReadQuery(refresh, true, { include_hidden: "true" })}`, "fetchCanvasClasses");
+}
+
+/** The tags each class's tasks start with when added from Canvas, for the classes the user chose some for. */
+export async function fetchCanvasCourseTags(): Promise<CanvasCourseTags[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/course-tags`, { headers });
+  await assertOk(res, "fetchCanvasCourseTags");
+  return (await res.json()).courses;
+}
+
+/**
+ * Sets the tags a class's tasks start with when added from Canvas, in order;
+ * an empty list clears them, so the class starts with its Canvas tag again.
+ * Returns every class's.
+ */
+export async function saveCanvasCourseTags(courseId: number, tagIds: number[]): Promise<CanvasCourseTags[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/course-tags/${courseId}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ tag_ids: tagIds }),
+  });
+  await assertOk(res, "saveCanvasCourseTags");
+  return (await res.json()).courses;
 }
 
 /**
