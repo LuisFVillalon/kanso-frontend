@@ -258,6 +258,112 @@ describe('CalendarReportView mood', () => {
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
   });
 
+  describe('mood, energy and stress over time', () => {
+    const full = (period_start: string, mood: number, energy: number | null, stress: number | null): MoodCheckin =>
+      ({ ...checkin(period_start, mood), energy, stress });
+    const dots = (series: string) => [...container.querySelectorAll(`[data-series="${series}"]`)] as HTMLElement[];
+    const tooltip = () => container.querySelector('[aria-label="Mood, energy and stress over time"] > [aria-hidden="true"].z-30');
+    const pointerDown = async (el: Element, pointerType: string) => {
+      await act(async () => {
+        const event = new MouseEvent('pointerdown', { bubbles: true });
+        Object.defineProperty(event, 'pointerType', { value: pointerType });
+        el.dispatchEvent(event);
+      });
+    };
+
+    it('stacks three rows on one axis, each with its own words, leaving gaps where energy and stress were skipped', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([full('2026-10-19', 2, 1, 5), full('2026-10-20', 4, null, null), full('2026-10-21', 5, 5, 1)]);
+      await render();
+      await openTab('Mood');
+      expect(text()).toContain('Each line is one feeling from your daily check-ins; line them up to see how they move together.');
+      for (const word of ['Rough', 'Okay', 'Great', 'Drained', 'Steady', 'Charged', 'Calm', 'Some', 'Maxed']) expect(text()).toContain(word);
+      expect(dots('mood').map(d => d.dataset.day)).toEqual(['2026-10-19', '2026-10-20', '2026-10-21']);
+      // A skipped energy or stress is a gap, never a zero.
+      expect(dots('energy').map(d => d.dataset.day)).toEqual(['2026-10-19', '2026-10-21']);
+      expect(dots('stress').map(d => d.dataset.day)).toEqual(['2026-10-19', '2026-10-21']);
+      expect(buttonLabelled(/^Monday, October 19: Mood Low · Energy Drained · Stress Maxed\. Edit$/)).toBeDefined();
+      expect(buttonLabelled(/^Tuesday, October 20: Mood Good\. Edit$/)).toBeDefined();
+      // One column per day spans all three rows, so the week has one button per day so far.
+      expect(container.querySelectorAll('[aria-label="Mood, energy and stress over time"] > button')).toHaveLength(3);
+    });
+
+    it('lights a day up in all three rows and lists its values', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([full('2026-10-19', 2, 1, 5), full('2026-10-20', 4, null, null)]);
+      await render();
+      await openTab('Mood');
+      expect(tooltip()).toBeNull();
+
+      await act(async () => { buttonLabelled(/^Monday, October 19:/).focus(); });
+      expect(container.querySelector('[data-active-column]')?.getAttribute('data-active-column')).toBe('2026-10-19');
+      expect(tooltip()?.textContent).toContain('Monday, October 19');
+      expect(tooltip()?.textContent).toContain('MoodLow');
+      expect(tooltip()?.textContent).toContain('EnergyDrained');
+      expect(tooltip()?.textContent).toContain('StressMaxed');
+      expect(dots('mood')[0].firstElementChild?.className).toContain('scale-150');
+      expect(dots('stress')[0].firstElementChild?.className).toContain('scale-150');
+
+      await act(async () => { buttonLabelled(/^Tuesday, October 20:/).focus(); });
+      expect(tooltip()?.textContent).toContain('EnergyNot recorded');
+      expect(tooltip()?.textContent).toContain('StressNot recorded');
+    });
+
+    it('shows a day on the first tap and edits it on the second', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([full('2026-10-20', 4, 3, 2)]);
+      await render();
+      await openTab('Mood');
+      const day = buttonLabelled(/^Tuesday, October 20:/);
+      await pointerDown(day, 'touch');
+      await act(async () => { (day as HTMLElement).focus(); });
+      await click(day);
+      expect(text()).not.toContain('Edit check-in');
+      expect(tooltip()?.textContent).toContain('Tap again: edit');
+      await pointerDown(day, 'touch');
+      await click(day);
+      expect(text()).toContain('Edit check-in · Tue, Oct 20');
+    });
+
+    it('draws each row’s 7-day trend on a month', async () => {
+      const days = Array.from({ length: 10 }, (_, i) => `2026-10-${String(i + 5).padStart(2, '0')}`);
+      api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => full(d, 3, 4, i % 2 ? 2 : null)));
+      await render();
+      await openTab('Mood');
+      await click(buttonLabelled(/^Month$/));
+      expect(text()).toContain('7-day trend');
+      const paths = [...container.querySelectorAll('[aria-label="Mood, energy and stress over time"] svg path')].map(p => p.getAttribute('d') ?? '');
+      expect(paths).toHaveLength(3);
+      for (const d of paths) expect(d).toMatch(/^M/);
+    });
+
+    it('cautions on each year row that has fewer than 8 days in the month', async () => {
+      const sept = Array.from({ length: 8 }, (_, i) => full(`2026-09-${String(i + 1).padStart(2, '0')}`, 4, i < 3 ? 4 : null, 2));
+      api.fetchMoodCheckins.mockResolvedValue(sept);
+      await render();
+      await openTab('Mood');
+      await click(buttonLabelled(/^Year$/));
+      await act(async () => { buttonLabelled(/^September:/).focus(); });
+      const rows = [...(tooltip()?.querySelectorAll('li') ?? [])].map(li => li.textContent);
+      expect(rows).toHaveLength(3);
+      expect(rows[1]).toContain('only 3 days');
+      expect(rows[0]).not.toContain('only');
+      expect(rows[2]).not.toContain('only');
+    });
+
+    it('fades the year’s months with fewer than 8 days', async () => {
+      const sept = Array.from({ length: 8 }, (_, i) => full(`2026-09-${String(i + 1).padStart(2, '0')}`, 4, 4, 2));
+      api.fetchMoodCheckins.mockResolvedValue([...sept, full('2026-10-20', 2, 2, 4)]);
+      await render();
+      await openTab('Mood');
+      await click(buttonLabelled(/^Year$/));
+      expect(text()).toContain('Fewer than 8 days');
+      const opacity = (series: string, day: string) => dots(series).find(d => d.dataset.day === day)?.style.opacity;
+      for (const series of ['mood', 'energy', 'stress']) {
+        expect(opacity(series, '2026-09')).toBe('1');
+        expect(opacity(series, '2026-10')).toBe('0.35');
+      }
+      expect(buttonLabelled(/^September: typical mood 4\.0 across 8 days\. Typical energy 4\.0 across 8 days\. Typical stress 2\.0 across 8 days\. Open September$/)).toBeDefined();
+    });
+  });
+
   describe('weekly and monthly check-ins', () => {
     const week = (period_start: string, mood: number, more: Partial<MoodCheckin> = {}): MoodCheckin =>
       ({ ...checkin(period_start, mood), id: 20, period_kind: 'week', ...more });

@@ -15,6 +15,8 @@ export type MoodSeries = 'mood' | 'energy' | 'stress';
 /** The month chart's rolling average: 7 days, drawn once at least 3 of them have a check-in. */
 export const ROLLING_WINDOW = 7;
 export const ROLLING_MIN = 3;
+/** On the year chart, a month with fewer days than this for a series is drawn faded. */
+export const YEAR_FADE_DAYS = 8;
 /** Under this many check-ins the report says patterns need more days — more than a week has, so only Month and Year show them. */
 export const PATTERN_MIN_DAYS = 10;
 
