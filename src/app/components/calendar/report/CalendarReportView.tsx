@@ -271,8 +271,23 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
   const hasMood = !!checkins && days > 0 && hasMoodCheckins(period, byDay, checkins);
   const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
+  const moodSection = (
+    <ReportMoodSection
+      period={period}
+      report={report}
+      activity={activity}
+      byDay={byDay}
+      checkins={checkins ?? []}
+      settings={mood.settings}
+      replaceDay={mood.replaceDay}
+      onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
+    />
+  );
+
   if (isEmpty(report) && !hasMood && !mood.error) {
-    return (
+    // While weekly or monthly check-ins are on, the period's weeks or months stay there to log.
+    const offersPeriodCheckins = !!checkins && days > 0 && (period.kind === 'year' ? mood.settings.monthly : mood.settings.weekly);
+    const empty = (
       <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
         <CalendarRange className="w-8 h-8 text-text-muted" aria-hidden="true" />
         <h3 className="text-base font-semibold text-text-primary">
@@ -281,6 +296,13 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
         <p className="text-sm text-text-muted max-w-sm">
           Tasks you plan and complete, time in notes and habit check-ins will show up here.
         </p>
+      </div>
+    );
+    if (!offersPeriodCheckins) return empty;
+    return (
+      <div className="flex flex-col gap-3 sm:gap-4">
+        {empty}
+        {moodSection}
       </div>
     );
   }
@@ -320,16 +342,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           <button type="button" onClick={mood.retry} className="btn btn-secondary py-1.5 px-3">Try again</button>
         </div>
       ) : (
-        <ReportMoodSection
-          period={period}
-          report={report}
-          activity={activity}
-          byDay={byDay}
-          checkins={checkins ?? []}
-          settings={mood.settings}
-          replaceDay={mood.replaceDay}
-          onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
-        />
+        moodSection
       )}
     </div>
   );

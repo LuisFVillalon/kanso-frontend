@@ -103,11 +103,12 @@ interface ReportMoodSectionProps {
 /**
  * The report's Mood section: "Mood over time" and the Check-ins summary,
  * then "Mood & your activity" and "Tags & mood", or an empty card with
- * "Log today". Any day dot opens its check-in to edit, and a hollow one logs
- * that day; weekly and monthly check-ins open from their spans, ◇ and the
- * Check-ins list, which also logs a past week or month without one. A week
- * is too short for mood patterns, so in their place it points to its Month
- * report.
+ * "Log today" and, while weekly or monthly check-ins are on, the period's
+ * weeks or months to log. Any day dot opens its check-in to edit, and a
+ * hollow one logs that day; weekly and monthly check-ins open from their
+ * spans, ◇ and the Check-ins list, which also logs a past week or month
+ * without one. A week is too short for mood patterns, so in their place it
+ * points to its Month report.
  */
 const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod }) => {
   const showToast = useToast();
@@ -203,6 +204,17 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
             <button type="button" onClick={() => setModal({ kind: 'day', date: todayStr, existing: byDay.get(todayStr) ?? null })} className="btn btn-primary py-1.5 px-3 mt-2">
               Log today
             </button>
+          )}
+          {(period.kind === 'year' ? settings.monthly : settings.weekly) && (
+            <div className="w-full max-w-md mt-4 text-left">
+              <ReportPeriodCheckins
+                period={period}
+                weeks={weeks}
+                months={months}
+                settings={settings}
+                onOpen={(kind, date, existing) => setModal({ kind, date, existing })}
+              />
+            </div>
           )}
         </div>
       ) : (
