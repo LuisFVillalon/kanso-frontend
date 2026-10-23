@@ -131,6 +131,7 @@ export const buildNotePdfMarkup = ({ title, html, tags = [], dateLabel }: NotePd
         break-inside: avoid; page-break-inside: avoid;
         orphans: 3; widows: 3;
       }
+      .pdf-body p:empty { min-height: 1.5em; }
       .pdf-body strong { font-weight: 700; color: #111827; }
       .pdf-body em     { font-style: italic; }
       .pdf-body u      { text-decoration: underline; }

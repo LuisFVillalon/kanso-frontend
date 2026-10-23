@@ -102,6 +102,17 @@ describe('note PDF document', () => {
     expect(texts(body.querySelectorAll('pre .pdf-code-line'))).toEqual(['a = 1', 'b = 2', '', 'c = 3']);
   });
 
+  it('gives blank lines one line of height, in the body, lists and tables', () => {
+    const { body } = renderPdf(
+      '<p>a</p><p></p><p></p><p>b</p><ul><li><p></p></li></ul><table><tbody><tr><td><p></p></td></tr></tbody></table>');
+    const empty = Array.from(body.querySelectorAll('p')).filter(p => !p.textContent);
+    expect(empty).toHaveLength(4);
+    const lineHeight = (p: Element) => parseFloat(getComputedStyle(p).fontSize) * 1.5;
+    for (const p of empty) expect(getComputedStyle(p).minHeight).toBe(`${lineHeight(p)}px`);
+    const filled = Array.from(body.querySelectorAll('p')).filter(p => p.textContent);
+    for (const p of filled) expect(parseFloat(getComputedStyle(p).minHeight) || 0).toBe(0);
+  });
+
   it('escapes the title and tags, and prints the date and tags under the title', () => {
     const { container } = renderPdf('<p>x</p>', {
       title: 'Ch. 3 <script>alert(1)</script> & more',
