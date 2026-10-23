@@ -17,7 +17,7 @@ export const AUTOSAVE_DELAY_MS = 500;
  * `schedule` queues a change and saves it AUTOSAVE_DELAY_MS after the last
  * one; changes queued in between merge into one save. `saveNow` (Ctrl+S, or
  * Retry after a failure) skips the wait. A save that fails keeps its changes
- * and sends them again with the next save, so a failed title isn't lost
+ * and sends them again with that note's next save, so a failed title isn't lost
  * because a later content save went through. Status is "saving" from the
  * first queued change until its save lands, then "saved" or "error".
  *
@@ -32,23 +32,25 @@ export function useNoteAutosave(noteId: number | null, onSave: SaveNote) {
   const onSaveRef = useRef(onSave);
   const noteIdRef = useRef(noteId);
   const pending = useRef<{ id: number; changes: NoteChanges } | null>(null);
-  const failed = useRef<{ id: number; changes: NoteChanges } | null>(null);
+  // Per note: changes whose save failed and still need sending.
+  const failed = useRef(new Map<number, NoteChanges>());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bumped by every save and every note switch; only the newest save may set the status.
   const generation = useRef(0);
-  // The newest save to carry each field; only that save decides whether the field still needs retrying.
-  const carrier = useRef<Partial<Record<keyof NoteChanges, number>>>({});
+  // Per note: the newest save to carry each field; only that save decides whether the field still needs retrying.
+  const carrier = useRef(new Map<number, Partial<Record<keyof NoteChanges, number>>>());
 
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
 
   const save = useCallback(async (id: number, changes: NoteChanges): Promise<boolean> => {
-    const retried = failed.current?.id === id ? failed.current.changes : {};
-    const payload = { ...retried, ...changes };
+    const payload = { ...failed.current.get(id), ...changes };
     const mine = ++generation.current;
     const fields = Object.keys(payload) as (keyof NoteChanges)[];
-    for (const field of fields) carrier.current[field] = mine;
+    const carriers = carrier.current.get(id) ?? {};
+    carrier.current.set(id, carriers);
+    for (const field of fields) carriers[field] = mine;
     setStatus('saving');
     let ok: boolean;
     try {
@@ -56,14 +58,14 @@ export function useNoteAutosave(noteId: number | null, onSave: SaveNote) {
     } catch {
       ok = false;
     }
-    const remaining: NoteChanges = failed.current?.id === id ? { ...failed.current.changes } : {};
+    const remaining: NoteChanges = { ...failed.current.get(id) };
     for (const field of fields) {
-      if (carrier.current[field] !== mine) continue;
+      if (carriers[field] !== mine) continue;
       if (ok) delete remaining[field];
       else Object.assign(remaining, { [field]: payload[field] });
     }
-    if (Object.keys(remaining).length > 0) failed.current = { id, changes: remaining };
-    else if (failed.current?.id === id) failed.current = null;
+    if (Object.keys(remaining).length > 0) failed.current.set(id, remaining);
+    else failed.current.delete(id);
     if (mine === generation.current && pending.current?.id !== id) {
       setStatus(ok ? 'saved' : 'error');
       if (ok) setSavedAt(new Date());
@@ -85,7 +87,6 @@ export function useNoteAutosave(noteId: number | null, onSave: SaveNote) {
   const leaveNote = useCallback(() => {
     void flushPending();
     generation.current++;
-    failed.current = null;
     setStatus('saved');
     setSavedAt(null);
   }, [flushPending]);

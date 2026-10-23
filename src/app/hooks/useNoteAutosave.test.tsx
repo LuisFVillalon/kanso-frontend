@@ -154,6 +154,30 @@ describe('useNoteAutosave', () => {
     expect(latest.current!.status).toBe('saved');
   });
 
+  it.each([false, true])('keeps the open note\'s failed title when the previous note\'s late save settles (that save ok: %s)', async aOk => {
+    let finishA!: (ok: boolean) => void;
+    const onSave = vi.fn<Save>()
+      .mockImplementationOnce(() => new Promise<boolean>(resolve => { finishA = resolve; }))
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
+    render(1, onSave);
+    act(() => latest.current!.schedule({ content: '<p>note one</p>' }));
+    render(2, onSave);
+    expect(onSave).toHaveBeenCalledWith(1, { content: '<p>note one</p>' });
+
+    act(() => latest.current!.schedule({ title: 'Note two' }));
+    act(() => { vi.advanceTimersByTime(AUTOSAVE_DELAY_MS); });
+    await settle();
+    expect(latest.current!.status).toBe('error');
+    await act(async () => { finishA(aOk); await Promise.resolve(); });
+
+    act(() => latest.current!.schedule({ content: '<p>note two</p>' }));
+    act(() => { vi.advanceTimersByTime(AUTOSAVE_DELAY_MS); });
+    await settle();
+    expect(onSave).toHaveBeenLastCalledWith(2, { title: 'Note two', content: '<p>note two</p>' });
+    expect(latest.current!.status).toBe('saved');
+  });
+
   it('does nothing without a note', () => {
     const onSave = vi.fn<Save>().mockResolvedValue(true);
     render(null, onSave);
