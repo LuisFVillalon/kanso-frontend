@@ -513,13 +513,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </ToolbarButton>
           )}
 
-          {roomy && startFocusMode && (
+          {!focusMode && roomy && startFocusMode && (
             <span className="contents" onAnimationEnd={focusKeyPressed ? finishFocusKey : undefined}>
               <ToolbarButton
-                toggle
-                active={focusMode}
+                toggle={false}
                 title="Focus mode (Ctrl+Shift+F)"
-                onClick={focusMode ? () => setFocusMode(false) : pressFocusKey}
+                onClick={pressFocusKey}
                 className={focusKeyPressed ? 'kanso-key-press kanso-key-press-now' : ''}
               >
                 <KansoMark className="w-[18px] h-[18px]" />
