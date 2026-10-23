@@ -299,6 +299,7 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
             data-rail={key}
             className="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl border border-dashed border-border-strong bg-surface text-text-muted hover:text-text-primary hover:border-accent transition-colors"
           >
+            <PanelControl label={`Add ${label} beside the others`} icon={Plus} tipSide="left" pressed={pressing(`add-${key}`)} onClick={() => act(`add-${key}`, () => setPanels([...on, key]))} />
             <button
               type="button"
               aria-label={`Show only ${label}`}
@@ -311,7 +312,6 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
               <Icon className="w-4 h-4 flex-shrink-0" aria-hidden />
               <span aria-hidden className="text-xs font-semibold [writing-mode:vertical-rl]">{label}</span>
             </button>
-            <PanelControl label={`Add ${label} beside the others`} icon={Plus} tipSide="left" pressed={pressing(`add-${key}`)} onClick={() => act(`add-${key}`, () => setPanels([...on, key]))} />
           </div>
         );
       })}

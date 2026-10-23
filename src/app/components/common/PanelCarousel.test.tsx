@@ -201,6 +201,9 @@ describe('PanelCarousel', () => {
     expect(splitChanges.at(-1)).toBe('tasks,canvas');
     expect(onScreen()).toEqual(['tasks', 'canvas']);
     expect(rails()).toEqual(['notes']);
+    const rail = container.querySelector('[data-rail="notes"]')!;
+    expect([...rail.querySelectorAll('button')].map(b => b.getAttribute('aria-label')))
+      .toEqual(['Add Notes beside the others', 'Show only Notes']);
   });
 
   it('shows three panels in columns with a divider between each, saved in Tasks, Notes, Canvas order', async () => {
