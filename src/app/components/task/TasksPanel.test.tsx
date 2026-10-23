@@ -216,6 +216,42 @@ describe('TasksPanel finishing the last open linked task', () => {
     expect(container.textContent).not.toContain('All linked tasks are done');
   });
 
+  it('offers to complete the parent in a toast when the filters hide its card', () => {
+    vi.useFakeTimers();
+    Element.prototype.scrollIntoView = vi.fn();
+    const onShowAll = vi.fn();
+    render([parent, done, open], { shown: [open], onShowAll });
+    act(() => checkbox(3).click());
+    render([parent, done, { ...open, completed: true }], { shown: [{ ...open, completed: true }], onShowAll });
+    act(() => { vi.advanceTimersByTime(60); });
+    expect(showToast).toHaveBeenCalledWith(
+      'All linked tasks are done. “Apply to Google” is hidden by your filters.',
+      'info',
+      [expect.objectContaining({ label: 'Complete “Apply to Google”' }), expect.objectContaining({ label: 'Show it' })],
+    );
+    const [complete, showIt] = showToast.mock.calls[0][2];
+
+    act(() => showIt.onClick());
+    expect(onShowAll).toHaveBeenCalled();
+    render([parent, done, { ...open, completed: true }], { onShowAll });
+    expect(card(1).classList.contains('task-flash')).toBe(true);
+    expect(card(1).textContent).toContain('All linked tasks are done. Mark Apply to Google complete?');
+
+    act(() => complete.onClick());
+    expect(handlers.onToggleComplete).toHaveBeenLastCalledWith(1);
+    expect(container.textContent).not.toContain('All linked tasks are done');
+  });
+
+  it('shows no toast when the parent card is in the list', () => {
+    vi.useFakeTimers();
+    Element.prototype.scrollIntoView = vi.fn();
+    render([parent, done, open]);
+    act(() => checkbox(3).click());
+    render([parent, done, { ...open, completed: true }]);
+    act(() => { vi.advanceTimersByTime(60); });
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
   it('drops the banner when the toggle fails and the list rolls back', () => {
     render([parent, done, open]);
     act(() => checkbox(3).click());

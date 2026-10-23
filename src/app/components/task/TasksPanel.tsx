@@ -12,7 +12,7 @@ import { TaskFormData } from './TaskFormFields';
 import { TrailItem } from './ParentTrail';
 import { LinkedRemoveMode, Tag, Task, TaskView } from '@/app/types/task';
 import { linkedTaskIndex, parentChain } from '@/app/utils/taskUtils';
-import { useToast } from '@/app/context/ToastContext';
+import { ToastAction, useToast } from '@/app/context/ToastContext';
 
 interface TasksPanelProps {
   tags: Tag[];
@@ -112,11 +112,22 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
     return true;
   }, []);
 
-  const hiddenToast = (task: Task, lead: string) =>
-    showToast(lead, 'info', onShowAll && {
-      label: 'Show it',
-      onClick: () => { goToWhenShown.current = task.id; onShowAll(); },
-    });
+  const showIt = (task: Task): ToastAction | undefined => onShowAll && {
+    label: 'Show it',
+    onClick: () => { goToWhenShown.current = task.id; onShowAll(); },
+  };
+
+  const hiddenToast = (task: Task, lead: string) => showToast(lead, 'info', showIt(task));
+
+  // The "all linked tasks are done" banner, for a parent the filters hide.
+  const allDoneToast = (parent: Task) => {
+    const complete = {
+      label: `Complete “${parent.title}”`,
+      onClick: () => { setBanner(parent.id, null); onToggleComplete(parent.id); },
+    };
+    const show = showIt(parent);
+    showToast(`All linked tasks are done. “${parent.title}” is hidden by your filters.`, 'info', show ? [complete, show] : complete);
+  };
 
   // A parent in a trail or a linked-task chip: scroll to its card, or say the filters hide it.
   const goToTask = (id: number) => {
@@ -144,7 +155,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
       if (parent) {
         const finishesLast = !task.completed && !parent.completed && openUnder(parent.id) === 1;
         setBanner(parent.id, finishesLast ? 'alldone' : null);
-        if (finishesLast) setTimeout(() => flash(parent.id, 'nearest'), 50);
+        if (finishesLast) setTimeout(() => { if (!flash(parent.id, 'nearest')) allDoneToast(parent); }, 50);
       }
     }
     onToggleComplete(id);
