@@ -10,6 +10,7 @@ import {
   PositionedEvent,
   SLOT_MINUTES,
   TimedEvent,
+  WorkDayMarks,
 } from '@/app/utils/weekLayout';
 
 const HOUR_PX = 48;
@@ -32,6 +33,19 @@ const KIND_STYLE: Record<TimedEvent['kind'] | 'habit', { bg: string; edge: strin
 
 /** The grid's own height; it scrolls the hours inside. A taller box (a dragged week view) stretches it. */
 const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
+
+/** Hours outside the work window: a flat wash of the muted text color. */
+const OFF_HOURS_BG = 'color-mix(in srgb, var(--tm-text-muted) 9%, transparent)';
+/** Rest days: the same wash, hatched, so a day off reads differently from an evening. */
+const REST_DAY_BG = 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--tm-text-muted) 14%, transparent) 0 5px, transparent 5px 10px)';
+/** The lines where the work window opens and closes. */
+const WINDOW_EDGE = 'color-mix(in srgb, var(--tm-accent) 55%, transparent)';
+
+/** Swatches for the work schedule, shown after WEEK_LEGEND. */
+export const WORK_DAY_LEGEND = [
+  { label: 'Outside work hours', background: OFF_HOURS_BG },
+  { label: 'Rest day', background: REST_DAY_BG },
+];
 
 export const WEEK_LEGEND = [
   { label: 'Planned task', ...KIND_STYLE.task },
@@ -62,6 +76,8 @@ interface WeekGridProps {
   days: Date[];
   timed: TimedEvent[];
   allDay: AllDayItem[];
+  /** Each day's rest-day flag and work window (see workDayMarks), in the order of `days`. */
+  workDays: WorkDayMarks[];
   /** Index of today's column, or null when today isn't in this week. */
   todayIndex: number | null;
   nowMinutes: number;
@@ -83,11 +99,13 @@ interface WeekGridProps {
  * half-hour slot buttons (one roving tab stop, arrow keys to move, Enter to
  * create a task there); planned tasks, completions and note sessions sit on
  * top as blocks, and undated-time tasks and habit completions fill the
- * all-day row. Scrolls both ways inside its own box, with the day headers and
- * hour gutter pinned, so it stays usable at phone width.
+ * all-day row. Hours outside the user's work window are washed out and rest
+ * days hatched, with dashed lines where the window opens and closes. Scrolls
+ * both ways inside its own box, with the day headers and hour gutter pinned,
+ * so it stays usable at phone width.
  */
 const WeekGrid: React.FC<WeekGridProps> = ({
-  days, timed, allDay, todayIndex, nowMinutes, scrollToMinutes, scrollKey,
+  days, timed, allDay, workDays, todayIndex, nowMinutes, scrollToMinutes, scrollKey,
   canOpenTask, canOpenHabit, onCreateAt, onOpenTask, onOpenNote, onOpenHabit, fill = false,
 }) => {
   const hintId = useId();
@@ -154,11 +172,14 @@ const WeekGrid: React.FC<WeekGridProps> = ({
             <div className="sticky left-0 z-10" style={{ backgroundColor: 'var(--tm-surface)' }} />
             {days.map((day, i) => {
               const isToday = i === todayIndex;
+              const { rest } = workDays[i];
               return (
                 <div
                   key={i}
                   aria-current={isToday ? 'date' : undefined}
+                  title={rest ? 'Rest day' : undefined}
                   className="flex flex-col items-center py-2 border-l border-border-subtle"
+                  style={rest ? { backgroundImage: REST_DAY_BG } : undefined}
                 >
                   <span
                     className="text-[11px] font-semibold uppercase tracking-wide"
@@ -174,6 +195,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                   >
                     {day.getDate()}
                   </span>
+                  <span className="sr-only">{workDayText(workDays[i])}</span>
                 </div>
               );
             })}
@@ -187,7 +209,11 @@ const WeekGrid: React.FC<WeekGridProps> = ({
               All day
             </div>
             {allDayByDay.map((items, i) => (
-              <div key={i} className="relative min-h-9 border-l border-border-subtle">
+              <div
+                key={i}
+                className="relative min-h-9 border-l border-border-subtle"
+                style={workDays[i].rest ? { backgroundImage: REST_DAY_BG } : undefined}
+              >
                 <button
                   type="button"
                   onClick={() => onCreateAt(days[i], null)}
@@ -229,9 +255,11 @@ const WeekGrid: React.FC<WeekGridProps> = ({
           </p>
           {days.map((day, dayIndex) => {
             const isToday = dayIndex === todayIndex;
+            const marks = workDays[dayIndex];
             return (
               <div
                 key={dayIndex}
+                data-rest-day={marks.rest || undefined}
                 className="relative border-l border-border-subtle"
                 style={{
                   height: minutesToPx(MINUTES_PER_DAY),
@@ -240,6 +268,22 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                   backgroundSize: `100% ${HOUR_PX}px`,
                 }}
               >
+                {marks.off.map(([start, end]) => (
+                  <div
+                    key={start}
+                    aria-hidden
+                    data-off-hours
+                    className="absolute left-0 right-0 pointer-events-none"
+                    style={{
+                      top: minutesToPx(start),
+                      height: minutesToPx(end - start),
+                      background: marks.rest ? REST_DAY_BG : OFF_HOURS_BG,
+                    }}
+                  />
+                ))}
+                {marks.opensAt !== null && <WindowEdge minutes={marks.opensAt} edge="opens" />}
+                {marks.closesAt !== null && <WindowEdge minutes={marks.closesAt} edge="closes" />}
+
                 {Array.from({ length: SLOTS_PER_DAY }, (_, slot) => {
                   const minutes = slot * SLOT_MINUTES;
                   const isFocusTarget = focusedSlot.day === dayIndex && focusedSlot.slot === slot;
@@ -254,7 +298,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                       onKeyDown={e => handleSlotKeyDown(e, dayIndex, slot)}
                       aria-label={`Create task on ${dayLabel(day)} at ${formatMinutes(minutes)}`}
                       aria-describedby={hintId}
-                      className="group block w-full text-left px-1 hover:bg-[var(--tm-accent-subtle)] focus-visible:bg-[var(--tm-accent-subtle)] transition-colors"
+                      className="group relative block w-full text-left px-1 hover:bg-[var(--tm-accent-subtle)] focus-visible:bg-[var(--tm-accent-subtle)] transition-colors"
                       style={{ height: SLOT_PX, outlineOffset: -2 }}
                     >
                       <span className="text-[10px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" style={{ color: 'var(--tm-accent)' }}>
@@ -294,6 +338,36 @@ const WeekGrid: React.FC<WeekGridProps> = ({
     </div>
   );
 };
+
+/** "10:00 PM", or "midnight" for the bottom of the day. */
+const edgeTime = (minutes: number) => (minutes >= MINUTES_PER_DAY ? 'midnight' : formatMinutes(minutes));
+
+/** "Work day, opens at 8:00 AM, closes at 10:00 PM" or "Rest day" for a day header's screen-reader text. */
+const workDayText = ({ rest, opensAt, closesAt }: WorkDayMarks): string => {
+  const edges = [
+    ...(opensAt === null ? [] : [{ at: opensAt, text: `opens at ${formatMinutes(opensAt)}` }]),
+    ...(closesAt === null ? [] : [{ at: closesAt, text: `closes at ${edgeTime(closesAt)}` }]),
+  ].sort((x, y) => x.at - y.at);
+  const day = rest ? 'Rest day' : 'Work day';
+  return edges.length ? `${day}, work window ${edges.map(e => e.text).join(', ')}` : day;
+};
+
+/** A dashed line where the work window opens or closes, labelled on the side away from the off hours. */
+const WindowEdge: React.FC<{ minutes: number; edge: 'opens' | 'closes' }> = ({ minutes, edge }) => (
+  <div
+    aria-hidden
+    data-window-edge={edge}
+    className="absolute left-0 right-0 pointer-events-none"
+    style={{ top: Math.min(minutesToPx(minutes), minutesToPx(MINUTES_PER_DAY) - 1), borderTop: `1px dashed ${WINDOW_EDGE}` }}
+  >
+    <span
+      className="absolute right-1 text-[9px] font-semibold leading-none whitespace-nowrap"
+      style={{ color: 'var(--tm-accent)', ...(edge === 'opens' ? { top: 2 } : { bottom: 2 }) }}
+    >
+      {edge === 'opens' ? 'Opens' : 'Closes'} {edgeTime(minutes)}
+    </span>
+  </div>
+);
 
 const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: () => void }> = ({ event, openable, onOpen }) => {
   const { bg, edge } = KIND_STYLE[event.kind];

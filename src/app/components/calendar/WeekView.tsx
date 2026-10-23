@@ -7,6 +7,7 @@ import { useTasksContext } from '@/app/context/TasksContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useToast } from '@/app/context/ToastContext';
+import { useAppShell } from '@/app/context/AppShellContext';
 import { useWeekActivity } from '@/app/hooks/useWeekActivity';
 import type { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
@@ -15,7 +16,7 @@ import EditTaskModal from '@/app/components/task/EditTaskModal';
 import HabitHistoryModal from '@/app/components/habit/HabitHistoryModal';
 import DragHandle from '@/app/components/common/DragHandle';
 import { useResizableSplit } from '@/app/hooks/useResizableSplit';
-import { DEFAULT_DAY_START } from '@/app/lib/restDays';
+import { DEFAULT_DAY_END, DEFAULT_DAY_START } from '@/app/lib/restDays';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
 import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import {
@@ -25,8 +26,9 @@ import {
   parseTimeToMinutes,
   startOfWeek,
   weekDays,
+  workDayMarks,
 } from '@/app/utils/weekLayout';
-import WeekGrid, { WEEK_LEGEND } from './WeekGrid';
+import WeekGrid, { WEEK_LEGEND, WORK_DAY_LEGEND } from './WeekGrid';
 
 // Tallest a dragged week view gets, in px.
 const MAX_HEIGHT_PX = 2400;
@@ -58,16 +60,8 @@ const emptyTaskForm = (): BaseTaskForm => ({
   created_date: '',
 });
 
-/** The user's day start (Settings → Work day and rest), cached locally by useProfile. */
-const readDayStartMinutes = (): number => {
-  let stored: string | null = null;
-  try {
-    stored = localStorage.getItem('tm_day_start_time');
-  } catch {
-    // storage blocked — fall back to the default
-  }
-  return parseTimeToMinutes(stored ?? DEFAULT_DAY_START) ?? parseTimeToMinutes(DEFAULT_DAY_START)!;
-};
+const toMinutesOr = (time: string, fallback: string): number =>
+  parseTimeToMinutes(time) ?? parseTimeToMinutes(fallback)!;
 
 /** The current time, refreshed every minute for the now-line. */
 const useMinuteClock = (): Date => {
@@ -100,6 +94,10 @@ const toggleById = (tags: Tag[], tag: Tag): Tag[] =>
  * scheduled_tasks, so a task created or edited here moves on the grid the
  * moment the save succeeds, without waiting on a refetch. Completions, note
  * sessions and habit completions come from GET /get-calendar-activity.
+ *
+ * Each day shows the user's work schedule from Settings → Work day and rest
+ * (rest days, and when the daily window opens and closes), read from the app
+ * shell's profile so it follows changes there straight away.
  *
  * With `fill`, the view takes its parent's height and the hour grid scrolls in
  * whatever room the toolbar leaves. With `onResize`, a handle under the grid
@@ -134,12 +132,20 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     onResizingChange: handleResizingChange,
   });
 
+  const { dayStartTime, shutoffTime, restDays } = useAppShell().profileState.profile;
+  const dayStartMinutes = toMinutesOr(dayStartTime, DEFAULT_DAY_START);
+  const dayEndMinutes = toMinutesOr(shutoffTime, DEFAULT_DAY_END);
+
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
+  const workDays = useMemo(
+    () => days.map(day => workDayMarks(day, restDays, dayStartMinutes, dayEndMinutes)),
+    [days, restDays, dayStartMinutes, dayEndMinutes],
+  );
   const todayStr = toLocalDateStr(now);
   const todayIndex = days.findIndex(d => toLocalDateStr(d) === todayStr);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   // Open near the current time on this week, at the user's day start otherwise.
-  const scrollToMinutes = todayIndex >= 0 ? Math.max(0, nowMinutes - 90) : readDayStartMinutes();
+  const scrollToMinutes = todayIndex >= 0 ? Math.max(0, nowMinutes - 90) : dayStartMinutes;
 
   const { timed, allDay } = useMemo(() => buildWeekEvents({
     weekStart,
@@ -244,6 +250,12 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
               {label}
             </li>
           ))}
+          {WORK_DAY_LEGEND.map(({ label, background }) => (
+            <li key={label} className="flex items-center gap-1.5 text-xs text-text-secondary">
+              <span aria-hidden className="w-3 h-3 rounded-sm border border-border-subtle" style={{ background }} />
+              {label}
+            </li>
+          ))}
         </ul>
       </div>
 
@@ -264,6 +276,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         days={days}
         timed={timed}
         allDay={allDay}
+        workDays={workDays}
         todayIndex={todayIndex >= 0 ? todayIndex : null}
         nowMinutes={nowMinutes}
         scrollToMinutes={scrollToMinutes}
