@@ -161,7 +161,8 @@ describe('CalendarReportView mood', () => {
     // Tasks never varied.
     expect(text()).toContain('Your number of tasks completed barely changed');
 
-    await click(buttonLabelled(/^Habits$/));
+    // The mood metric switch, not the tag card's Habits chip.
+    await click([...document.querySelectorAll('[aria-label="Compare mood with"] button')].find(b => b.textContent === 'Habits')!);
     expect(text()).toContain('In the last 4 weeks, your mood tended to be higher on days with more habits checked off.');
     expect(text()).toContain('Based on 20 days, so treat it as a hint.');
     expect(text()).toContain('Moderate link');

@@ -36,6 +36,22 @@ export interface ActivityHabitCompletion {
   estimated_time: number | null;
 }
 
+/** A note with sessions in the range, and the tags it carries now. */
+export interface ActivityNote {
+  id: number;
+  title: string;
+  tags: Tag[];
+}
+
+/** A habit with check-ins in the range, and the tags it carries now. */
+export interface ActivityHabit {
+  id: number;
+  title: string;
+  /** Hours per check-in. */
+  estimated_time: number | null;
+  tags: Tag[];
+}
+
 export interface CalendarActivity {
   start_date: string;
   end_date: string;
@@ -46,4 +62,8 @@ export interface CalendarActivity {
   /** Closed note editing sessions that overlap the range. */
   note_sessions: ActivityNoteSession[];
   habit_completions: ActivityHabitCompletion[];
+  /** The notes behind `note_sessions`. Older backends leave it out, and their notes count as untagged. */
+  notes?: ActivityNote[];
+  /** The habits behind `habit_completions`. Older backends leave it out, and their habits count as untagged. */
+  habits?: ActivityHabit[];
 }
