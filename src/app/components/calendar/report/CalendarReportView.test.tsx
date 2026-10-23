@@ -313,6 +313,7 @@ describe('CalendarReportView mood', () => {
       await openTab('Mood');
       const day = buttonLabelled(/^Tuesday, October 20:/);
       await pointerDown(day, 'touch');
+      await act(async () => { (day as HTMLElement).focus(); });
       await click(day);
       expect(text()).not.toContain('Edit check-in');
       expect(tooltip()?.textContent).toContain('Tap again: edit');
@@ -331,6 +332,20 @@ describe('CalendarReportView mood', () => {
       const paths = [...container.querySelectorAll('[aria-label="Mood, energy and stress over time"] svg path')].map(p => p.getAttribute('d') ?? '');
       expect(paths).toHaveLength(3);
       for (const d of paths) expect(d).toMatch(/^M/);
+    });
+
+    it('cautions on each year row that has fewer than 8 days in the month', async () => {
+      const sept = Array.from({ length: 8 }, (_, i) => full(`2026-09-${String(i + 1).padStart(2, '0')}`, 4, i < 3 ? 4 : null, 2));
+      api.fetchMoodCheckins.mockResolvedValue(sept);
+      await render();
+      await openTab('Mood');
+      await click(buttonLabelled(/^Year$/));
+      await act(async () => { buttonLabelled(/^September:/).focus(); });
+      const rows = [...(tooltip()?.querySelectorAll('li') ?? [])].map(li => li.textContent);
+      expect(rows).toHaveLength(3);
+      expect(rows[1]).toContain('only 3 days');
+      expect(rows[0]).not.toContain('only');
+      expect(rows[2]).not.toContain('only');
     });
 
     it('fades the year’s months with fewer than 8 days', async () => {

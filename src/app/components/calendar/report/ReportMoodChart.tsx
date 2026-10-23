@@ -135,6 +135,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
   const [active, setActive] = useState<number | null>(null);
   const [touched, setTouched] = useState(false);
   const pointerType = useRef<string | null>(null);
+  const previewed = useRef<number | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
   const isYear = period.kind === 'year';
   const n = buckets.length;
@@ -203,7 +204,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
   const handleColumnClick = (b: ReportBucket, i: number) => {
     // On a touch screen the first tap shows the column's values; the second acts on it.
-    if (pointerType.current === 'touch' && active !== i) {
+    if (pointerType.current === 'touch' && !(touched && previewed.current === i)) {
+      previewed.current = i;
       setActive(i);
       setTouched(true);
       return;
@@ -214,7 +216,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
   const tooltip = active != null && buckets[active] ? (() => {
     const b = buckets[active];
-    const lines: { label: string; text: string; color: string | null }[] = rows.map(r => {
+    const lines: { label: string; text: string; color: string | null; few?: string }[] = rows.map(r => {
       const v = r.values[active];
       if (isYear) {
         const m = r.months[active];
@@ -222,6 +224,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
           label: r.label,
           text: m.average != null ? `${r.names[Math.round(m.average) - 1]} ${m.average.toFixed(1)}` : 'Not recorded',
           color: m.average != null ? seriesColor(r.series, m.average) : null,
+          few: m.n > 0 && m.n < YEAR_FADE_DAYS ? `only ${days(m.n)}` : undefined,
         };
       }
       return { label: r.label, text: v != null ? r.names[v - 1] : 'Not recorded', color: v != null ? seriesColor(r.series, v) : null };
@@ -239,7 +242,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       >
         <p className="font-semibold text-text-primary">{b.longLabel}</p>
         {isYear && logged > 0 && (
-          <p className="text-[10px] text-text-muted">{days(logged)} logged{logged < YEAR_FADE_DAYS ? ' · few, read loosely' : ''}</p>
+          <p className="text-[10px] text-text-muted">{days(logged)} logged</p>
         )}
         <div className="mb-1" />
         {isYear || checkin ? (
@@ -252,6 +255,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
                 />
                 <span className="text-text-muted">{l.label}</span>
                 <span className={`ml-auto pl-2 whitespace-nowrap ${l.color ? 'text-text-primary font-medium' : 'text-text-muted italic'}`}>{l.text}</span>
+                {l.few && <span className="whitespace-nowrap text-[10px] text-text-muted">· {l.few}</span>}
               </li>
             ))}
           </ul>
