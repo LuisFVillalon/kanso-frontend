@@ -26,6 +26,8 @@ describe('ProfilePage avatars', () => {
     expect(buttons.map(b => b.getAttribute('aria-label')))
       .toEqual(['Your initial', ...monthlyAvatarOptions().map(o => o.label)]);
     expect(document.body.textContent).toContain('New icons every month.');
+    expect(document.body.textContent).toContain('This month');
+    expect(document.body.textContent).not.toContain('From a past month');
   });
 
   it('keeps a rotated-out current avatar as an extra selected tile', () => {
@@ -35,6 +37,10 @@ describe('ProfilePage avatars', () => {
     expect(buttons).toHaveLength(8);
     const tile = buttons.find(b => b.getAttribute('aria-label') === old.label)!;
     expect(tile.getAttribute('aria-pressed')).toBe('true');
-    expect(tile.title).toBe(`${old.label} (current)`);
+    expect(tile.title).toBe(`${old.label} (current, from a past month)`);
+    expect(buttons.at(-1)).toBe(tile);
+    expect(document.body.textContent).toContain('From a past month');
+    expect(document.getElementById(tile.getAttribute('aria-describedby')!)?.textContent)
+      .toContain('Pick another and this one goes away.');
   });
 });
