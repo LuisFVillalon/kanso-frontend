@@ -220,9 +220,12 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Your usual is your typical mood across all 20 check-ins this month.');
     expect(text()).not.toContain('overall');
 
-    // The Overview names the link with its direction.
+    // The Overview names the link with its direction, short enough for one line, with the whole sentence on hover.
     await openTab('Overview');
-    expect(text()).toContain('Moderate link: better mood on days with more habits checked off this month');
+    expect(text()).toContain('More habits, better mood');
+    const link = buttonLabelled(/^Mood & your activity/);
+    expect(link.getAttribute('aria-label')).toBe('Mood & your activity: Moderate link: better mood on days with more habits checked off this month');
+    expect(link.querySelector('[title]')?.getAttribute('title')).toBe('Moderate link: better mood on days with more habits checked off this month');
   });
 
   it('shows a tag row’s sentence under it on tap, one row at a time', async () => {

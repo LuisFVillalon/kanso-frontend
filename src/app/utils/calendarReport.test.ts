@@ -8,6 +8,7 @@ import {
   dailyActivity,
   describeCorrelation,
   describeLinkBrief,
+  describeLinkShort,
   describePeriod,
   elapsedDays,
   formatPeriodLabel,
@@ -501,5 +502,17 @@ describe('describeLinkBrief', () => {
     expect(describeLinkBrief('notes', analyseCorrelation(series(15, 'down')), 'in 2026')).toBe(
       'Early sign: worse mood on days with more time in notes in 2026',
     );
+  });
+});
+
+describe('describeLinkShort', () => {
+  it('names the activity and direction in a line short enough for the Overview tile', () => {
+    expect(describeLinkShort('tasks', analyseCorrelation(series(30, 'up')))).toBe('More tasks, better mood');
+    expect(describeLinkShort('notes', analyseCorrelation(series(15, 'down')))).toBe('More note time, lower mood');
+    for (const metric of ['tasks', 'notes', 'habits'] as const) {
+      for (const dir of ['up', 'down'] as const) {
+        expect(describeLinkShort(metric, analyseCorrelation(series(30, dir))).length).toBeLessThanOrEqual(33);
+      }
+    }
   });
 });

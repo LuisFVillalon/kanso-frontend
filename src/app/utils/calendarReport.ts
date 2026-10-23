@@ -538,6 +538,8 @@ const METRIC_COPY: Record<MoodMetric, {
   amount: string;
   /** "on days with more …" */
   more: string;
+  /** "More …, better mood" in the Overview's short line. */
+  short: string;
   /** "On days you …" at or above the split. */
   atLeast: (threshold: number) => string;
 }> = {
@@ -545,18 +547,21 @@ const METRIC_COPY: Record<MoodMetric, {
     noun: 'your tasks',
     amount: 'number of tasks completed',
     more: 'more tasks completed',
+    short: 'tasks',
     atLeast: t => (t === 1 ? 'completed at least one task' : `completed ${t} or more tasks`),
   },
   notes: {
     noun: 'your note time',
     amount: 'time in notes',
     more: 'more time in notes',
+    short: 'note time',
     atLeast: t => `spent ${formatDurationShort(t * 60)} or more in notes`,
   },
   habits: {
     noun: 'your habits',
     amount: 'number of habit check-ins',
     more: 'more habits checked off',
+    short: 'habits',
     atLeast: t => (t === 1 ? 'checked off at least one habit' : `checked off ${t} or more habits`),
   },
 };
@@ -621,8 +626,12 @@ export const describeCorrelation = (metric: MoodMetric, result: CorrelationResul
 };
 
 /**
- * The report Overview's short line for a named link (early to strong), with
- * its direction: "Strong link: better mood on days with more tasks completed this month".
+ * The full sentence for a named link (early to strong), with its direction:
+ * "Strong link: better mood on days with more tasks completed this month".
  */
 export const describeLinkBrief = (metric: MoodMetric, result: CorrelationResult, scope: string): string =>
   `${CORRELATION_LABELS[result.level]}: ${result.rho! > 0 ? 'better' : 'worse'} mood on days with ${METRIC_COPY[metric].more} ${scope}`;
+
+/** The Overview tile's short form of a named link, sized to fit one line: "More tasks, better mood". */
+export const describeLinkShort = (metric: MoodMetric, result: CorrelationResult): string =>
+  `More ${METRIC_COPY[metric].short}, ${result.rho! > 0 ? 'better' : 'lower'} mood`;

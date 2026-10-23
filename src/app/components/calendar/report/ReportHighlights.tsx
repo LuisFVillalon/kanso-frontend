@@ -10,6 +10,7 @@ import {
   analyseCorrelation,
   dailyActivity,
   describeLinkBrief,
+  describeLinkShort,
   MOOD_METRICS,
   moodActivityPoints,
   type CalendarReport,
@@ -33,6 +34,8 @@ interface Highlight {
   icon: React.ReactNode;
   title: string;
   text: string;
+  /** The whole sentence when `text` is a shortened form of it, for the tooltip and screen readers. */
+  full?: string;
 }
 
 interface ReportHighlightsProps {
@@ -130,6 +133,11 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
       icon: <ChartScatter className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />,
       title: 'Mood & your activity',
       text: metric
+        ? describeLinkShort(metric, result)
+        : n < PATTERN_MIN_DAYS
+          ? `Check in more: ${n} of ${PATTERN_MIN_DAYS} days`
+          : 'Activity: no clear pattern',
+      full: metric
         ? describeLinkBrief(metric, result, scopeLabel)
         : n < PATTERN_MIN_DAYS
           ? `Check in on a few more days to see a pattern — ${n} of about ${PATTERN_MIN_DAYS} so far`
@@ -153,12 +161,13 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
             <button
               type="button"
               onClick={() => onOpen(h.view, h.moodView)}
+              aria-label={h.full ? `${h.title}: ${h.full}` : undefined}
               className="w-full flex items-center gap-3 px-2 py-1 sm:py-1.5 rounded-lg text-left hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tm-accent)]"
             >
               <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-surface-raised" aria-hidden="true">{h.icon}</span>
               <span className="min-w-0 flex-1">
                 <span className="block text-[11px] leading-tight font-semibold uppercase tracking-wide text-text-muted">{h.title}</span>
-                <span className="block text-sm text-text-primary truncate" title={h.text}>{h.text}</span>
+                <span className={`block text-sm text-text-primary ${h.full ? 'line-clamp-2' : 'truncate'}`} title={h.full ?? h.text}>{h.text}</span>
               </span>
               <ChevronRight className="w-4 h-4 text-text-muted flex-shrink-0" aria-hidden="true" />
             </button>
