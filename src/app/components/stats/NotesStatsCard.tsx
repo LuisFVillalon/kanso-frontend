@@ -42,11 +42,12 @@ const CategoryLegendRow: React.FC<CategoryLegendRowProps> = ({ label, count, col
 );
 
 // Every note with any recorded time gets its own wedge, ranked by time
-// spent. Shared by the this-week time-breakdown slide and the compact tile's
-// today donut — they differ only in which totals map they pass in. Each note's wedge takes its
-// own first tag's color (same as its NoteRow dots and the By-Tag donut) so a
-// note reads as the same color everywhere in the card; untagged notes fall
-// back to the same neutral border color the tags donut uses for "Untagged".
+// spent. Shared by the this-week time-breakdown slide, the month totals and
+// the compact tile's today donut — they differ only in which totals map they
+// pass in. Each note's wedge takes its own first tag's color (same as its
+// NoteRow dots and the By-Tag donut) so a note reads as the same color
+// everywhere in the card; untagged notes fall back to the same neutral
+// border color the tags donut uses for "Untagged".
 const buildTimeCategories = (notes: Note[], totals: Record<number, number>) => {
   const timed = notes
     .map(n => ({ note: n, seconds: totals[n.id] ?? 0 }))
@@ -298,7 +299,7 @@ const useNotesStats = (notes: Note[], noteTags: TagStats[]) => {
     .map(([name, { color }]) => ({ name, color }));
 
   // Reuses the same Monday–Sunday / calendar-month boundaries as the
-  // time-breakdown slides above, so "this week"/"this month" mean the same
+  // week and month time totals above, so "this week"/"this month" mean the same
   // thing everywhere in the card instead of a separate rolling 7/30-day cut.
   // `monday`/`monthStart` are start-of-day timestamps, so the upper bounds
   // below are exclusive start-of-next-period, not the last day's midnight.
