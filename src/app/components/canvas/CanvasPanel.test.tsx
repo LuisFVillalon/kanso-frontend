@@ -260,9 +260,26 @@ describe('CanvasPanel', () => {
 
   it('shows the no-courses state between terms', async () => {
     api.fetchCanvasPanelCourses.mockResolvedValue(courses({ courses: [] }));
+    api.fetchCanvasClasses.mockResolvedValue(classes([]));
     await render();
     expect(text()).toContain('No active courses');
     expect(container.querySelector('[role="tablist"]')).toBeNull();
+  });
+
+  it('keeps the Classes tab after hiding the last class, so it can be shown again', async () => {
+    await render();
+    await click(button('Classes'));
+    api.updateCanvasHiddenCourses.mockResolvedValue(connected({ hidden_course_ids: [460] }));
+    api.fetchCanvasPanelCourses.mockResolvedValue(courses({ courses: [] }));
+    api.fetchCanvasClasses.mockResolvedValue(classes([{ hidden: true }]));
+    await click(button('Hide CS 460'));
+    expect(api.updateCanvasHiddenCourses).toHaveBeenCalledWith([460]);
+    expect(container.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(text()).not.toContain('No active courses');
+    expect(text()).toContain('Hidden from Upcoming. Tap the eye to show it again.');
+    api.updateCanvasHiddenCourses.mockResolvedValue(connected());
+    await click(button('Show CS 460'));
+    expect(api.updateCanvasHiddenCourses).toHaveBeenLastCalledWith([]);
   });
 
   it('allows one refresh every 30 seconds', async () => {

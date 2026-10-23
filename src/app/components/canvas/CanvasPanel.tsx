@@ -189,6 +189,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     labelOf: rememberedCourseLabel,
   }), [canvas.classes, courses, overview, isDemo, connection]);
   const shownClasses = classes.filter(c => !c.hidden);
+  const noClasses = !!courses && courses.courses.length === 0 && classes.length === 0;
   // Classes take their colors by their place in the class list, hidden ones last.
   const courseIds = useMemo(() => classes.map(c => c.id), [classes]);
   const lookup: CourseLookup = useCallback(courseId => {
@@ -349,18 +350,12 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
         {refreshButton('Retry', 'btn btn-outline')}
       </EmptyState>
     );
-  } else if (courses && courses.courses.length === 0) {
-    const allHidden = !isDemo && (connection?.hidden_course_ids.length ?? 0) > 0;
+  } else if (noClasses) {
     body = (
-      <EmptyState icon={Library} title={allHidden ? 'Every course is hidden' : 'No active courses'}>
+      <EmptyState icon={Library} title="No active courses">
         <p className="text-[13px] text-text-secondary max-w-[340px]">
-          {allHidden
-            ? 'All your courses are unticked under Courses to show.'
-            : "Canvas doesn't list you in any current courses. Once next term's courses are published, they'll show up here on their own."}
+          Canvas doesn&apos;t list you in any current courses. Once next term&apos;s courses are published, they&apos;ll show up here on their own.
         </p>
-        {allHidden && (
-          <button type="button" onClick={onOpenSettings} className="btn btn-outline">Choose courses</button>
-        )}
       </EmptyState>
     );
   } else {
@@ -457,7 +452,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   }
 
   const showTabs = tabs.length > 1 && (isDemo || !!connection)
-    && (status === 'loading' || (status === 'ready' && (!withCourses || (!!courses && courses.courses.length > 0))));
+    && (status === 'loading' || (status === 'ready' && (!withCourses || (!!courses && !noClasses))));
 
   return (
     <div
