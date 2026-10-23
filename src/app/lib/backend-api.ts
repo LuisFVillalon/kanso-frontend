@@ -10,7 +10,7 @@
 
 import { Note, NoteSession } from "../types/notes";
 import { LinkedRemoveMode, LinkedTaskRef, Tag, Task } from "../types/task";
-import { ArchivedTerm, CalendarSettings } from "../types/calendar";
+import { ArchivedTerm, CalendarSettings, TermDates, TermRollover } from "../types/calendar";
 import { CalendarActivity } from "../types/activity";
 import { Habit, HabitHistoryEntry } from "../types/habit";
 import { DayWindows, Profile } from "../types/profile";
@@ -87,7 +87,7 @@ async function assertOk(res: Response, context: string): Promise<void> {
 /** Query string for the list endpoints: active rows by default, only archived rows with `archived`. */
 const archivedQuery = (archived: boolean) => (archived ? "?archived=true" : "");
 
-/** `?local_date=` with the caller's own calendar day, for habit responses that carry today's completion state. */
+/** `?local_date=` with the caller's own calendar day, for habit responses that carry today's completion state and for the term reads that roll an ended term over. */
 const localDateQuery = () => `?${new URLSearchParams({ local_date: toLocalDateStr(new Date()) })}`;
 
 /**
@@ -546,9 +546,15 @@ export async function deleteAccount(): Promise<void> {
 
 // ── Calendar Settings (BigPictureCalendar) ────────────────────────────────────
 
+/**
+ * The current term, or null when there is none. Reading it first rolls the
+ * term over on the server when the current one has ended by the caller's
+ * local day (see fetchTermRollover), so the queued next term can come back
+ * as the current one.
+ */
 export async function fetchCalendarSettings(): Promise<CalendarSettings | null> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/get-calendar-settings`, { headers });
+  const res = await fetch(`${API_BASE_URL}/get-calendar-settings${localDateQuery()}`, { headers });
   if (res.status === 404) return null;
   await assertOk(res, "fetchCalendarSettings");
   return res.json();
@@ -570,7 +576,7 @@ export async function updateCalendarSettings(
 /** The user's archived terms, earliest first. */
 export async function fetchArchivedTerms(): Promise<ArchivedTerm[]> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/get-archived-terms`, { headers });
+  const res = await fetch(`${API_BASE_URL}/get-archived-terms${localDateQuery()}`, { headers });
   await assertOk(res, "fetchArchivedTerms");
   return res.json();
 }
@@ -591,6 +597,72 @@ export async function deleteArchivedTerm(id: number): Promise<ArchivedTerm> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/del-archived-term/${id}`, { method: "DELETE", headers });
   await assertOk(res, "deleteArchivedTerm");
+  return res.json();
+}
+
+/**
+ * The queued next term, the auto-archive switch and any ended term waiting
+ * to be archived. The server rolls the term over lazily on this read (and
+ * the two above): once the current term has ended, the queued next term
+ * becomes the current one, and with auto-archive on the ended term is
+ * archived.
+ */
+export async function fetchTermRollover(): Promise<TermRollover> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-term-rollover${localDateQuery()}`, { headers });
+  await assertOk(res, "fetchTermRollover");
+  return res.json();
+}
+
+/** Turns archiving the current term automatically when it ends on or off. */
+export async function updateTermRollover(autoArchive: boolean): Promise<TermRollover> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/update-term-rollover`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ auto_archive: autoArchive }),
+  });
+  await assertOk(res, "updateTermRollover");
+  return res.json();
+}
+
+/**
+ * Queues the term that takes over when the current one ends, replacing any
+ * already queued. It must start after the current term's end date (422
+ * otherwise), and there must be a current term (409).
+ */
+export async function saveNextTerm(term: TermDates): Promise<TermRollover> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/save-next-term${localDateQuery()}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(term),
+  });
+  await assertOk(res, "saveNextTerm");
+  return res.json();
+}
+
+/** Removes the queued next term. */
+export async function deleteNextTerm(): Promise<TermRollover> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/del-next-term`, { method: "DELETE", headers });
+  await assertOk(res, "deleteNextTerm");
+  return res.json();
+}
+
+/** Archives the ended term the next term replaced, so it stays on the month calendars. */
+export async function archiveEndedTerm(): Promise<ArchivedTerm> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/archive-ended-term`, { method: "POST", headers });
+  await assertOk(res, "archiveEndedTerm");
+  return res.json();
+}
+
+/** Drops the ended term the next term replaced, without archiving it. */
+export async function deleteEndedTerm(): Promise<TermRollover> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/del-ended-term`, { method: "DELETE", headers });
+  await assertOk(res, "deleteEndedTerm");
   return res.json();
 }
 

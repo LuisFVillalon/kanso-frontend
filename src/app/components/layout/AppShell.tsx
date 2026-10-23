@@ -53,7 +53,12 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
     calendarSettings, loading: calendarSettingsLoading, saveCalendarSettings,
     archivedTerms, archiveCurrentTerm, removeArchivedTerm,
+    rollover, saveQueuedNextTerm, removeNextTerm, setAutoArchive, archiveReplacedTerm, dropReplacedTerm,
   } = calendarSettingsState;
+  const termRollover = useMemo(
+    () => ({ rollover, saveQueuedNextTerm, removeNextTerm, setAutoArchive, archiveReplacedTerm, dropReplacedTerm }),
+    [rollover, saveQueuedNextTerm, removeNextTerm, setAutoArchive, archiveReplacedTerm, dropReplacedTerm],
+  );
   const [navExpanded, setNavExpanded] = useNavExpanded();
 
   const state = useAppModalState();
@@ -348,6 +353,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           archivedTerms={archivedTerms}
           onArchiveTerm={archiveCurrentTerm}
           onDeleteArchivedTerm={removeArchivedTerm}
+          termRollover={termRollover}
         />
       )}
 
