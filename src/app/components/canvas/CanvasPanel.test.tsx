@@ -2,7 +2,11 @@
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CanvasConnection, CanvasCourses, CanvasItem, CanvasOverview } from '@/app/types/canvas';
+import type {
+  CanvasClasses, CanvasClassSummary, CanvasConnection, CanvasCourses, CanvasItem, CanvasOverview,
+} from '@/app/types/canvas';
+import type { Tag } from '@/app/types/task';
+import type { CanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -21,6 +25,9 @@ const api = vi.hoisted(() => {
     fetchCanvasModules: vi.fn(),
     fetchCanvasAssignments: vi.fn(),
     fetchCanvasAnnouncements: vi.fn(),
+    fetchCanvasClasses: vi.fn(),
+    fetchCanvasCourseTags: vi.fn(),
+    saveCanvasCourseTags: vi.fn(),
     connectCanvas: vi.fn(),
     testCanvasConnection: vi.fn(),
     updateCanvasHiddenCourses: vi.fn(),
@@ -32,6 +39,8 @@ vi.mock('@/app/lib/backend-api', () => api);
 
 const auth = vi.hoisted(() => ({ isDemo: false }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
+const showToast = vi.hoisted(() => vi.fn());
+vi.mock('@/app/context/ToastContext', () => ({ useToast: () => showToast }));
 
 import CanvasPanel from './CanvasPanel';
 import { canvasReadFailure } from '@/app/hooks/useCanvas';
@@ -84,6 +93,14 @@ const courses = (overrides: Partial<CanvasCourses> = {}): CanvasCourses => ({
   ...overrides,
 });
 
+const classes = (overrides: Partial<CanvasClassSummary>[] = [{}]): CanvasClasses => ({
+  ...meta,
+  classes: overrides.map(o => ({
+    id: 460, code: 'CS 460', name: 'Operating Systems', term: 'Fall 2026', html_url: null, hidden: false,
+    due_this_week: 2, upcoming: 2, next_due: null, ...o,
+  })),
+});
+
 const apiError = (status: number, code: string) => new api.ApiError(status, code);
 
 let container: HTMLDivElement;
@@ -108,6 +125,8 @@ beforeEach(() => {
   api.fetchCanvasOverview.mockResolvedValue(overview());
   api.fetchCanvasPanelCourses.mockResolvedValue(courses());
   api.fetchCanvasAnnouncements.mockResolvedValue({ ...meta, announcements: [] });
+  api.fetchCanvasCourseTags.mockResolvedValue([]);
+  api.fetchCanvasClasses.mockResolvedValue(classes());
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -167,7 +186,7 @@ describe('CanvasPanel', () => {
     expect(container.querySelector('[aria-label="1 slipped"]')).not.toBeNull();
     // Open work counts down like a task.
     expect(text()).toContain('Due tomorrow');
-    expect(api.fetchCanvasOverview).toHaveBeenCalledWith(false);
+    expect(api.fetchCanvasOverview).toHaveBeenCalledWith(false, 'all');
   });
 
   it('prompts to connect when Canvas isn\'t connected, linking to Settings', async () => {
@@ -213,7 +232,7 @@ describe('CanvasPanel', () => {
     expect(text()).toMatch(message);
     await click(button('Retry'));
     expect(panelStatus()).toBe('ready');
-    expect(api.fetchCanvasOverview).toHaveBeenLastCalledWith(true);
+    expect(api.fetchCanvasOverview).toHaveBeenLastCalledWith(true, 'all');
   });
 
   it('warns about a token expiring within 7 days, with Replace opening Settings', async () => {
@@ -249,7 +268,7 @@ describe('CanvasPanel', () => {
   it('allows one refresh every 30 seconds', async () => {
     await render();
     await click(button('Refresh Canvas'));
-    expect(api.fetchCanvasOverview).toHaveBeenLastCalledWith(true);
+    expect(api.fetchCanvasOverview).toHaveBeenLastCalledWith(true, 'all');
     expect(button('Refresh Canvas').disabled).toBe(true);
     await act(async () => { vi.advanceTimersByTime(30_000); });
     expect(button('Refresh Canvas').disabled).toBe(false);
@@ -275,9 +294,9 @@ describe('CanvasPanel', () => {
   it('opens a course and switches to Reconnect if its modules answer canvas_token_invalid', async () => {
     api.fetchCanvasModules.mockRejectedValue(apiError(409, 'canvas_token_invalid'));
     await render();
-    await click(button('Courses'));
+    await click(button('Classes'));
     expect(text()).toContain('A-');
-    await click(container.querySelector<HTMLButtonElement>('button.w-full')!);
+    await click(button('Modules & assignments'));
     expect(api.fetchCanvasModules).toHaveBeenCalledWith(460, false);
     expect(panelStatus()).toBe('reconnect');
   });
@@ -285,8 +304,8 @@ describe('CanvasPanel', () => {
   it('shows a course error inside the course for other codes', async () => {
     api.fetchCanvasModules.mockRejectedValue(apiError(404, 'canvas_course_hidden'));
     await render();
-    await click(button('Courses'));
-    await click(container.querySelector<HTMLButtonElement>('button.w-full')!);
+    await click(button('Classes'));
+    await click(button('Modules & assignments'));
     expect(panelStatus()).toBe('ready');
     expect(text()).toContain('unticked under Courses to show');
   });
@@ -309,7 +328,9 @@ describe('CanvasPanel', () => {
       canvas_user_name: null, token_expires_at: null, ...overrides,
     });
     const feedOverview = () => overview({ missing: [], recently_graded: [] });
-    const addToTasks = { stateOf: vi.fn(() => ({ kind: 'add' as const, pending: false })), add: vi.fn() };
+    const addToTasks = {
+      stateOf: vi.fn(() => ({ kind: 'add' as const, pending: false })), add: vi.fn(), tags: [], createTag: vi.fn(),
+    };
 
     beforeEach(() => {
       api.fetchCanvasConnection.mockResolvedValue(feedConnection());
@@ -327,17 +348,15 @@ describe('CanvasPanel', () => {
       expect(api.fetchCanvasAnnouncements).not.toHaveBeenCalled();
     });
 
-    it('leaves out the Courses and Announcements tabs and says why', async () => {
+    it('shows Upcoming and Classes, leaving out Announcements without mentioning a token', async () => {
       await render();
-      expect(container.querySelector('[role="tablist"]')).toBeNull();
-      expect(button('Courses')).toBeUndefined();
+      expect(button('Upcoming')).toBeTruthy();
+      expect(button('Classes')).toBeTruthy();
       expect(button('Announcements')).toBeUndefined();
       expect(text()).not.toContain('No active courses');
-      const note = container.querySelector('[data-testid="canvas-feed-note"]')?.textContent;
-      expect(note).toContain('calendar feed, which has due dates only');
-      expect(note).toContain('need an access token, if your school allows one');
-      await click(button('Canvas settings'));
-      expect(onOpenSettings).toHaveBeenCalled();
+      expect(text()).not.toMatch(/access token/i);
+      await click(button('Classes'));
+      expect(text()).not.toMatch(/access token|Grade|Modules/i);
     });
 
     it("names feed courses a token never named, keeping the token's course codes", async () => {
@@ -396,17 +415,127 @@ describe('CanvasPanel', () => {
     api.fetchCanvasConnection.mockResolvedValue(connected({ connection_type: 'token' }));
     await render();
     expect(api.fetchCanvasPanelCourses).toHaveBeenCalled();
-    expect(button('Courses')).toBeTruthy();
+    expect(button('Classes')).toBeTruthy();
     expect(button('Announcements')).toBeTruthy();
-    expect(container.querySelector('[data-testid="canvas-feed-note"]')).toBeNull();
   });
 
   it('shows the tabs for a token while its data loads', async () => {
     api.fetchCanvasOverview.mockReturnValue(new Promise(() => {}));
     await render();
     expect(panelStatus()).toBe('loading');
-    expect(button('Courses')).toBeTruthy();
+    expect(button('Classes')).toBeTruthy();
     expect(button('Announcements')).toBeTruthy();
+  });
+
+  describe('range, classes and tags', () => {
+    const own: Tag = { id: 7, name: 'Exam prep', color: '#7C3AED' };
+    let addToTasks: CanvasAddToTasks;
+    const later = item({ id: 4, title: 'Final project', course_id: 254, course_name: 'MATH 254', due_at: inDays(20), html_url: 'https://sdsu.instructure.com/courses/254/assignments/4' });
+    const renderWithAdd = () => act(async () => root.render(<CanvasPanel onOpenSettings={onOpenSettings} addToTasks={addToTasks} />));
+    const dialog = () => container.querySelector('[role="dialog"]');
+
+    beforeEach(() => {
+      addToTasks = {
+        stateOf: vi.fn(() => ({ kind: 'add' as const, pending: false })),
+        add: vi.fn(async (_item: CanvasItem, tags: Tag[]) => ({
+          id: 90, title: 'Homework 5', description: '', completed: false, priority: null, due_date: null, due_time: null,
+          created_date: '2026-10-21', completed_date: null, tags: tags.map(t => (t.id === 0 ? { ...t, id: 11 } : t)),
+        })),
+        tags: [own],
+        createTag: vi.fn(async tag => ({ id: 12, ...tag })),
+      };
+      api.fetchCanvasOverview.mockResolvedValue(overview({ upcoming: [item({}), later] }));
+      api.fetchCanvasClasses.mockResolvedValue(classes([{}, { id: 254, code: 'MATH 254', name: 'Linear Algebra' }]));
+      api.saveCanvasCourseTags.mockImplementation(async (courseId: number, tagIds: number[]) => [{ course_id: courseId, tags: tagIds.map(id => ({ id, name: `Tag ${id}`, color: '#000' })) }]);
+    });
+
+    it('opens on everything upcoming by week and narrows to 7 days, remembering the choice', async () => {
+      await render();
+      expect(button('All upcoming').getAttribute('aria-pressed')).toBe('true');
+      expect(text()).toContain('This week');
+      expect(text()).toContain('Final project');
+      expect(text()).toContain("That's everything on your Canvas calendar.");
+      await click(button('7 days'));
+      expect(text()).toContain('Next 7 days');
+      expect(text()).not.toContain('Final project');
+      expect(localStorage.getItem('tm-canvas-range')).toBe('"week"');
+    });
+
+    it('narrows the list to one class with its chip', async () => {
+      await render();
+      const chips = container.querySelector('[aria-label="Filter by class"]')!;
+      expect(chips.textContent).toContain('All classes');
+      await click([...chips.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.startsWith('MATH 254'))!);
+      expect(text()).toContain('Final project');
+      expect(text()).not.toContain('Homework 5');
+      expect(text()).toContain("That's everything on your Canvas calendar for MATH 254.");
+    });
+
+    it('lists each class with what is due, its grade with a token, and hides one', async () => {
+      api.updateCanvasHiddenCourses.mockResolvedValue(connected({ hidden_course_ids: [254] }));
+      await renderWithAdd();
+      await click(button('Classes'));
+      const cards = [...container.querySelectorAll('[data-testid="canvas-class-card"]')];
+      expect(cards).toHaveLength(2);
+      expect(cards[0].textContent).toContain('Operating Systems · Fall 2026');
+      expect(cards[0].textContent).toContain('A-');
+      expect(cards[0].textContent).toContain('1 due this week');
+      expect(cards[0].textContent).toContain('Tags for tasksCS 460Choose your own');
+      api.fetchCanvasClasses.mockResolvedValue(classes([{}, { id: 254, code: 'MATH 254', hidden: true }]));
+      await click(button('Hide MATH 254'));
+      expect(api.updateCanvasHiddenCourses).toHaveBeenCalledWith([254]);
+      expect(text()).toContain('Hidden from Upcoming. Tap the eye to show it again.');
+      expect(button('Show MATH 254')).toBeTruthy();
+    });
+
+    it("opens a class's due dates in Upcoming", async () => {
+      await render();
+      await click(button('Classes'));
+      await click(container.querySelectorAll<HTMLButtonElement>('[data-testid="canvas-class-card"]')[1].querySelector('button:not([aria-label])')!);
+      expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toMatch(/^Upcoming/);
+      expect(text()).toContain('Final project');
+      expect(text()).not.toContain('Homework 5');
+    });
+
+    it('adds an item through the tag picker, starting with the class tag', async () => {
+      await renderWithAdd();
+      await click(button('Add "Homework 5" to tasks'));
+      expect(dialog()?.getAttribute('aria-label')).toBe('Add to tasks');
+      await click(button('Add task'));
+      expect(addToTasks.add).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }), [{ id: 0, name: 'CS 460', color: '#006BCB' }]);
+      expect(api.saveCanvasCourseTags).not.toHaveBeenCalled();
+      expect(dialog()).toBeNull();
+    });
+
+    it("remembers the chosen tags for the class, naming the tag the task created", async () => {
+      await renderWithAdd();
+      await click(button('Add "Homework 5" to tasks'));
+      await click(button('Exam prep'));
+      await click(dialog()!.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+      await click(button('Add task'));
+      expect(api.saveCanvasCourseTags).toHaveBeenCalledWith(460, [11, 7]);
+    });
+
+    it("opens on a class's saved tags", async () => {
+      api.fetchCanvasCourseTags.mockResolvedValue([{ course_id: 460, tags: [own] }]);
+      await renderWithAdd();
+      await click(button('Add "Homework 5" to tasks'));
+      expect(dialog()?.textContent).toContain('Your usual tags for CS 460.');
+      await click(button('Add task'));
+      expect(addToTasks.add).toHaveBeenCalledWith(expect.anything(), [own]);
+    });
+
+    it("chooses a class's tags from its card, creating a new tag first", async () => {
+      await renderWithAdd();
+      await click(button('Classes'));
+      await click(button('Choose your own'));
+      expect(dialog()?.getAttribute('aria-label')).toBe('Tags for CS 460 tasks');
+      await click(button('Save'));
+      expect(addToTasks.createTag).toHaveBeenCalledWith({ name: 'CS 460', color: '#006BCB' });
+      expect(api.saveCanvasCourseTags).toHaveBeenCalledWith(460, [12]);
+      expect(showToast).toHaveBeenCalledWith('CS 460 tasks will start with CS 460.', 'success');
+      expect(dialog()).toBeNull();
+    });
   });
 
   describe('demo sandbox', () => {

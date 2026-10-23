@@ -5,16 +5,19 @@ import {
   ApiError,
   fetchCanvasAnnouncements,
   fetchCanvasAssignments,
+  fetchCanvasClasses,
   fetchCanvasConnection,
   fetchCanvasModules,
   fetchCanvasOverview,
   fetchCanvasPanelCourses,
+  updateCanvasHiddenCourses,
 } from '@/app/lib/backend-api';
 import { canvasView } from '@/app/components/settings/CanvasIntegrationSection';
 import { canvasCan } from '@/app/utils/canvas';
 import type {
   CanvasAnnouncements,
   CanvasAssignments,
+  CanvasClasses,
   CanvasConnection,
   CanvasCourses,
   CanvasModules,
@@ -67,11 +70,14 @@ interface UseCanvasOptions {
 }
 
 /**
- * The Canvas panel's data: the masked connection, then the Upcoming overview
- * and the course list, with the announcements loaded the first time their
- * tab opens. Everything comes through the backend's Canvas proxy. A
- * calendar feed connection reads only the overview: the feed has no courses
- * or announcements, so `courses` stays null.
+ * The Canvas panel's data: the masked connection, then the overview of
+ * everything Canvas has coming (Upcoming narrows it to 7 days itself, and the
+ * Classes tab counts from it), the classes (hidden ones too) and the course
+ * list with grades, with the announcements loaded the first time their tab
+ * opens. Everything comes through the backend's Canvas proxy. A calendar
+ * feed has no courses or announcements, so `courses` stays null; its classes
+ * are the courses its due dates belong to. `classes` stays null when the
+ * backend can't list them, and the panel finds them in the due dates.
  */
 export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
   const [status, setStatus] = useState<CanvasPanelStatus>('loading');
@@ -79,6 +85,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
   const [connection, setConnection] = useState<CanvasConnection | null>(null);
   const [overview, setOverview] = useState<CanvasOverview | null>(null);
   const [courses, setCourses] = useState<CanvasCourses | null>(null);
+  const [classes, setClasses] = useState<CanvasClasses | null>(null);
   const [announcements, setAnnouncements] = useState<CanvasAnnouncements | null>(null);
   const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
   const [wantAnnouncements, setWantAnnouncements] = useState(false);
@@ -115,6 +122,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
     try {
       // Demo sandboxes read the sample data a token would.
       let withCourses = true;
+      let withClasses = true;
       let withAnnouncements = true;
       if (!isDemo) {
         const conn = await fetchCanvasConnection();
@@ -126,11 +134,14 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
           return;
         }
         withCourses = canvasCan(conn, 'courses');
+        withClasses = canvasCan(conn, 'classes');
         withAnnouncements = canvasCan(conn, 'announcements');
       }
-      const [nextOverview, nextCourses, nextAnnouncements] = await Promise.all([
-        fetchCanvasOverview(refresh),
+      const [nextOverview, nextCourses, nextClasses, nextAnnouncements] = await Promise.all([
+        fetchCanvasOverview(refresh, 'all'),
         withCourses ? fetchCanvasPanelCourses(refresh) : Promise.resolve(null),
+        // Without the class list, the panel finds the classes in the due dates.
+        withClasses ? fetchCanvasClasses(refresh).catch(() => null) : Promise.resolve(null),
         // A failed announcements fetch keeps the ones on screen rather than failing the panel.
         withAnnouncements && wantAnnouncementsRef.current
           ? fetchCanvasAnnouncements(refresh).catch(() => null)
@@ -139,6 +150,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
       if (run !== latest.current) return;
       setOverview(nextOverview);
       setCourses(nextCourses);
+      setClasses(nextClasses);
       if (nextAnnouncements) setAnnouncements(nextAnnouncements);
       hasData.current = true;
       setRefreshError(null);
@@ -188,6 +200,28 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
     }
   }, [refreshing, refreshBlocked, load]);
 
+  /**
+   * Hides a class from the panel or shows it again: saved to the connection
+   * at once, then the data reloads without it (the backend leaves hidden
+   * classes out). A failed save puts the old choice back; false then.
+   */
+  const setClassHidden = useCallback(async (courseId: number, hidden: boolean): Promise<boolean> => {
+    if (!connection) return false;
+    const previous = connection;
+    const ids = hidden
+      ? [...new Set([...previous.hidden_course_ids, courseId])].sort((a, b) => a - b)
+      : previous.hidden_course_ids.filter(id => id !== courseId);
+    setConnection({ ...previous, hidden_course_ids: ids });
+    try {
+      setConnection(await updateCanvasHiddenCourses(ids));
+    } catch {
+      setConnection(previous);
+      return false;
+    }
+    await load(false);
+    return true;
+  }, [connection, load]);
+
   useEffect(() => {
     if (!refreshBlocked) return;
     const timer = setTimeout(() => setRefreshBlocked(false), CANVAS_REFRESH_COOLDOWN_MS);
@@ -200,6 +234,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
     connection,
     overview,
     courses,
+    classes,
     announcements,
     announcementsError,
     loadAnnouncements,
@@ -208,6 +243,7 @@ export function useCanvas({ isDemo, syncToken = 0 }: UseCanvasOptions) {
     canRefresh: !refreshing && !refreshBlocked,
     refresh,
     refreshNonce,
+    setClassHidden,
     /** Reports a failed read from elsewhere in the panel (an open course), so a rejected token shows Reconnect. */
     fail,
   };

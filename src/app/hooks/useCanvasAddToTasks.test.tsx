@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React, { act } from 'react';
+import React, { act, useEffect } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CanvasItem } from '@/app/types/canvas';
@@ -12,7 +12,7 @@ const tasksCtx = {
   addTask: vi.fn<(form: BaseTaskForm) => Promise<Task | false>>(),
   discardTask: vi.fn<(task: Task) => Promise<boolean>>(),
 };
-const tagsCtx = { tags: [] as Tag[], setTags: vi.fn() };
+const tagsCtx = { tags: [] as Tag[], setTags: vi.fn(), addTag: vi.fn<(tag: { name: string; color: string }) => Promise<Tag | false>>() };
 const showToast = vi.fn();
 vi.mock('@/app/context/TasksContext', () => ({ useTasksContext: () => tasksCtx }));
 vi.mock('@/app/context/TagsContext', () => ({ useTagsContext: () => tagsCtx }));
@@ -37,10 +37,15 @@ const task = (id: number, extra: Partial<Task> = {}): Task => ({
 
 const onShowTask = vi.fn();
 const lookup = () => ({ label: 'CS 460', color: 'var(--tm-accent)' });
+// The tags the picker hands back; the panel's sheet is tested in CanvasAddSheet.test.
+let chosen: Tag[] = [];
+const latest: { hook?: ReturnType<typeof useCanvasAddToTasks> } = {};
 
 const Rows: React.FC<{ items: CanvasItem[] }> = ({ items }) => {
   const addToTasks = useCanvasAddToTasks(onShowTask);
-  return <>{items.map(i => <CanvasItemRow key={i.id} item={i} course={lookup} now={new Date(2026, 9, 21)} addToTasks={addToTasks} />)}</>;
+  useEffect(() => { latest.hook = addToTasks; });
+  const rowAdd = { stateOf: addToTasks.stateOf, open: (item: CanvasItem) => void addToTasks.add(item, chosen) };
+  return <>{items.map(i => <CanvasItemRow key={i.id} item={i} course={lookup} now={new Date(2026, 9, 21)} addToTasks={rowAdd} />)}</>;
 };
 
 let container: HTMLDivElement;
@@ -52,6 +57,7 @@ beforeEach(() => {
   root = createRoot(container);
   tasksCtx.tasks = [];
   tagsCtx.tags = [];
+  chosen = [];
 });
 
 afterEach(() => {
@@ -64,9 +70,9 @@ const render = (items: CanvasItem[]) => act(() => root.render(<Rows items={items
 const addButton = () => container.querySelector<HTMLButtonElement>('button[aria-label^="Add"]');
 
 describe('Add to tasks on a Canvas item', () => {
-  it('creates a task that follows the assignment, tagged with the course, then offers Undo', async () => {
-    tagsCtx.tags = [{ id: 3, name: 'CS 460', color: '#123456' }];
-    const created = task(50, { tags: [{ id: 3, name: 'CS 460', color: '#123456' }], canvas_assignment_id: 9876 });
+  it('creates a task that follows the assignment with the chosen tags, then names them with Undo', async () => {
+    chosen = [{ id: 3, name: 'CS 460', color: '#123456' }, { id: 4, name: 'Exam prep', color: '#7C3AED' }];
+    const created = task(50, { tags: chosen, canvas_assignment_id: 9876 });
     tasksCtx.addTask.mockResolvedValue(created);
     render([item()]);
     await act(async () => addButton()!.click());
@@ -75,22 +81,32 @@ describe('Add to tasks on a Canvas item', () => {
       title: 'Problem Set 6',
       due_date: '2026-10-23',
       due_time: '23:59',
-      tags: [{ id: 3, name: 'CS 460', color: '#123456' }],
+      tags: chosen,
       canvas_assignment_id: 9876,
       canvas_html_url: `${HOST}/courses/1001/assignments/9876`,
       canvas_due_at: item().due_at,
     }));
-    expect(showToast).toHaveBeenCalledWith('Added "Problem Set 6" to your tasks.', 'success', expect.objectContaining({ label: 'Undo' }));
+    expect(showToast).toHaveBeenCalledWith(
+      'Added "Problem Set 6" to your tasks with CS 460, Exam prep.', 'success', expect.objectContaining({ label: 'Undo' }),
+    );
     showToast.mock.calls[0][2].onClick();
     expect(tasksCtx.discardTask).toHaveBeenCalledWith(created);
   });
 
+  it('says when the task has no tags', async () => {
+    tasksCtx.addTask.mockResolvedValue(task(50, { tags: [] }));
+    render([item()]);
+    await act(async () => addButton()!.click());
+    expect(showToast).toHaveBeenCalledWith('Added "Problem Set 6" to your tasks with no tags.', 'success', expect.anything());
+  });
+
   it('adds a tag the backend created to the tag list', async () => {
-    const newTag = { id: 9, name: 'CS 460', color: '#006BCB' };
+    const newTag = { id: 9, name: 'Exam prep', color: '#7C3AED' };
+    chosen = [{ id: 0, name: 'Exam prep', color: '#7C3AED' }];
     tasksCtx.addTask.mockResolvedValue(task(50, { tags: [newTag] }));
     render([item()]);
     await act(async () => addButton()!.click());
-    expect(tasksCtx.addTask.mock.calls[0][0].tags).toEqual([{ id: 0, name: 'CS 460', color: '#006BCB' }]);
+    expect(tasksCtx.addTask.mock.calls[0][0].tags).toEqual([{ id: 0, name: 'Exam prep', color: '#7C3AED' }]);
     const update = tagsCtx.setTags.mock.calls[0][0];
     expect(update([])).toEqual([newTag]);
     expect(update([newTag])).toEqual([newTag]);
@@ -132,5 +148,13 @@ describe('Add to tasks on a Canvas item', () => {
     ]);
     expect(addButton()).toBeNull();
     expect(container.textContent).not.toContain('In tasks');
+  });
+
+  it('creates a tag on its own, or answers null when that failed', async () => {
+    const made = { id: 12, name: 'Exam prep', color: '#7C3AED' };
+    tagsCtx.addTag.mockResolvedValueOnce(made).mockResolvedValueOnce(false);
+    render([]);
+    await expect(latest.hook!.createTag({ name: 'Exam prep', color: '#7C3AED' })).resolves.toEqual(made);
+    await expect(latest.hook!.createTag({ name: 'Exam prep', color: '#7C3AED' })).resolves.toBeNull();
   });
 });
