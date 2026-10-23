@@ -992,9 +992,9 @@ async function fetchCanvasRead<T>(path: string, context: string): Promise<T> {
 }
 
 /**
- * Missing work, recently graded work and the work due over `range`: the next
- * 7 days, or everything Canvas has coming ("all"; a calendar feed also sends
- * its last 30 days). A backend from before the range sends the 7 days either way.
+ * Missing work, recently graded work and the work due from the start of today
+ * over `range`: the next 7 days, or everything Canvas has coming ("all", about
+ * 13 months). A backend from before the range sends the 7 days either way.
  */
 export function fetchCanvasOverview(refresh = false, range: CanvasRange = "week"): Promise<CanvasOverview> {
   const extra: Record<string, string> = range === "week" ? {} : { range };

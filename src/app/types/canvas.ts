@@ -208,8 +208,8 @@ export interface CanvasAnnouncement {
 }
 
 /**
- * How far ahead Upcoming reaches: the next 7 days, or everything Canvas has
- * coming (for a calendar feed, from 30 days back to about a year ahead).
+ * How far ahead Upcoming reaches from the start of today: the next 7 days,
+ * or everything Canvas has coming (about 13 months).
  */
 export type CanvasRange = 'week' | 'all';
 
