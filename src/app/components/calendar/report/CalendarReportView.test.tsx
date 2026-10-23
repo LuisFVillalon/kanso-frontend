@@ -226,7 +226,9 @@ describe('CalendarReportView mood', () => {
       ...checkin(d, (i % 5) + 1), id: i + 1, tags: i % 5 >= 3 ? ['Exercised'] : i % 5 <= 1 ? ['Tired'] : [],
     })));
     await render();
+    await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
+    await openPatterns();
 
     const exercised = buttonLabelled(/^On the 8 days you tagged “Exercised”/);
     const tired = buttonLabelled(/^On the 8 days you tagged “Tired”/);
