@@ -787,17 +787,19 @@ interface Props {
 
 /** Not connected: the home page's "+ Canvas" tab, closed there by someone who doesn't use Canvas, and opened again here. */
 const HomeCanvasTabNote: React.FC<{ hidden: boolean; onChange: (hidden: boolean) => void }> = ({ hidden, onChange }) => (
-  <p className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
-    {hidden ? 'The Canvas tab is closed on your home page. ' : 'Not using Canvas? You can close the Canvas tab on your home page. '}
-    <button
-      type="button"
-      onClick={() => onChange(!hidden)}
-      className="font-medium hover:underline"
-      style={{ color: 'var(--tm-accent)' }}
-    >
-      {hidden ? 'Show it again' : 'Close it'}
-    </button>
-  </p>
+  hidden ? (
+    <p className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
+      The Canvas tab is closed on your home page.{' '}
+      <button
+        type="button"
+        onClick={() => onChange(false)}
+        className="font-medium hover:underline"
+        style={{ color: 'var(--tm-accent)' }}
+      >
+        Show it again
+      </button>
+    </p>
+  ) : null
 );
 
 type Mode = 'view' | 'replace' | 'remove';

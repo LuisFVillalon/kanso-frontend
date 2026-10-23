@@ -196,6 +196,9 @@ const pickUp = async (el: HTMLElement, x: number) => {
   await pointer('pointerdown', el, x, 10);
   await pointer('pointermove', el, x + 15, 10);
 };
+const menu = () => document.querySelector<HTMLElement>('[role="menu"]');
+const menuItem = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(b => b.textContent === name)!;
+const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')].map(b => b.textContent);
 const key = async (el: EventTarget, k: string, init: KeyboardEventInit = {}) => {
   await act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init })); });
 };
@@ -375,13 +378,54 @@ describe('PanelCarousel', () => {
       expect(changes).toEqual([]);
     });
 
-    it('adds a tab to the split with Shift+Enter, and takes a half out with Delete', async () => {
+    it('adds a tab to the split, or takes a half out, from the tab\'s menu, focus going back to the tab', async () => {
       await render();
-      await key(tab('Canvas'), 'Enter', { shiftKey: true });
+      tab('Canvas').focus();
+      await key(tab('Canvas'), 'ContextMenu');
+      expect(menuItems()).toEqual(['Add Canvas to the split']);
+      expect(document.activeElement).toBe(menuItem('Add Canvas to the split'));
+      await click(menuItem('Add Canvas to the split'));
       expect(changes).toEqual(['tasks,notes,canvas']);
-      await key(tab('Notes'), 'Delete');
+      expect(menu()).toBeNull();
+      expect(document.activeElement).toBe(tab('Canvas'));
+      await key(tab('Notes'), 'F10', { shiftKey: true });
+      expect(menuItems()).toEqual(['Take Notes out of the split']);
+      await click(menuItem('Take Notes out of the split'));
       expect(changes).toEqual(['tasks,notes,canvas', 'tasks,canvas']);
       expect(strip()).toEqual(['[tasks,canvas]', 'notes']);
+      expect(document.activeElement).toBe(tab('Notes'));
+    });
+
+    it('opens the tab\'s menu with a right-click too, and closes it with Escape, back on the tab', async () => {
+      await render();
+      await act(async () => {
+        tab('Canvas').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 30 }));
+      });
+      expect(menuItems()).toEqual(['Add Canvas to the split']);
+      await key(document.activeElement!, 'ArrowDown');
+      expect(document.activeElement).toBe(menuItem('Add Canvas to the split'));
+      await key(document.activeElement!, 'Escape');
+      expect(menu()).toBeNull();
+      expect(document.activeElement).toBe(tab('Canvas'));
+      expect(changes).toEqual([]);
+    });
+
+    it('has no shortcuts for the split besides the tab\'s menu', async () => {
+      await render();
+      await key(tab('Canvas'), 'Enter', { shiftKey: true });
+      await key(tab('Notes'), 'Delete');
+      await key(tab('Notes'), 'Backspace');
+      await key(tab('Notes'), 'ArrowLeft', { altKey: true });
+      expect(changes).toEqual([]);
+      expect(orderChanges).toEqual([]);
+      expect(tab('Notes').getAttribute('aria-keyshortcuts')).toBe('Shift+ArrowLeft Shift+ArrowRight ContextMenu Shift+F10');
+    });
+
+    it('opens no menu on a tab with nothing to offer', async () => {
+      await render({ initial: 'tasks', initialSplit: 'tasks', available: NO_CANVAS });
+      await key(tab('Tasks'), 'ContextMenu');
+      expect(menu()).toBeNull();
+      expect(tab('Tasks').getAttribute('aria-keyshortcuts')).toBe('Shift+ArrowLeft Shift+ArrowRight');
     });
 
     it('has no number-key shortcuts', async () => {
@@ -418,6 +462,7 @@ describe('PanelCarousel', () => {
       expect(ghost.closest('[role="tablist"]')).toBeNull();
       expect(ghost.textContent).toBe('Canvas');
       await click(control('Connect Canvas'));
+      expect(control('Close the Canvas tab')!.tabIndex).toBe(0);
       await click(control('Close the Canvas tab'));
       expect(ghostCalls).toEqual(['connect', 'hide']);
       expect(changes).toEqual([]);
@@ -552,17 +597,18 @@ describe('PanelCarousel', () => {
       vi.useRealTimers();
     });
 
-    it('moves the picked tab with Shift (or Alt) and an arrow key', async () => {
+    it('moves the picked tab with Shift and an arrow key', async () => {
       await render({ initialPhone: 'notes' });
       await key(tab('Notes'), 'ArrowLeft', { shiftKey: true });
       expect(orderChanges).toEqual([['notes', 'tasks', 'canvas']]);
       expect(phoneChanges).toEqual([]);
       expect(tab('Notes').getAttribute('aria-selected')).toBe('true');
       expect(announced()).toBe('Notes moved to position 1 of 3.');
-      await key(tab('Notes'), 'ArrowLeft', { altKey: true });
-      expect(orderChanges).toHaveLength(1);
-      await key(tab('Notes'), 'ArrowRight', { altKey: true });
+      await key(tab('Notes'), 'ArrowRight', { shiftKey: true });
       expect(orderChanges.at(-1)).toEqual(['tasks', 'notes', 'canvas']);
+      await key(tab('Notes'), 'ArrowRight', { altKey: true });
+      expect(orderChanges).toHaveLength(2);
+      expect(phoneChanges).toEqual(['canvas']);
     });
 
     it('offers only Tasks and Notes without Canvas, falling back to Tasks, with the "+ Canvas" tab when offered', async () => {

@@ -177,7 +177,7 @@ describe('CanvasIntegrationSection', () => {
     expect(note).toContain('Anyone with the link can see your Canvas calendar');
   });
 
-  it('opens the home page\'s closed Canvas tab again, or closes it, while not connected', async () => {
+  it('opens the home page\'s closed Canvas tab again, and says nothing while it shows', async () => {
     api.fetchCanvasConnection.mockResolvedValue(notConnected);
     const changes: boolean[] = [];
     const renderTab = (hidden: boolean) => act(async () => root.render(
@@ -186,10 +186,9 @@ describe('CanvasIntegrationSection', () => {
     await renderTab(true);
     expect(text()).toContain('The Canvas tab is closed on your home page.');
     await click(button('Show it again'));
+    expect(changes).toEqual([false]);
     await renderTab(false);
-    expect(text()).toContain('Not using Canvas? You can close the Canvas tab on your home page.');
-    await click(button('Close it'));
-    expect(changes).toEqual([false, true]);
+    expect(text()).not.toContain('Canvas tab');
   });
 
   it('says nothing about the home page\'s Canvas tab once connected', async () => {

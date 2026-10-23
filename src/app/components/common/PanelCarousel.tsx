@@ -32,7 +32,8 @@ import { useKeyPress } from '@/app/hooks/useKeyPress';
  * The user puts the tabs, and so the panels, in their own order: by dragging
  * a tab (on a phone, after holding it a moment), or with Shift and an arrow
  * key on it. Dragging a half of the split tab moves that panel within the
- * split. Panels are placed by CSS order rather than moved in the DOM, so
+ * split. A tab's context menu (right-click, the context menu key or
+ * Shift+F10) offers what its hover control does, for the keyboard. Panels are placed by CSS order rather than moved in the DOM, so
  * reordering never remounts or reloads one.
  */
 
@@ -195,12 +196,16 @@ const STRIP_HINT_ID = `${TABS_ID}-strip-hint`;
 const HALF_HINT_ID = `${TABS_ID}-half-hint`;
 const PHONE_HINT_ID = `${TABS_ID}-tab-hint`;
 
-/** A small icon button on a tab, shown while the tab is hovered or focused; the keyboard has its own shortcut for it. */
+/**
+ * A small icon button on a tab, shown while the tab is hovered or focused; the
+ * keyboard reaches it through the tab's context menu. One always `visible`
+ * (on a tab outside the tablist) is in the Tab order itself.
+ */
 function TabControl({ label, icon: Icon, onClick, visible }: { label: string; icon: LucideIcon; onClick: () => void; visible?: boolean }) {
   return (
     <button
       type="button"
-      tabIndex={-1}
+      tabIndex={visible ? 0 : -1}
       aria-label={label}
       data-tip={label}
       {...longPressTip}
@@ -311,6 +316,18 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
     const rest = split.filter(k => k !== key);
     onSplitChange(toHomePanels(rest));
     if (splitShown) onChange(toHomePanels(rest));
+  };
+
+  /** What a wide screen's tab for `key` offers besides showing it: taking a half out of the split, or adding a panel to it. */
+  const tabAction = (key: PanelKey): { label: string; icon: LucideIcon; run: () => void } | null => {
+    const { label } = PANEL_META[key];
+    if (split.includes(key)) return { label: `Take ${label} out of the split`, icon: X, run: () => takeOutOfSplit(key) };
+    if (!canAdd(key)) return null;
+    return {
+      label: split.length > 0 ? `Add ${label} to the split` : `Open ${label} beside ${panelsName(on)}`,
+      icon: SquarePlus,
+      run: () => addToSplit(key),
+    };
   };
 
   const show = (panel: PanelKey) => {
@@ -506,7 +523,10 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
     },
     onPointerUp: clearHold,
     onPointerCancel: clearHold,
-    onContextMenu: (e: React.MouseEvent) => { if (holdStart.current || dragging) e.preventDefault(); },
+    onContextMenu: (e: React.MouseEvent) => {
+      if (holdStart.current || dragging) e.preventDefault();
+      else if (from !== 'tab' && openMenu(key, e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : null)) e.preventDefault();
+    },
     onClickCapture: (e: React.MouseEvent) => {
       if (!swallowClick.current) return;
       swallowClick.current = false;
@@ -515,9 +535,94 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
     },
   });
 
-  /** Shift (or Alt) and an arrow key on a tab move it, as on a phone. */
-  const moveKey = (e: React.KeyboardEvent) =>
-    (e.shiftKey || e.altKey) && (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
+  /** Shift and an arrow key on a tab move it, as on a phone. */
+  const moveKey = (e: React.KeyboardEvent) => e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
+
+  // ── A tab's context menu ──────────────────────────────────────────────
+  const [menu, setMenu] = useState<{ key: PanelKey; x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The tab a closed menu gives focus back to.
+  const menuTab = useRef<PanelKey | null>(null);
+  const menuAction = menu && tabAction(menu.key);
+
+  /** Opens `key`'s tab's menu at `at`, or under the tab; false when the tab has nothing to offer. */
+  const openMenu = (key: PanelKey, at: { x: number; y: number } | null) => {
+    if (!tabAction(key)) return false;
+    const r = document.getElementById(panelTabId(key))?.getBoundingClientRect();
+    setMenu({ key, x: at?.x ?? r?.left ?? 0, y: at?.y ?? r?.bottom ?? 0 });
+    return true;
+  };
+  const closeMenu = (refocusTab: boolean) => {
+    if (refocusTab && menu) menuTab.current = menu.key;
+    setMenu(null);
+  };
+
+  useLayoutEffect(() => {
+    if (menu) {
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+      return;
+    }
+    const key = menuTab.current;
+    menuTab.current = null;
+    if (key) document.getElementById(panelTabId(key))?.focus();
+  }, [menu]);
+
+  // A press anywhere else closes the menu.
+  useEffect(() => {
+    if (!menu) return;
+    const down = (e: PointerEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(null); };
+    window.addEventListener('pointerdown', down);
+    return () => window.removeEventListener('pointerdown', down);
+  }, [menu]);
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const i = items.indexOf(e.target as HTMLElement);
+    let next: number;
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      e.preventDefault();
+      closeMenu(true);
+      return;
+    }
+    if (e.key === 'ArrowDown') next = (i + 1) % items.length;
+    else if (e.key === 'ArrowUp') next = (i - 1 + items.length) % items.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = items.length - 1;
+    else return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
+
+  // On the body, so a transformed ancestor (the page's fade-in) can't offset it.
+  const tabMenu = menu && menuAction && createPortal(
+    <div
+      ref={menuRef}
+      role="menu"
+      aria-label={`${PANEL_META[menu.key].label} tab`}
+      onKeyDown={onMenuKeyDown}
+      onContextMenu={e => e.preventDefault()}
+      className="fixed z-[70] min-w-[12rem] rounded-lg border border-border bg-surface p-1 shadow-lg"
+      style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
+    >
+      {[menuAction].map(action => (
+        <button
+          key={action.label}
+          type="button"
+          role="menuitem"
+          tabIndex={-1}
+          onClick={() => {
+            closeMenu(true);
+            action.run();
+          }}
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[0.8125rem] text-text-primary hover:bg-surface-raised focus:bg-surface-raised focus:outline-none"
+        >
+          <action.icon className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+          {action.label}
+        </button>
+      ))}
+    </div>,
+    document.body,
+  );
 
   // ── Wide screen: the tab strip ────────────────────────────────────────
   // The tab that's selected: the split tab while the split shows, else the panel shown alone.
@@ -538,14 +643,8 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
       if (key) moveTab(key, e.key === 'ArrowRight');
       return;
     }
-    if (key && e.shiftKey && e.key === 'Enter' && canAdd(key)) {
-      e.preventDefault();
-      addToSplit(key);
-      return;
-    }
-    if (key && (e.key === 'Delete' || e.key === 'Backspace') && split.includes(key)) {
-      e.preventDefault();
-      takeOutOfSplit(key);
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      if (key && openMenu(key, null)) e.preventDefault();
       return;
     }
     let next: number;
@@ -571,9 +670,12 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
   /** Whether a tab is joined to the panels below: selected, or (the split tab) holding the panel shown alone. */
   const itemOn = (it: StripItem) => (it.split ? splitShown || it.keys.includes(on[0]) : !splitShown && on[0] === it.key);
 
+  const menuKeys = (key: PanelKey) => (tabAction(key) ? ' ContextMenu Shift+F10' : '');
+
   const panelTab = (key: PanelKey) => {
     const { label, icon: Icon } = PANEL_META[key];
     const selected = !splitShown && on[0] === key;
+    const action = tabAction(key);
     return (
       <div
         key={key}
@@ -588,20 +690,14 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
         <button
           {...tabProps(panelTabId(key), selected)}
           aria-describedby={STRIP_HINT_ID}
-          aria-keyshortcuts="Shift+Enter Shift+ArrowLeft Shift+ArrowRight"
+          aria-keyshortcuts={`Shift+ArrowLeft Shift+ArrowRight${menuKeys(key)}`}
           onClick={() => setPanels([key])}
           className={`flex items-center gap-2 flex-1 min-w-0 h-full pl-3 pr-1 rounded-t-[10px] text-[0.8125rem] ${selected ? 'font-semibold' : 'font-medium'}`}
         >
           <Icon className="w-4 h-4 flex-shrink-0" aria-hidden />
           <span className="truncate">{label}</span>
         </button>
-        {canAdd(key) && (
-          <TabControl
-            label={split.length > 0 ? `Add ${label} to the split` : `Open ${label} beside ${panelsName(on)}`}
-            icon={SquarePlus}
-            onClick={() => addToSplit(key)}
-          />
-        )}
+        {action && <TabControl label={action.label} icon={action.icon} onClick={action.run} />}
         {drop?.key === key && drop.kind === 'strip' && <DropIndicator after={drop.after} />}
       </div>
     );
@@ -635,6 +731,7 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
         {keys.map((key, i) => {
           const { label, icon: Icon } = PANEL_META[key];
           const solo = !splitShown && on[0] === key;
+          const action = tabAction(key)!;
           return (
             <div
               key={key}
@@ -651,14 +748,14 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
               <button
                 {...tabProps(panelTabId(key), solo)}
                 aria-describedby={`${SPLIT_TAB_ID} ${HALF_HINT_ID}`}
-                aria-keyshortcuts="Delete Shift+ArrowLeft Shift+ArrowRight"
+                aria-keyshortcuts={`Shift+ArrowLeft Shift+ArrowRight${menuKeys(key)}`}
                 onClick={() => setPanels([key])}
                 className={`flex items-center gap-2 flex-1 min-w-0 h-full pl-3 pr-1 text-[0.8125rem] ${solo || splitShown ? 'font-semibold' : 'font-medium'}`}
               >
                 <Icon className="w-4 h-4 flex-shrink-0" aria-hidden />
                 <span className="truncate">{label}</span>
               </button>
-              <TabControl label={`Take ${label} out of the split`} icon={X} onClick={() => takeOutOfSplit(key)} />
+              <TabControl label={action.label} icon={action.icon} onClick={action.run} />
               {drop?.key === key && drop.kind === 'half' && <DropIndicator after={drop.after} />}
             </div>
           );
@@ -883,8 +980,9 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
         </div>
       </div>
       {ghost}
-      <p id={STRIP_HINT_ID} hidden>Drag, or press Shift and an arrow key, to move this tab. Shift+Enter opens it beside the others.</p>
-      <p id={HALF_HINT_ID} hidden>Drag, or press Shift and an arrow key, to move this panel within the split. Delete takes it out of the split.</p>
+      {tabMenu}
+      <p id={STRIP_HINT_ID} hidden>Drag, or press Shift and an arrow key, to move this tab. Its menu (the context menu key or Shift+F10) can open it beside the others.</p>
+      <p id={HALF_HINT_ID} hidden>Drag, or press Shift and an arrow key, to move this panel within the split. Its menu (the context menu key or Shift+F10) takes it out of the split.</p>
       <p id={PHONE_HINT_ID} hidden>Hold and drag, or press Shift and an arrow key, to move this panel.</p>
       <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
     </div>
