@@ -317,6 +317,17 @@ describe('workDayMarks', () => {
     });
   });
 
+  it("carries a day's own window that runs past midnight into the next day", () => {
+    // Tuesdays 8 PM – 2 AM, every other day 8 AM – 4 PM.
+    const windowOn = (weekday: number): WindowMinutes => (weekday === 2 ? [1200, 120] : [480, 960]);
+    expect(workDayMarks(new Date(2026, 9, 20), weekend, windowOn)).toEqual({
+      rest: false, off: [[0, 1200]], opensAt: 1200, closesAt: [],
+    });
+    expect(workDayMarks(new Date(2026, 9, 21), weekend, windowOn)).toEqual({
+      rest: false, off: [[120, 480], [960, 1440]], opensAt: 480, closesAt: [120, 960],
+    });
+  });
+
   it('marks every day a work day when there are no rest days', () => {
     expect(workDayMarks(sunday, [], every(540, 1020)).rest).toBe(false);
   });

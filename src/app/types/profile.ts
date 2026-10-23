@@ -1,6 +1,6 @@
 import type { MoodCheckinSettings } from './mood';
 
-/** One weekday's own work window, "HH:MM" each; it ends after it starts. */
+/** One weekday's own work window, "HH:MM" each; an end at or before the start runs past midnight (00:00 is midnight). */
 export interface DayWindow {
   start: string;
   end: string;

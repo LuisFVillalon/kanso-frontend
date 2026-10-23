@@ -107,11 +107,15 @@ describe('useProfile day windows', () => {
       day_windows: {
         '1': { start: '10:00', end: '16:00' },
         '2': { start: '17:00', end: '09:00' },
+        '3': { start: '09:00', end: '9am' },
         '9': { start: '10:00', end: '16:00' },
       },
     });
     await remount();
-    expect(hook.profile.dayWindows).toEqual({ '1': { start: '10:00', end: '16:00' } });
+    expect(hook.profile.dayWindows).toEqual({
+      '1': { start: '10:00', end: '16:00' },
+      '2': { start: '17:00', end: '09:00' },
+    });
   });
 
   it('treats a null field as no days with their own window', async () => {

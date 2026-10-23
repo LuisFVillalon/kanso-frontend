@@ -65,6 +65,15 @@ describe('days with their own window', () => {
     // Thursday's runs past midnight, so it isn't called off on Thursday itself.
     expect(dayCalledOffAt(at(23, 0, 22), '09:00', '00:30', windows)).toBe(false);
   });
+
+  it("carries a day's own late window into the next day's small hours", () => {
+    // Every day 8 AM – 4 PM, except Wednesdays 8 PM – 2 AM.
+    const late = { '3': { start: '20:00', end: '02:00' } };
+    expect(toLocalDateStr(checkinDayAt(at(1, 0, 22), '08:00', '16:00', late))).toBe('2026-10-21');
+    expect(dayCalledOffAt(at(1, 0, 22), '08:00', '16:00', late)).toBe(false);
+    expect(dayCalledOffAt(at(2, 0, 22), '08:00', '16:00', late)).toBe(true);
+    expect(dayCalledOffAt(at(23, 0, 21), '08:00', '16:00', late)).toBe(false);
+  });
 });
 
 describe('endsPeriod', () => {

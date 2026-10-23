@@ -82,8 +82,8 @@ const onArchiveTerm = vi.fn<() => Promise<void>>();
 const onDeleteArchivedTerm = vi.fn<(id: number) => Promise<void>>();
 
 /** Commits each successful save to the props, as TaskManager's hooks do. */
-function Harness({ initialSection }: { initialSection?: SettingsSection }) {
-  const [saved, setSaved] = useState(profile);
+function Harness({ initialSection, initialProfile }: { initialSection?: SettingsSection; initialProfile: ProfileFields }) {
+  const [saved, setSaved] = useState(initialProfile);
   const [term, setTerm] = useState(calendarSettings);
   const [archived, setArchived] = useState([springTerm]);
   return (
@@ -120,8 +120,8 @@ function Harness({ initialSection }: { initialSection?: SettingsSection }) {
   );
 }
 
-const render = (initialSection?: SettingsSection) => {
-  act(() => root.render(<ToastProvider><Harness initialSection={initialSection} /></ToastProvider>));
+const render = (initialSection?: SettingsSection, overrides: Partial<ProfileFields> = {}) => {
+  act(() => root.render(<ToastProvider><Harness initialSection={initialSection} initialProfile={{ ...profile, ...overrides }} /></ToastProvider>));
 };
 
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
@@ -379,14 +379,43 @@ describe('SettingsModal autosave', () => {
       expect(input('Tuesday: call it a day').value).toBe('18:00');
     });
 
-    it("doesn't save a window that ends before it starts", async () => {
+    it('saves a window that runs past midnight', async () => {
       render('workday');
       await click(differentHours());
-      await act(async () => typeInto(input('Friday: call it a day'), '07:00'));
+      await act(async () => typeInto(input('Friday: call it a day'), '02:00'));
+      await pause();
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: { '5': { start: '08:30', end: '02:00' } } });
+      expect(input('Friday: call it a day').getAttribute('aria-invalid')).toBeNull();
+    });
+
+    it("doesn't save a window missing a time", async () => {
+      render('workday');
+      await click(differentHours());
+      await act(async () => typeInto(input('Friday: call it a day'), ''));
       await pause();
       expect(onSaveProfileField).not.toHaveBeenCalled();
-      expect(document.body.textContent).toContain('Call it a day has to come after the start, on the same day.');
+      expect(document.body.textContent).toContain('Pick both times.');
       expect(input('Friday: call it a day').getAttribute('aria-invalid')).toBe('true');
+    });
+
+    it('lists the default hours without an error when they run past midnight', async () => {
+      render('workday', { dayStartTime: '20:00', shutoffTime: '02:00' });
+      await click(differentHours());
+      expect(input('Monday starts').value).toBe('20:00');
+      expect(input('Monday: call it a day').value).toBe('02:00');
+      expect(input('Monday: call it a day').getAttribute('aria-invalid')).toBeNull();
+      await act(async () => typeInto(input('Monday starts'), '19:00'));
+      await pause();
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: { '1': { start: '19:00', end: '02:00' } } });
+    });
+
+    it("stays off when only a rest day has its own hours, and turning it on and off clears them", async () => {
+      render('workday', { dayWindows: { '0': { start: '10:00', end: '16:00' } } });
+      expect(differentHours().getAttribute('aria-checked')).toBe('false');
+      await click(differentHours());
+      expect(onSaveProfileField).not.toHaveBeenCalled();
+      await click(differentHours());
+      expect(onSaveProfileField).toHaveBeenLastCalledWith({ dayWindows: {} });
     });
 
     it('puts a day back on the default hours, with Undo', async () => {

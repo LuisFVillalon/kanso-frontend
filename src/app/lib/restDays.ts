@@ -31,9 +31,12 @@ export function loadStoredRestDays(): number[] {
   }
 }
 
-/** Whether `window` is two "HH:MM" times with the end after the start, as a day's own window must be. */
+/**
+ * Whether `window` is two "HH:MM" times. As with the every-day window, an end
+ * at or before the start runs past midnight and an end of 00:00 is midnight.
+ */
 export function isValidDayWindow({ start, end }: { start?: unknown; end?: unknown }): boolean {
-  return typeof start === 'string' && typeof end === 'string' && HH_MM.test(start) && HH_MM.test(end) && end > start;
+  return typeof start === 'string' && typeof end === 'string' && HH_MM.test(start) && HH_MM.test(end);
 }
 
 /** The well-formed entries of a `day_windows` value (keys "0".."6"); anything else is dropped. */

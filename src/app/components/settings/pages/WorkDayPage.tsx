@@ -48,7 +48,7 @@ interface DayWindowRowProps {
   loading: boolean;
 }
 
-/** One weekday's start and end; a window that doesn't end after it starts stays on screen unsaved. */
+/** One weekday's start and end; a window missing a time stays on screen unsaved. */
 const DayWindowRow: React.FC<DayWindowRowProps> = ({ day, label, value, own, onChange, onReset, loading }) => {
   const [draft, setDraft] = useState(value);
   // Follow the saved window when it changes from outside (Undo, the every-day window).
@@ -107,7 +107,7 @@ const DayWindowRow: React.FC<DayWindowRowProps> = ({ day, label, value, own, onC
       />
       {invalid && (
         <p id={errorId} className="col-span-2 sm:col-span-3 text-xs" style={{ color: 'var(--tm-danger)' }}>
-          {draft.start && draft.end ? 'Call it a day has to come after the start, on the same day.' : 'Pick both times.'}
+          Pick both times.
         </p>
       )}
     </li>
@@ -126,13 +126,13 @@ const WorkDayPage: React.FC<Props> = ({
   onClearDayWindows,
   loading,
 }) => {
-  const hasOwnWindows = Object.keys(dayWindows).length > 0;
+  const workdays = REST_DAY_OPTIONS.filter(({ day }) => !restDays.includes(day));
+  const hasOwnWindows = workdays.some(({ day }) => String(day) in dayWindows);
   const [differentHours, setDifferentHours] = useState(hasOwnWindows);
   const showDays = differentHours || hasOwnWindows;
-  const workdays = REST_DAY_OPTIONS.filter(({ day }) => !restDays.includes(day));
 
   const toggleDifferentHours = () => {
-    if (showDays && hasOwnWindows) onClearDayWindows();
+    if (showDays && Object.keys(dayWindows).length > 0) onClearDayWindows();
     setDifferentHours(!showDays);
   };
 
