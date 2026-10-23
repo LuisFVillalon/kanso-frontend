@@ -59,7 +59,7 @@ const signedDelta = (d: number) => `${d >= 0.05 ? '+' : d <= -0.05 ? '−' : '±
 /** A mood average as shown: to one decimal. */
 const toTenth = (n: number) => Math.round(n * 10) / 10;
 
-/** The row in plain words, for hover and screen readers. */
+/** The row in plain words, for hover, the tap caption and screen readers. */
 export const describeTagMood = (tag: string, days: number, tagAverage: number, usualAverage: number) => {
   const average = toTenth(tagAverage);
   const usual = toTenth(usualAverage);
