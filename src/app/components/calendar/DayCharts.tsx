@@ -186,7 +186,7 @@ export interface DayPoint {
 }
 
 interface WeekTrendLineChartProps {
-  days: DayPoint[]; // seven entries, Monday through Sunday
+  days: DayPoint[]; // seven entries, Sunday through Saturday
   rangeLabel: string;
   /** SVG element classes — defaults to the chart's natural (viewBox) aspect ratio. */
   svgClassName?: string;

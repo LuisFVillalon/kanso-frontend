@@ -9,17 +9,21 @@ const move = (from: Date, key: string) => {
 };
 
 describe('monthCells', () => {
-  it('starts the grid on Monday and pads every month to 42 cells', () => {
+  it('starts the grid on Sunday and pads every month to 42 cells', () => {
     const oct = monthCells(2026, 9); // 1 Oct 2026 is a Thursday
     expect(oct).toHaveLength(42);
-    expect(oct.slice(0, 3)).toEqual([null, null, null]);
-    expect(toLocalDateStr(oct[3]!)).toBe('2026-10-01');
-    expect(toLocalDateStr(oct[33]!)).toBe('2026-10-31');
-    expect(oct.slice(34).every(c => c === null)).toBe(true);
+    expect(oct.slice(0, 4)).toEqual([null, null, null, null]);
+    expect(toLocalDateStr(oct[4]!)).toBe('2026-10-01');
+    expect(toLocalDateStr(oct[34]!)).toBe('2026-10-31');
+    expect(oct.slice(35).every(c => c === null)).toBe(true);
 
-    const feb = monthCells(2021, 1); // 1 Feb 2021 is a Monday; 28 days
+    const feb = monthCells(2015, 1); // 1 Feb 2015 is a Sunday; 28 days
     expect(feb).toHaveLength(42);
-    expect(toLocalDateStr(feb[0]!)).toBe('2021-02-01');
+    expect(toLocalDateStr(feb[0]!)).toBe('2015-02-01');
+
+    const aug = monthCells(2026, 7); // 1 Aug 2026 is a Saturday; 31 days need all six rows
+    expect(toLocalDateStr(aug[6]!)).toBe('2026-08-01');
+    expect(toLocalDateStr(aug[36]!)).toBe('2026-08-31');
   });
 });
 
@@ -31,10 +35,11 @@ describe('gridKeyTarget', () => {
     expect(move(at(2026, 0, 3), 'ArrowUp')).toBe('2025-12-27');
   });
 
-  it('goes to the start and end of the Monday-first week', () => {
-    expect(move(at(2026, 9, 21), 'Home')).toBe('2026-10-19');
-    expect(move(at(2026, 9, 21), 'End')).toBe('2026-10-25');
-    expect(move(at(2026, 9, 25), 'Home')).toBe('2026-10-19');
+  it('goes to the start and end of the Sunday-first week', () => {
+    expect(move(at(2026, 9, 21), 'Home')).toBe('2026-10-18');
+    expect(move(at(2026, 9, 21), 'End')).toBe('2026-10-24');
+    expect(move(at(2026, 9, 24), 'Home')).toBe('2026-10-18');
+    expect(move(at(2026, 9, 18), 'End')).toBe('2026-10-24');
   });
 
   it('pages a month, keeping the day or clamping it to the month end', () => {

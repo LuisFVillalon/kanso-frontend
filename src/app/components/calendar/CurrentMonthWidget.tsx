@@ -119,7 +119,7 @@ const CurrentMonthWidget: React.FC<CurrentMonthWidgetProps> = ({ onExpand, dragH
     >
       <div className="flex-1 min-h-0 flex flex-col gap-1.5">
         <div className="grid grid-cols-7 gap-0.5 text-center flex-shrink-0">
-          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
             <span key={i} className="text-[9px] font-semibold text-text-muted leading-none">{d}</span>
           ))}
         </div>

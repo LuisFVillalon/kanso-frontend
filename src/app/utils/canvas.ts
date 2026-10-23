@@ -3,7 +3,7 @@ import type {
 } from '@/app/types/canvas';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { getDueStatus, type DueStatus } from '@/app/utils/taskUtils';
-import { addDays, startOfWeek } from '@/app/utils/weekLayout';
+import { addDays, startOfMondayWeek } from '@/app/utils/weekLayout';
 
 /** How a connection is made; a backend from before the calendar feed sends no type, so it's a token. */
 export const canvasConnectionType = (connection: CanvasConnection): CanvasConnectionType =>
@@ -136,11 +136,11 @@ function weekSpan(monday: Date): string {
  * ones go last.
  */
 export function groupByWeek(items: CanvasItem[], now: Date): CanvasWeekGroup[] {
-  const thisWeek = startOfWeek(now).getTime();
-  const nextWeek = addDays(startOfWeek(now), 7).getTime();
+  const thisWeek = startOfMondayWeek(now).getTime();
+  const nextWeek = addDays(startOfMondayWeek(now), 7).getTime();
   const byWeek = new Map<string, CanvasItem[]>();
   for (const item of items) {
-    const key = item.due_at ? toLocalDateStr(startOfWeek(new Date(item.due_at))) : 'undated';
+    const key = item.due_at ? toLocalDateStr(startOfMondayWeek(new Date(item.due_at))) : 'undated';
     byWeek.set(key, [...(byWeek.get(key) ?? []), item]);
   }
   const keys = [...byWeek.keys()].sort((a, b) => (a === 'undated' ? 1 : b === 'undated' ? -1 : a.localeCompare(b)));
