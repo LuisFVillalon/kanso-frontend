@@ -230,6 +230,20 @@ describe('useSplitPanel widths', () => {
     expect(widths(3)[2] * 9.5).toBeCloseTo(240);
   });
 
+  it('widens columns left narrower than 240px when the split shrinks', async () => {
+    await drag('divider-0', 0);
+    await drag('divider-1', 480);
+    expect(widths(3)).toEqual([20, 20, 60]);
+    await act(async () => root.render(<WidthProbe width={950} onWidths={w => { widths = w; }} />));
+    await act(async () => { window.dispatchEvent(new Event('resize')); });
+    const px = widths(3).map(w => w * 9.5);
+    expect(px[0]).toBeCloseTo(240);
+    expect(px[1]).toBeCloseTo(240);
+    expect(px[2]).toBeCloseTo(470);
+    await drag('divider-1', 950);
+    expect(widths(3).map(w => w * 9.5)).toEqual([expect.closeTo(240, 5), expect.closeTo(470, 5), expect.closeTo(240, 5)]);
+  });
+
   it('keeps three columns even, without movable dividers, on a split too narrow for 240px each', async () => {
     await drag('divider-0', 120);
     await act(async () => root.render(<WidthProbe width={700} onWidths={w => { widths = w; }} />));

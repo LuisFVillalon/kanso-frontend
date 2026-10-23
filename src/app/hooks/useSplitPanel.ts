@@ -41,6 +41,15 @@ const writeSavedHeight = (key: string, height: number) => {
   }
 };
 
+/** The narrowest a column gets, in % of a split `width` px wide (even thirds when it's too narrow). */
+const columnMinPct = (width: number): number => Math.min(100 / 3, (MIN_COLUMN_PX / width) * 100);
+
+/** The three columns' dividers moved just enough to leave each column at least `min` % wide. */
+const fitColumns = ([left, right]: [number, number], min: number): [number, number] => {
+  const fitLeft = Math.min(100 - 2 * min, Math.max(min, left));
+  return [fitLeft, Math.min(100 - min, Math.max(fitLeft + min, right))];
+};
+
 /** The visible panel bodies' top edge, in px below the split's top (0 when no panel has a body). */
 const bodyOffset = (split: HTMLElement): number => {
   const splitTop = split.getBoundingClientRect().top;
@@ -134,12 +143,14 @@ export const useSplitPanel = (enabled = true) => {
     if (!split || !divider) return;
     const { width } = split.getBoundingClientRect();
     const pct = (px / width) * 100;
-    const min = divider.count === 3 ? Math.min(100 / 3, (MIN_COLUMN_PX / width) * 100) : MIN_HALF_PCT;
+    const min = divider.count === 3 ? columnMinPct(width) : MIN_HALF_PCT;
     const clamp = (lo: number, hi: number) => Math.min(hi, Math.max(lo, pct));
     if (divider.count === 2) setTwoDivider(clamp(min, 100 - min));
     else if (divider.count === 3) {
-      setThreeDividers(([left, right]) =>
-        divider.index === 0 ? [clamp(min, right - min), right] : [left, clamp(left + min, 100 - min)]);
+      setThreeDividers(dividers => {
+        const [left, right] = fitColumns(dividers, min);
+        return divider.index === 0 ? [clamp(min, right - min), right] : [left, clamp(left + min, 100 - min)];
+      });
     }
   }, []);
   const startDividerDrag = useResizableSplit(
@@ -159,11 +170,11 @@ export const useSplitPanel = (enabled = true) => {
   const panelWidths = useCallback((count: number): number[] => {
     if (count === 2) return [twoDivider, 100 - twoDivider];
     if (count === 3) {
-      if (!dividersMovable(3)) return [100 / 3, 100 / 3, 100 / 3];
-      return [threeDividers[0], threeDividers[1] - threeDividers[0], 100 - threeDividers[1]];
+      const [left, right] = splitWidthPx === null ? threeDividers : fitColumns(threeDividers, columnMinPct(splitWidthPx));
+      return [left, right - left, 100 - right];
     }
     return [100];
-  }, [twoDivider, threeDividers, dividersMovable]);
+  }, [twoDivider, threeDividers, splitWidthPx]);
 
   const onHeightResize = useCallback((px: number) => {
     const split = splitContainerRef.current;
