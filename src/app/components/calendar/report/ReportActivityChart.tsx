@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import type { ReportBucket, ReportPeriodKind } from '@/app/utils/calendarReport';
 import { formatDurationShort } from '@/app/utils/dateUtils';
 
-type Metric = 'completions' | 'notes';
+export type ActivityMetric = 'completions' | 'notes';
 
 const TASK_COLOR = 'var(--tm-accent)';
 const HABIT_COLOR = 'var(--tm-success)';
@@ -13,6 +13,8 @@ const NOTE_COLOR = 'var(--tm-accent-2)';
 interface ReportActivityChartProps {
   buckets: ReportBucket[];
   kind: ReportPeriodKind;
+  /** Shows only this metric, without the Completions / Note time switch. */
+  metric?: ActivityMetric;
 }
 
 // A month has up to 31 bars; labelling every one crowds a phone screen, so
@@ -51,8 +53,9 @@ const describeBucket = (b: ReportBucket): string =>
  * "Note time" plots time spent in notes. Bars are plain flex boxes rather
  * than SVG so the axis labels never stretch at narrow widths.
  */
-const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind }) => {
-  const [metric, setMetric] = useState<Metric>('completions');
+const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind, metric: fixedMetric }) => {
+  const [chosenMetric, setMetric] = useState<ActivityMetric>('completions');
+  const metric = fixedMetric ?? chosenMetric;
 
   const valueOf = (b: ReportBucket) => (metric === 'completions' ? b.tasksCompleted + b.habitsCompleted : b.noteSeconds);
   const max = Math.max(...buckets.map(valueOf), 0);
@@ -64,10 +67,12 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart metric">
-          <MetricButton active={metric === 'completions'} onClick={() => setMetric('completions')}>Completions</MetricButton>
-          <MetricButton active={metric === 'notes'} onClick={() => setMetric('notes')}>Note time</MetricButton>
-        </div>
+        {!fixedMetric && (
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart metric">
+            <MetricButton active={metric === 'completions'} onClick={() => setMetric('completions')}>Completions</MetricButton>
+            <MetricButton active={metric === 'notes'} onClick={() => setMetric('notes')}>Note time</MetricButton>
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-3">
           {metric === 'completions' ? (
             <>
@@ -88,7 +93,7 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
         </div>
       ) : (
         <div role="img" aria-label={summary}>
-          <div className="flex items-end h-36 gap-[2px] sm:gap-1 border-b" style={{ borderColor: 'var(--tm-border)' }} aria-hidden="true">
+          <div className="flex items-end h-24 sm:h-36 gap-[2px] sm:gap-1 border-b" style={{ borderColor: 'var(--tm-border)' }} aria-hidden="true">
             {buckets.map(b => {
               const total = valueOf(b);
               const pct = (total / max) * 100;

@@ -24,8 +24,11 @@ import ReportMoodChart from './ReportMoodChart';
 import ReportMoodRelations from './ReportMoodRelations';
 import ReportPeriodCheckins from './ReportPeriodCheckins';
 
+/** Which part of the Mood tab shows: the chart and check-ins, or how mood moved with activity and tags. */
+export type MoodView = 'time' | 'patterns';
+
 /** How the Check-ins card and empty state name the days they cover. */
-const scopeName = (period: ReportPeriod): string => {
+export const scopeName = (period: ReportPeriod): string => {
   const name = describePeriod(period);
   return name.startsWith('this ') || name.startsWith('last ') ? name : `in ${name}`;
 };
@@ -101,19 +104,20 @@ interface ReportMoodSectionProps {
   /** Puts a saved check-in in place of its period's old one, or removes it (`saved` null). */
   replaceDay: (date: string, saved: MoodCheckin | null, kind?: MoodPeriodKind) => void;
   onSelectPeriod: (monthStart: Date) => void;
+  view: MoodView;
 }
 
 /**
- * The report's Mood section: "Mood over time" and the Check-ins summary,
- * then "Mood & your activity" and "Tags & mood", or an empty card with
- * "Log today" and, while weekly or monthly check-ins are on, the period's
- * weeks or months to log. Any day dot opens its check-in to edit, and a
- * hollow one logs that day; weekly and monthly check-ins open from their
- * spans, ◇ and the Check-ins list, which also logs a past week or month
- * without one. A week is too short for mood patterns, so in their place it
- * points to its Month report.
+ * The report's Mood tab: "Over time" shows "Mood over time" and the
+ * Check-ins summary, "Patterns" shows "Mood & your activity" and "Tags &
+ * mood"; with no check-ins it's an empty card with "Log today" and, while
+ * weekly or monthly check-ins are on, the period's weeks or months to log.
+ * Any day dot opens its check-in to edit, and a hollow one logs that day;
+ * weekly and monthly check-ins open from their spans, ◇ and the Check-ins
+ * list, which also logs a past week or month without one. A week is too
+ * short for mood patterns, so its Patterns point to its Month report.
  */
-const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod }) => {
+const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, view }) => {
   const showToast = useToast();
   const { habits } = useHabitsContext();
   const [modal, setModal] = useState<{ kind: MoodPeriodKind; date: string; existing: MoodCheckin | null } | null>(null);
@@ -188,11 +192,6 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
 
   return (
     <>
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mt-1">
-        <h3 className="text-base sm:text-lg font-semibold text-text-primary">Mood</h3>
-        <span className="text-xs text-text-muted">from your check-ins</span>
-      </div>
-
       {!hasMoodCheckins(period, byDay, checkins) ? (
         <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
           <span className="w-10 h-10 rounded-full flex items-center justify-center bg-surface-raised text-text-muted">
@@ -221,56 +220,58 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-          <div className="lg:col-span-2 min-w-0">
-            <CardShell icon={<Activity className="w-4 h-4" style={{ color: moodColor(4) }} />} header="Mood over time">
-              <ReportMoodChart
+        view === 'time' ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+            <div className="lg:col-span-2 min-w-0">
+              <CardShell icon={<Activity className="w-4 h-4" style={{ color: moodColor(4) }} />} header="Mood over time">
+                <ReportMoodChart
+                  period={period}
+                  buckets={report.buckets}
+                  byDay={byDay}
+                  weeks={weeks}
+                  months={months}
+                  onDay={(date, existing) => setModal({ kind: 'day', date, existing })}
+                  onWeek={week => setModal({ kind: 'week', date: week.period_start, existing: week })}
+                  onMonth={monthStart => onSelectPeriod(parseLocalDate(monthStart))}
+                  onMonthCheckin={month => setModal({ kind: 'month', date: month.period_start, existing: month })}
+                />
+              </CardShell>
+            </div>
+            <CheckinsCard summary={summary} period={period}>
+              <ReportPeriodCheckins
                 period={period}
-                buckets={report.buckets}
-                byDay={byDay}
                 weeks={weeks}
                 months={months}
-                onDay={(date, existing) => setModal({ kind: 'day', date, existing })}
-                onWeek={week => setModal({ kind: 'week', date: week.period_start, existing: week })}
-                onMonth={monthStart => onSelectPeriod(parseLocalDate(monthStart))}
-                onMonthCheckin={month => setModal({ kind: 'month', date: month.period_start, existing: month })}
+                settings={settings}
+                onOpen={(kind, date, existing) => setModal({ kind, date, existing })}
               />
-            </CardShell>
+            </CheckinsCard>
           </div>
-          <CheckinsCard summary={summary} period={period}>
-            <ReportPeriodCheckins
-              period={period}
-              weeks={weeks}
-              months={months}
-              settings={settings}
-              onOpen={(kind, date, existing) => setModal({ kind, date, existing })}
-            />
-          </CheckinsCard>
-        </div>
-      )}
-
-      {summary.average != null && period.kind === 'week' && (
-        <div className="card-glass p-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <ChartScatter className="w-4 h-4 shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden="true" />
-          <p className="text-sm text-text-secondary">
-            A week is too short to show patterns in your mood — they appear in the Month and Year reports.
-          </p>
-          <button type="button" onClick={() => onSelectPeriod(weekMonth)} className="btn btn-secondary py-1 px-3 text-xs sm:ml-auto">
-            See {weekMonth.toLocaleDateString('en-US', { month: 'long' })}
-          </button>
-        </div>
-      )}
-
-      {summary.average != null && period.kind !== 'week' && (
-        <ReportMoodRelations
-          activity={activity}
-          byDay={byDay}
-          period={period}
-          scopeLabel={scopeName(period)}
-          average={summary.average}
-          logged={summary.logged}
-          byWeek={period.kind === 'year'}
-        />
+        ) : period.kind === 'week' ? (
+          <div className="card-glass p-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <ChartScatter className="w-4 h-4 shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden="true" />
+            <p className="text-sm text-text-secondary">
+              A week is too short to show patterns in your mood — they appear in the Month and Year reports.
+            </p>
+            <button type="button" onClick={() => onSelectPeriod(weekMonth)} className="btn btn-secondary py-1 px-3 text-xs sm:ml-auto">
+              See {weekMonth.toLocaleDateString('en-US', { month: 'long' })}
+            </button>
+          </div>
+        ) : summary.average != null ? (
+          <ReportMoodRelations
+            activity={activity}
+            byDay={byDay}
+            period={period}
+            scopeLabel={scopeName(period)}
+            average={summary.average}
+            logged={summary.logged}
+            byWeek={period.kind === 'year'}
+          />
+        ) : (
+          <div className="card-glass p-6 text-center text-sm text-text-muted">
+            Mood & your activity and Tags & mood use your daily check-ins — there are none {scopeName(period)}.
+          </div>
+        )
       )}
 
       {modal && (
