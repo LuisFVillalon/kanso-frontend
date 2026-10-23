@@ -103,10 +103,12 @@ interface ReportMoodSectionProps {
 /**
  * The report's Mood section: "Mood over time" and the Check-ins summary,
  * then "Mood & your activity" and "Tags & mood", or an empty card with
- * "Log today". Any day dot opens its check-in to edit, and a hollow one logs
- * that day; weekly and monthly check-ins open from their spans and the
- * Check-ins list. A week is too short for mood patterns, so in their place
- * it points to its Month report.
+ * "Log today" and, while weekly or monthly check-ins are on, the period's
+ * weeks or months to log. Any day dot opens its check-in to edit, and a
+ * hollow one logs that day; weekly and monthly check-ins open from their
+ * spans, ◇ and the Check-ins list, which also logs a past week or month
+ * without one. A week is too short for mood patterns, so in their place it
+ * points to its Month report.
  */
 const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod }) => {
   const showToast = useToast();
@@ -203,6 +205,17 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
               Log today
             </button>
           )}
+          {(period.kind === 'year' ? settings.monthly : settings.weekly) && (
+            <div className="w-full max-w-md mt-4 text-left">
+              <ReportPeriodCheckins
+                period={period}
+                weeks={weeks}
+                months={months}
+                settings={settings}
+                onOpen={(kind, date, existing) => setModal({ kind, date, existing })}
+              />
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -217,6 +230,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
                 onDay={(date, existing) => setModal({ kind: 'day', date, existing })}
                 onWeek={week => setModal({ kind: 'week', date: week.period_start, existing: week })}
                 onMonth={monthStart => onSelectPeriod(parseLocalDate(monthStart))}
+                onMonthCheckin={month => setModal({ kind: 'month', date: month.period_start, existing: month })}
               />
             </CardShell>
           </div>
@@ -257,6 +271,8 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
 
       {modal && (
         <MoodCheckinModal
+          // A fresh form per period, so one never opens with another's answers.
+          key={`${modal.kind}:${modal.date}`}
           kind={modal.kind}
           date={parseLocalDate(modal.date)}
           existing={modal.existing}
