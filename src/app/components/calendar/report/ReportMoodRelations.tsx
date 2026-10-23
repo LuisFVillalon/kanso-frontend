@@ -72,6 +72,7 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod
   byDay, period, average, logged, scopeLabel,
 }) => {
   const rows = moodByTag(byDay, period.start, period.end);
+  const [openTag, setOpenTag] = useState<string | null>(null);
   return (
     <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Tags & mood">
       {rows.length === 0 ? (
@@ -93,27 +94,37 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod
               const half = Math.min(Math.abs(d) / TAG_DELTA_SPAN, 1) * 50;
               const mood = Math.round(row.average);
               const sentence = describeTagMood(row.tag, row.days, row.average, average);
+              const open = openTag === row.tag;
               return (
-                <li key={row.tag} className="flex items-center gap-2" title={sentence}>
-                  <span className="sr-only">{sentence}</span>
-                  <span className="w-24 shrink-0 min-w-0" aria-hidden="true">
-                    <span className="block text-xs sm:text-sm text-text-primary truncate">{row.tag}</span>
-                    <span className="block text-[11px] text-text-muted">{row.days} {row.days === 1 ? 'day' : 'days'}</span>
-                  </span>
-                  <span className="flex-1 h-4 relative" aria-hidden="true">
-                    <span className="absolute inset-x-0 top-[7px] h-0.5 rounded-full bg-surface-raised" />
-                    <span
-                      className="absolute top-[3px] h-2.5 rounded-sm"
-                      style={{ left: `${d >= 0 ? 50 : 50 - half}%`, width: `${Math.max(half, 1.5)}%`, backgroundColor: moodColor(mood) }}
-                    />
-                    <span className="absolute left-1/2 -ml-px -top-0.5 -bottom-0.5 w-0.5 rounded-sm bg-text-primary opacity-55" />
-                  </span>
-                  <span className="w-16 shrink-0 inline-flex items-center justify-end gap-1 text-xs font-semibold text-text-primary whitespace-nowrap" aria-hidden="true">
-                    <span className="w-4 h-4 shrink-0" style={{ color: moodColor(mood) }}>
-                      <MoodFace mood={mood} filled className="w-full h-full" />
+                <li key={row.tag}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenTag(t => (t === row.tag ? null : row.tag))}
+                    aria-expanded={open}
+                    title={sentence}
+                    className="w-full flex items-center gap-2 text-left rounded-md px-1 py-0.5 hover:bg-surface-raised"
+                  >
+                    <span className="sr-only">{sentence}</span>
+                    <span className="w-24 shrink-0 min-w-0" aria-hidden="true">
+                      <span className="block text-xs sm:text-sm text-text-primary truncate">{row.tag}</span>
+                      <span className="block text-[11px] text-text-muted">{row.days} {row.days === 1 ? 'day' : 'days'}</span>
                     </span>
-                    {signedDelta(d)}
-                  </span>
+                    <span className="flex-1 h-4 relative" aria-hidden="true">
+                      <span className="absolute inset-x-0 top-[7px] h-0.5 rounded-full bg-surface-raised" />
+                      <span
+                        className="absolute top-[3px] h-2.5 rounded-sm"
+                        style={{ left: `${d >= 0 ? 50 : 50 - half}%`, width: `${Math.max(half, 1.5)}%`, backgroundColor: moodColor(mood) }}
+                      />
+                      <span className="absolute left-1/2 -ml-px -top-0.5 -bottom-0.5 w-0.5 rounded-sm bg-text-primary opacity-55" />
+                    </span>
+                    <span className="w-16 shrink-0 inline-flex items-center justify-end gap-1 text-xs font-semibold text-text-primary whitespace-nowrap" aria-hidden="true">
+                      <span className="w-4 h-4 shrink-0" style={{ color: moodColor(mood) }}>
+                        <MoodFace mood={mood} filled className="w-full h-full" />
+                      </span>
+                      {signedDelta(d)}
+                    </span>
+                  </button>
+                  {open && <p className="mt-1 text-[11px] text-text-secondary leading-relaxed" aria-hidden="true">{sentence}</p>}
                 </li>
               );
             })}
