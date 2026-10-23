@@ -1,37 +1,41 @@
 'use client';
 
 import React, { useEffect, useId, useRef } from 'react';
-import { Download, Ellipsis, Focus, Info, ListTree, Loader2 } from 'lucide-react';
+import { ChevronDown, Download, Ellipsis, Info, ListTree, Loader2 } from 'lucide-react';
+import { KansoMark } from '@/app/components/common/KansoLogo';
 import {
   MenuPanel, RING_STYLE, handleMenuArrowKeys, menuItemClass, useFocusOnOpen, usePopover,
 } from './EditorToolbar';
 
-interface NoteMoreMenuProps {
-  /** Omitted where the editor doesn't offer PDF export (the home-panel overlays). */
-  onDownloadPdf?: () => void;
-  pdfLoading?: boolean;
-  onShowDetails: () => void;
-  outlineOpen: boolean;
-  onToggleOutline: () => void;
-  /** Omitted where focus mode isn't offered. */
-  onFocusMode?: () => void;
+interface MenuItem {
+  key: string;
+  label: string;
+  hint?: string;
+  Icon: React.ElementType;
+  checked?: boolean;
+  disabled?: boolean;
+  run: () => void;
 }
 
-/** "⋯": Download PDF, Note details, Outline and Focus mode. */
-const NoteMoreMenu: React.FC<NoteMoreMenuProps> = ({
-  onDownloadPdf, pdfLoading = false, onShowDetails, outlineOpen, onToggleOutline, onFocusMode,
-}) => {
+const pdfItem = (onDownloadPdf: () => void, pdfLoading: boolean): MenuItem => ({
+  key: 'pdf', label: pdfLoading ? 'Exporting…' : 'Download PDF', Icon: pdfLoading ? Loader2 : Download, disabled: pdfLoading, run: onDownloadPdf,
+});
+
+interface NoteActionMenuProps {
+  items: MenuItem[];
+  pdfLoading: boolean;
+  /** The trigger's accessible name and tooltip, and the menu's label. */
+  name: string;
+  /** A text trigger with a caret ("Export ▾"); otherwise the ⋯ icon. */
+  text?: string;
+}
+
+/** A note-row dropdown of actions; stays open while a PDF exports, then closes. */
+const NoteActionMenu: React.FC<NoteActionMenuProps> = ({ items, pdfLoading, name, text }) => {
   const { open, setOpen, containerRef, triggerRef } = usePopover<HTMLButtonElement>();
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
   useFocusOnOpen(open, menuRef);
-
-  const items: { key: string; label: string; hint?: string; Icon: React.ElementType; checked?: boolean; disabled?: boolean; run: () => void }[] = [
-    ...(onDownloadPdf ? [{ key: 'pdf', label: pdfLoading ? 'Exporting…' : 'Download PDF', Icon: pdfLoading ? Loader2 : Download, disabled: pdfLoading, run: onDownloadPdf }] : []),
-    { key: 'details', label: 'Note details', Icon: Info, run: onShowDetails },
-    { key: 'outline', label: 'Outline', Icon: ListTree, checked: outlineOpen, run: onToggleOutline },
-    ...(onFocusMode ? [{ key: 'focus', label: 'Focus mode', hint: 'Ctrl+Shift+F', Icon: Focus, run: onFocusMode }] : []),
-  ];
 
   // The PDF item reads "Exporting…" while busy; close once it finishes.
   const wasLoading = useRef(pdfLoading);
@@ -46,15 +50,21 @@ const NoteMoreMenu: React.FC<NoteMoreMenuProps> = ({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(v => !v)}
-        title="More: PDF, note details, outline, focus mode"
-        aria-label="More note actions"
+        title={name}
+        aria-label={name}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
-        className="flex items-center justify-center w-8 h-8 rounded-md outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 text-[var(--tm-text-secondary)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)]"
+        className={`flex items-center justify-center gap-1 h-8 rounded-md outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 text-[var(--tm-text-secondary)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)] ${text ? 'pl-2.5 pr-2 text-sm font-medium' : 'w-8'}`}
         style={RING_STYLE}
       >
-        <Ellipsis className="w-4 h-4" />
+        {text ? (
+          <>
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            {text}
+            <ChevronDown className="w-3 h-3" aria-hidden="true" />
+          </>
+        ) : <Ellipsis className="w-4 h-4" />}
       </button>
 
       {open && (
@@ -65,7 +75,7 @@ const NoteMoreMenu: React.FC<NoteMoreMenuProps> = ({
           align="end"
           id={menuId}
           role="menu"
-          aria-label="More note actions"
+          aria-label={name}
           onKeyDown={handleMenuArrowKeys}
           className="py-1 min-w-[13rem]"
         >
@@ -93,5 +103,38 @@ const NoteMoreMenu: React.FC<NoteMoreMenuProps> = ({
     </div>
   );
 };
+
+interface NoteMoreMenuProps {
+  /** Omitted where PDF export isn't offered (the home-panel overlays), or sits in the bar's Export menu. */
+  onDownloadPdf?: () => void;
+  pdfLoading?: boolean;
+  onShowDetails: () => void;
+  /** Omitted where the outline has its own button in the bar. */
+  outlineOpen?: boolean;
+  onToggleOutline?: () => void;
+  /** Omitted where focus mode isn't offered, or has its own button in the bar. */
+  onFocusMode?: () => void;
+}
+
+/** "⋯": Note details, plus whichever of PDF, Outline and Focus mode the bar has no room for. */
+const NoteMoreMenu: React.FC<NoteMoreMenuProps> = ({
+  onDownloadPdf, pdfLoading = false, onShowDetails, outlineOpen = false, onToggleOutline, onFocusMode,
+}) => (
+  <NoteActionMenu
+    name="More note actions"
+    pdfLoading={pdfLoading}
+    items={[
+      ...(onDownloadPdf ? [pdfItem(onDownloadPdf, pdfLoading)] : []),
+      { key: 'details', label: 'Note details', Icon: Info, run: onShowDetails },
+      ...(onToggleOutline ? [{ key: 'outline', label: 'Outline', Icon: ListTree, checked: outlineOpen, run: onToggleOutline }] : []),
+      ...(onFocusMode ? [{ key: 'focus', label: 'Focus mode', hint: 'Ctrl+Shift+F', Icon: KansoMark, run: onFocusMode }] : []),
+    ]}
+  />
+);
+
+/** "Export ▾": Download PDF. */
+export const NoteExportMenu: React.FC<{ onDownloadPdf: () => void; pdfLoading?: boolean }> = ({ onDownloadPdf, pdfLoading = false }) => (
+  <NoteActionMenu name="Export" text="Export" pdfLoading={pdfLoading} items={[pdfItem(onDownloadPdf, pdfLoading)]} />
+);
 
 export default NoteMoreMenu;

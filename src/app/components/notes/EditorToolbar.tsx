@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight,
   Bold, ChevronDown, Code, Highlighter, Image as ImageIcon, Italic, Link2, List, ListChecks, ListOrdered,
-  Minus, PanelLeftClose, PanelLeftOpen, Plus, Quote, Redo2, Table as TableIcon, Underline, Undo2, X,
+  Minus, PanelLeftClose, PanelLeftOpen, Plus, Quote, Redo2, Strikethrough, Table as TableIcon, Underline, Undo2, X,
 } from 'lucide-react';
 
 // ─── Heading levels ──────────────────────────────────────────────────────────
@@ -182,33 +182,40 @@ interface MenuPanelProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'sty
   align?: 'start' | 'end';
 }
 
+/** True inside a row that scrolls sideways: its menus must be placed on screen, or the row would clip them. */
+const ScrollingRowContext = createContext(false);
+
 /**
- * A dropdown's panel. Below a top bar it hangs under its trigger; above the
- * phone's bottom bar (which scrolls sideways and would clip it) it is placed
- * on screen with fixed positioning, kept inside the viewport.
+ * A dropdown's panel. Below a top bar it hangs under its trigger. In a row
+ * that scrolls sideways (the formatting row, the phone's bottom bar) it would
+ * be clipped, so it is placed on screen with fixed positioning instead, under
+ * the trigger or above the bottom bar, kept inside the viewport.
  */
 export const MenuPanel: React.FC<MenuPanelProps> = ({ placement, anchorRef, panelRef, align = 'start', className = '', children, ...rest }) => {
   const ownRef = useRef<HTMLDivElement>(null);
   const ref = panelRef ?? ownRef;
   const [fixedPos, setFixedPos] = useState<React.CSSProperties | null>(null);
+  const fixed = useContext(ScrollingRowContext) || placement === 'above';
 
   useLayoutEffect(() => {
-    if (placement !== 'above') return;
+    if (!fixed) return;
     const anchor = anchorRef.current?.getBoundingClientRect();
     const width = ref.current?.offsetWidth ?? 0;
     if (!anchor) return;
     const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
-    setFixedPos({ position: 'fixed', left, bottom: window.innerHeight - anchor.top + 6 });
-  }, [placement, anchorRef, ref]);
+    setFixedPos(placement === 'above'
+      ? { position: 'fixed', left, bottom: window.innerHeight - anchor.top + 6 }
+      : { position: 'fixed', left, top: anchor.bottom + 6 });
+  }, [fixed, placement, anchorRef, ref]);
 
-  // Above the bottom bar the panel sizes to its content, so it can be measured and kept on screen.
-  const placeClass = placement === 'above' ? 'w-max max-w-[calc(100vw-1rem)]' : `absolute top-full mt-1.5 ${align === 'end' ? 'right-0' : 'left-0'}`;
+  // A fixed panel sizes to its content, so it can be measured and kept on screen.
+  const placeClass = fixed ? 'w-max max-w-[calc(100vw-1rem)]' : `absolute top-full mt-1.5 ${align === 'end' ? 'right-0' : 'left-0'}`;
   return (
     <div
       ref={ref}
       {...rest}
       className={`${placeClass} rounded-lg z-50 ${className}`}
-      style={{ ...menuPanelStyle, ...(placement === 'above' ? fixedPos ?? { position: 'fixed', visibility: 'hidden' } : {}) }}
+      style={{ ...menuPanelStyle, ...(fixed ? fixedPos ?? { position: 'fixed', visibility: 'hidden' } : {}) }}
     >
       {children}
     </div>
@@ -218,8 +225,9 @@ export const MenuPanel: React.FC<MenuPanelProps> = ({ placement, anchorRef, pane
 // ─── Editor state for the controls ────────────────────────────────────────────
 
 const EMPTY_STATE = {
-  bold: false, italic: false, underline: false, highlight: false,
+  bold: false, italic: false, underline: false, strike: false, highlight: false,
   bulletList: false, orderedList: false, taskList: false, table: false,
+  link: false, blockquote: false, codeBlock: false,
   headingLevel: undefined as HeadingLevel | undefined,
   alignment: 'left' as Alignment,
   highlightColor: undefined as string | undefined,
@@ -238,11 +246,15 @@ function useControlsState(editor: Editor | null): ControlsState {
         bold: e.isActive('bold'),
         italic: e.isActive('italic'),
         underline: e.isActive('underline'),
+        strike: e.isActive('strike'),
         highlight: e.isActive('highlight'),
         bulletList: e.isActive('bulletList'),
         orderedList: e.isActive('orderedList'),
         taskList: e.isActive('taskList'),
         table: e.isActive('table'),
+        link: e.isActive('link'),
+        blockquote: e.isActive('blockquote'),
+        codeBlock: e.isActive('codeBlock'),
         headingLevel: HEADING_LEVELS.find(level => e.isActive('heading', { level })),
         alignment: ALIGNMENTS.find(a => e.isActive({ textAlign: a.value }))?.value ?? 'left',
         highlightColor: HIGHLIGHT_COLORS.find(({ color }) => e.isActive('highlight', { color }))?.color,
@@ -512,6 +524,45 @@ const TableGrid: React.FC<{ onInsert: (rows: number, cols: number) => void }> = 
   );
 };
 
+// ─── TablePicker ──────────────────────────────────────────────────────────────
+
+/** The formatting row's table button: a size grid that inserts a table with a header row. */
+const TablePicker: React.FC<{ editor: Editor | null; state: ControlsState; placement: MenuPlacement }> = ({ editor, state, placement }) => {
+  const { open, setOpen, containerRef, triggerRef } = usePopover<HTMLButtonElement>();
+  const menuId = useId();
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => setOpen(v => !v)}
+        title="Insert table"
+        aria-label="Insert table"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={menuId}
+        className={triggerClass(state.table, placement)}
+        style={triggerStyle(state.table)}
+      >
+        <TableIcon className="w-4 h-4" />
+      </button>
+
+      {open && (
+        <MenuPanel anchorRef={triggerRef} placement={placement} id={menuId} role="dialog" aria-label="Insert table">
+          <TableGrid
+            onInsert={(rows, cols) => {
+              editor?.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+              setOpen(false);
+            }}
+          />
+        </MenuPanel>
+      )}
+    </div>
+  );
+};
+
 // ─── InsertMenu ───────────────────────────────────────────────────────────────
 
 interface InsertMenuProps {
@@ -561,7 +612,6 @@ const InsertMenu: React.FC<InsertMenuProps> = ({ editor, state, placement, onPic
         style={triggerStyle(state.table)}
       >
         <Plus className="w-4 h-4" aria-hidden="true" />
-        {placement === 'below' && <span className="hidden @3xl:inline">Insert</span>}
         <ChevronDown className="w-3 h-3" aria-hidden="true" />
       </button>
 
@@ -669,38 +719,102 @@ const AlignMenu: React.FC<{ editor: Editor | null; state: ControlsState; placeme
   );
 };
 
-// ─── FormattingControls ───────────────────────────────────────────────────────
+// ─── Formatting controls ──────────────────────────────────────────────────────
 
 interface FormattingControlsProps {
   editor: Editor | null;
-  placement: MenuPlacement;
   onPickImage: () => void;
   onEditLink: () => void;
 }
 
-/**
- * The formatting tools, shared by the top bar and the phone's bottom bar:
- * text style | bold, italic, underline, highlight | lists, checklist |
- * Insert, alignment — plus undo/redo on the bottom bar, where there's no
- * keyboard to undo with.
- */
-export const FormattingControls: React.FC<FormattingControlsProps> = ({ editor, placement, onPickImage, onEditLink }) => {
-  const state = useControlsState(editor);
-  const iconSize = placement === 'above' ? 'w-[18px] h-[18px]' : 'w-4 h-4';
-  const toggles: { key: string; title: string; Icon: React.ElementType; active: boolean; run: (e: Editor) => void }[][] = [
-    [
-      { key: 'bold',      title: 'Bold (Ctrl+B)',      Icon: Bold,      active: state.bold,      run: e => e.chain().focus().toggleBold().run() },
-      { key: 'italic',    title: 'Italic (Ctrl+I)',    Icon: Italic,    active: state.italic,    run: e => e.chain().focus().toggleItalic().run() },
-      { key: 'underline', title: 'Underline (Ctrl+U)', Icon: Underline, active: state.underline, run: e => e.chain().focus().toggleUnderline().run() },
-    ],
-    [
-      { key: 'bullet',    title: 'Bulleted list (Ctrl+Shift+8)', Icon: List,        active: state.bulletList,  run: e => e.chain().focus().toggleBulletList().run() },
-      { key: 'ordered',   title: 'Numbered list (Ctrl+Shift+7)', Icon: ListOrdered, active: state.orderedList, run: e => e.chain().focus().toggleOrderedList().run() },
-      { key: 'checklist', title: 'Checklist (Ctrl+Shift+9)',     Icon: ListChecks,  active: state.taskList,    run: e => e.chain().focus().toggleTaskList().run() },
-    ],
-  ];
+interface ToggleSpec {
+  key: string;
+  title: string;
+  Icon: React.ElementType;
+  active: boolean;
+  run: (e: Editor) => void;
+}
 
-  const button = ({ key, title, Icon, active, run }: (typeof toggles)[number][number]) => (
+const markToggles = (state: ControlsState): ToggleSpec[] => [
+  { key: 'bold',      title: 'Bold (Ctrl+B)',      Icon: Bold,      active: state.bold,      run: e => e.chain().focus().toggleBold().run() },
+  { key: 'italic',    title: 'Italic (Ctrl+I)',    Icon: Italic,    active: state.italic,    run: e => e.chain().focus().toggleItalic().run() },
+  { key: 'underline', title: 'Underline (Ctrl+U)', Icon: Underline, active: state.underline, run: e => e.chain().focus().toggleUnderline().run() },
+];
+
+const listToggles = (state: ControlsState): ToggleSpec[] => [
+  { key: 'bullet',    title: 'Bulleted list (Ctrl+Shift+8)', Icon: List,        active: state.bulletList,  run: e => e.chain().focus().toggleBulletList().run() },
+  { key: 'ordered',   title: 'Numbered list (Ctrl+Shift+7)', Icon: ListOrdered, active: state.orderedList, run: e => e.chain().focus().toggleOrderedList().run() },
+  { key: 'checklist', title: 'Checklist (Ctrl+Shift+9)',     Icon: ListChecks,  active: state.taskList,    run: e => e.chain().focus().toggleTaskList().run() },
+];
+
+/** Undo and redo; on the phone's bottom bar there's no keyboard to undo with. */
+const UndoRedo: React.FC<{ editor: Editor | null; state: ControlsState; placement: MenuPlacement; iconSize: string }> = ({ editor, state, placement, iconSize }) => (
+  <>
+    <ToolbarButton placement={placement} toggle={false} title="Undo (Ctrl+Z)" disabled={!state.canUndo} onClick={() => editor?.chain().focus().undo().run()}>
+      <Undo2 className={iconSize} />
+    </ToolbarButton>
+    <ToolbarButton placement={placement} toggle={false} title="Redo (Ctrl+Shift+Z)" disabled={!state.canRedo} onClick={() => editor?.chain().focus().redo().run()}>
+      <Redo2 className={iconSize} />
+    </ToolbarButton>
+  </>
+);
+
+/**
+ * The top bar's formatting row, every tool one click away: undo, redo |
+ * text style | bold, italic, underline, strikethrough, highlight | lists,
+ * checklist | table, image, link, quote, code block | alignment.
+ */
+const FormattingRow: React.FC<FormattingControlsProps> = ({ editor, onPickImage, onEditLink }) => {
+  const state = useControlsState(editor);
+  const placement: MenuPlacement = 'below';
+  const button = ({ key, title, Icon, active, run }: ToggleSpec) => (
+    <ToolbarButton key={key} onClick={() => editor && run(editor)} active={active} title={title}>
+      <Icon className="w-4 h-4" />
+    </ToolbarButton>
+  );
+
+  return (
+    <>
+      <UndoRedo editor={editor} state={state} placement={placement} iconSize="w-4 h-4" />
+      <Divider />
+      <HeadingPicker editor={editor} state={state} placement={placement} />
+      <Divider />
+      {markToggles(state).map(button)}
+      {button({ key: 'strike', title: 'Strikethrough (Ctrl+Shift+S)', Icon: Strikethrough, active: state.strike, run: e => e.chain().focus().toggleStrike().run() })}
+      <HighlightPicker editor={editor} state={state} placement={placement} />
+      <Divider />
+      {listToggles(state).map(button)}
+      <Divider />
+      <TablePicker editor={editor} state={state} placement={placement} />
+      <ToolbarButton toggle={false} title="Insert image" onClick={onPickImage}>
+        <ImageIcon className="w-4 h-4" />
+      </ToolbarButton>
+      <ToolbarButton toggle={false} active={state.link} title="Link (Ctrl+K)" onClick={onEditLink}>
+        <Link2 className="w-4 h-4" />
+      </ToolbarButton>
+      {button({ key: 'quote', title: 'Quote (Ctrl+Shift+B)', Icon: Quote, active: state.blockquote, run: e => e.chain().focus().toggleBlockquote().run() })}
+      {button({ key: 'code', title: 'Code block (Ctrl+Alt+C)', Icon: Code, active: state.codeBlock, run: e => e.chain().focus().toggleCodeBlock().run() })}
+      <Divider />
+      {ALIGNMENTS.map(({ value, label, shortcut, Icon }) => button({
+        key: value,
+        title: `${label} (${shortcut})`,
+        Icon,
+        active: state.alignment === value,
+        run: e => e.chain().focus().setTextAlign(value).run(),
+      }))}
+    </>
+  );
+};
+
+/**
+ * The phone's bottom bar tools: text style | bold, italic, underline,
+ * highlight | lists, checklist | Insert, alignment | undo, redo.
+ */
+const BottomFormattingControls: React.FC<FormattingControlsProps> = ({ editor, onPickImage, onEditLink }) => {
+  const state = useControlsState(editor);
+  const placement: MenuPlacement = 'above';
+  const iconSize = 'w-[18px] h-[18px]';
+  const button = ({ key, title, Icon, active, run }: ToggleSpec) => (
     <ToolbarButton key={key} placement={placement} onClick={() => editor && run(editor)} active={active} title={title}>
       <Icon className={iconSize} />
     </ToolbarButton>
@@ -710,62 +824,53 @@ export const FormattingControls: React.FC<FormattingControlsProps> = ({ editor, 
     <>
       <HeadingPicker editor={editor} state={state} placement={placement} />
       <Divider />
-      {toggles[0].map(button)}
+      {markToggles(state).map(button)}
       <HighlightPicker editor={editor} state={state} placement={placement} />
       <Divider />
-      {toggles[1].map(button)}
+      {listToggles(state).map(button)}
       <Divider />
       <InsertMenu editor={editor} state={state} placement={placement} onPickImage={onPickImage} onEditLink={onEditLink} />
       <AlignMenu editor={editor} state={state} placement={placement} />
-      {placement === 'above' && (
-        <>
-          <Divider />
-          <ToolbarButton placement={placement} toggle={false} title="Undo" disabled={!state.canUndo} onClick={() => editor?.chain().focus().undo().run()}>
-            <Undo2 className={iconSize} />
-          </ToolbarButton>
-          <ToolbarButton placement={placement} toggle={false} title="Redo" disabled={!state.canRedo} onClick={() => editor?.chain().focus().redo().run()}>
-            <Redo2 className={iconSize} />
-          </ToolbarButton>
-        </>
-      )}
+      <Divider />
+      <UndoRedo editor={editor} state={state} placement={placement} iconSize={iconSize} />
     </>
   );
 };
 
 // ─── EditorToolbar ────────────────────────────────────────────────────────────
 
-interface EditorToolbarProps {
-  editor: Editor | null;
+interface EditorToolbarProps extends FormattingControlsProps {
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  /** Where the note lives: its tag folder and title. */
+  breadcrumb?: React.ReactNode;
   /** False when formatting lives in the bottom bar instead (narrow editors, phones). */
   showFormatting?: boolean;
-  onPickImage: () => void;
-  onEditLink: () => void;
-  /** Right-side items: save status, word count, Resources, the More menu. */
+  /** The note row's right-side items: save status, word count, Resources, menus. */
   children?: React.ReactNode;
 }
 
 /**
- * The note editor's top bar: one row that never wraps. Items that don't fit
- * a narrower editor tuck away via container queries (the bar is the
- * container), and below a minimum width NoteEditor moves the formatting
- * tools to a bottom bar.
+ * The note editor's top bar, two rows by job. The first is about the note:
+ * sidebar, where it lives, and its actions. The second is only formatting and
+ * scrolls sideways when it doesn't fit, rather than wrapping. On phones and
+ * narrow editors NoteEditor moves formatting to a bottom bar instead.
  */
 export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   editor,
   sidebarOpen = true,
   onToggleSidebar,
+  breadcrumb,
   showFormatting = true,
   onPickImage,
   onEditLink,
   children,
 }) => (
-  <div
-    className="@container shrink-0 border-b border-border-subtle"
-    style={{ backgroundColor: 'var(--tm-surface-raised)' }}
-  >
-    <div className="flex flex-nowrap items-center gap-0.5 px-3 sm:px-4 py-2 min-h-12">
+  <div className="@container shrink-0">
+    <div
+      className="flex flex-nowrap items-center gap-1 px-3 sm:pl-4 py-2 min-h-12 border-b border-border-subtle"
+      style={{ backgroundColor: 'var(--tm-surface-raised)' }}
+    >
       {onToggleSidebar && (
         // The sidebar is already hidden while a phone shows the editor, so the toggle would do nothing there.
         <div className="hidden sm:flex items-center shrink-0">
@@ -776,31 +881,39 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
           >
             {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
           </ToolbarButton>
-          {showFormatting && <Divider />}
         </div>
       )}
 
-      {showFormatting && (
-        <div role="toolbar" aria-label="Text formatting" className="flex items-center gap-0.5">
-          <FormattingControls editor={editor} placement="below" onPickImage={onPickImage} onEditLink={onEditLink} />
-        </div>
-      )}
+      {breadcrumb}
 
       <div className="ml-auto flex items-center gap-1 @3xl:gap-1.5 shrink-0 relative">
         {children}
       </div>
     </div>
+
+    {showFormatting && (
+      <ScrollingRowContext.Provider value>
+        <div
+          role="toolbar"
+          aria-label="Text formatting"
+          className="flex flex-nowrap items-center gap-0.5 px-3 sm:px-4 py-1.5 border-b border-border-subtle overflow-x-auto scrollbar-none"
+          style={{ backgroundColor: 'var(--tm-surface)' }}
+        >
+          <FormattingRow editor={editor} onPickImage={onPickImage} onEditLink={onEditLink} />
+        </div>
+      </ScrollingRowContext.Provider>
+    )}
   </div>
 );
 
 /** The phone's formatting bar, docked under the note and scrolling sideways when it doesn't fit. */
-export const BottomFormattingBar: React.FC<Omit<FormattingControlsProps, 'placement'>> = props => (
+export const BottomFormattingBar: React.FC<FormattingControlsProps> = props => (
   <div
     role="toolbar"
     aria-label="Formatting"
     className="shrink-0 flex items-center gap-0.5 px-2 py-1.5 border-t border-border-subtle overflow-x-auto scrollbar-none"
     style={{ backgroundColor: 'var(--tm-surface-raised)', paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
   >
-    <FormattingControls {...props} placement="above" />
+    <BottomFormattingControls {...props} />
   </div>
 );
