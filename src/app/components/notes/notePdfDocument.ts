@@ -193,8 +193,9 @@ export const buildNotePdfMarkup = ({ title, html, tags = [], dateLabel }: NotePd
         border-width: 0 1.5px 1.5px 0;
         transform: rotate(45deg);
       }
-      li.pdf-checked > .pdf-list-text { color: #6b7280; text-decoration: line-through; }
-      li.pdf-checked > .pdf-list-text p { color: #6b7280; }
+      li.pdf-checked > .pdf-list-text { color: #6b7280; }
+      /* html2canvas won't draw a parent's text-decoration on child text. */
+      li.pdf-checked > .pdf-list-text p { color: #6b7280; text-decoration: line-through; }
 
       /* ── Highlights keep their own color (inline style) and dark ink ─── */
       .pdf-body mark {

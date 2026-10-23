@@ -95,6 +95,10 @@ describe('note PDF document', () => {
     expect(items[1].classList.contains('pdf-checked')).toBe(false);
     expect(items[1].querySelector('.pdf-check:not(.is-checked)')).not.toBeNull();
     expect(body.querySelector('input[type="checkbox"]')).toBeNull();
+    // html2canvas doesn't carry text-decoration down to children, so the line goes on the text itself.
+    const decoration = (li: Element) => getComputedStyle(li.querySelector('.pdf-list-text p')!).textDecoration;
+    expect(decoration(items[0])).toContain('line-through');
+    expect(decoration(items[1])).not.toContain('line-through');
   });
 
   it('splits code blocks into one block per line, keeping blank lines', () => {
