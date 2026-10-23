@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { moodColor } from '@/app/components/mood/MoodFacePicker';
 import { MOOD_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
@@ -31,8 +31,9 @@ const BIN_MIN = 3;
 const NOTE_TICK_STEPS = [15, 30, 60, 120, 180, 240, 480];
 
 const HEIGHT = 226;
-/** Shorter on a phone-width chart, so Mood › Patterns fits one screen. */
+/** Shorter on a phone-width chart or a short window, so Mood › Patterns fits one screen. */
 const NARROW_HEIGHT = 180;
+const SHORT_QUERY = '(max-height: 760px)';
 const PAD_TOP = 12;
 const PAD_BOTTOM = 36;
 const DEFAULT_WIDTH = 560;
@@ -81,6 +82,14 @@ const useMeasuredWidth = <T extends HTMLElement>() => {
   }, []);
   return [ref, Math.max(MIN_WIDTH, width)] as const;
 };
+
+const subscribeShort = (onChange: () => void) => {
+  if (typeof window.matchMedia !== 'function') return () => {};
+  const query = window.matchMedia(SHORT_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+};
+const isShortNow = () => typeof window.matchMedia === 'function' && window.matchMedia(SHORT_QUERY).matches;
 
 export interface DayItem {
   key: string;
@@ -175,11 +184,12 @@ interface ReportMoodRelationChartProps {
  */
 const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metric, view, points, items, byWeek }) => {
   const [ref, width] = useMeasuredWidth<HTMLDivElement>();
+  const short = useSyncExternalStore(subscribeShort, isShortNow, () => false);
   const info = METRIC_INFO[metric];
   const lowerLabel = info.label.toLowerCase();
 
   const padLeft = width < 420 ? 50 : 62;
-  const height = width < 420 ? NARROW_HEIGHT : HEIGHT;
+  const height = width < 420 || short ? NARROW_HEIGHT : HEIGHT;
   const padRight = view === 'days' ? 38 : 12;
   const plotWidth = width - padLeft - padRight;
   const plotHeight = height - PAD_TOP - PAD_BOTTOM;
