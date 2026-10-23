@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
 import { useTasksContext } from '@/app/context/TasksContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useToast } from '@/app/context/ToastContext';
-import { AppShellContext } from '@/app/context/AppShellContext';
+import { useAppShell } from '@/app/context/AppShellContext';
 import { useWeekActivity } from '@/app/hooks/useWeekActivity';
 import type { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
@@ -16,7 +16,7 @@ import EditTaskModal from '@/app/components/task/EditTaskModal';
 import HabitHistoryModal from '@/app/components/habit/HabitHistoryModal';
 import DragHandle from '@/app/components/common/DragHandle';
 import { useResizableSplit } from '@/app/hooks/useResizableSplit';
-import { DEFAULT_DAY_END, DEFAULT_DAY_START, loadStoredRestDays } from '@/app/lib/restDays';
+import { DEFAULT_DAY_END, DEFAULT_DAY_START } from '@/app/lib/restDays';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
 import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import {
@@ -58,21 +58,6 @@ const emptyTaskForm = (): BaseTaskForm => ({
   estimated_time: null,
   reminder_minutes: null,
   created_date: '',
-});
-
-const readStored = (key: string): string | null => {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null; // storage blocked — fall back to the default
-  }
-};
-
-/** The work schedule as useProfile caches it locally, for when there's no app shell to read it from. */
-const readStoredSchedule = () => ({
-  dayStartTime: readStored('tm_day_start_time') ?? DEFAULT_DAY_START,
-  shutoffTime: readStored('tm_call_it_a_day') ?? DEFAULT_DAY_END,
-  restDays: loadStoredRestDays(),
 });
 
 const toMinutesOr = (time: string, fallback: string): number =>
@@ -147,9 +132,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     onResizingChange: handleResizingChange,
   });
 
-  const shell = useContext(AppShellContext);
-  const [storedSchedule] = useState(readStoredSchedule);
-  const { dayStartTime, shutoffTime, restDays } = shell?.profileState.profile ?? storedSchedule;
+  const { dayStartTime, shutoffTime, restDays } = useAppShell().profileState.profile;
   const dayStartMinutes = toMinutesOr(dayStartTime, DEFAULT_DAY_START);
   const dayEndMinutes = toMinutesOr(shutoffTime, DEFAULT_DAY_END);
 

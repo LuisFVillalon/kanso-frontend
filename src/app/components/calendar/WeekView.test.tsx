@@ -64,15 +64,17 @@ const activityFor = (start: string, end: string): CalendarActivity => ({
   habit_completions: [{ habit_id: 5, habit_title: 'Run', date: '2026-10-21', estimated_time: null }],
 });
 
-const render = async (props: React.ComponentProps<typeof WeekView> = {}) => {
-  await act(async () => root.render(<WeekView {...props} />));
-};
+type Schedule = Pick<ProfileFields, 'dayStartTime' | 'shutoffTime' | 'restDays'>;
+
+const DEFAULT_SCHEDULE: Schedule = { dayStartTime: '08:00', shutoffTime: '22:00', restDays: [0, 6] };
 
 /** WeekView inside an app shell whose profile carries this work schedule. */
-const renderWithSchedule = async (schedule: Pick<ProfileFields, 'dayStartTime' | 'shutoffTime' | 'restDays'>) => {
+const renderWithSchedule = async (schedule: Schedule, props: React.ComponentProps<typeof WeekView> = {}) => {
   const shell = { profileState: { profile: schedule } } as unknown as AppShellValue;
-  await act(async () => root.render(<AppShellContext.Provider value={shell}><WeekView /></AppShellContext.Provider>));
+  await act(async () => root.render(<AppShellContext.Provider value={shell}><WeekView {...props} /></AppShellContext.Provider>));
 };
+
+const render = (props: React.ComponentProps<typeof WeekView> = {}) => renderWithSchedule(DEFAULT_SCHEDULE, props);
 
 /** Each day header's screen-reader description of its work schedule, Monday first. */
 const daySchedules = () => [...container.querySelectorAll('.sr-only')]
@@ -132,9 +134,9 @@ describe('WeekView', { timeout: 30_000 }, () => {
     ]);
   });
 
-  it('shows rest days and when the work window opens and closes, from the local cache outside the app shell', async () => {
+  it('shows rest days and when the work window opens and closes', async () => {
     await render();
-    // The defaults: weekends off, 8 AM to 10 PM.
+    // Weekends off, 8 AM to 10 PM.
     expect(daySchedules()).toEqual([
       ...Array(5).fill('Work day, work window opens at 8:00 AM, closes at 10:00 PM'),
       'Rest day', 'Rest day',
@@ -147,12 +149,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
     const legend = [...container.querySelectorAll('ul[aria-label="Legend"] li')].map(li => li.textContent);
     expect(legend.slice(4)).toEqual(['Outside work hours', 'Rest day']);
 
-    localStorage.setItem('tm_rest_days', '[3]');
-    localStorage.setItem('tm_day_start_time', '09:30');
-    localStorage.setItem('tm_call_it_a_day', '17:00');
-    act(() => root.unmount());
-    root = createRoot(container);
-    await render();
+    await renderWithSchedule({ dayStartTime: '09:30', shutoffTime: '17:00', restDays: [3] });
     expect(daySchedules()[2]).toBe('Rest day');
     expect(daySchedules()[0]).toBe('Work day, work window opens at 9:30 AM, closes at 5:00 PM');
   });
