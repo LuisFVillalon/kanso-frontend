@@ -105,7 +105,7 @@ const NoteActionMenu: React.FC<NoteActionMenuProps> = ({ items, pdfLoading, name
 };
 
 interface NoteMoreMenuProps {
-  /** Omitted where PDF export isn't offered (the home-panel overlays), or sits in the bar's Export menu. */
+  /** Omitted where PDF export isn't offered, or sits in the bar's Export menu. */
   onDownloadPdf?: () => void;
   pdfLoading?: boolean;
   onShowDetails: () => void;

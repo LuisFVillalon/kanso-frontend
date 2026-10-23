@@ -5,7 +5,7 @@ import { ArrowDownUp, FileText, LayoutGrid, FolderClosed, X } from 'lucide-react
 import NoteCard from '@/app/components/notes/NoteCard';
 import NotesGridView from '@/app/components/notes/NotesGridView';
 import TagFolderOverlay from '@/app/components/notes/TagFolderOverlay';
-import NoteEditorOverlay from '@/app/components/notes/NoteEditorOverlay';
+import NoteEditorOverlay, { isNoteOpenMode, type NoteOpenMode } from '@/app/components/notes/NoteEditorOverlay';
 import { Note } from '@/app/types/notes';
 import { Tag } from '@/app/types/task';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
@@ -77,7 +77,21 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
     profile.notesViewMode as ViewMode | null,
     next => { onSaveProfile({ ...profile, notesViewMode: next }); },
   );
+  // Every note opens the same way, from the cards or a folder; this device remembers the last choice.
+  const [openMode, setOpenMode] = usePersistedPref<NoteOpenMode>('tm-note-open-mode', 'panel', isNoteOpenMode);
   const [notesFolderOverlay, setNotesFolderOverlay] = useState<Tag | null>(null);
+  // The folder the open note was picked from, so its header can lead back there.
+  const [openedFrom, setOpenedFrom] = useState<{ noteId: number; folder: Tag } | null>(null);
+  const openNote = (note: Note, folder: Tag | null = null) => {
+    setActiveNoteId(note.id);
+    setOpenedFrom(folder ? { noteId: note.id, folder } : null);
+    onEditorChange(note);
+  };
+  const closeNote = () => {
+    setOpenedFrom(null);
+    onEditorChange(null);
+  };
+  const openedFromFolder = openedFrom && openedFrom.noteId === noteEditorOverlay?.id ? openedFrom.folder : null;
   // Read live so notes archived or deleted from inside the open folder leave it.
   const folderNotes = useMemo(
     () => (notesFolderOverlay ? notes.filter(n => n.tags.some(t => t.id === notesFolderOverlay.id)) : []),
@@ -180,7 +194,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
                     key={note.id}
                     note={note}
                     isActive={note.id === activeNoteId}
-                    onClick={() => { setActiveNoteId(note.id); onEditorChange(note); }}
+                    onClick={() => openNote(note)}
                     onDelete={onDeleteNote}
                     onArchive={onArchiveNote}
                     deleting={pendingNoteIds?.has(note.id)}
@@ -192,7 +206,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
                 notes={notes}
                 allTags={tags}
                 activeNoteId={activeNoteId}
-                onSelectNote={note => { setActiveNoteId(note.id); onEditorChange(note); }}
+                onSelectNote={note => openNote(note)}
                 onDeleteNote={onDeleteNote}
                 onArchiveNote={onArchiveNote}
                 onFolderClick={tag => setNotesFolderOverlay(tag)}
@@ -209,11 +223,10 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
           tag={notesFolderOverlay}
           notes={folderNotes}
           activeNoteId={activeNoteId}
-          allTags={tags}
-          onUpdate={onUpdateNote}
           onDeleteNote={onDeleteNote}
           onArchiveNote={onArchiveNote}
           onClose={() => setNotesFolderOverlay(null)}
+          onSelectNote={note => openNote(note, notesFolderOverlay)}
         />
       )}
 
@@ -222,8 +235,12 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
           note={noteEditorOverlay}
           allTags={tags}
           onUpdate={onUpdateNote}
-          onDeleteNote={id => { onDeleteNote(id); onEditorChange(null); }}
-          onClose={() => onEditorChange(null)}
+          onDeleteNote={id => { onDeleteNote(id); closeNote(); }}
+          onClose={closeNote}
+          mode={openMode}
+          onModeChange={setOpenMode}
+          onBack={openedFromFolder ? () => { setNotesFolderOverlay(openedFromFolder); closeNote(); } : undefined}
+          backLabel={openedFromFolder ? `Back to ${openedFromFolder.name}` : undefined}
         />
       )}
     </div>

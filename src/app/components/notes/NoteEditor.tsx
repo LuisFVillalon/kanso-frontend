@@ -77,6 +77,8 @@ interface NoteEditorProps {
   onToggleSidebar?: () => void;
   /** The Notes page's extras: Resources, PDF export and focus mode. */
   showExtendedActions?: boolean;
+  /** PDF export on its own, for the home panel's note. Defaults to `showExtendedActions`. */
+  showExport?: boolean;
 }
 
 // ─── NoteEditor ───────────────────────────────────────────────────────────────
@@ -85,6 +87,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   note, allTags, onUpdate,
   sidebarOpen = true, onToggleSidebar,
   showExtendedActions = false,
+  showExport = showExtendedActions,
 }) => {
   const showToast = useToast();
   const [title, setTitle]               = useState(note?.title ?? '');
@@ -549,7 +552,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </button>
           )}
 
-          {!focusMode && roomy && showExtendedActions && (
+          {!focusMode && roomy && showExport && (
             <NoteExportMenu onDownloadPdf={handleDownloadPDF} pdfLoading={pdfLoading} />
           )}
 
@@ -567,7 +570,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           ) : (
             <div data-note-details-trigger className="contents">
               <NoteMoreMenu
-                onDownloadPdf={!roomy && showExtendedActions ? handleDownloadPDF : undefined}
+                onDownloadPdf={!roomy && showExport ? handleDownloadPDF : undefined}
                 pdfLoading={pdfLoading}
                 onShowDetails={toggleDetails}
                 outlineOpen={outlineOpen}
