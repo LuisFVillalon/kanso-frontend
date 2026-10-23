@@ -73,6 +73,13 @@ const LegendHollow: React.FC<{ label: string }> = ({ label }) => (
   </span>
 );
 
+const LegendBand: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+    <span className="w-2 h-3 rounded-full" style={{ backgroundColor: `color-mix(in srgb, ${moodColor(4)} 18%, transparent)` }} />
+    {label}
+  </span>
+);
+
 const LegendFaded: React.FC<{ label: string }> = ({ label }) => (
   <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
     <span className="w-2.5 h-2.5 rounded-full opacity-35" style={{ backgroundColor: moodColor(4) }} />
@@ -178,6 +185,9 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       })
     : [];
   const hasFaded = isYear && rows.some(r => r.months.some(m => m.n > 0 && m.n < YEAR_FADE_DAYS));
+  const hasBand = isYear && rows.some(r => r.months.some(m => m.n > 0));
+  const hasHollow = !isYear && buckets.some(b => !b.isFuture && !byDay.has(b.key));
+  const hasMarks = isYear || period.kind === 'month' || hasHollow || weekSpans.length > 0;
 
   const dotSize = period.kind === 'week' ? 'w-3 h-3' : isYear ? 'w-2.5 h-2.5' : 'w-2 h-2';
   const hollowSize = period.kind === 'week' ? 'w-2.5 h-2.5' : 'w-2 h-2';
@@ -389,16 +399,17 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
           <LegendDot color={moodColor(4)} label="Mood" />
           <LegendDot color="var(--tm-accent)" label="Energy" />
           <LegendDot color="var(--tm-accent-2)" label="Stress" />
-          <span className="w-px h-3 bg-border" aria-hidden="true" />
+          {hasMarks && <span className="w-px h-3 bg-border" aria-hidden="true" />}
           {isYear ? (
             <>
               <LegendLine label="How the month felt" />
+              {hasBand && <LegendBand label="Most days fell here" />}
               {hasFaded && <LegendFaded label={`Fewer than ${YEAR_FADE_DAYS} days`} />}
               {monthCheckins.size > 0 && <LegendDiamond label="Monthly check-in (click to edit)" />}
             </>
           ) : (
             <>
-              <LegendHollow label="No check-in yet" />
+              {hasHollow && <LegendHollow label="No check-in yet" />}
               {period.kind === 'month' && <LegendLine label="7-day trend" />}
               {weekSpans.length > 0 && <LegendDash label="Weekly check-in" />}
             </>
@@ -543,7 +554,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       <p className="text-[11px] text-text-muted">
         {isYear
           ? 'Each dot shows how a month felt overall. Point at a month to compare all three, and click it to open it.'
-          : 'Each line shows how you felt day to day. Point at a day to compare all three, and click it to edit or log it. A break in energy or stress means you skipped it that day.'}
+          : `${period.kind === 'month' ? 'Each line shows your trend over the past week.' : 'Each line shows how you felt day to day.'} Point at a day to compare all three, and click it to edit or log it. A break in energy or stress means you skipped it that day.`}
       </p>
     </div>
   );

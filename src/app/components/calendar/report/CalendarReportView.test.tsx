@@ -277,7 +277,7 @@ describe('CalendarReportView mood', () => {
       await openTab('Mood');
       expect(text()).toContain('Mood, energy and stress from your daily check-ins, one line each.');
       expect(text()).toContain('Each line shows how you felt day to day.');
-      expect(text()).toContain('No check-in yet');
+      expect(text()).not.toContain('No check-in yet');
       for (const word of ['Rough', 'Okay', 'Great', 'Drained', 'Steady', 'Charged', 'Calm', 'Some', 'Maxed']) expect(text()).toContain(word);
       expect(dots('mood').map(d => d.dataset.day)).toEqual(['2026-10-19', '2026-10-20', '2026-10-21']);
       // A skipped energy or stress is a gap, never a zero.
@@ -294,6 +294,7 @@ describe('CalendarReportView mood', () => {
       await render();
       await openTab('Mood');
       expect(tooltip()).toBeNull();
+      expect(text()).toContain('No check-in yet');
 
       await act(async () => { buttonLabelled(/^Monday, October 19:/).focus(); });
       expect(container.querySelector('[data-active-column]')?.getAttribute('data-active-column')).toBe('2026-10-19');
@@ -331,6 +332,8 @@ describe('CalendarReportView mood', () => {
       await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
       expect(text()).toContain('7-day trend');
+      expect(text()).toContain('Each line shows your trend over the past week.');
+      expect(text()).not.toContain('Each line shows how you felt day to day.');
       const paths = [...container.querySelectorAll('[aria-label="Mood, energy and stress over time"] svg path')].map(p => p.getAttribute('d') ?? '');
       expect(paths).toHaveLength(3);
       for (const d of paths) expect(d).toMatch(/^M/);
@@ -358,6 +361,7 @@ describe('CalendarReportView mood', () => {
       await click(buttonLabelled(/^Year$/));
       expect(text()).toContain('Fewer than 8 days');
       expect(text()).toContain('Each dot shows how a month felt overall.');
+      expect(text()).toContain('Most days fell here');
       const opacity = (series: string, day: string) => dots(series).find(d => d.dataset.day === day)?.style.opacity;
       for (const series of ['mood', 'energy', 'stress']) {
         expect(opacity(series, '2026-09')).toBe('1');
