@@ -27,7 +27,7 @@ import type { TaskFormData } from '@/app/components/task/TaskFormFields';
 import NotesPanel, { isNoteOrder, type NoteOrder } from '@/app/components/notes/NotesPanel';
 import CanvasPanel from '@/app/components/canvas/CanvasPanel';
 import PanelCarousel, {
-  DEFAULT_HOME_PANELS, isHomePanels, isPanelKey, type HomePanels, type PanelCarouselHandle, type PanelKey,
+  DEFAULT_HOME_PANELS, PANEL_ORDER, isHomePanels, isPanelKey, isPanelOrder, type HomePanels, type PanelCarouselHandle, type PanelKey,
 } from '@/app/components/common/PanelCarousel';
 import CalendarAndStats from '@/app/components/layout/CalendarAndStats';
 import WidgetsArea from '@/app/components/layout/WidgetsArea';
@@ -74,6 +74,8 @@ const TaskManager: React.FC = () => {
   const [phonePanel, setPhonePanel] = usePersistedPref<PanelKey>(`tm-home-phone-panel:${dataUserId ?? 'guest'}`, 'tasks', isPanelKey);
   // The last split on a wide screen, which a panel shown alone goes back to; remembered on this device.
   const [homeSplit, setHomeSplit] = usePersistedPref<HomePanels>(`tm-home-split:${dataUserId ?? 'guest'}`, DEFAULT_HOME_PANELS, isHomePanels);
+  // The order the panels sit in, on a wide screen and a phone alike; remembered on this device.
+  const [panelOrder, setPanelOrder] = usePersistedPref<PanelKey[]>(`tm-home-panel-order:${dataUserId ?? 'guest'}`, [...PANEL_ORDER], isPanelOrder);
   const carouselRef = useRef<PanelCarouselHandle>(null);
   const focusMode = mode === 'focus';
   const doodleMode = mode === 'doodle';
@@ -442,6 +444,8 @@ const TaskManager: React.FC = () => {
                 onChange={setHomePanels}
                 splitValue={homeSplit}
                 onSplitChange={setHomeSplit}
+                order={panelOrder}
+                onOrderChange={setPanelOrder}
                 phoneValue={phonePanel}
                 onPhoneChange={setPhonePanel}
                 available={homePanelKeys}
