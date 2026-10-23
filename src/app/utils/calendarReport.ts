@@ -538,10 +538,6 @@ const METRIC_COPY: Record<MoodMetric, {
   amount: string;
   /** "on days with more …" */
   more: string;
-  /** "… don’t seem to affect how you feel" */
-  subject: string;
-  /** "… may be good for your mood" */
-  good: string;
   /** "On days you …" at or above the split. */
   atLeast: (threshold: number) => string;
 }> = {
@@ -549,24 +545,18 @@ const METRIC_COPY: Record<MoodMetric, {
     noun: 'your tasks',
     amount: 'number of tasks completed',
     more: 'more tasks completed',
-    subject: 'tasks don’t',
-    good: 'getting things done',
     atLeast: t => (t === 1 ? 'completed at least one task' : `completed ${t} or more tasks`),
   },
   notes: {
     noun: 'your note time',
     amount: 'time in notes',
     more: 'more time in notes',
-    subject: 'time in notes doesn’t',
-    good: 'time in your notes',
     atLeast: t => `spent ${formatDurationShort(t * 60)} or more in notes`,
   },
   habits: {
     noun: 'your habits',
     amount: 'number of habit check-ins',
     more: 'more habits checked off',
-    subject: 'habits don’t',
-    good: 'keeping up your habits',
     atLeast: t => (t === 1 ? 'checked off at least one habit' : `checked off ${t} or more habits`),
   },
 };
@@ -605,9 +595,10 @@ export const describeCorrelation = (metric: MoodMetric, result: CorrelationResul
   const atLeast = copy.atLeast(threshold!);
   if (result.level === 'none') {
     const gap = highAverage! - lowAverage!;
-    return Math.abs(gap) < SAME_MOOD_GAP
-      ? `${Scope}, your mood was about the same on days you ${atLeast} as on other days, so ${copy.subject} seem to affect how you feel.`
-      : `${Scope}, you sometimes felt ${gap > 0 ? 'better' : 'worse'} on days you ${atLeast}, but not often enough to count as a pattern. For now, ${copy.subject} seem to affect how you feel.`;
+    const seen = Math.abs(gap) < SAME_MOOD_GAP
+      ? `${Scope}, your mood was about the same on days you ${atLeast} as on other days.`
+      : `${Scope}, you sometimes felt ${gap > 0 ? 'better' : 'worse'} on days you ${atLeast}, but not often enough to count as a pattern.`;
+    return n < STRONG_MIN_DAYS ? `${seen} Not enough days yet to tell.` : seen;
   }
 
   const better = rho! > 0;
@@ -616,17 +607,17 @@ export const describeCorrelation = (metric: MoodMetric, result: CorrelationResul
     return `${noticed} It’s based on only ${plural(n, 'day')}, so it could be chance — check back in a few weeks.`;
   }
   const meaning = better
-    ? `${copy.good} may be good for your mood`
-    : 'it may be worth noticing how those days leave you feeling';
+    ? 'Worth noticing what helps on those days.'
+    : 'Worth noticing how those days leave you feeling.';
   if (n < STRONG_MIN_DAYS) {
-    return `${noticed} ${capitalize(meaning)}. This is based on only ${plural(n, 'day')}, so take it as a hint.`;
+    return `${noticed} ${meaning} This is based on only ${plural(n, 'day')}, so take it as a hint.`;
   }
   const sure = result.level === 'strong'
-    ? `It was a clear pattern across ${plural(n, 'day')}`
+    ? `It was a clear pattern across ${plural(n, 'day')}.`
     : result.level === 'moderate'
-      ? `It showed up across ${plural(n, 'day')}`
-      : `It was a small but steady difference across ${plural(n, 'day')}`;
-  return `${noticed} ${sure}, so ${meaning}.`;
+      ? `It showed up across ${plural(n, 'day')}.`
+      : `It was a small but steady difference across ${plural(n, 'day')}.`;
+  return `${noticed} ${sure} ${meaning}`;
 };
 
 /**

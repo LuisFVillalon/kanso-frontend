@@ -411,11 +411,18 @@ describe('describeCorrelation', () => {
     // Every metric value gets moods 2 and 4 equally often.
     const unrelated = Array.from({ length: 30 }, (_, i) => ({ value: i % 5, mood: 2 + 2 * (i % 2) }));
     expect(describeSeries('habits', unrelated)).toBe(
-      'This month, your mood was about the same on days you checked off 2 or more habits as on other days, so habits don’t seem to affect how you feel.',
+      'This month, your mood was about the same on days you checked off 2 or more habits as on other days.',
     );
     // A gap in the split that the ranks don't back up isn't called the same.
     expect(describeSeries('habits', series(30, 'noise'))).toBe(
-      'This month, you sometimes felt better on days you checked off 2 or more habits, but not often enough to count as a pattern. For now, habits don’t seem to affect how you feel.',
+      'This month, you sometimes felt better on days you checked off 2 or more habits, but not often enough to count as a pattern.',
+    );
+  });
+
+  it('says it is too soon to tell when there is no clear link under 30 days', () => {
+    const unrelated = Array.from({ length: 20 }, (_, i) => ({ value: i % 5, mood: 2 + 2 * (i % 2) }));
+    expect(describeSeries('habits', unrelated)).toBe(
+      'This month, your mood was about the same on days you checked off 2 or more habits as on other days. Not enough days yet to tell.',
     );
   });
 
@@ -430,7 +437,7 @@ describe('describeCorrelation', () => {
     expect(result.p!).toBeLessThanOrEqual(0.1);
     expect(result.level).toBe('none');
     expect(describeCorrelation('tasks', result, 'this year')).toBe(
-      'This year, your mood was about the same on days you completed 2 or more tasks as on other days, so tasks don’t seem to affect how you feel.',
+      'This year, your mood was about the same on days you completed 2 or more tasks as on other days.',
     );
   });
 
@@ -442,28 +449,28 @@ describe('describeCorrelation', () => {
 
   it('calls a link under 30 days a hint, and never strong', () => {
     expect(describeSeries('tasks', series(25, 'down'), 'in September 2026')).toBe(
-      'In September 2026, you tended to feel worse on days you completed 2 or more tasks. It may be worth noticing how those days leave you feeling. This is based on only 25 days, so take it as a hint.',
+      'In September 2026, you tended to feel worse on days you completed 2 or more tasks. Worth noticing how those days leave you feeling. This is based on only 25 days, so take it as a hint.',
     );
   });
 
   it('says how sure a slight or moderate link over 30 days is', () => {
     expect(describeSeries('tasks', mixed(160, 60), 'in 2026')).toBe(
-      'In 2026, you felt slightly better on days you completed 2 or more tasks. It was a small but steady difference across 160 days, so getting things done may be good for your mood.',
+      'In 2026, you felt slightly better on days you completed 2 or more tasks. It was a small but steady difference across 160 days. Worth noticing what helps on those days.',
     );
     expect(describeSeries('habits', mixed(100, 30), 'in 2026')).toBe(
-      'In 2026, you tended to feel better on days you checked off 2 or more habits. It showed up across 100 days, so keeping up your habits may be good for your mood.',
+      'In 2026, you tended to feel better on days you checked off 2 or more habits. It showed up across 100 days. Worth noticing what helps on those days.',
     );
   });
 
   it('calls it a clear pattern only for a strong link over 30 days or more', () => {
     const notes = series(30, 'up').map(p => ({ ...p, value: p.value * 20 }));
     expect(describeSeries('notes', notes, 'in 2026')).toBe(
-      'In 2026, you usually felt better on days you spent 40m or more in notes. It was a clear pattern across 30 days, so time in your notes may be good for your mood.',
+      'In 2026, you usually felt better on days you spent 40m or more in notes. It was a clear pattern across 30 days. Worth noticing what helps on those days.',
     );
   });
 
   it('never claims a cause', () => {
-    const banned = /\b(because|causes?|caused|makes you|made you|boosts?|you should)\b/i;
+    const banned = /\b(because|causes?|caused|makes you|made you|boosts?|you should|affects?|good for)\b/i;
     const results: CorrelationResult[] = [];
     for (const n of [5, 12, 15, 25, 30, 60, 160]) {
       for (const relation of ['up', 'down', 'noise'] as const) results.push(analyseCorrelation(series(n, relation)));
