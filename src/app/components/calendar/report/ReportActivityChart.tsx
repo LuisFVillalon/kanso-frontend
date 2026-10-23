@@ -87,7 +87,7 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
     : `Time spent in notes per ${unit}`;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex-1 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         {!fixedMetric && (
           <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart metric">
@@ -108,18 +108,19 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
       </div>
 
       {max === 0 ? (
-        <div className="flex items-center justify-center text-center rounded-lg" style={{ minHeight: '9rem', backgroundColor: 'var(--tm-surface-raised)' }}>
+        <div className="flex-1 flex items-center justify-center text-center rounded-lg" style={{ minHeight: '9rem', backgroundColor: 'var(--tm-surface-raised)' }}>
           <p className="text-xs sm:text-sm text-text-muted italic">
             {metric === 'completions' ? 'No tasks or habits completed in this period' : 'No time in notes in this period'}
           </p>
         </div>
       ) : (
-        <div role="img" aria-label={summary}>
+        <div role="img" aria-label={summary} className="flex-1 flex flex-col">
           <p className="m-0 mb-1 text-[10px] sm:text-[11px] text-text-muted" aria-hidden="true">
             {metric === 'completions' ? 'Tasks & habits done' : 'Time in notes'}
           </p>
-          <div className="flex gap-1.5">
-            <div className="relative w-7 sm:w-8 flex-shrink-0 h-24 sm:h-36" aria-hidden="true">
+          {/* The bars' row grows to fill the card when a taller card sits beside it. */}
+          <div className="flex-1 grid grid-cols-[auto_minmax(0,1fr)] grid-rows-[minmax(6rem,1fr)_auto] sm:grid-rows-[minmax(9rem,1fr)_auto] gap-x-1.5">
+            <div className="relative w-7 sm:w-8" aria-hidden="true">
               {ticks.map(t => (
                 <span
                   key={t}
@@ -130,48 +131,46 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
                 </span>
               ))}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="relative flex items-end h-24 sm:h-36 gap-[2px] sm:gap-1 border-b" style={{ borderColor: 'var(--tm-border)' }} aria-hidden="true">
-                {ticks.slice(1).map(t => (
-                  <span
-                    key={t}
-                    className="absolute inset-x-0 border-t border-dashed pointer-events-none"
-                    style={{ bottom: `${(t / scaleTop) * 100}%`, borderColor: 'var(--tm-border-subtle)' }}
-                  />
-                ))}
-                {buckets.map(b => {
-                  const total = valueOf(b);
-                  const pct = (total / scaleTop) * 100;
-                  return (
-                    <div
-                      key={b.key}
-                      className="relative flex-1 min-w-0 h-full flex flex-col justify-end rounded-t-sm"
-                      style={{ backgroundColor: b.isCurrent ? 'var(--tm-accent-subtle)' : undefined }}
-                      title={describeBucket(b)}
-                    >
-                      {metric === 'completions' ? (
-                        <div className="flex flex-col justify-end overflow-hidden rounded-t-sm" style={{ height: `${pct}%`, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }}>
-                          <div style={{ flexGrow: b.habitsCompleted, backgroundColor: HABIT_COLOR }} />
-                          <div style={{ flexGrow: b.tasksCompleted, backgroundColor: TASK_COLOR }} />
-                        </div>
-                      ) : (
-                        <div className="rounded-t-sm" style={{ height: `${pct}%`, backgroundColor: NOTE_COLOR, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }} />
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-[2px] sm:gap-1 pt-1" aria-hidden="true">
-                {buckets.map((b, i) => (
-                  <span
+            <div className="relative flex items-end gap-[2px] sm:gap-1 border-b" style={{ borderColor: 'var(--tm-border)' }} aria-hidden="true">
+              {ticks.slice(1).map(t => (
+                <span
+                  key={t}
+                  className="absolute inset-x-0 border-t border-dashed pointer-events-none"
+                  style={{ bottom: `${(t / scaleTop) * 100}%`, borderColor: 'var(--tm-border-subtle)' }}
+                />
+              ))}
+              {buckets.map(b => {
+                const total = valueOf(b);
+                const pct = (total / scaleTop) * 100;
+                return (
+                  <div
                     key={b.key}
-                    className={`flex-1 min-w-0 text-center text-[10px] sm:text-xs leading-none ${b.isCurrent ? 'font-bold' : ''}`}
-                    style={{ color: b.isCurrent ? 'var(--tm-accent)' : 'var(--tm-text-muted)' }}
+                    className="relative flex-1 min-w-0 h-full flex flex-col justify-end rounded-t-sm"
+                    style={{ backgroundColor: b.isCurrent ? 'var(--tm-accent-subtle)' : undefined }}
+                    title={describeBucket(b)}
                   >
-                    {showLabel(kind, i) ? b.label : ''}
-                  </span>
-                ))}
-              </div>
+                    {metric === 'completions' ? (
+                      <div className="flex flex-col justify-end overflow-hidden rounded-t-sm" style={{ height: `${pct}%`, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }}>
+                        <div style={{ flexGrow: b.habitsCompleted, backgroundColor: HABIT_COLOR }} />
+                        <div style={{ flexGrow: b.tasksCompleted, backgroundColor: TASK_COLOR }} />
+                      </div>
+                    ) : (
+                      <div className="rounded-t-sm" style={{ height: `${pct}%`, backgroundColor: NOTE_COLOR, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="col-start-2 flex gap-[2px] sm:gap-1 pt-1" aria-hidden="true">
+              {buckets.map((b, i) => (
+                <span
+                  key={b.key}
+                  className={`flex-1 min-w-0 text-center text-[10px] sm:text-xs leading-none ${b.isCurrent ? 'font-bold' : ''}`}
+                  style={{ color: b.isCurrent ? 'var(--tm-accent)' : 'var(--tm-text-muted)' }}
+                >
+                  {showLabel(kind, i) ? b.label : ''}
+                </span>
+              ))}
             </div>
           </div>
           {/* Hidden on a phone to keep the report tabs on one screen. */}

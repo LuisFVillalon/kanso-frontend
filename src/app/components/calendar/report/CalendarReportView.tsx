@@ -44,7 +44,7 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import ReportActivityChart, { MetricButton } from './ReportActivityChart';
+import ReportActivityChart, { MetricButton, type ActivityMetric } from './ReportActivityChart';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
 import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
@@ -449,9 +449,10 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     );
   }
 
-  const activityCard = (
+  // Tasks shows only completions: its Note time is the Notes tab's chart.
+  const activityCard = (metric?: ActivityMetric) => (
     <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={period.kind === 'year' ? 'Activity by month' : 'Activity by day'}>
-      <ReportActivityChart buckets={report.buckets} kind={period.kind} />
+      <ReportActivityChart buckets={report.buckets} kind={period.kind} metric={metric} />
     </CardShell>
   );
 
@@ -459,7 +460,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     case 'tasks':
       return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-          <div className="lg:col-span-2">{activityCard}</div>
+          <div className="lg:col-span-2">{activityCard('completions')}</div>
           <div className="flex flex-col gap-3 sm:gap-4">
             <CardShell icon={<Target className="w-4 h-4" style={{ color: 'var(--tm-success)' }} />} header="Planned vs done">
               <PlannedVsDone report={report} />
@@ -511,7 +512,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
         <div className="flex flex-col gap-3 sm:gap-4">
           <StatTiles report={report} mood={periodMood} current={current} onOpen={onOpen} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-            <div className="lg:col-span-2">{activityCard}</div>
+            <div className="lg:col-span-2">{activityCard()}</div>
             <ReportHighlights
               period={period}
               report={report}

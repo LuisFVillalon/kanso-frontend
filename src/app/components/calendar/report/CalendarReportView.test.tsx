@@ -616,8 +616,11 @@ describe('CalendarReportView tabs', () => {
     expect(tab('Tasks').getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('Planned vs done');
     expect(text()).toContain('Busiest days');
+    // Note time is the Notes tab's chart, so Tasks has no metric switch.
+    expect(container.querySelector('[aria-label="Chart metric"]')).toBeNull();
 
     await openTab('Overview');
+    expect(container.querySelector('[aria-label="Chart metric"]')).not.toBeNull();
     await click(buttonLabelled(/^Where your time went: /));
     expect(tab('Time').getAttribute('aria-selected')).toBe('true');
     expect(document.querySelector('[aria-label="Measure"]')).not.toBeNull();
