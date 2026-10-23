@@ -26,6 +26,8 @@ interface SegmentedTabsProps<T extends string> {
    * others show just their icon, named by a tooltip.
    */
   labels?: 'all' | 'selected';
+  /** A clicked tab presses like a key. */
+  press?: boolean;
   className?: string;
 }
 
@@ -35,9 +37,9 @@ export const segmentedTabId = (idBase: string, value: string) => `${idBase}-tab-
 /**
  * A labelled segmented control that switches what an area shows. It's a
  * tablist: one tab is selected, Tab lands on it, and the arrow keys, Home and
- * End move the selection. A clicked tab presses like a key.
+ * End move the selection.
  */
-function SegmentedTabs<T extends string>({ label, tabs, value, onChange, idBase, panelId, labels = 'all', className = '' }: SegmentedTabsProps<T>) {
+function SegmentedTabs<T extends string>({ label, tabs, value, onChange, idBase, panelId, labels = 'all', press: pressOnClick = false, className = '' }: SegmentedTabsProps<T>) {
   const listRef = useRef<HTMLDivElement>(null);
   const { press, pressing } = useKeyPress<T>();
 
@@ -81,7 +83,7 @@ function SegmentedTabs<T extends string>({ label, tabs, value, onChange, idBase,
             data-tip={iconOnly ? tabLabel : undefined}
             data-tip-align={iconOnly && i === tabs.length - 1 ? 'end' : undefined}
             {...(iconOnly ? longPressTip : {})}
-            onClick={() => { press(tabValue); onChange(tabValue); }}
+            onClick={() => { if (pressOnClick) press(tabValue); onChange(tabValue); }}
             className={`flex items-center gap-1.5 ${iconOnly ? 'px-2' : 'px-2.5 sm:px-3'} py-1.5 rounded-md text-xs sm:text-sm whitespace-nowrap transition-colors ${
               selected
                 ? 'bg-accent-subtle text-accent font-semibold'

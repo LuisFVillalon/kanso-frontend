@@ -46,6 +46,7 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
           idBase={TABS_ID}
           panelId={TABPANEL_ID}
           labels="selected"
+          press
         />
       </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>
