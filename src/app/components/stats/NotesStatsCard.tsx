@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FileText, CalendarDays, TrendingUp, Type, NotebookText, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Note } from '@/app/types/notes';
 import { formatUpdatedDate, formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
-import { useNoteTimeTotals, useNoteTimeTotalsForRange } from '@/app/hooks/useNoteTimeTotals';
+import { useNoteTimeTotalsForRange } from '@/app/hooks/useNoteTimeTotals';
 import { TagStats } from '@/app/types/task';
 import { CardShell } from './CardShell';
 import { CategoryDonut } from './charts';
@@ -42,8 +42,8 @@ const CategoryLegendRow: React.FC<CategoryLegendRowProps> = ({ label, count, col
 );
 
 // Every note with any recorded time gets its own wedge, ranked by time
-// spent. Shared by the overall and this-week time-breakdown slides — they
-// differ only in which totals map they pass in. Each note's wedge takes its
+// spent. Shared by the this-week time-breakdown slide and the compact tile's
+// today donut — they differ only in which totals map they pass in. Each note's wedge takes its
 // own first tag's color (same as its NoteRow dots and the By-Tag donut) so a
 // note reads as the same color everywhere in the card; untagged notes fall
 // back to the same neutral border color the tags donut uses for "Untagged".
@@ -121,7 +121,7 @@ interface TimeBreakdownProps {
   emptyMessage: string;
 }
 
-// Shared layout for the overall and this-week time-breakdown slides — same
+// Layout for the this-week time-breakdown slide — same
 // "By Tag" structure (total + scrollable legend grid on the left, donut
 // flush right) so switching slides never jumps in shape or donut size.
 const TimeBreakdownSlide: React.FC<TimeBreakdownProps> = ({ categories, totalSeconds, emptyMessage }) => (
@@ -220,8 +220,6 @@ const NoteCarousel: React.FC<NoteCarouselProps> = ({ slides }) => {
 // ── Shared derived stats — used by both the compact tile and the overlay ────
 
 const useNotesStats = (notes: Note[], noteTags: TagStats[]) => {
-  const timeTotals = useNoteTimeTotals();
-
   const noteCount = notes.length;
   const taggedCount = notes.filter(n => n.tags.length > 0).length;
   const untaggedCount = Math.max(noteCount - taggedCount, 0);
@@ -246,8 +244,6 @@ const useNotesStats = (notes: Note[], noteTags: TagStats[]) => {
 
   const recentNotes = [...notes].sort((a, b) => new Date(b.updated_date).getTime() - new Date(a.updated_date).getTime()).slice(0, 3);
   const longestNotes = [...notes].sort((a, b) => countWords(b.content) - countWords(a.content)).slice(0, 3);
-  const timeCategories = buildTimeCategories(notes, timeTotals);
-  const totalTimeSpent = timeCategories.reduce((sum, c) => sum + c.count, 0);
 
   // This week, Monday–Sunday, in local time — same bucketing TasksStatsCard
   // uses for its weekly ring. fetchNoteTimeSpentForRange sends our UTC offset
@@ -322,7 +318,7 @@ const useNotesStats = (notes: Note[], noteTags: TagStats[]) => {
 
   return {
     noteCount, categories, recentNotes, longestNotes,
-    timeCategories, totalTimeSpent, weekTimeCategories, weekTotalTimeSpent,
+    weekTimeCategories, weekTotalTimeSpent,
     todayTimeTotals, todayTotalTimeSpent, monthTimeCategories, monthTotalTimeSpent,
     mostTimeSpentTodayNotes, activityStats,
     notesWorkedOnTodayCount: notesWorkedOnToday.length,
@@ -393,17 +389,6 @@ export const NotesOverlay: React.FC<NotesOverlayProps> = ({ notes, noteTags }) =
           categories={stats.weekTimeCategories}
           totalSeconds={stats.weekTotalTimeSpent}
           emptyMessage="No notes worked on this week yet"
-        />
-      ),
-    },
-    {
-      key: 'time-breakdown-overall',
-      label: 'Overall Time Breakdown',
-      content: (
-        <TimeBreakdownSlide
-          categories={stats.timeCategories}
-          totalSeconds={stats.totalTimeSpent}
-          emptyMessage="Open a note to start tracking time"
         />
       ),
     },

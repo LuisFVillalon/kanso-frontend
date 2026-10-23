@@ -10,6 +10,12 @@ import { ProgressRing } from './charts';
 import TileTools from './TileTools';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
 
+// The habit lists' scrollbar thumb — scrollbar-custom's border-colored thumb
+// all but disappears on the card, so a long list wouldn't look scrollable.
+const HABIT_LIST_SCROLLBAR: React.CSSProperties = {
+  scrollbarColor: 'color-mix(in srgb, var(--tm-text-muted) 45%, transparent) transparent',
+};
+
 interface StreakBadgeProps {
   icon: React.ReactNode;
   value: number;
@@ -265,7 +271,7 @@ export const HabitsOverlay: React.FC<HabitsOverlayProps> = ({ habits, onToggle, 
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-0.5 max-h-64 overflow-y-auto overflow-x-hidden pr-1">
+      <div className="flex flex-col gap-0.5 max-h-64 overflow-y-auto overflow-x-hidden scrollbar-custom pr-1" style={HABIT_LIST_SCROLLBAR}>
         {habits.map(h => (
           <HabitRow
             key={h.id}
@@ -471,7 +477,13 @@ const HabitsStatsCard: React.FC<HabitsStatsCardProps> = ({
           )}
         </div>
       ) : (
-        <div className="flex-1 min-h-0 grid grid-cols-2 gap-x-4 gap-y-1 content-center overflow-hidden">
+        // Scrolls once the rows outgrow the tile — `safe center` keeps a short
+        // list centered but pins a long one to the top so its first rows
+        // stay reachable, and the darker thumb shows there's more below.
+        <div
+          className="flex-1 min-h-0 grid grid-cols-2 gap-x-4 gap-y-1 [align-content:safe_center] overflow-y-auto overflow-x-hidden scrollbar-custom pr-1"
+          style={HABIT_LIST_SCROLLBAR}
+        >
           {habits.map(h => (
             <CompactHabitRow
               key={h.id}

@@ -460,19 +460,6 @@ export async function fetchNoteTimeSpent(noteId: number): Promise<number> {
 }
 
 /**
- * Fetches total time spent (in seconds) for every note that has at least one
- * closed session, keyed by note id. Notes with no closed sessions yet are
- * simply absent from the map rather than present with 0.
- */
-export async function fetchAllNoteTimeSpent(): Promise<Record<number, number>> {
-  const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/note-session/totals`, { headers });
-  await assertOk(res, "fetchAllNoteTimeSpent");
-  const body: { note_id: number; total_seconds: number }[] = await res.json();
-  return Object.fromEntries(body.map(({ note_id, total_seconds }) => [note_id, total_seconds]));
-}
-
-/**
  * Fetches total time spent (in seconds) for every note with at least one
  * closed session that ended within [startDate, endDate] (inclusive,
  * "YYYY-MM-DD"), keyed by note id.
