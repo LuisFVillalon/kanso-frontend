@@ -1,18 +1,27 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { ResizableImage } from './extensions/ResizableImage';
 import TiptapHighlight from '@tiptap/extension-highlight';
-import TiptapUnderline from '@tiptap/extension-underline';
 import TiptapTextAlign from '@tiptap/extension-text-align';
 import { TableKit } from '@tiptap/extension-table';
 import {
-  ChevronDown, ChevronUp, Type, Download, Link2, FileText, Loader2,
-  PanelLeftClose, PanelLeftOpen, Save, LibraryBig, X,
+  ChevronDown, ChevronUp, Type, Link2, FileText, Loader2,
+  PanelLeftClose, PanelLeftOpen, LibraryBig, X,
 } from 'lucide-react';
-import { EditorToolbar } from './EditorToolbar';
+import { BottomFormattingBar, EditorToolbar, RING_STYLE } from './EditorToolbar';
+import NoteSaveStatus from './NoteSaveStatus';
+import NoteMoreMenu from './NoteMoreMenu';
+import NoteDetails, { type NoteStats } from './NoteDetails';
+import NoteOutline from './NoteOutline';
+import NoteSelectionMenu, { repositionSelectionMenu } from './NoteSelectionMenu';
+import LinkEditor from './LinkEditor';
+import SlashMenu from './SlashMenu';
+import { SlashCommand, createSlashMenuStore, slashCommandPluginKey } from './extensions/SlashCommand';
+import { createTabKeyHandler } from './extensions/tabKeys';
 import { Note } from '@/app/types/notes';
 import { Tag } from '@/app/types/task';
 import { describeError, fetchLearningResources } from '@/app/lib/backend-api';
@@ -22,6 +31,8 @@ import { LearningResourcesResponse } from '@/app/types/learningResources';
 import { extractStructuredNoteContent } from '@/app/utils/noteContentExtractor';
 import { useNotePdfExport } from '@/app/hooks/useNotePdfExport';
 import { useNoteSession } from '@/app/hooks/useNoteSession';
+import { useNoteAutosave } from '@/app/hooks/useNoteAutosave';
+import { useElementWidth } from '@/app/hooks/useElementWidth';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
 
 // Splits on whitespace and drops empty tokens, so blank/whitespace-only
@@ -31,6 +42,18 @@ const countWords = (text: string) => {
   return trimmed === '' ? 0 : trimmed.split(/\s+/).length;
 };
 
+/**
+ * Below these editor widths the formatting tools move from the top bar to a
+ * bar under the note, so the top bar never wraps. The Notes page's bar also
+ * holds the sidebar toggle and Resources, so it needs more room.
+ */
+const TOP_FORMATTING_MIN_WIDTH = { notesPage: 700, overlay: 600 } as const;
+
+type SidePanel = 'resources' | 'outline';
+
+/** Focus mode's reading column. */
+const FOCUS_COLUMN = 'w-full max-w-[46rem] mx-auto';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface NoteEditorProps {
@@ -39,6 +62,7 @@ interface NoteEditorProps {
   onUpdate: (id: number, changes: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) => void | Promise<boolean>;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
+  /** The Notes page's extras: Resources, PDF export and focus mode. */
   showExtendedActions?: boolean;
 }
 
@@ -51,26 +75,46 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 }) => {
   const showToast = useToast();
   const [title, setTitle]               = useState(note?.title ?? '');
-  const [saveStatus, setSaveStatus]     = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [emptyToast, setEmptyToast]     = useState(false);
   const [tagsOpen, setTagsOpen]         = useState(false);
   const [tagTogglingId, setTagTogglingId] = useState<number | null>(null);
   const [resourcesStatus, setResourcesStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [resourcesData, setResourcesData]     = useState<LearningResourcesResponse | null>(null);
   const [resourcesError, setResourcesError]   = useState('');
-  const [resourcesOpen, setResourcesOpen]     = useState(false);
+  const [sidePanel, setSidePanel]             = useState<SidePanel | null>(null);
   const [wordCount, setWordCount]             = useState(0);
+  const [linkEditorOpen, setLinkEditorOpen]   = useState(false);
+  const [details, setDetails]                 = useState<NoteStats | null>(null);
+  const [focusMode, setFocusMode]             = useState(false);
 
-  const contentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const titleTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const savedTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [measureRef, editorWidth] = useElementWidth<HTMLDivElement>();
+  const setContainer = useCallback((el: HTMLDivElement | null) => {
+    containerRef.current = el;
+    measureRef(el);
+  }, [measureRef]);
+
+  const [slashStore] = useState(createSlashMenuStore);
+  // Tab defers to the slash menu while it's open, so Tab picks the highlighted block.
+  const [handleTabKey] = useState(() =>
+    createTabKeyHandler(view => !!slashCommandPluginKey.getState(view.state)?.active),
+  );
+
+  const { status: saveStatus, savedAt, schedule, saveNow } = useNoteAutosave(note?.id ?? null, onUpdate);
 
   // ── Editor setup ───────────────────────────────────────────────────────────
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4, 5] },
+        // Links open from the selection menu (or with the link's own Open),
+        // so clicking one while writing just places the cursor.
+        link: {
+          openOnClick: false,
+          defaultProtocol: 'https',
+          HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer nofollow' },
+        },
       }),
 
       // Image: base64 data-URIs are stored in note HTML so images survive
@@ -83,37 +127,25 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       // Highlight: multicolor=true lets each mark carry its own background-color.
       TiptapHighlight.configure({ multicolor: true }),
 
-      TiptapUnderline,
-
       TiptapTextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
 
       TableKit.configure({ table: { resizable: true } }),
+
+      TaskList,
+      TaskItem.configure({ nested: true }),
+
+      SlashCommand.configure({ store: slashStore }),
     ],
     content: note?.content ?? '',
     immediatelyRender: false,
     editorProps: {
       attributes: { class: 'notes-editor focus:outline-none min-h-[400px]' },
 
-      // ── Tab indentation ────────────────────────────────────────────────────
-      // Insert 4 spaces at the cursor when Tab is pressed outside a list.
-      // Inside a list, StarterKit's built-in sink/lift behaviour is preserved
-      // by returning false so ProseMirror continues its normal dispatch.
-      handleKeyDown(view, event) {
-        if (event.key !== 'Tab') return false;
-
-        // Walk up the node ancestry; if any ancestor is a listItem, let
-        // StarterKit handle the Tab (sinkListItem / liftListItem).
-        const { $from } = view.state.selection;
-        for (let d = $from.depth; d > 0; d--) {
-          if ($from.node(d).type.name === 'listItem') return false;
-        }
-
-        event.preventDefault();
-        view.dispatch(view.state.tr.insertText('    '));
-        return true;
-      },
+      // Four-space Tab outside lists, checklists and tables; Shift+Tab and
+      // Escape-then-Tab leave the editor (see tabKeys.ts).
+      handleKeyDown: handleTabKey,
 
       // ── Image paste ───────────────────────────────────────────────────────
       // Intercept clipboard events that contain an image file, convert to a
@@ -150,28 +182,25 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     onUpdate: ({ editor }) => {
       setWordCount(countWords(editor.getText()));
       if (!note) return;
-      const html = editor.getHTML();
-      if (contentTimer.current) clearTimeout(contentTimer.current);
-      contentTimer.current = setTimeout(() => {
-        onUpdate(note.id, { content: html });
-      }, 500);
+      schedule({ content: editor.getHTML() });
     },
   });
 
   const { pdfLoading, pdfError, downloadPDF } = useNotePdfExport({ editor, title });
-  // Return value unused here — the hook's side effect (opening/closing
-  // note_sessions rows on the backend) still needs to run.
-  useNoteSession(note);
+  // Time spent in this note on earlier visits (closed note_sessions rows) and
+  // the visible time of this visit; the hook also opens and closes this
+  // visit's session on the backend.
+  const { pastSeconds, visitSeconds } = useNoteSession(note);
 
-  // Sync to active note — cancel in-flight debounces, update title + editor content.
+  // Sync to active note — update title + editor content. Edits still queued
+  // for the previous note are sent by useNoteAutosave, not dropped.
   useEffect(() => {
-    if (contentTimer.current) clearTimeout(contentTimer.current);
-    if (titleTimer.current)   clearTimeout(titleTimer.current);
     setTitle(note?.title ?? '');
-    setSaveStatus('idle');
-    setResourcesOpen(false);
+    setSidePanel(null);
     setResourcesStatus('idle');
     setResourcesData(null);
+    setLinkEditorOpen(false);
+    setDetails(null);
     if (editor) {
       editor.commands.setContent(note?.content ?? '', { emitUpdate: false });
       setWordCount(countWords(editor.getText()));
@@ -190,33 +219,63 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   }, [editor]);
 
   useEffect(() => {
+    slashStore.setActions({ pickImage: () => imageInputRef.current?.click() });
+  }, [slashStore]);
+
+  // The editor moves when focus mode or a side panel opens or closes; keep
+  // the selection menu next to the selected text once the layout settles.
+  useEffect(() => {
+    if (!editor) return;
+    const frame = requestAnimationFrame(() => repositionSelectionMenu(editor));
+    const settled = setTimeout(() => repositionSelectionMenu(editor), 320);
     return () => {
-      if (contentTimer.current) clearTimeout(contentTimer.current);
-      if (titleTimer.current)   clearTimeout(titleTimer.current);
-      if (savedTimer.current)   clearTimeout(savedTimer.current);
+      cancelAnimationFrame(frame);
+      clearTimeout(settled);
     };
-  }, []);
+  }, [editor, focusMode, sidePanel]);
+
+  // Escape leaves focus mode, unless it's closing the slash menu or the link
+  // editor first. Listens in the capture phase: the editor marks Escape as
+  // handled before it would bubble up to the document.
+  useEffect(() => {
+    if (!focusMode) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || linkEditorOpen) return;
+      if (editor && slashCommandPluginKey.getState(editor.state)?.active) return;
+      setFocusMode(false);
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [focusMode, linkEditorOpen, editor]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleTitleChange = (value: string) => {
     setTitle(value);
     if (!note) return;
-    if (titleTimer.current) clearTimeout(titleTimer.current);
-    titleTimer.current = setTimeout(() => {
-      onUpdate(note.id, { title: value });
-    }, 500);
+    schedule({ title: value });
   };
 
-  const handleSave = async () => {
+  /** Ctrl+S, and Retry after a failed save: save the title and body now. */
+  const saveNoteNow = () => {
     if (!note || !editor) return;
-    if (contentTimer.current) clearTimeout(contentTimer.current);
-    if (titleTimer.current)   clearTimeout(titleTimer.current);
-    setSaveStatus('saving');
-    const result = await onUpdate(note.id, { title, content: editor.getHTML() });
-    setSaveStatus(result === false ? 'error' : 'saved');
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-    savedTimer.current = setTimeout(() => setSaveStatus('idle'), 2000);
+    void saveNow({ title, content: editor.getHTML() });
+  };
+
+  const handleShortcuts = (e: React.KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key === 's' && !e.shiftKey) {
+      // Instead of the browser's "Save page as".
+      e.preventDefault();
+      saveNoteNow();
+    } else if (key === 'k' && !e.shiftKey && editor?.view.dom.contains(e.target as Node)) {
+      e.preventDefault();
+      setLinkEditorOpen(true);
+    } else if (key === 'f' && e.shiftKey && showExtendedActions) {
+      e.preventDefault();
+      setFocusMode(v => !v);
+    }
   };
 
   const handleTagToggle = async (tag: Tag) => {
@@ -232,12 +291,16 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     }
   };
 
+  const flashEmptyToast = () => {
+    setEmptyToast(true);
+    setTimeout(() => setEmptyToast(false), 2500);
+  };
+
   const handleDownloadPDF = async () => {
     if (!note || !editor) return;
 
     if (editor.isEmpty) {
-      setEmptyToast(true);
-      setTimeout(() => setEmptyToast(false), 2500);
+      flashEmptyToast();
       return;
     }
 
@@ -263,24 +326,59 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const handleGetResources = async () => {
     if (!note || !editor) return;
 
-    if (resourcesOpen) {
-      setResourcesOpen(false);
+    if (sidePanel === 'resources') {
+      setSidePanel(null);
       return;
     }
 
     if (editor.isEmpty) {
-      setEmptyToast(true);
-      setTimeout(() => setEmptyToast(false), 2500);
+      flashEmptyToast();
       return;
     }
 
-    setResourcesOpen(true);
+    setSidePanel('resources');
 
     if (resourcesStatus === 'done' && resourcesData) return;
     if (resourcesStatus === 'loading') return;
 
     await runResourcesFetch();
   };
+
+  const toggleDetails = () => {
+    if (details) {
+      setDetails(null);
+      return;
+    }
+    setDetails({
+      words: wordCount,
+      characters: editor?.state.doc.textContent.length ?? 0,
+      timeSpentSeconds: pastSeconds + visitSeconds(),
+      savedAt,
+    });
+  };
+
+  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !editor) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      showToast(IMAGE_TOO_LARGE_MESSAGE);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = readerEvent => {
+      const src = readerEvent.target?.result as string;
+      if (!src) return;
+      editor.chain().focus().setImage({ src }).run();
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const pickImage = () => imageInputRef.current?.click();
+  const openLinkEditor = () => setLinkEditorOpen(true);
+  const closeLinkEditor = useCallback(() => setLinkEditorOpen(false), []);
+  const closeDetails = useCallback(() => setDetails(null), []);
 
   // ── Empty state ────────────────────────────────────────────────────────────
 
@@ -296,16 +394,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               type="button"
               onClick={onToggleSidebar}
               title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-              className="flex px-2 py-1.5 rounded-md text-sm transition-colors"
-              style={{ color: 'var(--tm-text-secondary)' }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--tm-surface-raised)';
-                (e.currentTarget as HTMLButtonElement).style.color = 'var(--tm-text-primary)';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor = '';
-                (e.currentTarget as HTMLButtonElement).style.color = 'var(--tm-text-secondary)';
-              }}
+              aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+              className="flex px-2 py-1.5 rounded-md text-sm transition-colors text-[var(--tm-text-secondary)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)]"
             >
               {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
             </button>
@@ -329,123 +419,115 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const compact = editorWidth !== null
+    && editorWidth < (onToggleSidebar ? TOP_FORMATTING_MIN_WIDTH.notesPage : TOP_FORMATTING_MIN_WIDTH.overlay);
+
+  const resourcesOpen = sidePanel === 'resources';
+
   return (
     <div
-      ref={containerRef}
-      className="flex-1 flex flex-col overflow-hidden relative"
+      ref={setContainer}
+      onKeyDown={handleShortcuts}
+      className={focusMode
+        ? 'fixed inset-0 z-40 flex flex-col overflow-hidden'
+        : 'flex-1 flex flex-col overflow-hidden relative'}
       style={{ backgroundColor: 'var(--tm-surface)' }}
     >
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      <EditorToolbar editor={editor} sidebarOpen={sidebarOpen} onToggleSidebar={onToggleSidebar}>
-        {showExtendedActions && (
-          <>
-            {/* Learning Resources */}
+      {focusMode ? (
+        <div className="absolute top-3 right-4 z-10 flex items-center gap-2">
+          <NoteSaveStatus status={saveStatus} savedAt={savedAt} onRetry={saveNoteNow} />
+          <button
+            type="button"
+            onClick={() => setFocusMode(false)}
+            title="Leave focus mode (Esc)"
+            className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-sm font-medium outline-none focus-visible:ring-2 transition-colors text-[var(--tm-text-secondary)] hover:text-[var(--tm-text-primary)] hover:bg-[var(--tm-surface-raised)]"
+            style={{ ...RING_STYLE, border: '1px solid var(--tm-border)' }}
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+            Leave focus
+          </button>
+        </div>
+      ) : (
+        <EditorToolbar
+          editor={editor}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={onToggleSidebar}
+          showFormatting={!compact}
+          onPickImage={pickImage}
+          onEditLink={openLinkEditor}
+        >
+          <NoteSaveStatus status={saveStatus} savedAt={savedAt} onRetry={saveNoteNow} />
+
+          {wordCount > 0 && (
+            <button
+              type="button"
+              data-note-details-trigger
+              onClick={toggleDetails}
+              title="Words, reading time and time spent"
+              aria-expanded={!!details}
+              className="hidden @4xl:flex items-center gap-1 h-8 px-2 rounded-md text-xs font-medium outline-none transition-colors focus-visible:ring-2 text-[var(--tm-text-muted)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)]"
+              style={RING_STYLE}
+            >
+              <Type className="w-3.5 h-3.5" aria-hidden="true" />
+              {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}
+            </button>
+          )}
+
+          {showExtendedActions && (
             <button
               type="button"
               onClick={handleGetResources}
               title={resourcesOpen ? 'Close resources panel' : 'Get AI learning resources'}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+              aria-label="Resources"
+              aria-pressed={resourcesOpen}
+              className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-offset-1 hover:bg-[var(--tm-accent-subtle)]"
               style={{
-                color: resourcesOpen ? 'var(--tm-accent)' : 'var(--tm-text-secondary)',
+                ...RING_STYLE,
+                color: 'var(--tm-accent)',
                 backgroundColor: resourcesOpen ? 'var(--tm-accent-subtle)' : undefined,
-              }}
-              onMouseEnter={e => {
-                if (!resourcesOpen) (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--tm-surface-raised)';
-              }}
-              onMouseLeave={e => {
-                if (!resourcesOpen) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '';
               }}
             >
               {resourcesStatus === 'loading' && !resourcesOpen
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <LibraryBig className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">Resources</span>
+              <span className="hidden @4xl:inline">Resources</span>
             </button>
-
-            {/* Download PDF */}
-            <button
-              type="button"
-              onClick={handleDownloadPDF}
-              disabled={pdfLoading}
-              title="Download as PDF"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ color: 'var(--tm-text-secondary)' }}
-              onMouseEnter={e => {
-                if (!pdfLoading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'var(--tm-surface-raised)';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLButtonElement).style.backgroundColor = '';
-              }}
-            >
-              {pdfLoading
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                : <Download className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">{pdfLoading ? 'Exporting…' : 'PDF'}</span>
-            </button>
-          </>
-        )}
-
-        {wordCount > 0 && (
-          <span
-            className="hidden sm:flex items-center gap-1 px-2 text-xs font-medium"
-            style={{ color: 'var(--tm-text-muted)' }}
-            title="Word count"
-          >
-            <Type className="w-3.5 h-3.5" />
-            {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}
-          </span>
-        )}
-
-        <button
-          onClick={handleSave}
-          disabled={saveStatus === 'saving'}
-          className="btn flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium disabled:cursor-wait"
-          style={saveStatus === 'saved' ? {
-            backgroundColor: 'var(--tm-success-subtle)',
-            color: 'var(--tm-success-text)',
-          } : saveStatus === 'error' ? {
-            backgroundColor: 'var(--tm-danger-subtle)',
-            color: 'var(--tm-danger)',
-          } : {
-            backgroundColor: 'var(--tm-accent)',
-            color: 'var(--tm-accent-text)',
-          }}
-        >
-          {saveStatus === 'saving' ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Saving…
-            </>
-          ) : saveStatus === 'saved' ? (
-            'Saved ✓'
-          ) : saveStatus === 'error' ? (
-            'Failed to save'
-          ) : (
-            <>
-              <Save className="w-3.5 h-3.5" />
-              Save
-            </>
           )}
-        </button>
-      </EditorToolbar>
 
-      {/* ── Main content: editor column + resources side panel ───────────── */}
+          <div data-note-details-trigger className="contents">
+            <NoteMoreMenu
+              onDownloadPdf={showExtendedActions ? handleDownloadPDF : undefined}
+              pdfLoading={pdfLoading}
+              onShowDetails={toggleDetails}
+              outlineOpen={sidePanel === 'outline'}
+              onToggleOutline={() => setSidePanel(p => (p === 'outline' ? null : 'outline'))}
+              onFocusMode={showExtendedActions ? () => setFocusMode(true) : undefined}
+            />
+          </div>
+
+          {details && <NoteDetails stats={details} onClose={closeDetails} />}
+        </EditorToolbar>
+      )}
+
+      {/* ── Main content: editor column + side panel ─────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
         {/* Editor column */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* ── Title ──────────────────────────────────────────────────────── */}
-          <div className="px-6 sm:px-10 pt-6 pb-2">
+          <div className={`px-6 sm:px-10 pb-2 ${focusMode ? `pt-14 ${FOCUS_COLUMN}` : 'pt-6'}`}>
             <input
               type="text"
               value={title}
               onChange={e => handleTitleChange(e.target.value)}
               placeholder="Untitled Note"
+              aria-label="Note title"
               className="w-full text-2xl sm:text-3xl font-bold text-text-primary placeholder-text-muted focus:outline-none bg-transparent"
             />
           </div>
 
           {/* ── Tag picker (collapsible) ──────────────────────────────────────── */}
-          {allTags.length > 0 && (
+          {allTags.length > 0 && !focusMode && (
             <div className="px-6 sm:px-10 pb-3">
               <button
                 type="button"
@@ -501,24 +583,32 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </div>
           )}
 
-          <div className="mx-6 sm:mx-10 border-t border-border-subtle" />
+          <div className={focusMode ? `w-full ${FOCUS_COLUMN}` : ''}>
+            <div className="mx-6 sm:mx-10 border-t border-border-subtle" />
+          </div>
 
           {/* ── Editor body ──────────────────────────────────────────────────── */}
-          <div className="flex-1 overflow-y-auto px-6 sm:px-10 py-4 scrollbar-custom">
-            <EditorContent editor={editor} />
+          <div className="flex-1 overflow-y-auto scrollbar-custom">
+            <div className={`px-6 sm:px-10 py-4 ${focusMode ? FOCUS_COLUMN : ''}`}>
+              <EditorContent editor={editor} />
+            </div>
           </div>
+
+          {compact && !focusMode && (
+            <BottomFormattingBar editor={editor} onPickImage={pickImage} onEditLink={openLinkEditor} />
+          )}
         </div>
 
-        {/* ── Resources side panel ──────────────────────────────────────────── */}
+        {/* ── Side panel: Learning resources or Outline ─────────────────────── */}
         <div
           className="shrink-0 flex flex-col border-l overflow-hidden transition-[width] duration-300 ease-in-out"
           style={{
-            width: resourcesOpen ? '300px' : '0px',
+            width: sidePanel && !focusMode ? (sidePanel === 'outline' ? '260px' : '300px') : '0px',
             borderColor: 'var(--tm-border)',
             backgroundColor: 'var(--tm-surface-raised)',
           }}
         >
-          <div className="w-[300px] flex flex-col h-full">
+          <div className={`${sidePanel === 'outline' ? 'w-[260px]' : 'w-[300px]'} flex flex-col h-full`}>
             {/* Panel header */}
             <div
               className="flex items-center justify-between px-4 py-3 border-b shrink-0"
@@ -526,9 +616,11 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             >
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold" style={{ color: 'var(--tm-text-primary)' }}>Learning Resources</span>
+                  <span className="text-sm font-semibold" style={{ color: 'var(--tm-text-primary)' }}>
+                    {sidePanel === 'outline' ? 'Outline' : 'Learning Resources'}
+                  </span>
                 </div>
-                {resourcesData?.topic && (
+                {sidePanel === 'resources' && resourcesData?.topic && (
                   <div className="flex justify-start items-center gap-1 px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: 'var(--tm-accent-subtle)' }}>
                     <p className='text-xs'>Context caught: </p>
                     <span className="text-sm font-medium" style={{ color: 'var(--tm-accent)' }}>{resourcesData.topic}</span>
@@ -537,11 +629,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setResourcesOpen(false)}
-                className="p-1 rounded-md transition-colors"
-                style={{ color: 'var(--tm-text-secondary)' }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--tm-surface)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '')}
+                onClick={() => setSidePanel(null)}
+                aria-label={sidePanel === 'outline' ? 'Close outline' : 'Close resources'}
+                className="p-1 rounded-md transition-colors text-[var(--tm-text-secondary)] hover:bg-[var(--tm-surface)]"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -549,14 +639,16 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 
             {/* Panel body */}
             <div className="flex-1 overflow-y-auto scrollbar-custom">
-              {resourcesStatus === 'loading' && (
+              {sidePanel === 'outline' && <NoteOutline editor={editor} />}
+
+              {sidePanel === 'resources' && resourcesStatus === 'loading' && (
                 <div className="px-4 py-10 flex flex-col items-center gap-3">
                   <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'var(--tm-accent)' }} />
                   <p className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>Analyzing your note…</p>
                 </div>
               )}
 
-              {resourcesStatus === 'error' && (
+              {sidePanel === 'resources' && resourcesStatus === 'error' && (
                 <div className="px-4 py-8 flex flex-col items-center gap-3 text-center">
                   <p className="text-sm" style={{ color: 'var(--tm-danger)' }}>{resourcesError}</p>
                   <button
@@ -570,13 +662,13 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 </div>
               )}
 
-              {resourcesStatus === 'done' && resourcesData && resourcesData.message && (
+              {sidePanel === 'resources' && resourcesStatus === 'done' && resourcesData && resourcesData.message && (
                 <div className="px-4 py-8 flex flex-col items-center gap-1 text-center">
                   <p className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>{resourcesData.message}</p>
                 </div>
               )}
 
-              {resourcesStatus === 'done' && resourcesData && !resourcesData.message && (
+              {sidePanel === 'resources' && resourcesStatus === 'done' && resourcesData && !resourcesData.message && (
                 <div className="px-3 py-3 flex flex-col gap-2.5">
                   {resourcesData.resources.map((r, i) => (
                     <a
@@ -609,6 +701,27 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ── Floating editor UI ───────────────────────────────────────────── */}
+      {editor && (
+        <NoteSelectionMenu
+          editor={editor}
+          noteTags={note.tags}
+          onEditLink={openLinkEditor}
+          linkEditorOpen={linkEditorOpen}
+        />
+      )}
+      {editor && linkEditorOpen && <LinkEditor editor={editor} onClose={closeLinkEditor} />}
+      <SlashMenu store={slashStore} />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={handleImageFile}
+      />
 
       {/* ── Toasts ───────────────────────────────────────────────────────── */}
       {emptyToast && (
@@ -696,6 +809,99 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         .notes-editor u {
           text-decoration: underline;
         }
+        .notes-editor s {
+          text-decoration: line-through;
+        }
+
+        /* Links, quotes, code and dividers (Tailwind's reset leaves them unstyled) */
+        .notes-editor a {
+          color: var(--tm-accent);
+          text-decoration: underline;
+          text-underline-offset: 2px;
+          cursor: text;
+        }
+        .notes-editor blockquote {
+          border-left: 3px solid var(--tm-border-strong);
+          padding: 0.125rem 0 0.125rem 0.875rem;
+          margin: 0.5rem 0;
+        }
+        .notes-editor blockquote p {
+          color: var(--tm-text-muted);
+        }
+        .notes-editor code {
+          font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 0.875em;
+          padding: 0.1em 0.35em;
+          border-radius: 4px;
+          background-color: var(--tm-surface-raised);
+          border: 1px solid var(--tm-border-subtle);
+        }
+        .notes-editor pre {
+          margin: 0.5rem 0;
+          padding: 0.625rem 0.75rem;
+          border-radius: 8px;
+          background-color: var(--tm-surface-raised);
+          border: 1px solid var(--tm-border-subtle);
+          white-space: pre-wrap;
+        }
+        .notes-editor pre code {
+          padding: 0;
+          border: 0;
+          background: none;
+          color: var(--tm-text-primary);
+        }
+        .notes-editor hr {
+          border: 0;
+          border-top: 1px solid var(--tm-border);
+          margin: 1rem 0;
+        }
+        .notes-editor hr.ProseMirror-selectednode {
+          border-top-color: var(--tm-accent);
+        }
+
+        /* Checklists */
+        .notes-editor ul[data-type="taskList"] {
+          list-style: none;
+          padding-left: 0.125rem;
+        }
+        .notes-editor ul[data-type="taskList"] li {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.5rem;
+        }
+        .notes-editor ul[data-type="taskList"] li > label {
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          height: 1.6em;
+          user-select: none;
+        }
+        .notes-editor ul[data-type="taskList"] li > label input {
+          width: 1rem;
+          height: 1rem;
+          margin: 0;
+          cursor: pointer;
+          accent-color: var(--tm-accent);
+        }
+        .notes-editor ul[data-type="taskList"] li > div {
+          flex: 1;
+          min-width: 0;
+        }
+        .notes-editor ul[data-type="taskList"] li > div > p {
+          margin-bottom: 0;
+        }
+        .notes-editor ul[data-type="taskList"] li[data-checked="true"] > div {
+          text-decoration: line-through;
+          text-decoration-color: var(--tm-pencil);
+        }
+        .notes-editor ul[data-type="taskList"] li[data-checked="true"] > div p {
+          color: var(--tm-text-muted);
+        }
+
+        /* Slash command: the "/query" being typed */
+        .notes-editor .suggestion {
+          color: var(--tm-accent);
+        }
 
         /* Tables */
         .notes-editor .tableWrapper {
@@ -738,8 +944,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         .notes-editor mark {
           border-radius: 3px;
           padding: 0 2px;
-          /* Pastel highlight colors, so keep light-mode ink on them in dark mode too */
-          color: #171717;
+          /* Pastel highlight colors, so keep light-mode ink on them in dark mode too.
+             !important because Tiptap writes an inline color: inherit on every mark. */
+          color: #171717 !important;
         }
 
         /* Pasted / inserted images */

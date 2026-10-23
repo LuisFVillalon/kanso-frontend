@@ -103,7 +103,8 @@ const NotesView: React.FC<NotesViewProps> = ({ embedded = false }) => {
     <div
       ref={panelRef}
       className="card overflow-hidden flex"
-      style={{ height: embedded ? 'calc(100vh - 280px)' : 'calc(100vh - 96px)', minHeight: '420px' }}
+      // Ends above the phone's tab bar, so the editor's bottom formatting bar stays reachable.
+      style={{ height: `calc(100vh - ${embedded ? 280 : 96}px - var(--tm-tabbar-offset, 0px))`, minHeight: '420px' }}
     >
       {/* Left sidebar */}
       <div

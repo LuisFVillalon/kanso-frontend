@@ -181,6 +181,23 @@ export function useNotePdfExport({ editor, title }: UseNotePdfExportOptions) {
             min-width: 0;
           }
           .pdf-list-text p { margin: 0; }
+          /* Checklist boxes: drawn with borders, which html2canvas renders reliably */
+          .pdf-check {
+            display: inline-block;
+            width: 11px;
+            height: 11px;
+            margin-top: 4px;
+            border: 1.5px solid #9ca3af;
+            border-radius: 3px;
+            box-sizing: border-box;
+            color: #ffffff;
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 8px;
+            text-align: center;
+          }
+          .pdf-check.is-checked { background: #374151; border-color: #374151; }
+          li.pdf-checked > .pdf-list-text { color: #6b7280; text-decoration: line-through; }
           /* Nested list indent */
           .pdf-list-text ul,
           .pdf-list-text ol { margin: 4px 0 4px 8px; }
@@ -245,6 +262,27 @@ export function useNotePdfExport({ editor, title }: UseNotePdfExportOptions) {
             text-align: left;
           }
 
+          /* ── Links, code blocks, dividers ────────────────────────────────── */
+          .pdf-body a { color: #1d4ed8; text-decoration: underline; }
+          .pdf-body s { text-decoration: line-through; }
+          .pdf-body pre {
+            background: #f3f4f6;
+            border-radius: 4px;
+            padding: 8px 10px;
+            margin: 8px 0;
+            white-space: pre-wrap;
+            break-inside: avoid; page-break-inside: avoid;
+          }
+          .pdf-body pre code {
+            font-size: 11px;
+            color: #374151;
+            background: none;
+            padding: 0;
+            vertical-align: baseline;
+            line-height: 1.5;
+          }
+          .pdf-body hr { border: 0; border-top: 1px solid #e5e7eb; margin: 14px 0; }
+
           /* ── Blockquote ──────────────────────────────────────────────────── */
           .pdf-body blockquote {
             border-left: 3px solid #d1d5db;
@@ -284,6 +322,7 @@ export function useNotePdfExport({ editor, title }: UseNotePdfExportOptions) {
         const allLists = Array.from(pdfBody.querySelectorAll('ul, ol')).reverse();
         allLists.forEach(list => {
           const isOrdered = list.tagName === 'OL';
+          const isChecklist = list.getAttribute('data-type') === 'taskList';
           let counter = 0;
           Array.from(list.children).forEach(child => {
             if (child.tagName !== 'LI') return;
@@ -291,7 +330,18 @@ export function useNotePdfExport({ editor, title }: UseNotePdfExportOptions) {
 
             const marker = document.createElement('span');
             marker.className = 'pdf-list-marker';
-            marker.textContent = isOrdered ? `${counter}.` : '•';
+            if (isChecklist) {
+              // Swap the editor's <label><input type=checkbox> for a drawn box.
+              const checked = child.getAttribute('data-checked') === 'true';
+              child.querySelector(':scope > label')?.remove();
+              const box = document.createElement('span');
+              box.className = checked ? 'pdf-check is-checked' : 'pdf-check';
+              box.textContent = checked ? '✓' : '';
+              marker.appendChild(box);
+              if (checked) child.classList.add('pdf-checked');
+            } else {
+              marker.textContent = isOrdered ? `${counter}.` : '•';
+            }
 
             const textWrap = document.createElement('span');
             textWrap.className = 'pdf-list-text';

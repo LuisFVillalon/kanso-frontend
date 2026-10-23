@@ -75,19 +75,23 @@ function collectNotableRuns(node: JSONContent, highlights: string[], styledText:
   (node.content ?? []).forEach(child => collectNotableRuns(child, highlights, styledText));
 }
 
+const LIST_TYPES = new Set(['bulletList', 'orderedList', 'taskList']);
+
+/** Bulleted, numbered and checklist items as "- text", "1. text" and "- [x] text" lines. */
 function extractListItems(list: JSONContent, ordered: boolean, depth: number, lines: string[]): void {
   let index = 1;
 
   for (const item of list.content ?? []) {
-    if (item.type !== 'listItem') continue;
+    if (item.type !== 'listItem' && item.type !== 'taskItem') continue;
 
     const indent = '  '.repeat(depth);
-    const bullet = ordered ? `${index}.` : '-';
+    const checkbox = item.type === 'taskItem' ? (item.attrs?.checked ? ' [x]' : ' [ ]') : '';
+    const bullet = (ordered ? `${index}.` : '-') + checkbox;
     const textParts: string[] = [];
     const nestedLists: JSONContent[] = [];
 
     for (const child of item.content ?? []) {
-      if (child.type === 'bulletList' || child.type === 'orderedList') {
+      if (LIST_TYPES.has(child.type ?? '')) {
         nestedLists.push(child);
       } else {
         const text = collectText(child).trim();
@@ -136,6 +140,7 @@ function walk(node: JSONContent, out: Collectors): void {
       return;
     }
     case 'bulletList':
+    case 'taskList':
       extractListItems(node, false, 0, out.lists);
       return;
     case 'orderedList':
