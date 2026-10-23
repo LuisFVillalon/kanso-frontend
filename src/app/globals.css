@@ -1353,8 +1353,11 @@ html[data-page-style="blank"] body {
 }
 @media (max-width: 767px) {
   .app-content { padding-bottom: calc(var(--tm-tabbar-h) + env(safe-area-inset-bottom)); }
-  /* Toasts clear the tab bar. */
-  html:has(.app-tabbar) { --tm-toast-offset: calc(var(--tm-tabbar-h) + env(safe-area-inset-bottom)); }
+  /* Toasts clear the tab bar, and full-height panels (Notes) end above it. */
+  html:has(.app-tabbar) {
+    --tm-toast-offset: calc(var(--tm-tabbar-h) + env(safe-area-inset-bottom));
+    --tm-tabbar-offset: calc(var(--tm-tabbar-h) + env(safe-area-inset-bottom));
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
