@@ -14,11 +14,11 @@ export const METRIC_INFO: Record<MoodMetric, { label: string; button: string; co
   habits: { label: 'Habits completed', button: 'Habits', color: 'var(--tm-success)' },
 };
 
-/** The scatter's x axis title and the footnote's name for "more of it". */
-const SCATTER_AXIS: Record<MoodMetric, { title: string; more: string }> = {
-  tasks: { title: 'Tasks you finished that day', more: 'tasks finished' },
-  notes: { title: 'Minutes in notes that day', more: 'time in notes' },
-  habits: { title: 'Habits checked off that day', more: 'habits checked off' },
+/** The scatter's x axis title, its word for "less of it", and the footnote's name for "more of it". */
+const SCATTER_AXIS: Record<MoodMetric, { title: string; less: string; more: string }> = {
+  tasks: { title: 'Tasks you finished that day', less: 'fewer', more: 'tasks finished' },
+  notes: { title: 'Time in notes that day', less: 'less', more: 'time in notes' },
+  habits: { title: 'Habits checked off that day', less: 'fewer', more: 'habits checked off' },
 };
 
 /** A metric value as people read it: a count, or whole minutes as "1h 5m". */
@@ -43,9 +43,9 @@ const NARROW_HEIGHT = 180;
 const SHORT_QUERY = '(max-height: 760px)';
 const PAD_TOP = 12;
 const PAD_BOTTOM = 36;
-/** The scatter's extra room: a y axis title above, and an x axis line, ticks and title below. */
+/** The scatter's extra room: a y axis title above, and an x axis line, ticks, end labels and title below. */
 const SCATTER_PAD_TOP = 26;
-const SCATTER_PAD_BOTTOM = 50;
+const SCATTER_PAD_BOTTOM = 56;
 const DEFAULT_WIDTH = 560;
 const MIN_WIDTH = 280;
 
@@ -255,11 +255,11 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
             <text x={xOf(t)} y={axisY + 16} textAnchor="middle" fontSize={11} fill="var(--tm-text-muted)">{formatMetric(metric, t)}</text>
           </g>
         ))}
-        <text x={padLeft} y={height - 3} fontSize={10} fill="var(--tm-text-muted)">fewer</text>
+        <text x={padLeft} y={height - 15} fontSize={10} fill="var(--tm-text-muted)">{SCATTER_AXIS[metric].less}</text>
         <text x={padLeft + plotWidth / 2} y={height - 3} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--tm-text-muted)">
           {SCATTER_AXIS[metric].title}
         </text>
-        <text x={width - padRight} y={height - 3} textAnchor="end" fontSize={10} fill="var(--tm-text-muted)">more</text>
+        <text x={width - padRight} y={height - 15} textAnchor="end" fontSize={10} fill="var(--tm-text-muted)">more</text>
         {points.map(p => (
           <circle
             key={p.dateStr}
@@ -333,7 +333,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
       </svg>
       {view === 'scatter' && (
         <p className="m-0 mt-1 text-[11px] text-text-muted">
-          Each dot is one day. The line shows your typical mood on days with fewer vs more {SCATTER_AXIS[metric].more}.
+          Each dot is one day. The line shows your typical mood on days with {SCATTER_AXIS[metric].less} vs more {SCATTER_AXIS[metric].more}.
         </p>
       )}
 

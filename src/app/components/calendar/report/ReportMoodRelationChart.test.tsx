@@ -35,7 +35,7 @@ describe('ReportMoodRelationChart scatter', () => {
     expect(texts).toContain('fewer');
     expect(texts).toContain('more');
     expect(texts.some(t => t?.includes('→'))).toBe(false);
-    // One tick per labelled value, plus the axis line itself.
+    // The five dashed mood grid lines, plus one tick per labelled value.
     const tickLabels = ['0', '1', '2', '3', '4'].filter(n => texts.includes(n));
     expect(tickLabels).toHaveLength(5);
     expect(host.querySelectorAll('svg g > line')).toHaveLength(5 + 5);
@@ -44,10 +44,23 @@ describe('ReportMoodRelationChart scatter', () => {
 
   it('names the unit for note time and habits', () => {
     renderScatter('notes');
-    expect(svgTexts()).toContain('Minutes in notes that day');
-    expect(host.textContent).toContain('fewer vs more time in notes.');
+    expect(svgTexts()).toContain('Time in notes that day');
+    expect(svgTexts()).toContain('less');
+    expect(svgTexts()).not.toContain('fewer');
+    expect(host.textContent).toContain('less vs more time in notes.');
     renderScatter('habits');
     expect(svgTexts()).toContain('Habits checked off that day');
+    expect(svgTexts()).toContain('fewer');
     expect(host.textContent).toContain('fewer vs more habits checked off.');
+  });
+
+  it('puts the end labels on their own row between the tick labels and the axis title', () => {
+    renderScatter('tasks');
+    const textEl = (content: string) => [...host.querySelectorAll('svg text')].find(t => t.textContent === content)!;
+    const y = (content: string) => Number(textEl(content).getAttribute('y'));
+    const title = y('Tasks you finished that day');
+    expect(y('fewer')).toBe(y('more'));
+    expect(y('fewer')).toBeLessThan(title);
+    expect(y('fewer')).toBeGreaterThan(y('4'));
   });
 });
