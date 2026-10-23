@@ -87,6 +87,8 @@ interface ReportMoodChartProps {
   onWeek: (week: MoodCheckin) => void;
   /** A month of the year was clicked: open that month's report. */
   onMonth: (monthStart: string) => void;
+  /** A monthly check-in's ◇ was clicked: edit it. */
+  onMonthCheckin: (month: MoodCheckin) => void;
 }
 
 /**
@@ -94,11 +96,12 @@ interface ReportMoodChartProps {
  * by its value, with hollow dots on the axis for days without one (a month
  * adds a 7-day rolling average) and each weekly check-in as a dashed span
  * across its week; for a year, each month's average with its interquartile
- * range and a ◇ for the monthly check-in. Mood, energy and stress share the
- * 1–5 scale. Dots and labels are HTML positioned over a stretched SVG of
- * lines, so nothing distorts at narrow widths.
+ * range and a ◇ for the monthly check-in, which opens it to edit. Mood,
+ * energy and stress share the 1–5 scale. Dots and labels are HTML
+ * positioned over a stretched SVG of lines, so nothing distorts at narrow
+ * widths.
  */
-const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDay, weeks, months: monthCheckins, onDay, onWeek, onMonth }) => {
+const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDay, weeks, months: monthCheckins, onDay, onWeek, onMonth, onMonthCheckin }) => {
   const [series, setSeries] = useState<MoodSeries>('mood');
   const { label: seriesLabel, names } = SERIES.find(s => s.series === series)!;
   const isYear = period.kind === 'year';
@@ -246,18 +249,6 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
               );
             })}
 
-            {isYear && isMood && buckets.map((b, i) => {
-              const checkin = monthCheckins.get(b.key);
-              return checkin ? (
-                <span
-                  key={`diamond-${b.key}`}
-                  className="absolute w-3 h-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-[1.6px] pointer-events-none"
-                  style={{ left: `${xOf(i, n)}%`, top: `${yOf(checkin.mood)}%`, borderColor: moodColor(checkin.mood) }}
-                  aria-hidden="true"
-                />
-              ) : null;
-            })}
-
             {buckets.map((b, i) => {
               if (b.isFuture) return null;
               const left = `${(i / n) * 100}%`;
@@ -308,6 +299,26 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
               );
             })}
 
+            {isYear && isMood && buckets.map((b, i) => {
+              const checkin = monthCheckins.get(b.key);
+              if (!checkin) return null;
+              const label = `${b.longLabel.split(' ')[0]} monthly check-in: ${moodLabel(checkin.mood)}${checkin.word ? ` · “${checkin.word}”` : ''}`;
+              // After the month dots, so the ◇ stays clickable where it sits on its month's dot.
+              return (
+                <button
+                  key={`diamond-${b.key}`}
+                  type="button"
+                  onClick={() => onMonthCheckin(checkin)}
+                  className="absolute w-4 h-4 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-accent"
+                  style={{ left: `${xOf(i, n)}%`, top: `${yOf(checkin.mood)}%` }}
+                  aria-label={`${label}. Edit`}
+                  title={label}
+                >
+                  <span className="block w-3 h-3 rotate-45 border-[1.6px]" style={{ borderColor: moodColor(checkin.mood) }} />
+                </button>
+              );
+            })}
+
             {!hasValues && (
               <p className="absolute inset-x-0 top-1/3 text-center text-xs sm:text-sm text-text-muted italic px-2">
                 {series === 'mood' ? 'No check-ins in this period' : `No ${lowerName} recorded in this period — it’s optional in the check-in`}
@@ -334,7 +345,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
       <p className="text-[11px] text-text-muted">
         {isYear
-          ? `Dots are each month’s average; the shaded bar covers the middle half of its days${isMood && monthCheckins.size > 0 ? ', and ◇ marks the monthly check-in' : ''}. Click a month to open it.`
+          ? `Dots are each month’s average; the shaded bar covers the middle half of its days${isMood && monthCheckins.size > 0 ? '; ◇ marks the monthly check-in — click it to edit' : ''}. Click a month to open it.`
           : `Click a dot to edit that day’s check-in. Hollow dots are days without one — click to log it.${period.kind === 'month' ? ' The solid line is your 7-day average: each point averages that day and the 6 before it, shown once 3 of those days have a check-in.' : ''}${weekSpans.length > 0 ? ' Dashed lines are weekly check-ins.' : ''}`}
       </p>
     </div>
