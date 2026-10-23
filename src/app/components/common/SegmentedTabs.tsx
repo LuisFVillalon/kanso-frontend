@@ -28,6 +28,8 @@ interface SegmentedTabsProps<T extends string> {
   labels?: 'all' | 'selected';
   /** A clicked tab presses like a key. */
   press?: boolean;
+  /** 'small' is the compact switch the report charts use, for views inside a tab. */
+  size?: 'default' | 'small';
   className?: string;
 }
 
@@ -39,7 +41,7 @@ export const segmentedTabId = (idBase: string, value: string) => `${idBase}-tab-
  * tablist: one tab is selected, Tab lands on it, and the arrow keys, Home and
  * End move the selection.
  */
-function SegmentedTabs<T extends string>({ label, tabs, value, onChange, idBase, panelId, labels = 'all', press: pressOnClick = false, className = '' }: SegmentedTabsProps<T>) {
+function SegmentedTabs<T extends string>({ label, tabs, value, onChange, idBase, panelId, labels = 'all', press: pressOnClick = false, size = 'default', className = '' }: SegmentedTabsProps<T>) {
   const listRef = useRef<HTMLDivElement>(null);
   const { press, pressing } = useKeyPress<T>();
 
@@ -65,7 +67,7 @@ function SegmentedTabs<T extends string>({ label, tabs, value, onChange, idBase,
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className={`inline-flex items-center gap-1 p-1 rounded-lg bg-surface border border-border ${className}`}
+      className={`inline-flex items-center gap-1 ${size === 'small' ? 'p-0.5' : 'p-1'} rounded-lg bg-surface border border-border ${className}`}
     >
       {tabs.map(({ value: tabValue, label: tabLabel, icon: Icon }, i) => {
         const selected = tabValue === value;
@@ -84,10 +86,13 @@ function SegmentedTabs<T extends string>({ label, tabs, value, onChange, idBase,
             data-tip-align={iconOnly && i === tabs.length - 1 ? 'end' : undefined}
             {...(iconOnly ? longPressTip : {})}
             onClick={() => { if (pressOnClick) press(tabValue); onChange(tabValue); }}
-            className={`flex items-center gap-1.5 ${iconOnly ? 'px-2' : 'px-2.5 sm:px-3'} py-1.5 rounded-md text-xs sm:text-sm whitespace-nowrap transition-colors ${
-              selected
-                ? 'bg-accent-subtle text-accent font-semibold'
-                : 'font-medium text-text-secondary hover:text-text-primary hover:bg-surface-raised'
+            className={`flex items-center gap-1.5 whitespace-nowrap transition-colors ${size === 'small'
+              ? `px-2.5 py-1 rounded-md text-xs font-medium ${selected ? 'bg-surface-raised text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`
+              : `${iconOnly ? 'px-2' : 'px-2.5 sm:px-3'} py-1.5 rounded-md text-xs sm:text-sm ${
+                selected
+                  ? 'bg-accent-subtle text-accent font-semibold'
+                  : 'font-medium text-text-secondary hover:text-text-primary hover:bg-surface-raised'
+              }`
             } ${pressing(tabValue) ? 'key-press-play' : ''}`}
           >
             {Icon && <Icon className="w-4 h-4 flex-shrink-0" aria-hidden />}

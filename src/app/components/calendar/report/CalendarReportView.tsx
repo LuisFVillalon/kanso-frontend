@@ -44,7 +44,7 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import ReportActivityChart, { MetricButton, type ActivityMetric } from './ReportActivityChart';
+import ReportActivityChart, { type ActivityMetric } from './ReportActivityChart';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
 import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
@@ -57,23 +57,39 @@ const KINDS: { kind: ReportPeriodKind; label: string }[] = [
 
 const iconClass = 'w-3.5 h-3.5 sm:w-4 sm:h-4';
 
-/** The report's tabs; the open one is the URL's `view` (none for Overview). */
+/** The report's views; the open one is the URL's `view` (none for Overview). */
 export type ReportView = 'overview' | 'tasks' | 'notes' | 'habits' | 'mood' | 'time';
 
-const VIEWS: readonly SegmentedTab<ReportView>[] = [
-  { value: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { value: 'tasks', label: 'Tasks', icon: CircleCheck },
-  { value: 'notes', label: 'Notes', icon: FileText },
-  { value: 'habits', label: 'Habits', icon: Flame },
+/** The report's three tabs, each holding one or more views. */
+type ReportGroup = 'productivity' | 'mood' | 'time';
+
+const GROUPS: readonly SegmentedTab<ReportGroup>[] = [
+  { value: 'productivity', label: 'Productivity', icon: LayoutDashboard },
   { value: 'mood', label: 'Mood', icon: Smile },
   { value: 'time', label: 'Time', icon: Tag },
 ];
 
+const PRODUCTIVITY_VIEWS: readonly SegmentedTab<ReportView>[] = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'tasks', label: 'Tasks' },
+  { value: 'notes', label: 'Notes' },
+  { value: 'habits', label: 'Habits' },
+];
+
+const MOOD_VIEWS: readonly SegmentedTab<MoodView>[] = [
+  { value: 'time', label: 'Over time' },
+  { value: 'patterns', label: 'Patterns' },
+];
+
+const GROUPS_ID = 'report-groups';
 const VIEWS_ID = 'report-views';
 const VIEW_PANEL_ID = 'report-views-tabpanel';
 
-const parseView = (value: string | null): ReportView => VIEWS.find(v => v.value === value)?.value ?? 'overview';
+const VIEW_VALUES: readonly ReportView[] = ['overview', 'tasks', 'notes', 'habits', 'mood', 'time'];
+
+const parseView = (value: string | null): ReportView => VIEW_VALUES.find(v => v === value) ?? 'overview';
 const parseMoodView = (value: string | null): MoodView => (value === 'patterns' ? 'patterns' : 'time');
+const groupOf = (view: ReportView): ReportGroup => (view === 'mood' || view === 'time' ? view : 'productivity');
 
 // ── Stat tiles ──────────────────────────────────────────────────────────────
 
@@ -546,11 +562,12 @@ const ReportSkeleton: React.FC = () => (
 // ── View ────────────────────────────────────────────────────────────────────
 
 /**
- * Weekly / monthly / yearly report on the /reports page, in tabs so each fits
- * one screen: Overview (the stat tiles, the activity chart, highlights and
- * how the time split by tag), then Tasks, Notes, Habits, Mood (Over time or
- * Patterns) and Time. The open tab lives in the URL (`?view=mood&mood=patterns`),
- * so Back, reloads and links keep it, and switching the period keeps the tab.
+ * Weekly / monthly / yearly report on the /reports page, in three tabs whose
+ * views each fit one screen: Productivity (Overview — the stat tiles, the
+ * activity chart, highlights and how the time split by tag — then Tasks, Notes
+ * and Habits), Mood (Over time or Patterns) and Time. The open view lives in
+ * the URL (`?view=tasks`, `?view=mood&mood=patterns`), so Back, reloads and
+ * links keep it, and switching the period keeps the view.
  */
 const CalendarReportView: React.FC = () => {
   const [period, setPeriod] = useState<ReportPeriod>(() => periodContaining('week', new Date()));
@@ -560,12 +577,21 @@ const CalendarReportView: React.FC = () => {
   const searchParams = useSearchParams();
   const view = parseView(searchParams.get('view'));
   const moodView = parseMoodView(searchParams.get('mood'));
+  const group = groupOf(view);
+
+  // A tab reopens on the view it was last left on.
+  const [lastViews, setLastViews] = useState<{ productivity: ReportView; mood: MoodView }>(() => ({
+    productivity: group === 'productivity' ? view : 'overview',
+    mood: moodView,
+  }));
+  if (group === 'productivity' && lastViews.productivity !== view) setLastViews(prev => ({ ...prev, productivity: view }));
+  if (group === 'mood' && lastViews.mood !== moodView) setLastViews(prev => ({ ...prev, mood: moodView }));
 
   const current = periodContaining(period.kind, new Date());
   const isCurrent = isSamePeriod(period, current);
   const label = formatPeriodLabel(period);
 
-  // Each tab is a history entry, so Back returns to the tab before.
+  // Each view is a history entry, so Back returns to the view before.
   const navigate = (next: ReportView, nextMood: MoodView = 'time') => {
     const params = new URLSearchParams(searchParams.toString());
     if (next === 'overview') params.delete('view');
@@ -577,10 +603,18 @@ const CalendarReportView: React.FC = () => {
     window.history.pushState(null, '', query ? `?${query}` : window.location.pathname);
   };
 
-  // On a phone the tabs scroll sideways; keep the open one in sight.
+  const openGroup = (next: ReportGroup) => {
+    if (next === 'productivity') navigate(lastViews.productivity);
+    else if (next === 'mood') navigate('mood', lastViews.mood);
+    else navigate('time');
+  };
+
+  const subTab = group === 'productivity' ? view : group === 'mood' ? moodView : null;
+
+  // On a phone the views' switch can scroll sideways; keep the open one in sight.
   useEffect(() => {
-    document.getElementById(segmentedTabId(VIEWS_ID, view))?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [view]);
+    if (subTab) document.getElementById(segmentedTabId(VIEWS_ID, subTab))?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [subTab]);
 
   return (
     <section className="flex flex-col gap-3 sm:gap-4" aria-labelledby="calendar-report-heading">
@@ -637,25 +671,47 @@ const CalendarReportView: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <div className="max-w-full overflow-x-auto scrollbar-none">
-          <SegmentedTabs
-            label="Report sections"
-            tabs={VIEWS}
-            value={view}
-            onChange={next => navigate(next)}
-            idBase={VIEWS_ID}
-            panelId={VIEW_PANEL_ID}
-          />
-        </div>
-        {view === 'mood' && (
-          <div className="sm:ml-auto flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Mood view">
-            <MetricButton active={moodView === 'time'} onClick={() => navigate('mood', 'time')}>Over time</MetricButton>
-            <MetricButton active={moodView === 'patterns'} onClick={() => navigate('mood', 'patterns')}>Patterns</MetricButton>
+        <SegmentedTabs
+          label="Report sections"
+          tabs={GROUPS}
+          value={group}
+          onChange={openGroup}
+          idBase={GROUPS_ID}
+          panelId={VIEW_PANEL_ID}
+        />
+        {subTab && (
+          <div className="sm:ml-auto max-w-full overflow-x-auto scrollbar-none">
+            {group === 'productivity' ? (
+              <SegmentedTabs
+                label="Productivity view"
+                tabs={PRODUCTIVITY_VIEWS}
+                value={view}
+                onChange={next => navigate(next)}
+                idBase={VIEWS_ID}
+                panelId={VIEW_PANEL_ID}
+                size="small"
+              />
+            ) : (
+              <SegmentedTabs
+                label="Mood view"
+                tabs={MOOD_VIEWS}
+                value={moodView}
+                onChange={next => navigate('mood', next)}
+                idBase={VIEWS_ID}
+                panelId={VIEW_PANEL_ID}
+                size="small"
+              />
+            )}
           </div>
         )}
       </div>
 
-      <div id={VIEW_PANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(VIEWS_ID, view)} className="flex flex-col gap-3 sm:gap-4">
+      <div
+        id={VIEW_PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={[segmentedTabId(GROUPS_ID, group), subTab && segmentedTabId(VIEWS_ID, subTab)].filter(Boolean).join(' ')}
+        className="flex flex-col gap-3 sm:gap-4"
+      >
         {error ? (
           <div className="card-glass p-6 flex flex-col items-center text-center gap-3" role="alert">
             <p className="text-sm text-text-primary">{error}</p>
