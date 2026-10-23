@@ -3,7 +3,7 @@ import React, { act, useImperativeHandle, useRef, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PanelCarousel, {
-  isHomePanels, parseHomePanels, phonePanel, restorePanels, toHomePanels, widePanels,
+  inOrder, isHomePanels, isPanelOrder, movePanel, parseHomePanels, phonePanel, restorePanels, toHomePanels, widePanels,
   type HomePanels, type PanelCarouselHandle, type PanelKey,
 } from './PanelCarousel';
 
@@ -55,6 +55,26 @@ describe('restorePanels', () => {
   });
 });
 
+describe('panel order', () => {
+  it('accepts every panel once, in any order', () => {
+    expect(isPanelOrder(['canvas', 'tasks', 'notes'])).toBe(true);
+    for (const bad of [['tasks', 'notes'], ['tasks', 'tasks', 'notes'], ['tasks', 'notes', 'habits'], 'tasks,notes,canvas', null]) {
+      expect(isPanelOrder(bad)).toBe(false);
+    }
+  });
+
+  it('moves a panel before or after another', () => {
+    expect(movePanel(ALL, 'canvas', 'tasks', false)).toEqual(['canvas', 'tasks', 'notes']);
+    expect(movePanel(ALL, 'tasks', 'notes', true)).toEqual(['notes', 'tasks', 'canvas']);
+    expect(movePanel(ALL, 'tasks', 'canvas', false)).toEqual(['notes', 'tasks', 'canvas']);
+    expect(movePanel(ALL, 'notes', 'notes', true)).toEqual(ALL);
+  });
+
+  it('sorts panels into the order', () => {
+    expect(inOrder(['tasks', 'canvas'], ['canvas', 'notes', 'tasks'])).toEqual(['canvas', 'tasks']);
+  });
+});
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 let container: HTMLDivElement;
@@ -63,6 +83,7 @@ let media: { phone: boolean };
 let changes: HomePanels[];
 let splitChanges: HomePanels[];
 let phoneChanges: PanelKey[];
+let orderChanges: PanelKey[][];
 let drags: [number, number][];
 let handle: PanelCarouselHandle | null;
 
@@ -72,15 +93,23 @@ const Counter: React.FC<{ name: PanelKey; widthPct: number }> = ({ name, widthPc
   return <button type="button" data-counter={name} data-width={widthPct} onClick={() => setCount(c => c + 1)}>{name}:{count}</button>;
 };
 
-interface HarnessProps { initial?: HomePanels; initialSplit?: HomePanels; initialPhone?: PanelKey; available?: PanelKey[]; movable?: boolean }
+interface HarnessProps {
+  initial?: HomePanels;
+  initialSplit?: HomePanels;
+  initialPhone?: PanelKey;
+  initialOrder?: PanelKey[];
+  available?: PanelKey[];
+  movable?: boolean;
+}
 
 const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Harness(
-  { initial = 'tasks,notes', initialSplit = 'tasks,notes', initialPhone = 'tasks', available = ALL, movable = true },
+  { initial = 'tasks,notes', initialSplit = 'tasks,notes', initialPhone = 'tasks', initialOrder = ALL, available = ALL, movable = true },
   ref,
 ) {
   const [value, setValue] = useState<HomePanels>(initial);
   const [splitValue, setSplitValue] = useState<HomePanels>(initialSplit);
   const [phoneValue, setPhoneValue] = useState<PanelKey>(initialPhone);
+  const [order, setOrder] = useState<PanelKey[]>(initialOrder);
   const splitRef = useRef<HTMLDivElement>(null);
   const inner = useRef<PanelCarouselHandle>(null);
   useImperativeHandle(ref, () => ({ show: panel => inner.current?.show(panel) }), []);
@@ -91,6 +120,8 @@ const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Har
       onChange={next => { changes.push(next); setValue(next); }}
       splitValue={splitValue}
       onSplitChange={next => { splitChanges.push(next); setSplitValue(next); }}
+      order={order}
+      onOrderChange={next => { orderChanges.push(next); setOrder(next); }}
       phoneValue={phoneValue}
       onPhoneChange={next => { phoneChanges.push(next); setPhoneValue(next); }}
       available={available}
@@ -121,12 +152,37 @@ const visible = (key: PanelKey) => !!slot(key)?.className.includes('split-slot')
 const onScreen = () => (['tasks', 'notes', 'canvas'] as PanelKey[]).filter(visible);
 const width = (key: PanelKey) => slot(key)!.style.getPropertyValue('--slot-w');
 const dividers = () => [...container.querySelectorAll<HTMLElement>('[data-divider]')];
+/** The panels on screen, left to right as their CSS order places them. */
+const placed = () => onScreen().sort((a, b) => Number(slot(a)!.style.order) - Number(slot(b)!.style.order));
+const grip = (key: PanelKey) => container.querySelector<HTMLElement>(`[data-reorder-grip="${key}"]`)!;
+const announced = () => container.querySelector('[role="status"]')!.textContent;
+const indicator = () => {
+  const bar = container.querySelector<HTMLElement>('[data-drop-indicator]');
+  return bar && [bar.closest<HTMLElement>('[data-drop-key]')!.dataset.dropKey, bar.dataset.dropIndicator];
+};
+/** Lays the drop targets out 100 px apart: across for panels and tabs, down for rails. */
+const layOut = () => {
+  const at = (el: HTMLElement, left: number, top: number, w: number, h: number) => {
+    el.getBoundingClientRect = () => ({ left, top, right: left + w, bottom: top + h, width: w, height: h, x: left, y: top, toJSON: () => ({}) });
+  };
+  const across = [...container.querySelectorAll<HTMLElement>('[data-drop-kind="panel"], [data-drop-kind="tab"]')]
+    .sort((a, b) => Number(a.style.order || 0) - Number(b.style.order || 0));
+  across.forEach((el, i) => at(el, i * 100, 0, 100, 400));
+  container.querySelectorAll<HTMLElement>('[data-drop-kind="rail"]').forEach((el, i) => at(el, 1000, i * 100, 40, 100));
+};
+const pointer = async (type: string, target: EventTarget, x: number, y: number) => {
+  await act(async () => { target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })); });
+};
+const key = async (el: EventTarget, k: string, init: KeyboardEventInit = {}) => {
+  await act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init })); });
+};
 
 beforeEach(() => {
   media = { phone: false };
   changes = [];
   splitChanges = [];
   phoneChanges = [];
+  orderChanges = [];
   drags = [];
   handle = null;
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -203,7 +259,7 @@ describe('PanelCarousel', () => {
     expect(rails()).toEqual(['notes']);
     const rail = container.querySelector('[data-rail="notes"]')!;
     expect([...rail.querySelectorAll('button')].map(b => b.getAttribute('aria-label')))
-      .toEqual(['Add Notes beside the others', 'Show only Notes']);
+      .toEqual(['Move Notes', 'Add Notes beside the others', 'Show only Notes']);
   });
 
   it('shows three panels in columns with a divider between each, saved in Tasks, Notes, Canvas order', async () => {
@@ -325,11 +381,185 @@ describe('PanelCarousel', () => {
       expect(document.activeElement).toBe(tab('Canvas'));
     });
 
+    it('lays the tabs and the swipe track out in the saved order', async () => {
+      await render({ initialOrder: ['canvas', 'tasks', 'notes'] });
+      expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Canvas', 'Tasks', 'Notes']);
+      expect([slot('canvas')!.style.order, slot('tasks')!.style.order, slot('notes')!.style.order]).toEqual(['0', '1', '2']);
+      const el = track();
+      const scrollTo = vi.fn();
+      el.scrollTo = scrollTo;
+      await click(tab('Notes'));
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ left: 2 * (300 + 12) }));
+    });
+
+    it('drags a held tab to a new place, without picking it', async () => {
+      vi.useFakeTimers();
+      await render();
+      layOut();
+      await pointer('pointerdown', tab('Canvas'), 250, 20);
+      await act(async () => { vi.advanceTimersByTime(350); });
+      expect(document.body.textContent).toContain('Moving Canvas');
+      await pointer('pointermove', window, 30, 20);
+      expect(indicator()).toEqual(['tasks', 'before']);
+      await pointer('pointerup', window, 30, 20);
+      await click(tab('Canvas'));
+      expect(orderChanges).toEqual([['canvas', 'tasks', 'notes']]);
+      expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Canvas', 'Tasks', 'Notes']);
+      expect(phoneChanges).toEqual([]);
+      expect(announced()).toBe('Canvas moved to position 1 of 3.');
+      vi.useRealTimers();
+    });
+
+    it('treats a tab pressed and moved straight away as a swipe, not a drag', async () => {
+      vi.useFakeTimers();
+      await render();
+      layOut();
+      await pointer('pointerdown', tab('Canvas'), 250, 20);
+      await pointer('pointermove', tab('Canvas'), 230, 20);
+      await act(async () => { vi.advanceTimersByTime(350); });
+      expect(document.body.textContent).not.toContain('Moving Canvas');
+      await click(tab('Canvas'));
+      expect(phoneChanges).toEqual(['canvas']);
+      expect(orderChanges).toEqual([]);
+      vi.useRealTimers();
+    });
+
+    it('moves the picked tab with Alt and an arrow key', async () => {
+      await render({ initialPhone: 'notes' });
+      await key(tab('Notes'), 'ArrowLeft', { altKey: true });
+      expect(orderChanges).toEqual([['notes', 'tasks', 'canvas']]);
+      expect(phoneChanges).toEqual([]);
+      expect(tab('Notes').getAttribute('aria-selected')).toBe('true');
+      expect(announced()).toBe('Notes moved to position 1 of 3.');
+      await key(tab('Notes'), 'ArrowLeft', { altKey: true });
+      expect(orderChanges).toHaveLength(1);
+    });
+
     it('offers only Tasks and Notes without Canvas, falling back to Tasks', async () => {
       await render({ initialPhone: 'canvas', available: NO_CANVAS });
       expect(tabs().map(t => t.getAttribute('aria-label'))).toEqual(['Tasks', 'Notes']);
       expect(onScreen()).toEqual(['tasks']);
       expect(slot('canvas')).toBeNull();
+    });
+  });
+
+  describe('reordering', () => {
+    it('drags a panel by its grip to the other side of another, showing where it will land', async () => {
+      await render({ initial: 'tasks,notes,canvas' });
+      await click(container.querySelector<HTMLElement>('[data-counter="notes"]')!);
+      layOut();
+      expect(grip('notes').dataset.tip).toBe('Drag to reorder');
+      await pointer('pointerdown', grip('notes'), 150, 10);
+      expect(slot('notes')!.className).toContain('opacity-50');
+      await pointer('pointermove', window, 30, 10);
+      expect(indicator()).toEqual(['tasks', 'before']);
+      await pointer('pointermove', window, 280, 10);
+      expect(indicator()).toEqual(['canvas', 'after']);
+      await pointer('pointerup', window, 280, 10);
+      expect(orderChanges).toEqual([['tasks', 'canvas', 'notes']]);
+      expect(placed()).toEqual(['tasks', 'canvas', 'notes']);
+      expect(indicator()).toBeNull();
+      expect(announced()).toBe('Notes moved to position 3 of 3.');
+      // The panel moved without remounting, and the widths stay with the places.
+      expect(slot('notes')!.textContent).toContain('notes:1');
+      expect(width('notes')).toBe('calc(50% - 5.333333333333333px)');
+      expect(dividers().map(d => d.style.order)).toEqual(['1', '3']);
+      expect(changes).toEqual([]);
+    });
+
+    it('puts a dragged panel back when Escape is pressed', async () => {
+      await render();
+      layOut();
+      await pointer('pointerdown', grip('tasks'), 50, 10);
+      await pointer('pointermove', window, 180, 10);
+      expect(indicator()).toEqual(['notes', 'after']);
+      // Released in the same task as Escape, before a render.
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true, clientX: 180, clientY: 10 }));
+      });
+      expect(indicator()).toBeNull();
+      expect(orderChanges).toEqual([]);
+      expect(announced()).toBe('Moving Tasks cancelled.');
+    });
+
+    it('leaves the order alone when a panel is dropped where it was', async () => {
+      await render();
+      layOut();
+      await pointer('pointerdown', grip('tasks'), 50, 10);
+      await pointer('pointermove', window, 60, 10);
+      await pointer('pointerup', window, 60, 10);
+      expect(orderChanges).toEqual([]);
+    });
+
+    it('moves a panel with the arrow keys on its grip, keeping focus there', async () => {
+      await render({ initial: 'tasks,notes,canvas' });
+      expect(grip('tasks').getAttribute('aria-label')).toBe('Move Tasks');
+      grip('tasks').focus();
+      await key(grip('tasks'), 'ArrowRight');
+      expect(placed()).toEqual(['notes', 'tasks', 'canvas']);
+      expect(announced()).toBe('Tasks moved to position 2 of 3.');
+      await key(grip('tasks'), 'End');
+      expect(placed()).toEqual(['notes', 'canvas', 'tasks']);
+      await key(grip('tasks'), 'ArrowRight');
+      expect(orderChanges).toHaveLength(2);
+      await key(grip('canvas'), 'Home');
+      expect(placed()).toEqual(['canvas', 'notes', 'tasks']);
+      expect(document.activeElement).toBe(grip('tasks'));
+    });
+
+    it('has no grip on a panel shown alone', async () => {
+      await render({ initial: 'notes' });
+      expect(container.querySelector('[data-panel="notes"] [data-reorder-grip]')).toBeNull();
+    });
+
+    it('drops a rail among the panels, showing that panel there', async () => {
+      await render();
+      layOut();
+      await pointer('pointerdown', grip('canvas'), 1020, 50);
+      await pointer('pointermove', window, 120, 10);
+      expect(indicator()).toEqual(['notes', 'before']);
+      await pointer('pointerup', window, 120, 10);
+      expect(orderChanges).toEqual([['tasks', 'canvas', 'notes']]);
+      expect(changes).toEqual(['tasks,notes,canvas']);
+      expect(placed()).toEqual(['tasks', 'canvas', 'notes']);
+      expect(rails()).toEqual([]);
+    });
+
+    it('reorders the rails among themselves, by dragging or with the up and down arrows', async () => {
+      await render({ initial: 'tasks' });
+      expect(rails()).toEqual(['notes', 'canvas']);
+      layOut();
+      await pointer('pointerdown', grip('canvas'), 1020, 150);
+      await pointer('pointermove', window, 1020, 20);
+      expect(indicator()).toEqual(['notes', 'before']);
+      await pointer('pointerup', window, 1020, 20);
+      expect(rails()).toEqual(['canvas', 'notes']);
+      expect(changes).toEqual([]);
+      grip('canvas').focus();
+      await key(grip('canvas'), 'ArrowDown');
+      expect(rails()).toEqual(['notes', 'canvas']);
+      expect(document.activeElement).toBe(grip('canvas'));
+      expect(announced()).toBe('Canvas moved to position 2 of 2.');
+    });
+
+    it('lays the panels and rails out in the saved order, and adds a panel back in its place', async () => {
+      await render({ initial: 'canvas,tasks', initialOrder: ['canvas', 'notes', 'tasks'] });
+      expect(placed()).toEqual(['canvas', 'tasks']);
+      await click(control('Add Notes beside the others'));
+      expect(changes).toEqual(['tasks,notes,canvas']);
+      expect(placed()).toEqual(['canvas', 'notes', 'tasks']);
+      await click(control('Hide Canvas'));
+      await click(control('Hide Notes'));
+      expect(rails()).toEqual(['canvas', 'notes']);
+    });
+
+    it('keeps the last panel on, maximize and restore working in any order', async () => {
+      await render({ initial: 'tasks,notes,canvas', initialOrder: ['notes', 'canvas', 'tasks'] });
+      await click(control('Show only Canvas'));
+      expect(rails()).toEqual(['notes', 'tasks']);
+      await click(control('Back to Tasks + Notes + Canvas'));
+      expect(placed()).toEqual(['notes', 'canvas', 'tasks']);
     });
   });
 

@@ -60,15 +60,18 @@ vi.mock('@/app/context/AppShellContext', () => ({
 // The panels offered, on and on a phone are listed on the wrapper, with a button for a phone's pick.
 vi.mock('@/app/components/common/PanelCarousel', async importOriginal => ({
   ...(await importOriginal<object>()),
-  default: ({ renderPanel, available, value, phoneValue, onPhoneChange }: {
+  default: ({ renderPanel, available, value, phoneValue, onPhoneChange, order, onOrderChange }: {
     renderPanel: (key: 'canvas', opts: { widthPct: number }) => React.ReactNode;
     available: string[];
     value: string;
     phoneValue: string;
     onPhoneChange: (next: 'notes') => void;
+    order: string[];
+    onOrderChange: (next: string[]) => void;
   }) => (
-    <div data-available={available.join(',')} data-value={value} data-phone={phoneValue}>
+    <div data-available={available.join(',')} data-value={value} data-phone={phoneValue} data-order={order.join(',')}>
       <button type="button" data-phone-pick onClick={() => onPhoneChange('notes')} />
+      <button type="button" data-reorder onClick={() => onOrderChange(['canvas', 'tasks', 'notes'])} />
       {renderPanel('canvas', { widthPct: 50 })}
     </div>
   ),
@@ -184,6 +187,26 @@ describe('TaskManager home panels', () => {
     expect(carousel.getAttribute('data-phone')).toBe('notes');
     expect(localStorage.getItem('tm-home-phone-panel:u1')).toBe('"notes"');
     expect(localStorage.getItem('tm-home-panels')).toBe('"tasks,notes,canvas"');
+  });
+
+  it('remembers the panels\' order on this device, starting from Tasks, Notes, Canvas', async () => {
+    await render();
+    const carousel = container.querySelector('[data-available]')!;
+    expect(carousel.getAttribute('data-order')).toBe('tasks,notes,canvas');
+    await act(async () => container.querySelector<HTMLElement>('[data-reorder]')!.click());
+    expect(carousel.getAttribute('data-order')).toBe('canvas,tasks,notes');
+    expect(localStorage.getItem('tm-home-panel-order:u1')).toBe('["canvas","tasks","notes"]');
+    expect(localStorage.getItem('tm-home-panels')).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render();
+    expect(container.querySelector('[data-available]')!.getAttribute('data-order')).toBe('canvas,tasks,notes');
+  });
+
+  it('ignores a saved order that isn\'t every panel once', async () => {
+    localStorage.setItem('tm-home-panel-order:u1', JSON.stringify(['notes', 'notes', 'tasks']));
+    await render();
+    expect(container.querySelector('[data-available]')!.getAttribute('data-order')).toBe('tasks,notes,canvas');
   });
 
   it('offers the sample Canvas data to a demo user without checking a connection', async () => {
