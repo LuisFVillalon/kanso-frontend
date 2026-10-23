@@ -56,8 +56,13 @@ const TAG_DELTA_SPAN = 1.5;
 /** "+0.7", "−0.4" (a real minus) or "±0.0". */
 const signedDelta = (d: number) => `${d >= 0.05 ? '+' : d <= -0.05 ? '−' : '±'}${Math.abs(d).toFixed(1)}`;
 
+/** A mood average as shown: to one decimal. */
+const toTenth = (n: number) => Math.round(n * 10) / 10;
+
 /** The row in plain words, for hover and screen readers. */
-export const describeTagMood = (tag: string, days: number, average: number, usual: number) => {
+export const describeTagMood = (tag: string, days: number, tagAverage: number, usualAverage: number) => {
+  const average = toTenth(tagAverage);
+  const usual = toTenth(usualAverage);
   const d = average - usual;
   const cmp = Math.abs(d) < 0.05 ? 'the same as' : `${Math.abs(d).toFixed(1)} ${d > 0 ? 'higher' : 'lower'} than`;
   return `On the ${days} ${days === 1 ? 'day' : 'days'} you tagged “${tag}”, your mood averaged ${average.toFixed(1)} (${moodLabel(Math.round(average))}) — ${cmp} your usual ${usual.toFixed(1)}.`;
@@ -72,6 +77,7 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod
   byDay, period, average, logged, scopeLabel,
 }) => {
   const rows = moodByTag(byDay, period.start, period.end);
+  const usual = toTenth(average);
   const [openTag, setOpenTag] = useState<string | null>(null);
   return (
     <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Tags & mood">
@@ -84,15 +90,16 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1.5 text-[11px] text-text-muted" aria-hidden="true">
             <span className="text-right">◀ lower mood</span>
             <span className="px-2 py-0.5 rounded-full bg-surface-raised font-semibold text-text-primary whitespace-nowrap">
-              your usual {average.toFixed(1)} · {moodLabel(Math.round(average))}
+              your usual {usual.toFixed(1)} · {moodLabel(Math.round(usual))}
             </span>
             <span>higher mood ▶</span>
           </div>
           <ul className="flex flex-col gap-2.5">
             {rows.map(row => {
-              const d = row.average - average;
+              const tagAverage = toTenth(row.average);
+              const d = tagAverage - usual;
               const half = Math.min(Math.abs(d) / TAG_DELTA_SPAN, 1) * 50;
-              const mood = Math.round(row.average);
+              const mood = Math.round(tagAverage);
               const sentence = describeTagMood(row.tag, row.days, row.average, average);
               const open = openTag === row.tag;
               return (
