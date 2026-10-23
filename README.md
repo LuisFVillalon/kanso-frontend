@@ -91,7 +91,8 @@ src/app/
   utils/                 # Date helpers, note-content extraction for the AI service, ...
 brand/                   # The brand kit: DESIGN.md (source of truth for look and voice),
                          # tokens, logo, icons and snippets
-public/                  # Web-manifest icons
+public/                  # Web-manifest icons, and fonts/pdf: the static fonts Download PDF embeds
+scripts/                 # build-pdf-fonts.py rebuilds public/fonts/pdf from the OFL sources
 ```
 
 ## Running locally
