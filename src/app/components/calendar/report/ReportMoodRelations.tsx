@@ -73,14 +73,14 @@ export const describeTagMood = (tag: string, days: number, tagAverage: number, u
  * a labeled center (your average mood over the period) toward lower or
  * higher mood, the tag's own mood as a face, and the signed difference.
  */
-const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod; average: number; logged: number; scopeLabel: string }> = ({
-  byDay, period, average, logged, scopeLabel,
+const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod; average: number; logged: number; scopeLabel: string; headerAction: React.ReactNode }> = ({
+  byDay, period, average, logged, scopeLabel, headerAction,
 }) => {
   const rows = moodByTag(byDay, period.start, period.end);
   const usual = toTenth(average);
   const [openTag, setOpenTag] = useState<string | null>(null);
   return (
-    <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Tags & mood">
+    <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Tags & mood" headerAction={headerAction}>
       {rows.length === 0 ? (
         <p className="text-xs sm:text-sm text-text-muted italic py-2">
           Tag your check-ins and the tags you use on at least {TAG_MIN_DAYS} days show up here, compared with your usual mood.
@@ -164,12 +164,15 @@ interface ReportMoodRelationsProps {
 /**
  * "Mood & your activity" — how mood moved with tasks, note time and habits
  * on days with a check-in, as a chart, a plain-language statement capped by
- * sample size, and a mini card per metric — beside "Tags & mood". Nothing
- * here says what causes what.
+ * sample size, and a mini card per metric — beside "Tags & mood". Below the
+ * lg breakpoint the two cards take turns behind an Activity / Tags switch,
+ * and the mini cards are left out on phones, so Patterns fits one screen.
+ * Nothing here says what causes what.
  */
 const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byDay, period, scopeLabel, average, logged, byWeek }) => {
   const [metric, setMetric] = useState<MoodMetric>('tasks');
   const [view, setView] = useState<RelationView>('scatter');
+  const [panel, setPanel] = useState<'activity' | 'tags'>('activity');
 
   const startStr = toLocalDateStr(period.start);
   const endStr = toLocalDateStr(period.end);
@@ -186,11 +189,17 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
   const points = moodActivityPoints(byDay, days, period.start, period.end, metric);
   const items = view === 'days' ? dayItems(byDay, days, period.start, period.end, metric, byWeek) : [];
   const info = METRIC_INFO[metric];
+  const panelSwitch = (
+    <div className="lg:hidden flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Pattern to show">
+      <MetricButton active={panel === 'activity'} onClick={() => setPanel('activity')}>Activity</MetricButton>
+      <MetricButton active={panel === 'tags'} onClick={() => setPanel('tags')}>Tags</MetricButton>
+    </div>
+  );
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-      <div className="lg:col-span-2 min-w-0">
-        <CardShell icon={<ChartScatter className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header="Mood & your activity">
+      <div className={`lg:col-span-2 min-w-0 ${panel === 'tags' ? 'max-lg:hidden' : ''}`}>
+        <CardShell icon={<ChartScatter className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header="Mood & your activity" headerAction={panelSwitch}>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Compare mood with">
               {MOOD_METRICS.map(m => (
@@ -249,7 +258,7 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
             </details>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="hidden sm:grid grid-cols-3 gap-2">
             {MOOD_METRICS.map(m => {
               const r = results[m];
               const active = metric === m;
@@ -277,7 +286,9 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
           </div>
         </CardShell>
       </div>
-      <TagsCard byDay={byDay} period={period} average={average} logged={logged} scopeLabel={scopeLabel} />
+      <div className={`min-w-0 ${panel === 'activity' ? 'max-lg:hidden' : ''}`}>
+        <TagsCard byDay={byDay} period={period} average={average} logged={logged} scopeLabel={scopeLabel} headerAction={panelSwitch} />
+      </div>
     </div>
   );
 };
