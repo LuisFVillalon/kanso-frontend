@@ -335,7 +335,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       <p className="text-[11px] text-text-muted">
         {isYear
           ? `Dots are each month’s average; the shaded bar covers the middle half of its days${isMood && monthCheckins.size > 0 ? ', and ◇ marks the monthly check-in' : ''}. Click a month to open it.`
-          : `Click a dot to edit that day’s check-in. Hollow dots are days without one — click to log it.${weekSpans.length > 0 ? ' Dashed lines are weekly check-ins.' : ''}`}
+          : `Click a dot to edit that day’s check-in. Hollow dots are days without one — click to log it.${period.kind === 'month' ? ' The solid line is your 7-day average: each point averages that day and the 6 before it, shown once 3 of those days have a check-in.' : ''}${weekSpans.length > 0 ? ' Dashed lines are weekly check-ins.' : ''}`}
       </p>
     </div>
   );
