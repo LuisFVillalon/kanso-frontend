@@ -262,6 +262,24 @@ describe('NoteEditor toolbar', () => {
     expect(byLabel('More note actions')).not.toBeNull();
   });
 
+  it('keeps the formatting toolbar in focus mode and hides the Focus button there', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(byLabel('Bold (Ctrl+B)')).not.toBeNull();
+    expect(byLabel('Outline')).toBeNull();
+    expect(byLabel('Resources')).toBeNull();
+    expect(byLabel('Focus mode (Ctrl+Shift+F)')).toBeNull();
+  });
+
+  it('leaves focus mode from the Leave focus button', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => Array.from(container.querySelectorAll('button')).find(b => b.textContent === 'Leave focus')!.click());
+    expect(byLabel('More note actions')).not.toBeNull();
+  });
+
   it('leaves focus mode on Escape typed in the note, even once the editor has marked the key handled', () => {
     render(vi.fn<Update>().mockResolvedValue(true));
     act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
