@@ -44,7 +44,8 @@ const weekLabel = (start: string) =>
  * — or, in the Year view, "Months in a word" from the monthly check-ins.
  * Each opens to edit. While that check-in is on, a week or month that has
  * begun without one gets a row or tile to log it; hidden while there are
- * none and that check-in is off.
+ * none and that check-in is off. Below lg the rows and tiles sit in one
+ * sideways-scrolling row, so the Mood tab still fits a phone screen.
  */
 const ReportPeriodCheckins: React.FC<Props> = ({ period, weeks, months, settings, onOpen }) => {
   const todayStr = toLocalDateStr(new Date());
@@ -62,11 +63,11 @@ const ReportPeriodCheckins: React.FC<Props> = ({ period, weeks, months, settings
         {starts.length === 0 ? (
           <p className="text-xs text-text-muted italic">No monthly check-ins in {year} yet — they’re asked on the last day of each month.</p>
         ) : (
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto lg:grid lg:grid-cols-3">
             {starts.map(start => {
               const m = months.get(start.slice(0, 7)) ?? null;
               const monthName = parseLocalDate(start).toLocaleDateString('en-US', { month: 'long' });
-              const tile = 'rounded-lg px-2 py-1.5 text-left min-w-0 hover:ring-1 hover:ring-border focus-visible:outline-2 focus-visible:outline-accent';
+              const tile = 'shrink-0 w-20 lg:w-auto rounded-lg px-2 py-1.5 text-left min-w-0 hover:ring-1 hover:ring-border focus-visible:outline-2 focus-visible:outline-accent';
               const abbr = <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-muted">{monthName.slice(0, 3)}</span>;
               return m ? (
                 <button
@@ -127,23 +128,23 @@ const ReportPeriodCheckins: React.FC<Props> = ({ period, weeks, months, settings
           )}
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex gap-2 overflow-x-auto lg:flex-col">
           {starts.map(start => {
             const w = logged.get(start);
             const label = weekLabel(start);
             if (!w) {
               return (
-                <li key={start}>
+                <li key={start} className="shrink-0">
                   <button
                     type="button"
                     onClick={() => onOpen('week', start, null)}
-                    className="w-full flex items-center gap-2 p-2 rounded-lg border border-dashed border-border text-left hover:ring-1 hover:ring-border focus-visible:outline-2 focus-visible:outline-accent"
+                    className="w-full flex items-center gap-2 px-2 py-1 lg:p-2 rounded-lg border border-dashed border-border text-left hover:ring-1 hover:ring-border focus-visible:outline-2 focus-visible:outline-accent"
                     aria-label={`${label}: no weekly check-in. Log it`}
                   >
-                    <span className="w-6 h-6 shrink-0 flex items-center justify-center text-text-muted">
+                    <span className="w-4 h-4 lg:w-6 lg:h-6 shrink-0 flex items-center justify-center text-text-muted">
                       <CalendarRange className="w-4 h-4" aria-hidden="true" />
                     </span>
-                    <span className="min-w-0 flex-1 text-sm font-semibold text-text-primary">
+                    <span className="min-w-0 flex-1 text-xs lg:text-sm whitespace-nowrap lg:whitespace-normal font-semibold text-text-primary">
                       {label} <span className="font-medium text-accent">· Log it</span>
                     </span>
                   </button>
@@ -154,21 +155,21 @@ const ReportPeriodCheckins: React.FC<Props> = ({ period, weeks, months, settings
               .filter(Boolean)
               .join(' · ');
             return (
-              <li key={start}>
+              <li key={start} className="shrink-0">
                 <button
                   type="button"
                   onClick={() => onOpen('week', start, w)}
-                  className="w-full flex items-start gap-2 p-2 rounded-lg bg-surface-raised text-left hover:ring-1 hover:ring-border focus-visible:outline-2 focus-visible:outline-accent"
+                  className="w-full flex items-center lg:items-start gap-2 px-2 py-1 lg:p-2 rounded-lg bg-surface-raised text-left hover:ring-1 hover:ring-border focus-visible:outline-2 focus-visible:outline-accent"
                   aria-label={`${label}: ${moodLabel(w.mood)}${details ? ` · ${details}` : ''}. Edit`}
                 >
-                  <span className="w-6 h-6 shrink-0" style={{ color: moodColor(w.mood) }}>
+                  <span className="w-4 h-4 lg:w-6 lg:h-6 shrink-0" style={{ color: moodColor(w.mood) }}>
                     <MoodFace mood={w.mood} filled className="w-full h-full" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-text-primary">
+                    <span className="block text-xs lg:text-sm whitespace-nowrap lg:whitespace-normal font-semibold text-text-primary">
                       {label} <span className="font-normal text-text-muted">· {moodLabel(w.mood)}</span>
                     </span>
-                    {details && <span className="block text-xs text-text-secondary truncate" title={details}>{details}</span>}
+                    {details && <span className="hidden lg:block text-xs text-text-secondary truncate" title={details}>{details}</span>}
                   </span>
                 </button>
               </li>
