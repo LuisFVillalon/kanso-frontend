@@ -606,6 +606,32 @@ describe('CalendarReportView tabs', () => {
     expect(document.querySelector('[aria-label="Measure"]')).not.toBeNull();
   });
 
+  it('opens Mood Patterns from a month’s Mood & your activity highlight, and Over time from the week’s Mood', async () => {
+    await render();
+    await click(buttonLabelled(/^MoodGood 4\.0 · 1 of 3 days logged$/));
+    expect(window.location.search).toBe('?view=mood');
+
+    await openTab('Overview');
+    await click(buttonLabelled(/^Month$/));
+    await click(buttonLabelled(/^Mood & your activity/));
+    expect(window.location.search).toBe('?view=mood&mood=patterns');
+    expect(tab('Mood').getAttribute('aria-selected')).toBe('true');
+    expect(text()).not.toContain('Mood over time');
+  });
+
+  it('adds no history entry for the tab or mood view already open', async () => {
+    await render();
+    await openTab('Mood');
+    const length = window.history.length;
+    await openTab('Mood');
+    await click([...document.querySelectorAll('[aria-label="Mood view"] button')].find(b => b.textContent === 'Over time')!);
+    expect(window.history.length).toBe(length);
+    await openPatterns();
+    expect(window.history.length).toBe(length + 1);
+    await openPatterns();
+    expect(window.history.length).toBe(length + 1);
+  });
+
   it('falls back to Overview for an unknown view', async () => {
     window.history.replaceState(null, '', '/reports?view=bogus');
     await render();

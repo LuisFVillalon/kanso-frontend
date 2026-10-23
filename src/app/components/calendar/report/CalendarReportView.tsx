@@ -398,7 +398,7 @@ interface ReportBodyProps {
   mood: ReportMood;
   view: ReportView;
   moodView: MoodView;
-  onOpen: (view: ReportView) => void;
+  onOpen: (view: ReportView, moodView?: MoodView) => void;
   onSelectPeriod: (period: ReportPeriod) => void;
 }
 
@@ -572,6 +572,7 @@ const CalendarReportView: React.FC = () => {
     if (next === 'mood' && nextMood === 'patterns') params.set('mood', 'patterns');
     else params.delete('mood');
     const query = params.toString();
+    if (query === searchParams.toString()) return;
     window.history.pushState(null, '', query ? `?${query}` : window.location.pathname);
   };
 
@@ -679,7 +680,7 @@ const CalendarReportView: React.FC = () => {
             mood={{ ...mood, settings: profile.moodCheckins }}
             view={view}
             moodView={moodView}
-            onOpen={next => navigate(next)}
+            onOpen={navigate}
             onSelectPeriod={setPeriod}
           />
         )}

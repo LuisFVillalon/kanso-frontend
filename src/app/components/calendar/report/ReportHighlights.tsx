@@ -21,6 +21,7 @@ import { buildTagBreakdown, collectTagItems, UNTAGGED_KEY } from '@/app/utils/ta
 import { METRIC_INFO } from './ReportMoodRelationChart';
 import { formatTagHours } from './ReportTagBreakdown';
 import type { ReportView } from './CalendarReportView';
+import type { MoodView } from './ReportMoodSection';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -29,6 +30,7 @@ const NAMED_LEVELS: CorrelationLevel[] = ['strong', 'moderate', 'slight', 'early
 
 interface Highlight {
   view: ReportView;
+  moodView?: MoodView;
   icon: React.ReactNode;
   title: string;
   text: string;
@@ -44,12 +46,12 @@ interface ReportHighlightsProps {
   mood: MoodSummary | null;
   /** How the period is named in a sentence: "this month", "in 2025". */
   scopeLabel: string;
-  onOpen: (view: ReportView) => void;
+  onOpen: (view: ReportView, moodView?: MoodView) => void;
 }
 
 /**
  * The report Overview's one-line answers — the busiest day, the note with the
- * most time, the longest habit streak, the week's mood or how a month's or
+ * most time, the current habit streak, the week's mood or how a month's or
  * year's mood moved with activity, and the tag that took the most time — each
  * opening the tab that explains it.
  */
@@ -125,6 +127,7 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
     const { metric, result, n } = moodLink;
     highlights.push({
       view: 'mood',
+      moodView: 'patterns',
       icon: <ChartScatter className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />,
       title: 'Mood & your activity',
       text: metric
@@ -150,7 +153,7 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
           <li key={h.title}>
             <button
               type="button"
-              onClick={() => onOpen(h.view)}
+              onClick={() => onOpen(h.view, h.moodView)}
               className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tm-accent)]"
             >
               <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-surface-raised" aria-hidden="true">{h.icon}</span>
