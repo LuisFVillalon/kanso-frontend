@@ -9,7 +9,6 @@ import {
   monthMood,
   moodByTag,
   moodFetchRange,
-  moodSummaryScope,
   periodRollingAverage,
   quantile,
   rollingAverage,
@@ -43,43 +42,17 @@ const checkin = (period_start: string, mood: number, overrides: Partial<MoodChec
   ...overrides,
 });
 
-describe('trailing 4 weeks', () => {
-  it('widens the current week to the 28 days ending today', () => {
-    const now = new Date(2026, 9, 21, 22, 0); // Wednesday Oct 21
-    const scope = moodSummaryScope(periodContaining('week', now), now);
-    expect(scope.widened).toBe(true);
-    expect([day(scope.start), day(scope.end)]).toEqual(['2026-09-24', '2026-10-21']);
-  });
-
-  it('ends a past week on its Sunday', () => {
+describe('moodFetchRange', () => {
+  it('fetches just the week, the 6 days before a month, or the year', () => {
     const now = new Date(2026, 9, 21);
-    const scope = moodSummaryScope(periodContaining('week', new Date(2026, 9, 7)), now); // Oct 5–11
-    expect([day(scope.start), day(scope.end)]).toEqual(['2026-09-14', '2026-10-11']);
-  });
-
-  it('counts 28 local days across the March DST change', () => {
-    const scope = moodSummaryScope(periodContaining('week', new Date(2026, 2, 25)), new Date(2026, 3, 30)); // Mar 23–29
-    expect([day(scope.start), day(scope.end)]).toEqual(['2026-03-02', '2026-03-29']);
-    expect(summarizeMood(new Map(), scope.start, scope.end, new Date(2026, 3, 30)).days).toBe(28);
-  });
-
-  it('leaves months and years unwidened', () => {
-    const month = periodContaining('month', new Date(2026, 9, 21));
-    const scope = moodSummaryScope(month, new Date(2026, 9, 21));
-    expect(scope.widened).toBe(false);
-    expect([day(scope.start), day(scope.end)]).toEqual(['2026-10-01', '2026-10-31']);
-  });
-
-  it('fetches the trailing weeks, the 6 days before a month, or the year', () => {
-    const now = new Date(2026, 9, 21);
-    const week = moodFetchRange(periodContaining('week', now), now);
-    expect([day(week.start), day(week.end)]).toEqual(['2026-09-24', '2026-10-25']);
-    const month = moodFetchRange(periodContaining('month', now), now);
+    const week = moodFetchRange(periodContaining('week', now));
+    expect([day(week.start), day(week.end)]).toEqual(['2026-10-19', '2026-10-25']);
+    const month = moodFetchRange(periodContaining('month', now));
     // October ends on a Saturday, so its last week runs to Sunday Nov 1.
     expect([day(month.start), day(month.end)]).toEqual(['2026-09-25', '2026-11-01']);
-    const may = moodFetchRange(periodContaining('month', new Date(2026, 4, 10)), now); // ends on a Sunday
+    const may = moodFetchRange(periodContaining('month', new Date(2026, 4, 10))); // ends on a Sunday
     expect([day(may.start), day(may.end)]).toEqual(['2026-04-25', '2026-05-31']);
-    const year = moodFetchRange(periodContaining('year', now), now);
+    const year = moodFetchRange(periodContaining('year', now));
     expect([day(year.start), day(year.end)]).toEqual(['2026-01-01', '2026-12-31']);
   });
 });
@@ -252,7 +225,11 @@ describe('hasMoodCheckins', () => {
   const week = periodContaining('week', now);
   const year = periodContaining('year', now);
   const has = (period: ReturnType<typeof periodContaining>, rows: MoodCheckin[]) =>
-    hasMoodCheckins(period, moodSummaryScope(period, now), indexDayCheckins(rows), rows);
+    hasMoodCheckins(period, indexDayCheckins(rows), rows);
+
+  it('counts only the week’s own daily check-ins', () => {
+    expect(has(week, [checkin('2026-10-15', 4)])).toBe(false);
+  });
 
   it('counts weekly check-ins without any daily ones', () => {
     expect(has(week, [])).toBe(false);

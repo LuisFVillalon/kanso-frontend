@@ -12,12 +12,10 @@ import type { ReportPeriod } from '@/app/utils/calendarReport';
 
 export type MoodSeries = 'mood' | 'energy' | 'stress';
 
-/** A week is too short to say much, so the Week report's mood summary covers the 4 weeks to its end. */
-export const TRAILING_DAYS = 28;
 /** The month chart's rolling average: 7 days, drawn once at least 3 of them have a check-in. */
 export const ROLLING_WINDOW = 7;
 export const ROLLING_MIN = 3;
-/** Under this many check-ins the report says patterns need more days. */
+/** Under this many check-ins the report says patterns need more days — more than a week has, so only Month and Year show them. */
 export const PATTERN_MIN_DAYS = 10;
 
 const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -30,33 +28,12 @@ const eachDay = (start: Date, end: Date): string[] => {
   return days;
 };
 
-export interface MoodScope {
-  start: Date;
-  end: Date;
-  /** True when a week was widened to the trailing 4 weeks. */
-  widened: boolean;
-}
-
 /**
- * The days a period's mood summary covers: the period itself, except that a
- * week widens to the 4 weeks ending on its last day — or today, while it's
- * the current week.
- */
-export const moodSummaryScope = (period: ReportPeriod, now: Date = new Date()): MoodScope => {
-  if (period.kind !== 'week') return { start: period.start, end: period.end, widened: false };
-  const today = startOfDay(now);
-  const end = today < period.start ? period.start : today < period.end ? today : period.end;
-  return { start: addDays(end, -(TRAILING_DAYS - 1)), end, widened: true };
-};
-
-/**
- * The check-ins a period's report fetches: the trailing 4 weeks for a week,
- * a month plus the 6 days before it (so its rolling average is whole from
+ * The check-ins a period's report fetches: a month plus the 6 days before it (so its rolling average is whole from
  * the 1st) and the rest of its last Mon–Sun week (so a weekly check-in
- * running into the next month sees all its days), or the year.
+ * running into the next month sees all its days), or just the week or year.
  */
-export const moodFetchRange = (period: ReportPeriod, now: Date = new Date()): { start: Date; end: Date } => {
-  if (period.kind === 'week') return { start: moodSummaryScope(period, now).start, end: period.end };
+export const moodFetchRange = (period: ReportPeriod): { start: Date; end: Date } => {
   if (period.kind === 'month') {
     return { start: addDays(period.start, -(ROLLING_WINDOW - 1)), end: addDays(period.end, (7 - period.end.getDay()) % 7) };
   }
@@ -222,11 +199,11 @@ export const indexMonthCheckins = (checkins: MoodCheckin[]): Map<string, MoodChe
   new Map(checkins.filter(c => c.period_kind === 'month').map(c => [c.period_start.slice(0, 7), c]));
 
 /**
- * Whether the report has a check-in to show: a daily one in `scope`, a
+ * Whether the report has a check-in to show: a daily one in the period, a
  * weekly one overlapping the period or, in the Year view, a monthly one.
  */
-export const hasMoodCheckins = (period: ReportPeriod, scope: MoodScope, byDay: Map<string, MoodCheckin>, checkins: MoodCheckin[]): boolean => {
-  if (summarizeMood(byDay, scope.start, scope.end).logged > 0) return true;
+export const hasMoodCheckins = (period: ReportPeriod, byDay: Map<string, MoodCheckin>, checkins: MoodCheckin[]): boolean => {
+  if (summarizeMood(byDay, period.start, period.end).logged > 0) return true;
   if (period.kind !== 'year') return weekCheckinsIn(checkins, period.start, period.end).length > 0;
   const year = `${period.start.getFullYear()}-`;
   return checkins.some(c => c.period_kind === 'month' && c.period_start.startsWith(year));

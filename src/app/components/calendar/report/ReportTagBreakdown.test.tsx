@@ -26,13 +26,11 @@ const empty = (overrides: Partial<CalendarActivity> = {}): CalendarActivity => (
   ...overrides,
 });
 
-// A week's report holds the 4 weeks to its end, so last week is in here too.
 const weekActivity = empty({
   completed_tasks: [
     task(1, 'Study block', 3, 20, [cs, math]),
     task(2, 'Lab writeup', 2, 21),
     task(3, 'Laundry', 1, 20, []),
-    task(4, 'Old lab', 1, 13),
   ],
   note_sessions: [{
     id: 1, note_id: 7, note_title: 'Lecture notes',
@@ -53,6 +51,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   // Wednesday: the week is Oct 19–25, three days in.
   vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
+  api.fetchCalendarActivity.mockResolvedValue(empty({ completed_tasks: [task(4, 'Old lab', 1, 13)] }));
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -91,7 +90,7 @@ describe('ReportTagBreakdown', () => {
     ]);
     expect(text()).toContain('↑ 3.5h vs last week, same days');
     expect(text()).toContain('new vs last week');
-    expect(api.fetchCalendarActivity).not.toHaveBeenCalled();
+    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-12', '2026-10-14', { includeArchived: true });
   });
 
   it('counts instead of timing, and leaves out a kind that is switched off', async () => {

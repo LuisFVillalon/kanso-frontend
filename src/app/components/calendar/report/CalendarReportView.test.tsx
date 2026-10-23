@@ -75,25 +75,20 @@ const buttonLabelled = (pattern: RegExp) =>
 const click = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); };
 
 describe('CalendarReportView mood', () => {
-  it('adds the Mood tile and widens the week summary to 4 weeks', async () => {
+  it('adds the Mood tile and keeps the week summary to the week', async () => {
     await render();
-    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-09-24', '2026-10-25');
+    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-19', '2026-10-25');
     expect(text()).toContain('1 of 3 days logged');
-    expect(text()).toContain('Using 4 weeks — one week is too short');
-    // The Check-ins card averages Good and Low over the 28 days to today.
-    expect(text()).toContain('2 of 28 days logged');
+    expect(text()).not.toContain('4 weeks');
+    expect(text()).not.toContain('28 days');
     expect(text()).toContain('Mood over time');
     expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
   });
 
-  it('keeps the Mood section for a week with check-ins only in the earlier weeks', async () => {
+  it('ignores check-ins from before the week', async () => {
     api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-15', 4), checkin('2026-10-01', 2)]);
     await render();
-    expect(text()).not.toContain('Nothing recorded');
-    expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
-    expect(text()).toContain('Using 4 weeks — one week is too short');
-    expect(text()).toContain('2 of 28 days logged');
-    expect(text()).toContain('Mood over time');
+    expect(text()).toContain('Nothing recorded for this week');
   });
 
   it('shows the mood error instead of the empty state when check-ins fail to load', async () => {
@@ -136,14 +131,24 @@ describe('CalendarReportView mood', () => {
     expect(buttonLabelled(/^Thursday, October 22/)).toBeUndefined();
   });
 
+  it('points a week to its Month report for mood patterns', async () => {
+    await render();
+    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-19', '2026-10-25', { includeArchived: true });
+    expect(text()).not.toContain('Mood & your activity');
+    expect(text()).not.toContain('Patterns in your mood show up');
+    expect(text()).toContain('they appear in the Month and Year reports');
+    await click(buttonLabelled(/^See October$/));
+    expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
+  });
+
   it('shows "Not enough data" for mood and activity below 10 check-ins', async () => {
     await render();
-    // The week's activity reaches back over the same 4 weeks as its mood summary.
-    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-09-24', '2026-10-25', { includeArchived: true });
+    await click(buttonLabelled(/^Month$/));
+    expect(text()).toContain('Patterns in your mood show up after about 10 days with a check-in — 2 so far this month.');
     expect(text()).toContain('Mood & your activity');
     expect(text()).toContain('Not enough data');
     expect(text()).toContain('2 days with a check-in');
-    expect(text()).toContain('Patterns between mood and tasks show up after about 10 days with a check-in — 2 so far in the last 4 weeks.');
+    expect(text()).toContain('Patterns between mood and tasks show up after about 10 days with a check-in — 2 so far this month.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
     expect(text()).toContain('Tags & mood');
   });
@@ -157,13 +162,14 @@ describe('CalendarReportView mood', () => {
       habit_completions: days.flatMap((d, i) => Array.from({ length: i % 5 }, (_, h) => ({ habit_id: h + 1, habit_title: `Habit ${h}`, date: d, estimated_time: null }))),
     }));
     await render();
+    await click(buttonLabelled(/^Month$/));
     expect(text()).toContain('20 days with a check-in');
     // Tasks never varied.
     expect(text()).toContain('Your number of tasks completed barely changed');
 
     // The mood metric switch, not the tag card's Habits chip.
     await click([...document.querySelectorAll('[aria-label="Compare mood with"] button')].find(b => b.textContent === 'Habits')!);
-    expect(text()).toContain('In the last 4 weeks, your mood tended to be higher on days with more habits checked off.');
+    expect(text()).toContain('This month, your mood tended to be higher on days with more habits checked off.');
     expect(text()).toContain('Based on 20 days, so treat it as a hint.');
     expect(text()).toContain('Moderate link');
     expect(text()).toContain('↑ together');
@@ -236,7 +242,7 @@ describe('CalendarReportView mood', () => {
       expect(text()).not.toContain('Nothing recorded');
       expect(text()).not.toContain('No mood check-ins');
       expect(text()).toContain('Mood over time');
-      expect(text()).toContain('No daily check-ins in the last 4 weeks.');
+      expect(text()).toContain('No daily check-ins this week.');
       expect(buttonLabelled(/^Week of Oct 19: Great · “Shipped it”\. Edit$/)).toBeDefined();
     });
 

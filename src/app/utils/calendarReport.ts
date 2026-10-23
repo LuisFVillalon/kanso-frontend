@@ -289,8 +289,8 @@ export const buildCalendarReport = (
 
   const days = dailyActivity(activity, period.start, period.end);
 
-  // A week's activity is fetched for the 4 weeks to its end (see dailyActivity's
-  // use in the Mood section), so tasks due outside the period are dropped here.
+  // The activity passed in may span more than the period, so tasks due outside
+  // it are dropped here.
   const planned = activity.scheduled_tasks.filter(t => t.due_date !== null && inPeriod(t.due_date));
   const plannedCompleted = planned.filter(t => t.completed).length;
 
@@ -577,7 +577,7 @@ const TENDED: Record<'slight' | 'moderate' | 'strong', string> = {
 
 /**
  * The plain-language statement under the chart. `scope` names the days it
- * covers ("this month", "in the last 4 weeks"). The wording only ever says
+ * covers ("this month", "in October 2026"). The wording only ever says
  * what moved together, in the past tense — it never names a cause.
  */
 export const describeCorrelation = (metric: MoodMetric, result: CorrelationResult, scope: string): string => {

@@ -37,7 +37,7 @@ import {
   type ReportPeriod,
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
-import { hasMoodCheckins, indexDayCheckins, moodSummaryScope, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
+import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportMoodSection from './ReportMoodSection';
 import ReportTagBreakdown from './ReportTagBreakdown';
@@ -268,8 +268,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
   const checkins = mood.checkins;
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
   const periodMood = checkins ? summarizeMood(byDay, period.start, period.end) : null;
-  const scope = moodSummaryScope(period);
-  const hasMood = !!checkins && days > 0 && hasMoodCheckins(period, scope, byDay, checkins);
+  const hasMood = !!checkins && days > 0 && hasMoodCheckins(period, byDay, checkins);
   const current = isSamePeriod(period, periodContaining(period.kind, new Date()));
 
   if (isEmpty(report) && !hasMood && !mood.error) {
@@ -328,7 +327,6 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           byDay={byDay}
           checkins={checkins ?? []}
           settings={mood.settings}
-          scope={scope}
           replaceDay={mood.replaceDay}
           onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
         />

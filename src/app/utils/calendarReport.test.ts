@@ -142,7 +142,7 @@ describe('buildCalendarReport', () => {
     expect(byDay['2026-10-15']).toBe(1);
   });
 
-  it('only plans tasks due in the period, though a week loads 4 weeks of activity', () => {
+  it('only plans tasks due in the period, even when the activity spans more days', () => {
     const activity = {
       ...emptyActivity('2026-09-21', '2026-10-18'),
       scheduled_tasks: [task({ id: 1, due_date: '2026-09-30', completed: true }), task({ id: 2, due_date: '2026-10-13' })],
@@ -440,8 +440,8 @@ describe('describeCorrelation', () => {
   });
 
   it('calls a link under 30 days a hint, and never strong', () => {
-    expect(describeSeries('tasks', series(25, 'down'), 'in the last 4 weeks')).toBe(
-      'In the last 4 weeks, your mood tended to be lower on days with more tasks completed. On days you completed 2 or more tasks it averaged 2.0, vs 4.5 on days with fewer. Based on 25 days, so treat it as a hint.',
+    expect(describeSeries('tasks', series(25, 'down'), 'in September 2026')).toBe(
+      'In September 2026, your mood tended to be lower on days with more tasks completed. On days you completed 2 or more tasks it averaged 2.0, vs 4.5 on days with fewer. Based on 25 days, so treat it as a hint.',
     );
   });
 
@@ -464,7 +464,7 @@ describe('describeCorrelation', () => {
     expect(new Set(results.map(r => r.level))).toEqual(new Set(['insufficient', 'flat', 'none', 'early', 'slight', 'moderate', 'strong']));
     for (const result of results) {
       for (const metric of ['tasks', 'notes', 'habits'] as const) {
-        for (const scope of ['this week', 'in the last 4 weeks', 'in October 2026']) {
+        for (const scope of ['this week', 'in 2026', 'in October 2026']) {
           expect(describeCorrelation(metric, result, scope)).not.toMatch(banned);
         }
       }
