@@ -14,6 +14,13 @@ export const METRIC_INFO: Record<MoodMetric, { label: string; button: string; co
   habits: { label: 'Habits completed', button: 'Habits', color: 'var(--tm-success)' },
 };
 
+/** The scatter's x axis title, its word for "less of it", and the footnote's name for "more of it". */
+const SCATTER_AXIS: Record<MoodMetric, { title: string; less: string; more: string }> = {
+  tasks: { title: 'Tasks you finished that day', less: 'fewer', more: 'tasks finished' },
+  notes: { title: 'Time in notes that day', less: 'less', more: 'time in notes' },
+  habits: { title: 'Habits checked off that day', less: 'fewer', more: 'habits checked off' },
+};
+
 /** A metric value as people read it: a count, or whole minutes as "1h 5m". */
 export const formatMetric = (metric: MoodMetric, value: number): string =>
   metric === 'notes' ? (value > 0 ? formatDurationShort(value * 60) : '0m') : String(Math.round(value * 10) / 10);
@@ -36,6 +43,9 @@ const NARROW_HEIGHT = 180;
 const SHORT_QUERY = '(max-height: 760px)';
 const PAD_TOP = 12;
 const PAD_BOTTOM = 36;
+/** The scatter's extra room: a y axis title above, and an x axis line, ticks, end labels and title below. */
+const SCATTER_PAD_TOP = 26;
+const SCATTER_PAD_BOTTOM = 56;
 const DEFAULT_WIDTH = 560;
 const MIN_WIDTH = 280;
 
@@ -192,8 +202,10 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
   const height = width < 420 || short ? NARROW_HEIGHT : HEIGHT;
   const padRight = view === 'days' ? 38 : 12;
   const plotWidth = width - padLeft - padRight;
-  const plotHeight = height - PAD_TOP - PAD_BOTTOM;
-  const yOf = (mood: number) => PAD_TOP + ((5 - mood) / 4) * plotHeight;
+  const padTop = view === 'scatter' ? SCATTER_PAD_TOP : PAD_TOP;
+  const padBottom = view === 'scatter' ? SCATTER_PAD_BOTTOM : PAD_BOTTOM;
+  const plotHeight = height - padTop - padBottom;
+  const yOf = (mood: number) => padTop + ((5 - mood) / 4) * plotHeight;
 
   const scale = MOOD_LABELS.map((name, i) => {
     const y = yOf(i + 1);
@@ -231,14 +243,23 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
       return [xOf(meanValue), yOf(meanMood)] as [number, number];
     });
 
+    // Below the lowest jittered dot, so the axis never cuts through one.
+    const axisY = padTop + plotHeight + 12;
     body = (
       <>
+        <text x={0} y={11} fontSize={10.5} fontWeight={600} fill="var(--tm-text-muted)">Your mood that day</text>
+        <line x1={padLeft} x2={width - padRight} y1={axisY} y2={axisY} stroke="var(--tm-text-muted)" strokeOpacity={0.6} />
         {ticks.map(t => (
-          <text key={t} x={xOf(t)} y={height - 20} textAnchor="middle" fontSize={11} fill="var(--tm-text-muted)">{formatMetric(metric, t)}</text>
+          <g key={t}>
+            <line x1={xOf(t)} x2={xOf(t)} y1={axisY} y2={axisY + 4} stroke="var(--tm-text-muted)" strokeOpacity={0.6} />
+            <text x={xOf(t)} y={axisY + 16} textAnchor="middle" fontSize={11} fill="var(--tm-text-muted)">{formatMetric(metric, t)}</text>
+          </g>
         ))}
+        <text x={padLeft} y={height - 15} fontSize={10} fill="var(--tm-text-muted)">{SCATTER_AXIS[metric].less}</text>
         <text x={padLeft + plotWidth / 2} y={height - 3} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--tm-text-muted)">
-          {info.label} per day →
+          {SCATTER_AXIS[metric].title}
         </text>
+        <text x={width - padRight} y={height - 15} textAnchor="end" fontSize={10} fill="var(--tm-text-muted)">more</text>
         {points.map(p => (
           <circle
             key={p.dateStr}
@@ -261,7 +282,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
     const n = Math.max(1, items.length);
     const band = plotWidth / n;
     const max = Math.max(1, ...items.map(it => it.value));
-    const barTop = (v: number) => PAD_TOP + plotHeight - (v / max) * plotHeight;
+    const barTop = (v: number) => padTop + plotHeight - (v / max) * plotHeight;
     const moodPoints = items.map((it, i) => (it.mood != null ? [padLeft + (i + 0.5) * band, yOf(it.mood)] as [number, number] : null));
     const labelStep = byWeek ? 1 : n > 14 ? 5 : 1;
 
@@ -273,7 +294,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
             x={padLeft + i * band + band * 0.14}
             y={barTop(it.value)}
             width={Math.max(1, band * 0.72)}
-            height={PAD_TOP + plotHeight - barTop(it.value)}
+            height={padTop + plotHeight - barTop(it.value)}
             rx={Math.min(3, band / 4)}
             fill={info.color}
             fillOpacity={0.3}
@@ -312,7 +333,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
       </svg>
       {view === 'scatter' && (
         <p className="m-0 mt-1 text-[11px] text-text-muted">
-          Each dot is a day. The dark line follows your typical mood as {lowerLabel} goes up.
+          Each dot is one day. The line shows your typical mood on days with {SCATTER_AXIS[metric].less} vs more {SCATTER_AXIS[metric].more}.
         </p>
       )}
 
