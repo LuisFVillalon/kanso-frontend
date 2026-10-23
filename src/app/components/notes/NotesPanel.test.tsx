@@ -9,7 +9,10 @@ vi.mock('@/app/lib/supabase', () => ({ supabase: {} }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('./NoteEditor', () => ({
   default: ({ note, showExport }: { note: Note; showExport?: boolean }) => (
-    <div data-testid="note-editor" data-export={String(!!showExport)}>{note.title}</div>
+    <div data-testid="note-editor" data-export={String(!!showExport)}>
+      {note.title}
+      <textarea aria-label="Note body" defaultValue={note.content} />
+    </div>
   ),
 }));
 
@@ -173,6 +176,20 @@ describe('NotesPanel opening a note', () => {
     act(() => anyLabel('Back to panel')!.click());
     expect(openIn()).toBe('panel');
     expect(JSON.parse(window.localStorage.getItem('tm-note-open-mode')!)).toBe('panel');
+  });
+
+  it('keeps an edit typed just before switching between the panel and the centered view', () => {
+    renderOpen('cards');
+    clickText('Lecture notes');
+    const body = () => anyLabel('Note body') as unknown as HTMLTextAreaElement;
+    body().value = 'hello';
+    act(() => anyLabel('Expand')!.click());
+    expect(openIn()).toBe('centered');
+    expect(body().value).toBe('hello');
+    body().value = 'hello again';
+    act(() => anyLabel('Back to panel')!.click());
+    expect(openIn()).toBe('panel');
+    expect(body().value).toBe('hello again');
   });
 
   it('opens folder notes centered too once the choice is centered', () => {

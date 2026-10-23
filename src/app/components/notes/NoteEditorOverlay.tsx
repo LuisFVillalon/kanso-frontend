@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, X, FileSymlink, Maximize2, Minimize2 } from 'lucide-react';
 import { Note } from '@/app/types/notes';
@@ -37,8 +38,18 @@ const NoteEditorOverlay: React.FC<NoteEditorOverlayProps> = ({
 }) => {
   const router = useRouter();
   const centered = mode === 'centered';
+  const [editorHost] = useState(() => {
+    if (typeof document === 'undefined') return null;
+    const host = document.createElement('div');
+    host.style.display = 'contents';
+    return host;
+  });
+  const placeEditor = useCallback((slot: HTMLDivElement | null) => {
+    if (slot && editorHost) slot.appendChild(editorHost);
+  }, [editorHost]);
 
   return (
+    <>
     <Modal
       onClose={onClose}
       layer={centered ? 'top' : 'base'}
@@ -93,15 +104,18 @@ const NoteEditorOverlay: React.FC<NoteEditorOverlayProps> = ({
       </div>
 
       {/* Editor */}
-      <div className="flex-1 overflow-hidden flex flex-col">
-        <NoteEditor
-          note={note}
-          allTags={allTags}
-          onUpdate={onUpdate}
-          showExport
-        />
-      </div>
+      <div ref={placeEditor} className="flex-1 overflow-hidden flex flex-col" />
     </Modal>
+    {editorHost && createPortal(
+      <NoteEditor
+        note={note}
+        allTags={allTags}
+        onUpdate={onUpdate}
+        showExport
+      />,
+      editorHost,
+    )}
+    </>
   );
 };
 
