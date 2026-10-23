@@ -543,7 +543,8 @@ describe('CalendarReportView tabs', () => {
     expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
     expect(text()).toContain('Activity by day');
     expect(text()).toContain('Highlights');
-    expect(text()).toContain('Longest streak');
+    expect(text()).toContain('Current streak');
+    expect(text()).not.toContain('Longest streak');
     // A week's mood is its average; patterns wait for the Month report.
     expect(text()).toContain('Good 4.0 · 1 of 3 days logged');
     expect(text()).not.toContain('Mood & your activity');

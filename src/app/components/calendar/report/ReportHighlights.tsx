@@ -107,7 +107,7 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
     {
       view: 'habits',
       icon: <Flame className="w-4 h-4" style={{ color: '#F97316' }} />,
-      title: 'Longest streak',
+      title: 'Current streak',
       text: streak
         ? `${streak.title} · ${plural(streak.currentStreak ?? 0, 'day')}${streak.bestStreak ? ` (best ${streak.bestStreak})` : ''}`
         : 'No habit streaks going',
