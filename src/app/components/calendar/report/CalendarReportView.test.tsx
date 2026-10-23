@@ -21,6 +21,23 @@ const auth = vi.hoisted(() => ({ user: { id: 'user-1' } }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
 const habitsContext = vi.hoisted(() => ({ habits: [] }));
 vi.mock('@/app/context/HabitsContext', () => ({ useHabitsContext: () => habitsContext }));
+// The open tab lives in the URL: read it from window.location, and re-render on pushState like Next does.
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  const listeners = new Set<() => void>();
+  const pushState = window.history.pushState.bind(window.history);
+  window.history.pushState = (...args: Parameters<History['pushState']>) => {
+    pushState(...args);
+    listeners.forEach(listener => listener());
+  };
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  return {
+    useSearchParams: () => new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search)),
+  };
+});
 
 import CalendarReportView from './CalendarReportView';
 
@@ -37,6 +54,7 @@ const checkin = (period_start: string, mood: number): MoodCheckin => ({
 
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/reports');
   vi.useFakeTimers({ toFake: ['Date'] });
   // Wednesday: the week is Oct 19–25, three days in.
   vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
@@ -73,16 +91,20 @@ const text = () => document.body.textContent ?? '';
 const buttonLabelled = (pattern: RegExp) =>
   [...document.body.querySelectorAll('button')].find(b => pattern.test(b.getAttribute('aria-label') ?? b.textContent ?? ''))!;
 const click = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); };
+const tab = (name: string) => [...document.querySelectorAll('[role="tab"]')].find(t => t.textContent === name)!;
+const openTab = (name: string) => click(tab(name));
+const openPatterns = () => click([...document.querySelectorAll('[aria-label="Mood view"] button')].find(b => b.textContent === 'Patterns')!);
 
 describe('CalendarReportView mood', () => {
   it('adds the Mood tile and keeps the week summary to the week', async () => {
     await render();
     expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-19', '2026-10-25');
     expect(text()).toContain('1 of 3 days logged');
+    expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
+    await openTab('Mood');
     expect(text()).not.toContain('4 weeks');
     expect(text()).not.toContain('28 days');
     expect(text()).toContain('Mood over time');
-    expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
   });
 
   it('ignores check-ins from before the week', async () => {
@@ -97,6 +119,7 @@ describe('CalendarReportView mood', () => {
     await render();
     expect(text()).not.toContain('Nothing recorded');
     expect(text()).toContain('Couldn’t load check-ins');
+    await openTab('Mood');
     expect(text()).toContain('Couldn’t load your mood check-ins.');
     expect(buttonLabelled(/^Try again$/)).toBeDefined();
   });
@@ -120,6 +143,7 @@ describe('CalendarReportView mood', () => {
 
   it('edits a logged day and logs a hollow one', async () => {
     await render();
+    await openTab('Mood');
     await click(buttonLabelled(/^Tuesday, October 20: Mood Good/));
     expect(text()).toContain('Edit check-in · Tue, Oct 20');
     await click(buttonLabelled(/^Cancel$/));
@@ -134,17 +158,22 @@ describe('CalendarReportView mood', () => {
   it('points a week to its Month report for mood patterns', async () => {
     await render();
     expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-19', '2026-10-25', { includeArchived: true });
-    expect(text()).not.toContain('Mood & your activity');
+    await openTab('Mood');
     expect(text()).not.toContain('Patterns in your mood show up');
+    await openPatterns();
+    expect(text()).not.toContain('Mood & your activity');
     expect(text()).toContain('they appear in the Month and Year reports');
     await click(buttonLabelled(/^See October$/));
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
+    expect(text()).toContain('Mood & your activity');
   });
 
   it('shows "Not enough data" for mood and activity below 10 check-ins', async () => {
     await render();
+    await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     expect(text()).toContain('Patterns in your mood show up after about 10 days with a check-in — 2 so far this month.');
+    await openPatterns();
     expect(text()).toContain('Mood & your activity');
     expect(text()).toContain('Not enough data');
     expect(text()).toContain('2 days with a check-in');
@@ -162,12 +191,14 @@ describe('CalendarReportView mood', () => {
       habit_completions: days.flatMap((d, i) => Array.from({ length: i % 5 }, (_, h) => ({ habit_id: h + 1, habit_title: `Habit ${h}`, date: d, estimated_time: null }))),
     }));
     await render();
+    await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
+    await openPatterns();
     expect(text()).toContain('20 days with a check-in');
     // Tasks never varied.
     expect(text()).toContain('Your number of tasks completed barely changed');
 
-    // The mood metric switch, not the tag card's Habits chip.
+    // The mood metric switch, not the Habits tab.
     await click([...document.querySelectorAll('[aria-label="Compare mood with"] button')].find(b => b.textContent === 'Habits')!);
     expect(text()).toContain('This month, your mood tended to be higher on days with more habits checked off.');
     expect(text()).toContain('Based on 20 days, so treat it as a hint.');
@@ -195,7 +226,9 @@ describe('CalendarReportView mood', () => {
       ...checkin(d, (i % 5) + 1), id: i + 1, tags: i % 5 >= 3 ? ['Exercised'] : i % 5 <= 1 ? ['Tired'] : [],
     })));
     await render();
+    await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
+    await openPatterns();
 
     const exercised = buttonLabelled(/^On the 8 days you tagged “Exercised”/);
     const tired = buttonLabelled(/^On the 8 days you tagged “Tired”/);
@@ -218,6 +251,7 @@ describe('CalendarReportView mood', () => {
 
   it('opens a month from the year chart', async () => {
     await render();
+    await openTab('Mood');
     await click(buttonLabelled(/^Year$/));
     await click(buttonLabelled(/^October: average mood 3\.0/));
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
@@ -237,6 +271,7 @@ describe('CalendarReportView mood', () => {
         week('2026-09-28', 2),
       ]);
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
       expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-11-01');
 
@@ -260,6 +295,7 @@ describe('CalendarReportView mood', () => {
       vi.setSystemTime(new Date(2026, 10, 3, 20, 0));
       api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-27', 4), checkin('2026-11-01', 2), week('2026-10-26', 3)]);
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
       await click(buttonLabelled(/^Previous month$/));
       expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-11-01');
@@ -270,6 +306,7 @@ describe('CalendarReportView mood', () => {
     it('keeps the Mood section for a weekly check-in with no daily ones', async () => {
       api.fetchMoodCheckins.mockResolvedValue([week('2026-10-19', 5, { highlight: 'Shipped it' })]);
       await render();
+      await openTab('Mood');
       expect(text()).not.toContain('Nothing recorded');
       expect(text()).not.toContain('No mood check-ins');
       expect(text()).toContain('Mood over time');
@@ -280,6 +317,7 @@ describe('CalendarReportView mood', () => {
     it('keeps the Year view’s Months in a word with only monthly check-ins', async () => {
       api.fetchMoodCheckins.mockResolvedValue([month('2026-09-01', 2, 'Grind')]);
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
       expect(text()).not.toContain('No mood check-ins');
       expect(text()).toContain('Months in a word');
@@ -297,6 +335,7 @@ describe('CalendarReportView mood', () => {
       api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-12', 4), week('2026-10-12', 5)]);
       api.saveMoodCheckin.mockImplementation(async (body: MoodCheckin) => ({ ...week('2026-10-12', body.mood), ...body }));
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
       await click(buttonLabelled(/^Week of Oct 12: Great/));
       await click(buttonLabelled(/^Low$/));
@@ -315,6 +354,7 @@ describe('CalendarReportView mood', () => {
         month('2026-10-01', 4, null),
       ]);
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
       expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-01-01', '2026-12-31');
 
@@ -332,6 +372,7 @@ describe('CalendarReportView mood', () => {
 
     it('leaves the lists out while those check-ins are off and none exist', async () => {
       await render();
+      await openTab('Mood');
       expect(text()).not.toContain('Weekly check-ins');
       await click(buttonLabelled(/^Year$/));
       expect(text()).not.toContain('Months in a word');
@@ -340,6 +381,7 @@ describe('CalendarReportView mood', () => {
     it('offers to log the week when weekly check-ins are on', async () => {
       api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { weekly: true } });
       await render();
+      await openTab('Mood');
       expect(text()).toContain('No weekly check-in yet — it’s asked on Sunday.');
       await click(buttonLabelled(/^Log it$/));
       expect(text()).toContain('Weekly check-in');
@@ -350,6 +392,7 @@ describe('CalendarReportView mood', () => {
       api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-20', 4), week('2026-10-12', 5)]);
       api.saveMoodCheckin.mockImplementation(async (body: MoodCheckin) => ({ ...week(body.period_start, body.mood), ...body }));
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
 
       // Sep 28 runs into October; Oct 26 hasn't begun.
@@ -370,6 +413,7 @@ describe('CalendarReportView mood', () => {
     it('lists only logged weeks of a month while weekly check-ins are off', async () => {
       api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-20', 4), week('2026-10-12', 5)]);
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
       expect(buttonLabelled(/^Week of Oct 12: Great\. Edit$/)).toBeDefined();
       expect(buttonLabelled(/no weekly check-in/)).toBeUndefined();
@@ -380,6 +424,7 @@ describe('CalendarReportView mood', () => {
       api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-20', 4), month('2026-09-01', 2, 'Grind')]);
       api.saveMoodCheckin.mockImplementation(async (body: MoodCheckin) => ({ ...month(body.period_start, body.mood, null), ...body }));
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
 
       expect(buttonLabelled(/^January: no monthly check-in\. Log it$/)).toBeDefined();
@@ -399,6 +444,7 @@ describe('CalendarReportView mood', () => {
     it('lists no unlogged months while monthly check-ins are off', async () => {
       api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-20', 4), month('2026-09-01', 2, 'Grind')]);
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
       expect(buttonLabelled(/^September: Low, “Grind”\. Edit$/)).toBeDefined();
       expect(buttonLabelled(/no monthly check-in/)).toBeUndefined();
@@ -407,6 +453,7 @@ describe('CalendarReportView mood', () => {
     it('edits a monthly check-in from its ◇ on the year', async () => {
       api.fetchMoodCheckins.mockResolvedValue([checkin('2026-09-10', 3), month('2026-09-01', 2, 'Grind')]);
       await render();
+      await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
       await click(buttonLabelled(/^September monthly check-in: Low · “Grind”\. Edit$/));
       expect(text()).toContain('Edit monthly check-in');
@@ -419,6 +466,12 @@ describe('CalendarReportView mood', () => {
       await render();
       await click(buttonLabelled(/^Month$/));
       await click(buttonLabelled(/^Previous month$/));
+      expect(text()).toContain('Nothing recorded for last month');
+      expect(buttonLabelled(/no weekly check-in/)).toBeUndefined();
+      await openTab('Tasks');
+      expect(text()).toContain('Nothing recorded for last month');
+      expect(buttonLabelled(/no weekly check-in/)).toBeUndefined();
+      await openTab('Mood');
       expect(text()).toContain('Nothing recorded for last month');
       expect(text()).toContain('No mood check-ins last month');
       expect(buttonLabelled(/^Week of Aug 31: no weekly check-in\. Log it$/)).toBeDefined();
@@ -445,6 +498,7 @@ describe('CalendarReportView mood', () => {
       await render();
       await click(buttonLabelled(/^Month$/));
       await click(buttonLabelled(/^Previous month$/));
+      await openTab('Mood');
       await click(buttonLabelled(/^Week of Sep 14: no weekly check-in/));
       await click(buttonLabelled(/^Good$/));
       await click(buttonLabelled(/^Save check-in$/));
@@ -466,6 +520,7 @@ describe('CalendarReportView mood', () => {
       await render();
       await click(buttonLabelled(/^Year$/));
       await click(buttonLabelled(/^Previous year$/));
+      await openTab('Mood');
       expect(text()).toContain('Nothing recorded for last year');
       expect(text()).toContain('No mood check-ins last year');
       expect(buttonLabelled(/^December: no monthly check-in\. Log it$/)).toBeDefined();
@@ -483,9 +538,119 @@ describe('CalendarReportView mood', () => {
       api.fetchMoodCheckins.mockResolvedValue([]);
       await render();
       await click(buttonLabelled(/^Previous week$/));
+      await openTab('Mood');
       expect(text()).toContain('No weekly check-in for this week.');
       await click(buttonLabelled(/^Log it$/));
       expect(text()).toContain('Week of Oct 12–18');
     });
+  });
+});
+
+describe('CalendarReportView tabs', () => {
+  const withHabits = () => api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+    start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [],
+    habit_completions: ['2026-10-19', '2026-10-20'].map(date => ({ habit_id: 1, habit_title: 'Meditate', date, estimated_time: 0.5 })),
+  }));
+
+  it('opens on Overview: tiles, activity, highlights and the time-by-tag bar', async () => {
+    withHabits();
+    await render();
+    expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
+    expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
+    expect(text()).toContain('Activity by day');
+    expect(text()).toContain('Highlights');
+    expect(text()).toContain('Current streak');
+    expect(text()).not.toContain('Longest streak');
+    // A week's mood is its average; patterns wait for the Month report.
+    expect(text()).toContain('Good 4.0 · 1 of 3 days logged');
+    expect(text()).not.toContain('Mood & your activity');
+    expect(buttonLabelled(/^Where your time went: 1h estimated and tracked this week/)).toBeDefined();
+    expect(text()).not.toContain('Mood over time');
+    expect(text()).not.toContain('Busiest days');
+  });
+
+  it('opens a tile’s tab and puts it in the URL', async () => {
+    withHabits();
+    await render();
+    await click(buttonLabelled(/^Habits22 check-ins$/));
+    expect(window.location.search).toBe('?view=habits');
+    expect(tab('Habits').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('Each square is a day.');
+    // Mon and Tue are done, Wed isn't, and Thu–Sun are still to come.
+    expect(container.querySelectorAll('[title$=": done"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[title$=": not done"]')).toHaveLength(1);
+
+    await openTab('Overview');
+    expect(window.location.search).toBe('');
+  });
+
+  it('opens the tab and mood view a link names', async () => {
+    window.history.replaceState(null, '', '/reports?view=mood&mood=patterns');
+    await render();
+    expect(tab('Mood').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('they appear in the Month and Year reports');
+    await click(buttonLabelled(/^Month$/));
+    expect(text()).toContain('Mood & your activity');
+    expect(text()).not.toContain('Mood over time');
+
+    await click([...document.querySelectorAll('[aria-label="Mood view"] button')].find(b => b.textContent === 'Over time')!);
+    expect(window.location.search).toBe('?view=mood');
+    expect(text()).toContain('Mood over time');
+  });
+
+  it('keeps the tab when the period changes', async () => {
+    await render();
+    await openTab('Notes');
+    expect(text()).toContain('Note time by day');
+    await click(buttonLabelled(/^Year$/));
+    expect(tab('Notes').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('Note time by month');
+    expect(window.location.search).toBe('?view=notes');
+  });
+
+  it('opens Tasks and Time from the highlights and the share bar', async () => {
+    withHabits();
+    await render();
+    await click(buttonLabelled(/^Busiest day/));
+    expect(tab('Tasks').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('Planned vs done');
+    expect(text()).toContain('Busiest days');
+
+    await openTab('Overview');
+    await click(buttonLabelled(/^Where your time went: /));
+    expect(tab('Time').getAttribute('aria-selected')).toBe('true');
+    expect(document.querySelector('[aria-label="Measure"]')).not.toBeNull();
+  });
+
+  it('opens Mood Patterns from a month’s Mood & your activity highlight, and Over time from the week’s Mood', async () => {
+    await render();
+    await click(buttonLabelled(/^MoodGood 4\.0 · 1 of 3 days logged$/));
+    expect(window.location.search).toBe('?view=mood');
+
+    await openTab('Overview');
+    await click(buttonLabelled(/^Month$/));
+    await click(buttonLabelled(/^Mood & your activity/));
+    expect(window.location.search).toBe('?view=mood&mood=patterns');
+    expect(tab('Mood').getAttribute('aria-selected')).toBe('true');
+    expect(text()).not.toContain('Mood over time');
+  });
+
+  it('adds no history entry for the tab or mood view already open', async () => {
+    await render();
+    await openTab('Mood');
+    const length = window.history.length;
+    await openTab('Mood');
+    await click([...document.querySelectorAll('[aria-label="Mood view"] button')].find(b => b.textContent === 'Over time')!);
+    expect(window.history.length).toBe(length);
+    await openPatterns();
+    expect(window.history.length).toBe(length + 1);
+    await openPatterns();
+    expect(window.history.length).toBe(length + 1);
+  });
+
+  it('falls back to Overview for an unknown view', async () => {
+    window.history.replaceState(null, '', '/reports?view=bogus');
+    await render();
+    expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CircleCheck, FileText, Repeat, Tag as TagIcon } from 'lucide-react';
+import { ArrowLeft, ChevronRight, CircleCheck, FileText, Repeat, Tag as TagIcon } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
 import { formatHours } from '@/app/components/stats/charts';
 import { useTagComparison } from '@/app/hooks/useTagComparison';
@@ -386,7 +386,7 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
                 title={m === 'time'
                   ? 'Task and habit estimates, plus time spent editing notes'
                   : 'Tasks completed, notes worked on and habit check-ins'}
-                className={`px-2.5 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                   measure === m ? 'bg-surface-raised text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
@@ -403,7 +403,7 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
                   type="button"
                   onClick={() => toggleKind(k)}
                   aria-pressed={kinds[k]}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
+                  className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
                     kinds[k] ? 'border-border-strong bg-surface-raised text-text-primary' : 'border-border text-text-muted hover:text-text-primary'
                   }`}
                 >
@@ -453,6 +453,84 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
         )}
       </CardShell>
     </section>
+  );
+};
+
+// ── Share bar ───────────────────────────────────────────────────────────────
+
+const ALL_KINDS: Record<TagItemKind, boolean> = { task: true, note: true, habit: true };
+
+interface ReportTagShareBarProps {
+  period: ReportPeriod;
+  activity: CalendarActivity;
+  /** Opens the full "Where your time went" card. */
+  onOpen: () => void;
+}
+
+/**
+ * The report Overview's one-line "Where your time went": the period's time
+ * as a share bar, with each tag's share under it. The whole card opens the
+ * full breakdown.
+ */
+export const ReportTagShareBar: React.FC<ReportTagShareBarProps> = ({ period, activity, onOpen }) => {
+  const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
+  const breakdown = useMemo(
+    () => buildTagBreakdown(collectTagItems(activity, period.start, period.end), 'time', ALL_KINDS),
+    // `periodKey` identifies the period; its Date objects change identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activity, periodKey],
+  );
+  const { rows, total } = breakdown;
+  const top = rows.find(r => r.key !== UNTAGGED_KEY && !r.foldedKeys);
+  const summary = total > 0
+    ? `${formatTagHours(total)} estimated and tracked ${periodWord(period)}${top ? `, most went to ${top.name} (${percent(top.total, total)}%)` : ''}`
+    : 'No estimated or tracked time to break down yet';
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Where your time went: ${summary}. Show by tag`}
+      className="card-glass w-full text-left p-3 sm:p-4 flex flex-col gap-2 hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tm-accent)]"
+    >
+      <span className="flex items-center gap-1.5">
+        <TagIcon className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} aria-hidden />
+        <span className="text-xs sm:text-sm md:text-base text-text-muted font-medium uppercase tracking-wide">Where your time went</span>
+        <ChevronRight className="w-4 h-4 ml-auto text-text-muted" aria-hidden />
+      </span>
+      {total > 0 ? (
+        <>
+          <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-lg font-bold text-text-primary">{formatTagHours(total)}</span>
+            <span className="text-xs text-text-secondary">
+              estimated and tracked {periodWord(period)}
+              {top && (
+                <>
+                  {' · most went to '}
+                  <span className="font-semibold text-text-primary">{top.name}</span> ({percent(top.total, total)}%)
+                </>
+              )}
+            </span>
+          </span>
+          <span className="flex h-3 rounded-full overflow-hidden gap-0.5" aria-hidden="true">
+            {rows.map(row => (
+              <span key={row.key} className="min-w-[3px]" style={{ flex: `${row.total} 1 0`, backgroundColor: rowColor(row) }} />
+            ))}
+          </span>
+          <span className="flex flex-wrap gap-x-3.5 gap-y-1 text-[11px] sm:text-xs text-text-secondary" aria-hidden="true">
+            {rows.map(row => (
+              <span key={row.key} className="inline-flex items-center gap-1.5">
+                <Swatch color={rowColor(row)} size="w-2 h-2" />
+                <span className={row.key === UNTAGGED_KEY ? 'italic' : ''}>{row.name}</span>
+                <span className="font-semibold text-text-primary">{percent(row.total, total)}%</span>
+              </span>
+            ))}
+          </span>
+        </>
+      ) : (
+        <span className="text-xs sm:text-sm text-text-muted italic">{summary}.</span>
+      )}
+    </button>
   );
 };
 
