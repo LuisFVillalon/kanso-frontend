@@ -342,7 +342,7 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
   const [kinds, setKinds] = useState<Record<TagItemKind, boolean>>({ task: true, note: true, habit: true });
   const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
   const [open, setOpen] = useState<{ periodKey: string; key: string } | null>(null);
-  const comparison = useTagComparison(period, activity);
+  const comparison = useTagComparison(period);
 
   const items = useMemo(
     () => collectTagItems(activity, period.start, period.end),
