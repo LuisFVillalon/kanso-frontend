@@ -88,6 +88,9 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
 
   const index = useMemo(() => linkedTaskIndex(allTasks), [allTasks]);
   const { byId, childrenOf, descendantsOf, openUnder } = index;
+  // The tasks as they are now, for a toast's button clicked after the list changed.
+  const indexNow = useRef(index);
+  useEffect(() => { indexNow.current = index; }, [index]);
 
   const setBanner = (id: number, kind: LinkedBannerKind | null) =>
     setBanners(prev => {
@@ -123,7 +126,12 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
   const allDoneToast = (parent: Task) => {
     const complete = {
       label: `Complete “${parent.title}”`,
-      onClick: () => { setBanner(parent.id, null); onToggleComplete(parent.id); },
+      onClick: () => {
+        const now = indexNow.current.byId.get(parent.id);
+        if (!now || now.completed || indexNow.current.openUnder(parent.id) > 0) return;
+        setBanner(parent.id, null);
+        onToggleComplete(parent.id);
+      },
     };
     const show = showIt(parent);
     showToast(`All linked tasks are done. “${parent.title}” is hidden by your filters.`, 'info', show ? [complete, show] : complete);

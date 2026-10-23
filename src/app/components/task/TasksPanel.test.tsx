@@ -242,6 +242,29 @@ describe('TasksPanel finishing the last open linked task', () => {
     expect(container.textContent).not.toContain('All linked tasks are done');
   });
 
+  it("the toast's Complete does nothing once the parent no longer waits on it", () => {
+    vi.useFakeTimers();
+    Element.prototype.scrollIntoView = vi.fn();
+    render([parent, done, open], { shown: [open] });
+    act(() => checkbox(3).click());
+    const closed = { ...open, completed: true };
+    render([parent, done, closed], { shown: [closed] });
+    act(() => { vi.advanceTimersByTime(60); });
+    const [complete] = [showToast.mock.calls[0][2]].flat();
+    handlers.onToggleComplete.mockClear();
+
+    // The linked task was reopened (or its toggle rolled back).
+    render([parent, done, open], { shown: [open] });
+    act(() => complete.onClick());
+    // The parent was completed elsewhere.
+    render([{ ...parent, completed: true }, done, closed], { shown: [closed] });
+    act(() => complete.onClick());
+    // The parent was deleted.
+    render([done, closed], { shown: [closed] });
+    act(() => complete.onClick());
+    expect(handlers.onToggleComplete).not.toHaveBeenCalled();
+  });
+
   it('shows no toast when the parent card is in the list', () => {
     vi.useFakeTimers();
     Element.prototype.scrollIntoView = vi.fn();

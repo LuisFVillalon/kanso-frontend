@@ -392,6 +392,29 @@ describe('Opening a linked task in the editor', () => {
     expect(doc().querySelectorAll('[hidden]')).toHaveLength(0);
   });
 
+  it('drops a linked task unlinked on top from the form below, so saving it does not link it back', async () => {
+    const onSubmit = vi.fn<Submit>(async () => {});
+    function Harness() {
+      const [tasks, setTasks] = useState(allTasks);
+      return (
+        <EditHarness
+          initial={allTasks[0]} tasks={tasks} onSubmit={onSubmit}
+          onSaveLinkedTask={async t => { setTasks(prev => prev.map(x => (x.id === t.id ? t : x))); return true; }}
+        />
+      );
+    }
+    act(() => root.render(<Harness />));
+    act(() => rowOpen('Read the job posting').click());
+    act(() => buttonByText('Unlink').click());
+    await submit();
+
+    expect(doc().querySelectorAll('[hidden]')).toHaveLength(0);
+    expect(rowTitles()).toEqual(['Update résumé']);
+    act(() => button('Remove Update résumé').click());
+    await submit();
+    expect(onSubmit).toHaveBeenCalledWith(expect.anything(), []);
+  });
+
   it('offers no open button without a way to save the opened task', () => {
     act(() => root.render(<EditHarness initial={allTasks[0]} onSubmit={vi.fn()} />));
     expect(rowOpen('Read the job posting')).toBeNull();

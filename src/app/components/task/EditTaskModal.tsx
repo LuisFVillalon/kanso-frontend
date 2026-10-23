@@ -111,6 +111,12 @@ const EditTaskForm: React.FC<EditTaskFormProps> = ({
   // The tasks above this one as it was when the modal opened, so the trail stays put while unlinked.
   const parents = parentChain(byId, { ...task, parent_task_id: originalParentId });
   const showLinkedField = !!allTasks;
+  const savedIds = new Set(savedLinked.flatMap(d => (d.kind === 'existing' ? [d.id] : [])));
+  // A saved row whose task has since moved elsewhere (say, unlinked in a form opened on top) is gone from here.
+  const stillHere = (d: LinkedDraft) =>
+    d.kind !== 'existing' || !savedIds.has(d.id) || byId.get(d.id)?.parent_task_id === task.id;
+  const saved = savedLinked.filter(stillHere);
+  const rows = linked.filter(stillHere);
 
   const setParent = (parent_task_id: number | null) =>
     onTaskChange({ ...(task as TaskFormData), parent_task_id });
@@ -118,12 +124,12 @@ const EditTaskForm: React.FC<EditTaskFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLinkedError(null);
-    if (showLinkedField && linked.some(d => d.kind === 'new' && !d.form.title.trim())) {
+    if (showLinkedField && rows.some(d => d.kind === 'new' && !d.form.title.trim())) {
       setLinkedError('Give each new linked task a title, or remove it.');
       return;
     }
-    const refs = showLinkedField && linkedDraftsChanged(savedLinked, linked)
-      ? toLinkedRefs(linked, allTasks!)
+    const refs = showLinkedField && linkedDraftsChanged(saved, rows)
+      ? toLinkedRefs(rows, allTasks!)
       : undefined;
     setIsLoading(true);
     try {
@@ -196,7 +202,7 @@ const EditTaskForm: React.FC<EditTaskFormProps> = ({
                 activeTaskCount={activeTaskCount}
                 usedPriorityLevels={usedPriorityLevels}
                 onOpenTask={onOpenTask}
-                drafts={linked}
+                drafts={rows}
                 onChange={setLinked}
                 mode="edit"
                 error={linkedError}
