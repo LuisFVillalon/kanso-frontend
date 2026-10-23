@@ -270,8 +270,8 @@ describe('NoteEditor toolbar', () => {
   it('presses the k key on the Focus button, then opens focus mode and leaves it with Escape', () => {
     render(vi.fn<Update>().mockResolvedValue(true));
     const focus = byLabel('Focus mode (Ctrl+Shift+F)')!;
-    // The one-color k key, in the button's ink: no key red.
-    expect(focus.querySelector('svg .kanso-key-face rect')!.getAttribute('fill')).toBe('currentColor');
+    // The logo's k, in the button's ink: no key red.
+    expect(focus.querySelector('svg path')!.getAttribute('fill')).toBe('currentColor');
     expect(focus.innerHTML).not.toContain('--kanso-key');
     act(() => focus.click());
     expect(focus.className).toContain('key-press-play');
@@ -279,7 +279,7 @@ describe('NoteEditor toolbar', () => {
     // Focus mode opens once the key springs back (jsdom never runs the animation, so the fallback).
     act(() => { vi.advanceTimersByTime(600); });
     expect(byLabel('More note actions')).toBeNull();
-    expect(container.textContent).toContain('Leave focus');
+    expect(byLabel('Leave focus')).not.toBeNull();
     act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
     expect(byLabel('More note actions')).not.toBeNull();
   });
@@ -294,11 +294,17 @@ describe('NoteEditor toolbar', () => {
     expect(byLabel('Focus mode (Ctrl+Shift+F)')).toBeNull();
   });
 
-  it('leaves focus mode from the Leave focus button', () => {
+  it('leaves focus mode from the X and k button, which has no text', () => {
     render(vi.fn<Update>().mockResolvedValue(true));
     act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
     act(() => { vi.advanceTimersByTime(600); });
-    act(() => Array.from(container.querySelectorAll('button')).find(b => b.textContent === 'Leave focus')!.click());
+    const leave = byLabel('Leave focus')!;
+    expect(leave.textContent).toBe('');
+    const [x, k] = leave.querySelectorAll('svg');
+    expect(x.classList.contains('lucide-x')).toBe(true);
+    expect(k.querySelector('path')!.getAttribute('fill')).toBe('currentColor');
+    expect(container.textContent).not.toContain('Leave focus');
+    act(() => leave.click());
     expect(byLabel('More note actions')).not.toBeNull();
   });
 

@@ -49,21 +49,21 @@ describe('WidgetsArea', () => {
     await render();
     expect(tab('Widgets').textContent).toBe('Widgets');
     expect(tab('Widgets').querySelector('svg')!.classList.contains('lucide-shapes')).toBe(true);
-    expect(tab('Week calendar').textContent).toBe('');
-    expect(tab('Week calendar').dataset.tip).toBe('Week calendar');
-    expect(tab('Week calendar').querySelector('svg')!.classList.contains('lucide-calendar-days')).toBe(true);
+    expect(tab('Week').textContent).toBe('');
+    expect(tab('Week').dataset.tip).toBe('Week');
+    expect(tab('Week').querySelector('svg')!.classList.contains('lucide-calendar-days')).toBe(true);
 
-    await act(async () => tab('Week calendar').click());
-    expect(tab('Week calendar').textContent).toBe('Week calendar');
-    expect(tab('Week calendar').hasAttribute('data-tip')).toBe(false);
-    expect(tab('Week calendar').className).toContain('key-press-play');
+    await act(async () => tab('Week').click());
+    expect(tab('Week').textContent).toBe('Week');
+    expect(tab('Week').hasAttribute('data-tip')).toBe(false);
+    expect(tab('Week').className).toContain('key-press-play');
     expect(tab('Widgets').textContent).toBe('');
     expect(tab('Widgets').getAttribute('aria-label')).toBe('Widgets');
   });
 
   it('fits the week calendar to the widgets box, which keeps setting the height', async () => {
     await render();
-    await act(async () => tab('Week calendar').click());
+    await act(async () => tab('Week').click());
 
     // The widgets stay in flow (hidden) so the area keeps their height.
     const widgetsCell = container.querySelector('[data-testid="widgets"]')!.parentElement!;
@@ -78,9 +78,9 @@ describe('WidgetsArea', () => {
     expect(week.parentElement!.parentElement!.parentElement).toBe(widgetsCell.parentElement);
   });
 
-  it('grows the box when the week calendar is dragged taller, and resets on Widgets', async () => {
+  it('grows the box when the week calendar is dragged taller, and keeps that height across Widgets', async () => {
     await render();
-    await act(async () => tab('Week calendar').click());
+    await act(async () => tab('Week').click());
     const week = () => container.querySelector<HTMLElement>('[data-testid="week-view"]')!;
     const box = () => week().parentElement!.parentElement!;
     expect(week().dataset.height).toBe('null');
@@ -91,19 +91,52 @@ describe('WidgetsArea', () => {
     expect(box().style.minHeight).toBe('900px');
 
     await act(async () => tab('Widgets').click());
-    await act(async () => tab('Week calendar').click());
-    expect(week().dataset.height).toBe('null');
-    expect(box().style.minHeight).toBe('');
+    await act(async () => tab('Week').click());
+    expect(week().dataset.height).toBe('900');
+    expect(box().style.minHeight).toBe('900px');
   });
 
-  it("doesn't keep a dragged height once the page is left", async () => {
+  it('opens the week calendar at its dragged height after the page is left', async () => {
     await render();
-    await act(async () => tab('Week calendar').click());
+    await act(async () => tab('Week').click());
     await act(async () => container.querySelector<HTMLElement>('[data-testid="week-view"]')!.click());
+    expect(localStorage.getItem('tm-home-week-height:u1')).toBe('900');
     act(() => root.unmount());
     root = createRoot(container);
 
     await render();
-    expect(container.querySelector<HTMLElement>('[data-testid="week-view"]')!.dataset.height).toBe('null');
+    expect(container.querySelector<HTMLElement>('[data-testid="week-view"]')!.dataset.height).toBe('900');
+  });
+
+  it('eases the area to the other view\'s height on a switch, unless motion is reduced', async () => {
+    const animate = vi.fn();
+    const proto = HTMLElement.prototype as unknown as { animate?: unknown };
+    const heights = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get');
+    proto.animate = animate;
+    try {
+      await render();
+      const area = () => container.querySelector('[role="tabpanel"]')!.firstElementChild as HTMLElement;
+      heights.mockReturnValue(320);
+      await act(async () => tab('Week').click());
+      expect(animate).not.toHaveBeenCalled(); // same height: nothing to ease
+
+      heights.mockReturnValueOnce(900).mockReturnValue(320);
+      await act(async () => tab('Widgets').click());
+      expect(animate).toHaveBeenCalledTimes(1);
+      expect(animate.mock.instances[0]).toBe(area());
+      const [frames, timing] = animate.mock.calls[0];
+      expect(frames.map((f: Keyframe) => f.height)).toEqual(['900px', '320px']);
+      expect(timing.duration).toBeGreaterThanOrEqual(200);
+      expect(timing.duration).toBeLessThanOrEqual(250);
+
+      window.matchMedia = vi.fn().mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia;
+      heights.mockReturnValueOnce(320).mockReturnValue(900);
+      await act(async () => tab('Week').click());
+      expect(animate).toHaveBeenCalledTimes(1);
+    } finally {
+      delete proto.animate;
+      heights.mockRestore();
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    }
   });
 });

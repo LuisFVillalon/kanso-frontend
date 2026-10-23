@@ -34,7 +34,7 @@ import { useNoteSession } from '@/app/hooks/useNoteSession';
 import { useNoteAutosave } from '@/app/hooks/useNoteAutosave';
 import { useElementWidth } from '@/app/hooks/useElementWidth';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
-import { KansoKeyIcon } from '@/app/components/common/KansoLogo';
+import { KansoKIcon } from '@/app/components/common/KansoLogo';
 
 // Splits on whitespace and drops empty tokens, so blank/whitespace-only
 // content (Tiptap's getText() for an "empty" doc) counts as zero words.
@@ -474,7 +474,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       style={{ backgroundColor: 'var(--tm-surface)' }}
     >
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
-      {/* Focus mode keeps the toolbar, trading the panel and sidebar toggles for Leave focus. */}
+      {/* Focus mode keeps the toolbar, trading the panel and sidebar toggles for Leave focus (the X and the k). */}
         <EditorToolbar
           editor={editor}
           sidebarOpen={sidebarOpen}
@@ -526,7 +526,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 onClick={pressFocusKey}
                 className={focusKeyPressed ? 'key-press-play' : ''}
               >
-                <KansoKeyIcon className="w-[18px] h-[18px]" />
+                <KansoKIcon className="w-[18px] h-[18px]" />
               </ToolbarButton>
             </span>
           )}
@@ -561,11 +561,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               type="button"
               onClick={() => setFocusMode(false)}
               title="Leave focus mode (Esc)"
-              className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-sm font-medium outline-none focus-visible:ring-2 transition-colors shrink-0 text-[var(--tm-text-secondary)] hover:text-[var(--tm-text-primary)] hover:bg-[var(--tm-surface)]"
+              aria-label="Leave focus"
+              className="flex items-center gap-1.5 h-8 px-2.5 rounded-md outline-none focus-visible:ring-2 transition-colors shrink-0 text-[var(--tm-text-secondary)] hover:text-[var(--tm-text-primary)] hover:bg-[var(--tm-surface)]"
               style={{ ...RING_STYLE, border: '1px solid var(--tm-border)' }}
             >
               <X className="w-4 h-4" aria-hidden="true" />
-              Leave focus
+              <KansoKIcon className="w-[18px] h-[18px]" />
             </button>
           ) : (
             <div data-note-details-trigger className="contents">

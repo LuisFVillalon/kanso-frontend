@@ -2,7 +2,7 @@
 
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { LayoutGrid, LineSquiggle } from 'lucide-react';
-import { KansoKeyIcon } from '@/app/components/common/KansoLogo';
+import { KansoKIcon } from '@/app/components/common/KansoLogo';
 import { longPressTip } from '@/app/components/common/longPressTip';
 import { useKeyPress } from '@/app/hooks/useKeyPress';
 
@@ -12,11 +12,13 @@ interface ModeOption {
   key: AppMode;
   icon: React.FC<{ className?: string }>;
   label: string;
+  /** The accessible name and tooltip, when the label alone doesn't say what the mode is. */
+  name?: string;
 }
 
 const MODES: ModeOption[] = [
   { key: 'normal', icon: LayoutGrid, label: 'Overview' },
-  { key: 'focus', icon: KansoKeyIcon, label: 'Focus' },
+  { key: 'focus', icon: KansoKIcon, label: 'kanso', name: 'kanso (focus mode)' },
   { key: 'doodle', icon: LineSquiggle, label: 'Doodle' },
 ];
 
@@ -70,15 +72,15 @@ const ModeSwitcher: React.FC<ModeSwitcherProps> = ({ mode, onChange, className =
           }}
         />
       )}
-      {MODES.map(({ key, icon: Icon, label }) => {
+      {MODES.map(({ key, icon: Icon, label, name = label }) => {
         const active = mode === key;
         return (
           <button
             key={key}
             type="button"
             aria-pressed={active}
-            aria-label={label}
-            data-tip={active ? undefined : label}
+            aria-label={name}
+            data-tip={active ? undefined : name}
             {...longPressTip}
             onClick={() => { press(key); onChange(key); }}
             className={`relative z-10 flex items-center justify-center gap-1.5 h-8 rounded-full text-[0.8125rem] font-medium whitespace-nowrap transition-colors duration-150 ${active ? 'px-3.5' : 'px-2.5'} ${pressing(key) ? 'key-press-play' : ''}`}

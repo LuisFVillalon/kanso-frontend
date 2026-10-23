@@ -223,8 +223,8 @@ describe('TaskManager widgets area', () => {
   it('switches between the widgets and the week calendar and remembers the choice per user', async () => {
     await render();
     expect(tab('Widgets').getAttribute('aria-selected')).toBe('true');
-    await act(async () => (tab('Week calendar') as HTMLElement).click());
-    expect(tab('Week calendar').getAttribute('aria-selected')).toBe('true');
+    await act(async () => (tab('Week') as HTMLElement).click());
+    expect(tab('Week').getAttribute('aria-selected')).toBe('true');
     expect(localStorage.getItem('tm-home-widgets-view:u1')).toBe('"week"');
   });
 });

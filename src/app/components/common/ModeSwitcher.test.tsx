@@ -37,33 +37,33 @@ describe('ModeSwitcher', () => {
   it('names every mode, showing the name only on the selected one', async () => {
     await act(async () => root.render(<Harness />));
     expect(container.querySelector('[role="group"]')!.getAttribute('aria-label')).toBe('View mode');
-    expect(buttons().map(b => b.getAttribute('aria-label'))).toEqual(['Overview', 'Focus', 'Doodle']);
+    expect(buttons().map(b => b.getAttribute('aria-label'))).toEqual(['Overview', 'kanso (focus mode)', 'Doodle']);
     expect(buttons().map(b => b.textContent)).toEqual(['Overview', '', '']);
     expect(button('Overview').getAttribute('aria-pressed')).toBe('true');
     expect(button('Overview').hasAttribute('data-tip')).toBe(false);
-    expect(button('Focus').dataset.tip).toBe('Focus');
+    expect(button('kanso (focus mode)').dataset.tip).toBe('kanso (focus mode)');
     expect(button('Doodle').dataset.tip).toBe('Doodle');
   });
 
-  it('draws Overview as a grid and Focus as the one-color k key', async () => {
+  it('draws Overview as a grid and kanso as the logo\'s k, in the button\'s ink', async () => {
     await act(async () => root.render(<Harness />));
     expect(button('Overview').querySelector('svg')!.classList.contains('lucide-layout-grid')).toBe(true);
-    const face = button('Focus').querySelector('svg .kanso-key-face rect')!;
-    expect(face.getAttribute('fill')).toBe('currentColor');
-    expect(button('Focus').innerHTML).not.toContain('--kanso-key');
+    const k = button('kanso (focus mode)').querySelector('svg path')!;
+    expect(k.getAttribute('fill')).toBe('currentColor');
+    expect(button('kanso (focus mode)').innerHTML).not.toContain('--kanso-key');
   });
 
   it('switches mode, moving the name, and presses the clicked mode once', async () => {
     await act(async () => root.render(<Harness />));
-    await click(button('Focus'));
+    await click(button('kanso (focus mode)'));
     expect(changes).toEqual(['focus']);
-    expect(buttons().map(b => b.textContent)).toEqual(['', 'Focus', '']);
-    expect(button('Focus').getAttribute('aria-pressed')).toBe('true');
+    expect(buttons().map(b => b.textContent)).toEqual(['', 'kanso', '']);
+    expect(button('kanso (focus mode)').getAttribute('aria-pressed')).toBe('true');
     expect(button('Overview').dataset.tip).toBe('Overview');
-    expect(button('Focus').className).toContain('key-press-play');
+    expect(button('kanso (focus mode)').className).toContain('key-press-play');
     expect(button('Overview').className).not.toContain('key-press-play');
     act(() => { vi.advanceTimersByTime(400); });
-    expect(button('Focus').className).not.toContain('key-press-play');
+    expect(button('kanso (focus mode)').className).not.toContain('key-press-play');
   });
 
   it('shows an icon-only mode\'s name on a long press, without switching to it', async () => {
