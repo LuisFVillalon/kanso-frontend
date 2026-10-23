@@ -33,8 +33,9 @@ import { useKeyPress } from '@/app/hooks/useKeyPress';
  * a tab (on a phone, after holding it a moment), or with Shift and an arrow
  * key on it. Dragging a half of the split tab moves that panel within the
  * split. A tab's context menu (right-click, the context menu key or
- * Shift+F10) offers what its hover control does, for the keyboard. Panels are placed by CSS order rather than moved in the DOM, so
- * reordering never remounts or reloads one.
+ * Shift+F10) offers what its hover control does, for the keyboard. Panels
+ * are placed by CSS order rather than moved in the DOM, so reordering never
+ * remounts or reloads one.
  */
 
 export type PanelKey = 'tasks' | 'notes' | 'canvas';
