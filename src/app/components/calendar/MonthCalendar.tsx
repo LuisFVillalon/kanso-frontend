@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Sun } from 'lucide-react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
+import type { TermPeriod } from '@/app/types/calendar';
+import { formatTermRange, termColor, termOnDay, termsInRange } from '@/app/lib/termPeriods';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import { gridKeyTarget, monthCells } from '@/app/utils/monthGrid';
 import {
@@ -35,9 +37,12 @@ interface MonthCalendarProps {
    * there, and focus follows once that day is rendered.
    */
   onNavigate?: (date: Date) => void;
+  /** Term periods to mark across their days (the current term and archived ones). */
+  terms?: TermPeriod[];
 }
 
 const DAY_HEADERS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+const NO_TERMS: TermPeriod[] = [];
 
 const shapeStyle = (s: MonthShape, color: string, animate: boolean): React.CSSProperties => ({
   position: 'absolute',
@@ -62,6 +67,7 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
   onSelectDay,
   selectedDate,
   onNavigate,
+  terms = NO_TERMS,
 }) => {
   const now = new Date();
   const isCurrent = year === now.getFullYear() && month === now.getMonth();
@@ -95,6 +101,12 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
     onNavigate(next);
   };
 
+  // The terms that touch this month, named above the grid.
+  const monthTerms = useMemo(
+    () => termsInRange(terms, toLocalDateStr(new Date(year, month, 1)), toLocalDateStr(new Date(year, month + 1, 0))),
+    [terms, year, month],
+  );
+
   const monthHolidays = useMemo(() => getHolidays(year)[month] ?? {}, [year, month]);
 
   const heroSummary = useMemo(() => {
@@ -112,6 +124,8 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
     }
     return { tasks, hours, habits };
   }, [isCurrent, cells, dayData]);
+  const showToday = isCurrent && !!heroSummary;
+  const showSummaryRow = showToday || monthTerms.length > 0;
 
   const { hue, icon: Icon, daylightHours } = MONTHS[month];
   const shapes = MONTH_SHAPES[month];
@@ -176,20 +190,32 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
           className="flex items-center gap-2 flex-wrap mx-0.5 mb-2.5 pb-2.5"
           style={{
             minHeight: 26,
-            borderBottom: isCurrent && heroSummary ? '1px solid var(--tm-border-subtle)' : '1px solid transparent',
-            visibility: isCurrent && heroSummary ? 'visible' : 'hidden',
+            borderBottom: showSummaryRow ? '1px solid var(--tm-border-subtle)' : '1px solid transparent',
+            visibility: showSummaryRow ? 'visible' : 'hidden',
           }}
         >
-          {isCurrent && heroSummary && (
-            <>
-              <span
-                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium leading-none"
-                style={{ backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)' }}
-              >
-                Today · {formatHeroDate(todayStr)}
-              </span>
-            </>
+          {showToday && (
+            <span
+              className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium leading-none"
+              style={{ backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)' }}
+            >
+              Today · {formatHeroDate(todayStr)}
+            </span>
           )}
+          {monthTerms.map(term => (
+            <span
+              key={`${term.title}-${term.start_date}-${term.archived}`}
+              data-term={term.title}
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium leading-none"
+              style={{ border: '1px solid var(--tm-border)', color: 'var(--tm-text-secondary)' }}
+            >
+              <span aria-hidden className="w-3 h-[3px] rounded-full" style={{ backgroundColor: termColor(term) }} />
+              {term.title}
+              <span className="text-text-muted">
+                · {formatTermRange(term)}{term.archived ? ' · archived' : ''}
+              </span>
+            </span>
+          ))}
         </div>
 
         <div className="grid grid-cols-7 gap-0.5 mb-1">
@@ -226,6 +252,7 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
                 onSelect={onSelectDay}
                 hue={hue}
                 holidayName={monthHolidays[date.getDate()]}
+                term={termOnDay(monthTerms, dateStr)}
                 isSelected={selectedDate === undefined ? undefined : dateStr === selectedStr}
                 tabIndex={onNavigate ? (dateStr === tabStopStr ? 0 : -1) : undefined}
               />

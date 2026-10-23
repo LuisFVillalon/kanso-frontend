@@ -3,6 +3,8 @@
 import React from 'react';
 import { SquareCheck, FileText } from 'lucide-react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
+import type { TermPeriod } from '@/app/types/calendar';
+import { termColor } from '@/app/lib/termPeriods';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 interface DayCellProps {
@@ -17,15 +19,18 @@ interface DayCellProps {
   isSelected?: boolean;
   /** Roving tab stop: 0 for the grid's one focusable day, -1 for the rest. */
   tabIndex?: number;
+  /** The term this day falls in, marked by a band along the cell's foot. */
+  term?: TermPeriod;
 }
 
 const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}` : hours.toFixed(1));
 
 // A single day cell in a month grid — day number plus compact indicators for
 // habits completed (colored dots, tag color), tasks due + estimated hours,
-// and notes edited. Deliberately terse; the day panel beside the calendar
+// and notes edited, with a band along the foot on days inside a term.
+// Deliberately terse; the day panel beside the calendar
 // page's month (or the dashboard tile's DayDetailModal) carries the full text.
-const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, holidayName, isSelected, tabIndex }) => {
+const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, holidayName, isSelected, tabIndex, term }) => {
   const habitDots = data?.habitsCompleted ?? [];
   const taskCount = data?.tasksDue.length ?? 0;
   const hours = data?.estimatedHours ?? 0;
@@ -42,8 +47,8 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
       data-date={toLocalDateStr(date)}
       aria-pressed={isSelected}
       tabIndex={tabIndex}
-      title={holidayName ?? date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
-      aria-label={`${date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}${holidayName ? ` — ${holidayName}` : ''}${hasContent ? ' — has activity' : ''}`}
+      title={[holidayName ?? date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' }), term?.title].filter(Boolean).join(' · ')}
+      aria-label={`${date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}${holidayName ? ` — ${holidayName}` : ''}${term ? ` — ${term.title}` : ''}${hasContent ? ' — has activity' : ''}`}
       className="relative flex flex-col text-left rounded-md p-1 sm:p-1.5 transition-transform duration-150 ease-in-out hover:z-10 hover:-translate-y-px"
       style={{
         minHeight: 60,
@@ -67,6 +72,15 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
         />
       )}
 
+      {term && (
+        <span
+          aria-hidden
+          data-term-band
+          className="absolute left-1 right-1 bottom-0.5 h-[3px] rounded-full"
+          style={{ backgroundColor: termColor(term), opacity: term.archived ? 0.55 : 0.75 }}
+        />
+      )}
+
       {habitDots.length > 0 && (
         <div className="flex flex-wrap items-center gap-0.5 mt-1">
           {visibleDots.map((h, i) => (
@@ -83,7 +97,7 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
         </div>
       )}
 
-      <div className="mt-auto pt-1 flex items-center justify-between gap-1 flex-wrap">
+      <div className="mt-auto pt-1 pb-0.5 flex items-center justify-between gap-1 flex-wrap">
         {taskCount > 0 && (
           <span className="inline-flex items-center gap-0.5 text-[8px] sm:text-[9px] font-semibold text-text-muted leading-none">
             <SquareCheck className="w-2 h-2 sm:w-2.5 sm:h-2.5" />

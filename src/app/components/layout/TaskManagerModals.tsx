@@ -13,7 +13,7 @@ import SettingsModal, { type SettingsSection } from '@/app/components/settings/S
 import { Tag, BaseTaskForm, NewTag, NewHabit, Task, LinkedTaskRef } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
 import type { ProfileFields } from '@/app/hooks/useProfile';
-import type { CalendarSettings } from '@/app/types/calendar';
+import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
 
 interface TaskManagerModalsProps {
   // New task
@@ -91,6 +91,9 @@ interface TaskManagerModalsProps {
   calendarSettings: CalendarSettings;
   calendarSettingsLoading: boolean;
   onSaveCalendarSettings: (changes: Partial<Omit<CalendarSettings, 'id'>>) => Promise<CalendarSettings>;
+  archivedTerms: ArchivedTerm[];
+  onArchiveTerm: () => Promise<unknown>;
+  onDeleteArchivedTerm: (id: number) => Promise<void>;
 }
 
 const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
@@ -105,6 +108,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   historyHabit, historyShowBackButton, onCloseHabitHistory, onToggleHabitDate,
   showSettings, settingsSection, onCloseSettings, onAccountDeleted, onSignOut, profile, profileLoading, onSaveProfileField,
   calendarSettings, calendarSettingsLoading, onSaveCalendarSettings,
+  archivedTerms, onArchiveTerm, onDeleteArchivedTerm,
 }) => {
   return (
     <>
@@ -195,6 +199,9 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         calendarSettings={calendarSettings}
         calendarSettingsLoading={calendarSettingsLoading}
         onSaveCalendarSettings={onSaveCalendarSettings}
+        archivedTerms={archivedTerms}
+        onArchiveTerm={onArchiveTerm}
+        onDeleteArchivedTerm={onDeleteArchivedTerm}
       />
     </>
   );

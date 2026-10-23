@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
+import type { TermPeriod } from '@/app/types/calendar';
 import YearStrip from './YearStrip';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -35,7 +36,7 @@ afterEach(() => {
 describe('YearStrip', () => {
   const onFocusMonth = vi.fn();
   const onSelectDay = vi.fn();
-  const render = (dayData = new Map<string, DayData>()) => act(() => root.render(
+  const render = (dayData = new Map<string, DayData>(), terms?: TermPeriod[]) => act(() => root.render(
     <YearStrip
       year={2026}
       focusedMonth={9}
@@ -44,6 +45,7 @@ describe('YearStrip', () => {
       selectedDate={new Date(2026, 9, 14)}
       onFocusMonth={onFocusMonth}
       onSelectDay={onSelectDay}
+      terms={terms}
     />,
   ));
 
@@ -84,5 +86,21 @@ describe('YearStrip', () => {
     expect(outline('2026-10-21')).toContain('var(--tm-accent)');
     expect(outline('2026-10-14')).toContain('var(--tm-text-primary)');
     expect(outline('2026-10-15')).toBe('');
+  });
+
+  it('underlines the days of the current and archived terms, and names them', () => {
+    render(undefined, [
+      { title: 'Spring 2026', start_date: '2026-01-20', end_date: '2026-05-15', archived: true },
+      { title: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-18', archived: false },
+    ]);
+    const term = (date: string) => container.querySelector(`[data-date="${date}"]`)!.getAttribute('data-term');
+    expect(term('2026-01-19')).toBeNull();
+    expect(term('2026-01-20')).toBe('Spring 2026');
+    expect(term('2026-05-15')).toBe('Spring 2026');
+    expect(term('2026-07-01')).toBeNull();
+    expect(term('2026-08-24')).toBe('Fall 2026');
+    expect(month('May').getAttribute('aria-label')).toContain(', Spring 2026');
+    expect(month('July').getAttribute('aria-label')).toBe('July 2026, 0 tasks due');
+    expect(container.textContent).toContain('Spring 2026 (archived)');
   });
 });
