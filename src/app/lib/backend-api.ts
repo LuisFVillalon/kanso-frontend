@@ -239,7 +239,7 @@ export async function updateWholeTask(id: number, task: {
 /**
  * Saves all of a task's linked tasks in one transaction, in the order given:
  * existing tasks are linked (moved from another parent if they had one), new
- * titles are created with the parent's tags, and active linked tasks left out
+ * tasks are created with the fields given, and active linked tasks left out
  * are unlinked. Returns the parent and its linked tasks in order. Throws an
  * ApiError (400 with a readable detail) when a link breaks the rules.
  */

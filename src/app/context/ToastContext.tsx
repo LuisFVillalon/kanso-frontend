@@ -15,11 +15,11 @@ interface Toast {
   id: number;
   message: string;
   variant: ToastVariant;
-  action?: ToastAction;
+  actions: ToastAction[];
 }
 
-/** Shows a toast and returns a function that dismisses it early. */
-type ShowToast = (message: string, variant?: ToastVariant, action?: ToastAction) => () => void;
+/** Shows a toast, with one button or several, and returns a function that dismisses it early. */
+type ShowToast = (message: string, variant?: ToastVariant, action?: ToastAction | ToastAction[]) => () => void;
 
 const ToastContext = createContext<ShowToast | null>(null);
 
@@ -48,9 +48,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const showToast = useCallback<ShowToast>((message, variant = 'error', action) => {
     const id = nextId.current++;
+    const actions = action ? [action].flat() : [];
     // Keep the stack short: the newest three are plenty.
-    setToasts(prev => [...prev.slice(-2), { id, message, variant, action }]);
-    setTimeout(() => dismiss(id), action ? DISMISS_WITH_ACTION_AFTER_MS : DISMISS_AFTER_MS);
+    setToasts(prev => [...prev.slice(-2), { id, message, variant, actions }]);
+    setTimeout(() => dismiss(id), actions.length > 0 ? DISMISS_WITH_ACTION_AFTER_MS : DISMISS_AFTER_MS);
     return () => dismiss(id);
   }, [dismiss]);
 
@@ -62,7 +63,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         style={{ bottom: 'calc(1rem + var(--tm-toast-offset, 0px))' }}
         className="fixed left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none"
       >
-        {toasts.map(({ id, message, variant, action }) => {
+        {toasts.map(({ id, message, variant, actions }) => {
           const { icon: Icon, color } = VARIANT_STYLE[variant];
           return (
             <div
@@ -73,15 +74,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             >
               <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color }} />
               <p className="flex-1 text-text-primary">{message}</p>
-              {action && (
+              {actions.map(action => (
                 <button
+                  key={action.label}
                   type="button"
                   onClick={() => { dismiss(id); action.onClick(); }}
                   className="font-semibold text-accent shrink-0 hover:underline"
                 >
                   {action.label}
                 </button>
-              )}
+              ))}
               <button
                 type="button"
                 onClick={() => dismiss(id)}

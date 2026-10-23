@@ -28,6 +28,10 @@ interface TaskFormFieldsProps {
   usedPriorityLevels: number[];
   /** Extra field rendered right after the title (e.g. a linked task's "Leads up to"). */
   afterTitle?: React.ReactNode;
+  /** Shown under the due date and time (e.g. a new linked task's quick dates). */
+  dueDateExtra?: React.ReactNode;
+  /** Shown under the tags (e.g. where a new linked task's tags came from). */
+  tagsHint?: React.ReactNode;
 }
 
 const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
@@ -38,7 +42,13 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
   activeTaskCount,
   usedPriorityLevels,
   afterTitle,
+  dueDateExtra,
+  tagsHint,
 }) => {
+  // Several of these forms can be on screen at once (a new linked task's, say), so label ids are unique.
+  const labelId = React.useId();
+  const remindMeId = `${labelId}-remind-me`;
+  const durationId = `${labelId}-estimated-duration`;
   const occupiedPriorities = new Set(
     usedPriorityLevels.filter(p => p !== values.priority),
   );
@@ -132,13 +142,14 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
           </div>
         </div>
       </div>
+      {dueDateExtra}
 
       {/* Reminder lead */}
       {showReminder && (
         <div>
-          <label id="remind-me-label" className="block text-sm font-medium text-text-secondary mb-2">Remind me</label>
+          <label id={remindMeId} className="block text-sm font-medium text-text-secondary mb-2">Remind me</label>
           <ReminderLeadPicker
-            aria-labelledby="remind-me-label"
+            aria-labelledby={remindMeId}
             value={values.reminder_minutes ?? null}
             onChange={minutes => set({ reminder_minutes: minutes })}
             defaultMinutes={notifications.preferences?.default_reminder_minutes ?? DEFAULT_REMINDER_MINUTES}
@@ -164,10 +175,11 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
 
       {/* Estimated Duration */}
       <div>
-        <label id="estimated-duration-label" className="block text-sm font-medium text-text-secondary mb-2">
+        <label id={durationId} className="block text-sm font-medium text-text-secondary mb-2">
           Estimated Duration
         </label>
         <DurationPicker
+          labelledBy={durationId}
           value={values.estimated_time}
           onChange={hours => set({ estimated_time: hours })}
         />
@@ -214,6 +226,7 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
             ))}
           </div>
         )}
+        {tagsHint && <p className="text-xs text-text-muted mt-1">{tagsHint}</p>}
       </div>
 
     </>

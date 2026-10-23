@@ -202,6 +202,13 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     setEditingTask(null);
   };
 
+  // A linked task opened inside the edit modal; false leaves it open.
+  const handleSaveLinkedTask = async (task: Task, linked?: LinkedTaskRef[]) => {
+    if (!(await updateTask(task.id, taskToEditForm(task)))) return false;
+    if (linked) await saveLinkedTasks(task, linked);
+    return true;
+  };
+
   const handleToggleHabitDate = async (habitId: number, date: string) => {
     await toggleHabitDate(habitId, date);
     refetch();
@@ -297,6 +304,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         tags={tags}
         onToggleTag={tag => setEditingTask(prev => (prev ? { ...prev, tags: toggleById(prev.tags, tag) } : prev))}
         onSubmit={handleEditTask}
+        onSaveLinkedTask={handleSaveLinkedTask}
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
         allTasks={tasks}

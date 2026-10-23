@@ -1,28 +1,44 @@
 import React, { useState } from 'react';
 import Modal from '@/app/components/common/Modal';
-import { LinkedRemoveMode } from '@/app/types/task';
+import { LinkedRemoveMode, Task } from '@/app/types/task';
+
+/** One of the task's direct linked tasks, with every task under it. */
+export interface RemovedBranch {
+  task: Task;
+  under: Task[];
+}
 
 interface RemoveLinkedTasksDialogProps {
   verb: 'delete' | 'archive';
   title: string;
-  linkedCount: number;
+  /** The task's direct linked tasks, in order. */
+  linked: RemovedBranch[];
   onConfirm: (linked: LinkedRemoveMode) => void;
   onClose: () => void;
 }
 
+const plural = (n: number, one: string, many = `${one}s`) => (n === 1 ? one : many);
+
+const names = (tasks: Task[]) => tasks.map((t, i) => (
+  <React.Fragment key={t.id}>{i > 0 && ', '}<b>{t.title}</b></React.Fragment>
+));
+
 /**
  * Asked before deleting or archiving a task that has linked tasks: keep them
- * as standalone tasks (picked by default) or take them along.
+ * (picked by default; the ones directly under it become standalone and keep
+ * their own linked tasks) or take them along. Lists what each choice does.
  */
 const RemoveLinkedTasksDialog: React.FC<RemoveLinkedTasksDialogProps> = ({
   verb,
   title,
-  linkedCount,
+  linked,
   onConfirm,
   onClose,
 }) => {
   const [mode, setMode] = useState<LinkedRemoveMode>('keep');
   const Verb = verb === 'delete' ? 'Delete' : 'Archive';
+  const all = linked.flatMap(b => [b.task, ...b.under]);
+  const deeper = all.length - linked.length;
 
   const option = (value: LinkedRemoveMode, label: React.ReactNode, hint: string) => (
     <label
@@ -55,10 +71,11 @@ const RemoveLinkedTasksDialog: React.FC<RemoveLinkedTasksDialogProps> = ({
           {Verb} &ldquo;{title}&rdquo;?
         </h3>
         <p className="text-sm text-text-secondary mb-3.5">
-          It has {linkedCount} linked task{linkedCount === 1 ? '' : 's'}. What should happen to them?
+          It has {all.length} linked {plural(all.length, 'task')}
+          {deeper > 0 && ` (${linked.length} directly under it)`}. They&apos;re all in your list too. What should happen to them?
         </p>
         <div className="flex flex-col gap-2">
-          {option('keep', <><b>Keep them</b> as standalone tasks</>, 'They stay in your list, just unlinked.')}
+          {option('keep', <><b>Keep them</b> as tasks</>, 'They stay in your list. The ones directly under it become standalone.')}
           {option(
             'cascade',
             <b>{Verb} them too</b>,
@@ -66,6 +83,32 @@ const RemoveLinkedTasksDialog: React.FC<RemoveLinkedTasksDialogProps> = ({
               ? 'All of them can be restored from Recently deleted for 30 days.'
               : 'All of them can be restored from the Archive.',
           )}
+        </div>
+        <div className="mt-3.5">
+          <span className="block text-xs text-text-muted">What happens</span>
+          <ul className="list-disc pl-[18px] mt-1 text-[12.5px] text-text-secondary">
+            {mode === 'keep' ? (
+              <>
+                {linked.map(({ task, under }) => {
+                  const own = under.filter(t => t.parent_task_id === task.id).length;
+                  return (
+                    <li key={task.id}>
+                      <b>{task.title}</b> becomes a standalone task
+                      {own > 0 && `, and keeps its ${own} linked ${plural(own, 'task')}`}
+                    </li>
+                  );
+                })}
+                {linked.filter(b => b.under.length > 0).map(({ task, under }) => (
+                  <li key={`root-${task.id}`}>
+                    {names(under)} now {plural(under.length, 'names', 'name')} <b>{task.title}</b> as{' '}
+                    {plural(under.length, 'its', 'their')} original task
+                  </li>
+                ))}
+              </>
+            ) : (
+              all.map(t => <li key={t.id}>{t.title}</li>)
+            )}
+          </ul>
         </div>
         <div className="flex gap-3 mt-[18px]">
           <button type="button" onClick={onClose} className="btn btn-secondary flex-1 py-2">

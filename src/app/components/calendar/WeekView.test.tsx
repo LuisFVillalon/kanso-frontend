@@ -253,10 +253,12 @@ describe('WeekView', { timeout: 30_000 }, () => {
 
     await submit();
     expect(mocks.addTask).toHaveBeenCalledTimes(1);
-    expect(mocks.saveLinkedTasks).toHaveBeenCalledWith(created, [{ title: 'Draft cover letter' }]);
+    expect(mocks.saveLinkedTasks).toHaveBeenCalledWith(created, [expect.objectContaining({ title: 'Draft cover letter' })]);
     expect(d.querySelector('[role="alert"]')?.textContent).toContain("The task was created, but its linked tasks weren't saved");
 
-    const reminder = d.querySelector<HTMLSelectElement>('select[aria-labelledby="remind-me-label"]')!;
+    // The task's own reminder: the first "Remind me" on the form (the new linked task has its own below).
+    const remindLabel = [...d.querySelectorAll('label')].find(l => l.textContent === 'Remind me')!;
+    const reminder = d.querySelector<HTMLSelectElement>(`select[aria-labelledby="${remindLabel.id}"]`)!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(reminder, '15');
       reminder.dispatchEvent(new Event('change', { bubbles: true }));

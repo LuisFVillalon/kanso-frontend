@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Archive, Check, Timer, Trash2, Calendar, SquarePen, GraduationCap, ExternalLink } from 'lucide-react';
+import { Archive, Check, Timer, Trash2, Calendar, SquarePen, GraduationCap, ExternalLink, Plus } from 'lucide-react';
 import { Task } from '@/app/types/task';
 import {
-  TaskGroup,
   getDueStatus,
   getDurationColor,
   formatTime12Hour,
   formatDueDateShort,
   PRIORITY_COLORS,
-  parentChain,
   toInkTone,
 } from '@/app/utils/taskUtils';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
@@ -17,10 +15,8 @@ import { canvasCourseLabel } from '@/app/utils/canvasTasks';
 import PriorityPicker from './PriorityPicker';
 import TaskTags from './TaskTags';
 import TaskStatusChip from './TaskStatusChip';
-import LinkedTasksList, { LinkedCountPill, LinkedToggleButton } from './LinkedTasksList';
-import ParentTrail from './ParentTrail';
-
-const NO_LOADED_TASKS: ReadonlyMap<number, Task> = new Map();
+import LinkedTasksSummary, { LinkedChip, LinkedCountPill } from './LinkedTasksSummary';
+import ParentTrail, { TrailItem } from './ParentTrail';
 
 /** "From Canvas · CS 460 ↗": opens the assignment a task added from Canvas follows. */
 const FromCanvasLink: React.FC<{ url: string; className?: string }> = ({ url, className = '' }) => {
@@ -54,16 +50,16 @@ interface TaskItemProps {
   compact?: boolean;
   /** True while a toggle-complete, archive or delete request for this task is in flight. */
   pending?: boolean;
-  /** Linked tasks nested under this one, each with its own (see groupLinkedTasks). */
-  linkedTasks?: TaskGroup[];
-  linkedDone?: number;
-  linkedTotal?: number;
-  /** In-flight ids, so a linked task's checkbox can show its own pending state. */
-  pendingTaskIds?: Set<number>;
+  /** The tasks above this one, from its original task down to the task before it (see parentChain). */
+  parents?: TrailItem[];
+  /** This task's own linked tasks, each also a card in the list. */
+  linked?: LinkedChip[];
+  /** Scrolls to another task's card (a parent in the trail, or a linked task). */
+  onGoToTask?: (id: number) => void;
+  /** Opens the "New linked task" form under this card. */
+  onAddLinked?: (task: Task) => void;
   /** A completion question shown at the bottom of the card (see LinkedTaskBanner). */
   banner?: React.ReactNode;
-  /** The completion question a nested linked task is asking, shown under its row. */
-  linkedBannerFor?: (group: TaskGroup) => React.ReactNode;
 }
 
 const TaskItem: React.FC<TaskItemProps> = ({
@@ -79,12 +75,11 @@ const TaskItem: React.FC<TaskItemProps> = ({
   occupiedPriorities = [],
   compact = false,
   pending = false,
-  linkedTasks = [],
-  linkedDone = 0,
-  linkedTotal = 0,
-  pendingTaskIds,
+  parents = [],
+  linked = [],
+  onGoToTask,
+  onAddLinked,
   banner,
-  linkedBannerFor,
 }) => {
   const maxPriority = activeTaskCount ?? Object.keys(PRIORITY_COLORS).length;
 
@@ -97,27 +92,8 @@ const TaskItem: React.FC<TaskItemProps> = ({
   }, [activeTaskCount, occupiedPriorities, task.priority]);
 
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-  const [linkedExpanded, setLinkedExpanded] = useState(true);
-  const hasLinked = linkedTotal > 0;
-
-  const linkedList = hasLinked && (
-    <LinkedTasksList
-      linkedTasks={linkedTasks}
-      linkedDone={linkedDone}
-      linkedTotal={linkedTotal}
-      parent={task}
-      expanded={linkedExpanded}
-      onToggleExpanded={() => setLinkedExpanded(v => !v)}
-      onToggleComplete={onToggleComplete}
-      onEditTask={onEditTask}
-      maxPriority={maxPriority}
-      pendingTaskIds={pendingTaskIds}
-      compact={compact}
-      bannerFor={linkedBannerFor}
-    />
-  );
-  // A card is top-level, so its parent (if any) isn't loaded; only the API's summary can name it.
-  const parents = parentChain(NO_LOADED_TASKS, task);
+  const hasLinked = linked.length > 0;
+  const linkedDone = linked.filter(c => c.task.completed).length;
   const [descriptionOverflows, setDescriptionOverflows] = useState(false);
 
   const descriptionRef = useRef<HTMLParagraphElement>(null);
@@ -158,14 +134,11 @@ const TaskItem: React.FC<TaskItemProps> = ({
   if (compact) {
     return (
       <div
+        data-task-id={task.id}
         className={`card-glass px-3 py-2 animate-fade-in ${task.completed ? 'opacity-75' : ''}`}
         style={{ animationDelay: `${index * 0.05}s` }}
       >
         <div className="flex items-center gap-2 min-w-0">
-          {hasLinked && (
-            <LinkedToggleButton expanded={linkedExpanded} onClick={() => setLinkedExpanded(v => !v)} />
-          )}
-
           <button
             onClick={() => onToggleComplete?.(task.id)}
             disabled={pending}
@@ -184,13 +157,24 @@ const TaskItem: React.FC<TaskItemProps> = ({
             className={`flex-1 min-w-0 text-sm font-semibold truncate ${
               task.completed ? 'line-through text-text-muted' : 'text-text-primary'
             }`}
+            title={task.title}
           >
             {task.title}
           </span>
 
-          <ParentTrail chain={parents} className="flex-shrink-[2]" />
+          {hasLinked && <LinkedCountPill done={linkedDone} total={linked.length} />}
 
-          {hasLinked && <LinkedCountPill done={linkedDone} total={linkedTotal} />}
+          {onAddLinked && !task.completed && (
+            <button
+              type="button"
+              onClick={() => onAddLinked(task)}
+              className="btn btn-ghost p-1 flex-shrink-0"
+              title="Add a linked task"
+              aria-label={`Add a linked task to ${task.title}`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           <PriorityPicker
             priority={task.priority}
@@ -232,9 +216,14 @@ const TaskItem: React.FC<TaskItemProps> = ({
           </button>
         </div>
 
-        <TaskTags tags={task.tags} allTags={tags} className={`mt-1.5 ${hasLinked ? 'pl-12' : 'pl-6'}`} />
-        {canvasUrl && <FromCanvasLink url={canvasUrl} className={`mt-1.5 ${hasLinked ? 'ml-12' : 'ml-6'}`} />}
-        {linkedList}
+        {/* Its own line, so a long title never squeezes the trail out. */}
+        {parents.length > 0 && (
+          <div className="flex mt-1 pl-6 min-w-0">
+            <ParentTrail chain={parents} onOpen={onGoToTask} maxShown={2} className="max-w-full" />
+          </div>
+        )}
+        <TaskTags tags={task.tags} allTags={tags} className="mt-1.5 pl-6" />
+        {canvasUrl && <FromCanvasLink url={canvasUrl} className="mt-1.5 ml-6" />}
         {banner}
       </div>
     );
@@ -242,6 +231,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
 
   return (
     <div
+      data-task-id={task.id}
       className={`card-glass p-4 sm:p-6 animate-fade-in ${task.completed ? 'opacity-75' : ''}`}
       style={{ animationDelay: `${index * 0.05}s` }}
     >
@@ -270,7 +260,6 @@ const TaskItem: React.FC<TaskItemProps> = ({
               >
                 {task.title}
               </h3>
-              {parents.length > 0 && <ParentTrail chain={parents} className="mt-0.5" />}
             </div>
 
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -326,6 +315,13 @@ const TaskItem: React.FC<TaskItemProps> = ({
               </button>
             </div>
           </div>
+
+          {/* Its own line under the title, so the trail gets the card's full width. */}
+          {parents.length > 0 && (
+            <div className="flex -mt-1 mb-2 min-w-0">
+              <ParentTrail chain={parents} onOpen={onGoToTask} variant="card" maxShown={2} className="max-w-full" />
+            </div>
+          )}
 
           {task.description && (
             <div className="relative mb-3 pl-3 border-l-2 border-border-subtle">
@@ -397,9 +393,21 @@ const TaskItem: React.FC<TaskItemProps> = ({
             )}
 
             {canvasUrl && <FromCanvasLink url={canvasUrl} />}
+
+            {onAddLinked && !task.completed && (
+              <button
+                type="button"
+                onClick={() => onAddLinked(task)}
+                className="ml-auto inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[12.5px] font-medium text-accent hover:bg-[var(--tm-accent-subtle)]"
+                aria-label={`Add a linked task to ${task.title}`}
+              >
+                <Plus className="w-3.5 h-3.5" aria-hidden />
+                Linked task
+              </button>
+            )}
           </div>
 
-          {linkedList}
+          {hasLinked && onGoToTask && <LinkedTasksSummary linked={linked} onGoTo={onGoToTask} />}
           {banner}
         </div>
       </div>

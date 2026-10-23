@@ -2,7 +2,7 @@
 import React, { act, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BaseTaskForm, LinkedTaskRef, Task } from '@/app/types/task';
+import type { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
 import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
 import EditTaskModal from './EditTaskModal';
 import NewTaskModal from './NewTaskModal';
@@ -53,25 +53,38 @@ function NewHarness({ onSubmit }: { onSubmit: Submit }) {
   );
 }
 
-function EditHarness({ initial, onSubmit, onChange = () => {}, tasks = allTasks }: {
-  initial: Task; onSubmit: Submit; onChange?: (t: TaskFormData) => void; tasks?: Task[];
+type SaveLinked = (task: Task, linked?: LinkedTaskRef[]) => Promise<boolean>;
+
+function EditHarness({ initial, onSubmit, onChange = () => {}, tasks = allTasks, tags = [], onSaveLinkedTask, onClose = () => {} }: {
+  initial: Task; onSubmit: Submit; onChange?: (t: TaskFormData) => void; tasks?: Task[]; tags?: Tag[];
+  onSaveLinkedTask?: SaveLinked; onClose?: () => void;
 }) {
   const [t, setT] = useState(initial);
   return (
     <EditTaskModal
-      isOpen task={t} onClose={() => {}} onTaskChange={next => { onChange(next); setT({ ...t, ...next } as Task); }}
-      tags={[]} onToggleTag={() => {}} onSubmit={onSubmit} activeTaskCount={1} usedPriorityLevels={[]}
-      allTasks={tasks}
+      isOpen task={t} onClose={onClose} onTaskChange={next => { onChange(next); setT({ ...t, ...next } as Task); }}
+      tags={tags} onToggleTag={() => {}} onSubmit={onSubmit} activeTaskCount={1} usedPriorityLevels={[]}
+      allTasks={tasks} onSaveLinkedTask={onSaveLinkedTask}
     />
   );
 }
+
+/** What PUT /update-linked-tasks gets for a new linked task with just a title (and `extra`). */
+const newRef = (title: string, extra: Partial<LinkedTaskRef> = {}) => ({
+  title, description: '', priority: null, due_date: null, due_time: null, tags: [],
+  estimated_time: null, reminder_minutes: null, ...extra,
+});
 
 const doc = () => container.ownerDocument;
 const button = (label: string) => doc().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
 const buttonByText = (text: string) => [...doc().querySelectorAll('button')].find(b => b.textContent === text)!;
 const rowTitles = () =>
   [...doc().querySelectorAll('ul[aria-labelledby="linked-tasks-label"] > li')].map(li =>
-    li.querySelector<HTMLInputElement>('input')?.value ?? li.querySelector('span.truncate')?.textContent ?? '');
+    li.querySelector('span.truncate')?.textContent ?? '');
+/** The fields of a new linked task's row, while they show. */
+const draftFields = () => doc().querySelector<HTMLElement>('li[data-draft^="new-"]:not([hidden]) .border-dashed');
+/** The form that's showing: the editor's top one when a linked task is open on top of its parent. */
+const visibleForm = () => [...doc().querySelectorAll('form')].find(f => !f.closest('[hidden]'))!;
 const search = () => doc().querySelector<HTMLInputElement>('input[role="combobox"]')!;
 const newTitleInput = () => doc().querySelector<HTMLInputElement>('input[aria-labelledby="linked-new-label"]')!;
 
@@ -85,7 +98,7 @@ const key = (el: Element, k: string) =>
   act(() => { el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })); });
 const submit = async () => {
   await act(async () => {
-    doc().querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    visibleForm().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
 };
 
@@ -119,7 +132,7 @@ describe('LinkedTasksField on the new-task form', () => {
 
     await submit();
     expect(onSubmit).toHaveBeenCalledWith(
-      expect.anything(), [{ id: 6 }, { title: 'Ask Prof. Kim for a reference letter' }], undefined,
+      expect.anything(), [{ id: 6 }, newRef('Ask Prof. Kim for a reference letter')], undefined,
     );
   });
 
@@ -161,7 +174,7 @@ describe('LinkedTasksField on the new-task form', () => {
     act(() => root.render(<NewHarness onSubmit={onSubmit} />));
     type(newTitleInput(), 'Draft cover letter');
     key(newTitleInput(), 'Enter');
-    type(doc().querySelector<HTMLInputElement>('input[aria-label="New linked task title"]')!, '  ');
+    type(draftFields()!.querySelector<HTMLInputElement>('input[type="text"]')!, '  ');
     await submit();
     expect(onSubmit).not.toHaveBeenCalled();
     expect(doc().querySelector('[role="alert"]')?.textContent).toBe('Give each new linked task a title, or remove it.');
@@ -239,7 +252,7 @@ describe('LinkedTasksField on the edit-task form', () => {
     type(newTitleInput(), 'Book a quiet room');
     key(newTitleInput(), 'Enter');
     await submit();
-    expect(onSubmit).toHaveBeenCalledWith(expect.anything(), [{ title: 'Book a quiet room' }]);
+    expect(onSubmit).toHaveBeenCalledWith(expect.anything(), [newRef('Book a quiet room')]);
   });
 
   it('shows the whole trail above a deeply linked task as plain text, so edits are never left behind', () => {
@@ -248,8 +261,8 @@ describe('LinkedTasksField on the edit-task form', () => {
     act(() => root.render(<EditHarness initial={deeper} onSubmit={vi.fn()} tasks={tasks} />));
     expect(doc().querySelector('[title="Leads up to Prepare for Google phone screen › Mock interview with Dana"]'))
       .not.toBeNull();
-    expect(button('Open parent task Mock interview with Dana')).toBeNull();
-    expect(button('Open parent task Prepare for Google phone screen')).toBeNull();
+    expect(button('Go to Mock interview with Dana')).toBeNull();
+    expect(button('Go to original task: Prepare for Google phone screen')).toBeNull();
   });
 
   it("offers neither the task's own parents nor itself when linking under a nested task", () => {
@@ -262,5 +275,148 @@ describe('LinkedTasksField on the edit-task form', () => {
     expect(blocked.every(text => text?.includes('Would create a loop'))).toBe(true);
     const offered = [...doc().querySelectorAll('[role="option"]')].map(o => o.textContent ?? '');
     expect(offered.some(text => text.includes('Book a quiet room'))).toBe(false);
+  });
+});
+
+describe('LinkedTasksField new linked tasks with every field', () => {
+  const school: Tag = { id: 8, name: 'School', color: '#123456' };
+  const gym: Tag = { id: 9, name: 'Gym', color: '#654321' };
+  const parentTask = { ...allTasks[0], tags: [school] };
+  const addNew = (title: string) => {
+    type(newTitleInput(), title);
+    key(newTitleInput(), 'Enter');
+  };
+  const field = (selector: string) => draftFields()!.querySelector<HTMLInputElement>(selector)!;
+
+  it("opens a new row with the task form's fields, starting with this task's tags", () => {
+    act(() => root.render(<EditHarness initial={parentTask} onSubmit={vi.fn()} tags={[school, gym]} />));
+    addNew('Practice questions');
+    const fields = draftFields()!;
+    for (const selector of ['input[type="text"]', 'input[type="date"]', 'input[type="time"]', 'select', 'textarea']) {
+      expect(fields.querySelector(selector)).not.toBeNull();
+    }
+    expect(field('input[type="text"]').value).toBe('Practice questions');
+    expect(fields.textContent).toContain('Selected:School');
+    expect(fields.textContent).toContain('Starts with “Apply to internships”’s tags.');
+    expect(button('Hide details of Practice questions').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('saves the fields set on a new row with the list', async () => {
+    const onSubmit = vi.fn<Submit>(async () => {});
+    act(() => root.render(<EditHarness initial={parentTask} onSubmit={onSubmit} tags={[school, gym]} />));
+    addNew('Practice questions');
+    act(() => buttonByText('Day before “Apply to internshi…”').click());
+    type(field('input[type="time"]'), '17:00');
+    const tagButton = (name: string) => [...draftFields()!.querySelectorAll('button')].find(b => b.textContent === name)!;
+    act(() => tagButton('Gym').click());
+    act(() => tagButton('School').click());
+    await submit();
+    expect(onSubmit).toHaveBeenCalledWith(expect.anything(), [
+      { id: 5 }, { id: 4 },
+      newRef('Practice questions', { due_date: '2026-11-14', due_time: '17:00', tags: [{ id: 9, name: 'Gym', color: '#654321' }] }),
+    ]);
+  });
+
+  it('hides the fields behind a summary, and shows them again', () => {
+    act(() => root.render(<EditHarness initial={parentTask} onSubmit={vi.fn()} />));
+    addNew('Practice questions');
+    act(() => buttonByText('Same day').click());
+    act(() => button('Hide details of Practice questions').click());
+    expect(draftFields()).toBeNull();
+    expect(doc().body.textContent).toContain('Nov 15');
+    act(() => button('Edit details of Practice questions').click());
+    expect(field('input[type="date"]').value).toBe('2026-11-15');
+  });
+
+  it('opens only the newest row', () => {
+    act(() => root.render(<EditHarness initial={parentTask} onSubmit={vi.fn()} />));
+    addNew('One');
+    addNew('Two');
+    expect(button('Edit details of One').getAttribute('aria-expanded')).toBe('false');
+    expect(button('Hide details of Two').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('warns when a new linked task is due after this one', () => {
+    act(() => root.render(<EditHarness initial={parentTask} onSubmit={vi.fn()} />));
+    addNew('Practice questions');
+    type(field('input[type="date"]'), '2026-11-20');
+    expect(draftFields()!.textContent).toContain('This is due after “Apply to internships” (Nov 15). Saving is still allowed.');
+  });
+});
+
+describe('Opening a linked task in the editor', () => {
+  const rowOpen = (title: string) => button(`Open ${title}`);
+
+  it('opens a linked task in the same editor, with a link back', () => {
+    act(() => root.render(<EditHarness initial={allTasks[0]} onSubmit={vi.fn()} onSaveLinkedTask={vi.fn()} />));
+    act(() => rowOpen('Read the job posting').click());
+    // The parent's form stays mounted underneath, hidden.
+    expect(doc().querySelectorAll('[hidden]')).toHaveLength(1);
+    expect(buttonByText('Back to “Apply to internships”')).toBeTruthy();
+    expect(visibleForm().querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe('Read the job posting');
+    expect(buttonByText('Save and go back')).toBeTruthy();
+
+    act(() => buttonByText('Back to “Apply to internships”').click());
+    expect(doc().querySelectorAll('[hidden]')).toHaveLength(0);
+    expect(visibleForm().querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe('Apply to internships');
+  });
+
+  it("saves the opened task and goes back, keeping the parent's unsaved changes", async () => {
+    const onSaveLinkedTask = vi.fn<SaveLinked>(async () => true);
+    const onSubmit = vi.fn<Submit>(async () => {});
+    act(() => root.render(<EditHarness initial={allTasks[0]} onSubmit={onSubmit} onSaveLinkedTask={onSaveLinkedTask} />));
+    type(visibleForm().querySelector<HTMLInputElement>('input[type="text"]')!, 'Apply to fall internships');
+    act(() => rowOpen('Read the job posting').click());
+    type(visibleForm().querySelector<HTMLInputElement>('input[type="text"]')!, 'Read both job postings');
+    await submit();
+
+    expect(onSaveLinkedTask).toHaveBeenCalledWith(expect.objectContaining({ id: 5, title: 'Read both job postings' }), undefined);
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(doc().querySelectorAll('[hidden]')).toHaveLength(0);
+    expect(visibleForm().querySelector<HTMLInputElement>('input[type="text"]')!.value).toBe('Apply to fall internships');
+  });
+
+  it('stays on the opened task when it fails to save, and Cancel goes back without closing', async () => {
+    const onClose = vi.fn();
+    const onSaveLinkedTask = vi.fn<SaveLinked>(async () => false);
+    act(() => root.render(
+      <EditHarness initial={allTasks[0]} onSubmit={vi.fn()} onSaveLinkedTask={onSaveLinkedTask} onClose={onClose} />,
+    ));
+    act(() => rowOpen('Read the job posting').click());
+    await submit();
+    expect(buttonByText('Save and go back')).toBeTruthy();
+    expect(doc().querySelectorAll('[hidden]')).toHaveLength(1);
+
+    act(() => [...visibleForm().querySelectorAll('button')].find(b => b.textContent === 'Cancel')!.click());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(doc().querySelectorAll('[hidden]')).toHaveLength(0);
+  });
+
+  it('drops a linked task unlinked on top from the form below, so saving it does not link it back', async () => {
+    const onSubmit = vi.fn<Submit>(async () => {});
+    function Harness() {
+      const [tasks, setTasks] = useState(allTasks);
+      return (
+        <EditHarness
+          initial={allTasks[0]} tasks={tasks} onSubmit={onSubmit}
+          onSaveLinkedTask={async t => { setTasks(prev => prev.map(x => (x.id === t.id ? t : x))); return true; }}
+        />
+      );
+    }
+    act(() => root.render(<Harness />));
+    act(() => rowOpen('Read the job posting').click());
+    act(() => buttonByText('Unlink').click());
+    await submit();
+
+    expect(doc().querySelectorAll('[hidden]')).toHaveLength(0);
+    expect(rowTitles()).toEqual(['Update résumé']);
+    act(() => button('Remove Update résumé').click());
+    await submit();
+    expect(onSubmit).toHaveBeenCalledWith(expect.anything(), []);
+  });
+
+  it('offers no open button without a way to save the opened task', () => {
+    act(() => root.render(<EditHarness initial={allTasks[0]} onSubmit={vi.fn()} />));
+    expect(rowOpen('Read the job posting')).toBeNull();
   });
 });

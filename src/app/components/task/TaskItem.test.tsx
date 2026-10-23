@@ -3,7 +3,6 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '@/app/types/task';
-import { groupLinkedTasks } from '@/app/utils/taskUtils';
 import TaskItem from './TaskItem';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -18,9 +17,8 @@ const linkedTasks = [
   task(2, 'Update résumé', { parent_task_id: 1, position: 0, completed: true }),
   task(3, 'Mock interview', { parent_task_id: 1, position: 1 }),
 ];
-/** The card's linked tasks as the list nests them. */
-const nest = (tasks: Task[]) => groupLinkedTasks(tasks, tasks)[0].linked;
-const linked = nest([parent, ...linkedTasks]);
+/** The parent card's linked-task chips; Mock interview has 2 of its own. */
+const linked = [{ task: linkedTasks[0], linkedCount: 0 }, { task: linkedTasks[1], linkedCount: 2 }];
 
 let container: HTMLDivElement;
 let root: Root;
@@ -40,135 +38,103 @@ afterEach(() => {
 
 const render = (props: Partial<React.ComponentProps<typeof TaskItem>> = {}) =>
   act(() => root.render(
-    <TaskItem task={parent} index={0} tags={[]} linkedTasks={linked} linkedDone={1} linkedTotal={2} {...props} />,
+    <TaskItem task={parent} index={0} tags={[]} linked={linked} onGoToTask={vi.fn()} {...props} />,
   ));
 const button = (label: string) => container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
 
-describe('TaskItem linked tasks', () => {
-  it('shows linked tasks under the parent with "x of y done" progress', () => {
+describe('TaskItem on a parent card', () => {
+  it('shows "x of y done" progress and a chip for each linked task', () => {
     render();
     expect(container.textContent).toContain('Linked tasks');
     expect(container.textContent).toContain('1 of 2 done');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('1');
-    expect(container.textContent).toContain('Update résumé');
-    expect(container.textContent).toContain('Mock interview');
+    expect(button('Go to linked task: Update résumé (done)')).not.toBeNull();
+    expect(button('Go to linked task: Mock interview')?.textContent).toBe('Mock interview+2');
   });
 
-  it('collapses and expands the linked tasks', () => {
-    render();
-    // The priority badge also carries aria-expanded, so pick the linked tasks header.
-    const toggle = Array.from(container.querySelectorAll<HTMLButtonElement>('button[aria-expanded]'))
-      .find(b => b.textContent?.includes('Linked tasks'))!;
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    act(() => toggle.click());
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(container.textContent).not.toContain('Mock interview');
-    expect(container.textContent).toContain('1 of 2 done');
-    act(() => toggle.click());
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(container.textContent).toContain('Mock interview');
+  it('goes to a linked task’s own card from its chip', () => {
+    const onGoToTask = vi.fn();
+    render({ onGoToTask });
+    act(() => button('Go to linked task: Mock interview')!.click());
+    expect(onGoToTask).toHaveBeenCalledWith(3);
   });
 
-  it('completes and edits a linked task from its row', () => {
-    const onToggleComplete = vi.fn();
-    const onEditTask = vi.fn();
-    render({ onToggleComplete, onEditTask });
-    act(() => button('Mark complete: Mock interview')!.click());
-    expect(onToggleComplete).toHaveBeenCalledWith(3);
-    act(() => button('Edit Mock interview')!.click());
-    expect(onEditTask).toHaveBeenCalledWith(linkedTasks[1]);
-  });
-
-  it('disables a linked task checkbox while its request is in flight', () => {
-    render({ pendingTaskIds: new Set([3]) });
-    expect(button('Mark complete: Mock interview')!.disabled).toBe(true);
-    expect(button('Mark incomplete: Update résumé')!.disabled).toBe(false);
-  });
-
-  it('shows a compact "done/total" pill and collapsible rows on compact cards', () => {
+  it('shows a compact "done/total" pill on compact cards', () => {
     render({ compact: true });
     expect(container.textContent).toContain('1/2');
-    expect(container.textContent).toContain('Mock interview');
-    act(() => button('Hide linked tasks')!.click());
-    expect(container.textContent).not.toContain('Mock interview');
-  });
-
-  it('shows each linked task with a trail to the card it leads up to, which opens it', () => {
-    const onEditTask = vi.fn();
-    render({ onEditTask });
-    const row = button('Edit Mock interview')!.closest('li')!;
-    expect(row.querySelector('[title="Leads up to Apply to Google"]')).not.toBeNull();
-    act(() => row.querySelector<HTMLButtonElement>('button[aria-label="Open parent task Apply to Google"]')!.click());
-    expect(onEditTask).toHaveBeenCalledWith(parent);
-  });
-
-  describe('nested deeper', () => {
-    const practice = task(4, 'Practice questions', { parent_task_id: 3, position: 0 });
-    const room = task(5, 'Book a quiet room', { parent_task_id: 3, position: 1, completed: true });
-    const notes = task(6, 'Write up notes', { parent_task_id: 4 });
-    const nested = nest([parent, ...linkedTasks, practice, room, notes]);
-    const rowOf = (title: string) => button(`Edit ${title}`)!.closest('li')!;
-
-    it('nests a linked task under its own parent, with its progress and full trail', () => {
-      render({ linkedTasks: nested });
-      // Mock interview's linked tasks sit inside its own row, not beside it.
-      expect(rowOf('Mock interview').contains(rowOf('Practice questions'))).toBe(true);
-      expect(rowOf('Practice questions').contains(rowOf('Write up notes'))).toBe(true);
-      expect(rowOf('Update résumé').contains(rowOf('Practice questions'))).toBe(false);
-      expect(rowOf('Mock interview').querySelector('[title="1 of 2 linked tasks done"]')).not.toBeNull();
-      expect(rowOf('Write up notes').querySelector('[title="Leads up to Apply to Google › Mock interview › Practice questions"]'))
-        .not.toBeNull();
-      // The card counts only its own linked tasks.
-      expect(container.textContent).toContain('1 of 2 done');
-    });
-
-    it('names just its own parent on a deeper row, which opens it', () => {
-      const onEditTask = vi.fn();
-      render({ linkedTasks: nested, onEditTask });
-      const trail = rowOf('Write up notes').querySelector('[title^="Leads up to"]')!;
-      expect(trail.textContent).toBe('…›Practice questions');
-      expect(trail.querySelector('button[aria-label="Open parent task Mock interview"]')).toBeNull();
-      act(() => trail.querySelector<HTMLButtonElement>('button[aria-label="Open parent task Practice questions"]')!.click());
-      expect(onEditTask).toHaveBeenCalledWith(practice);
-    });
-
-    it('collapses and expands one linked task’s own linked tasks', () => {
-      render({ linkedTasks: nested });
-      act(() => button('Hide linked tasks of Mock interview')!.click());
-      expect(container.textContent).not.toContain('Practice questions');
-      expect(container.textContent).toContain('Update résumé');
-      act(() => button('Show linked tasks of Mock interview')!.click());
-      expect(container.textContent).toContain('Write up notes');
-    });
-
-    it('completes a nested task from its row and shows its banner there', () => {
-      const onToggleComplete = vi.fn();
-      render({
-        linkedTasks: nested,
-        onToggleComplete,
-        linkedBannerFor: g => g.task.id === 3 && <p role="status">Mock interview banner</p>,
-      });
-      act(() => button('Mark complete: Write up notes')!.click());
-      expect(onToggleComplete).toHaveBeenCalledWith(6);
-      expect(rowOf('Mock interview').querySelector('[role="status"]')?.textContent).toBe('Mock interview banner');
-      expect(rowOf('Practice questions').querySelector('[role="status"]')).toBeNull();
-    });
-  });
-
-  it("shows the API's summary of a card's parent that isn't loaded", () => {
-    render({
-      task: task(8, 'Orphan', { parent_task_id: 99, parent: { id: 99, title: 'Archived goal' } }),
-      linkedTotal: 0,
-    });
-    expect(container.querySelector('[title="Leads up to Archived goal"]')).not.toBeNull();
-    // Nothing to open it in, so it's plain text.
-    expect(button('Open parent task Archived goal')).toBeNull();
+    expect(container.querySelector('[role="progressbar"]')).toBeNull();
   });
 
   it('renders no linked section for a task without linked tasks', () => {
-    render({ linkedTasks: [], linkedDone: 0, linkedTotal: 0 });
+    render({ linked: [] });
     expect(container.textContent).not.toContain('Linked tasks');
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  });
+
+  it('opens the "New linked task" form from "+ Linked task", except on a completed task', () => {
+    const onAddLinked = vi.fn();
+    render({ onAddLinked });
+    act(() => button('Add a linked task to Apply to Google')!.click());
+    expect(onAddLinked).toHaveBeenCalledWith(parent);
+    render({ onAddLinked, compact: true });
+    expect(button('Add a linked task to Apply to Google')).not.toBeNull();
+    render({ onAddLinked, task: { ...parent, completed: true } });
+    expect(button('Add a linked task to Apply to Google')).toBeNull();
+  });
+
+  it('marks the card with its task id, for scrolling to it', () => {
+    render();
+    expect(container.querySelector('[data-task-id="1"]')).not.toBeNull();
+  });
+});
+
+describe('TaskItem on a linked task’s card', () => {
+  const notes = task(6, 'Write up notes', { parent_task_id: 4 });
+  // Write up notes → Practice questions → Mock interview (done) → Apply to Google.
+  const chain = [
+    { id: 1, title: 'Apply to Google' },
+    { id: 3, title: 'Mock interview', completed: true },
+    { id: 4, title: 'Practice questions' },
+  ];
+
+  it('names its original task and the task before it, with "…" for the rest', () => {
+    render({ task: notes, parents: chain, linked: [] });
+    const trail = container.querySelector('[title^="Leads up to"]')!;
+    expect(trail.getAttribute('title')).toBe('Leads up to Apply to Google › Mock interview › Practice questions');
+    expect(trail.textContent).toBe('Apply to Google›…›Practice questions');
+    expect(button('Go to original task: Apply to Google')).not.toBeNull();
+    expect(button('Go to task before it: Practice questions')).not.toBeNull();
+  });
+
+  it('goes to either task from the trail', () => {
+    const onGoToTask = vi.fn();
+    render({ task: notes, parents: chain, linked: [], onGoToTask });
+    act(() => button('Go to original task: Apply to Google')!.click());
+    act(() => button('Go to task before it: Practice questions')!.click());
+    expect(onGoToTask.mock.calls).toEqual([[1], [4]]);
+  });
+
+  it('shows the whole trail from "…", striking through a done task', () => {
+    render({ task: notes, parents: chain, linked: [] });
+    act(() => button('Show 1 more')!.click());
+    const done = button('Go to Mock interview (done)')!;
+    expect(done.className).toContain('line-through');
+  });
+
+  it('names just the task before it when that is also its original task', () => {
+    render({ task: linkedTasks[1], parents: [{ id: 1, title: 'Apply to Google' }], linked: [] });
+    expect(button('Go to Apply to Google')).not.toBeNull();
+  });
+
+  it('shows the trail on compact cards too', () => {
+    render({ task: notes, parents: chain, linked: [], compact: true });
+    expect(button('Go to original task: Apply to Google')).not.toBeNull();
+    expect(button('Go to task before it: Practice questions')).not.toBeNull();
+  });
+
+  it('shows no trail on a task with no parent', () => {
+    render({ parents: [] });
+    expect(container.querySelector('[title^="Leads up to"]')).toBeNull();
   });
 });
 
@@ -178,7 +144,7 @@ describe('TaskItem added from Canvas', () => {
 
   it('links to the assignment, naming the course when the panel has listed it', () => {
     localStorage.setItem('tm-canvas-course-labels', JSON.stringify({ 1001: 'CS 460' }));
-    render({ task: task(7, 'Problem Set 6', { canvas_assignment_id: 9876, canvas_html_url: url }), linkedTotal: 0 });
+    render({ task: task(7, 'Problem Set 6', { canvas_assignment_id: 9876, canvas_html_url: url }) });
     const link = container.querySelector<HTMLAnchorElement>('a[title="Open in Canvas"]');
     expect(link?.href).toBe(url);
     expect(link?.target).toBe('_blank');
@@ -186,12 +152,12 @@ describe('TaskItem added from Canvas', () => {
   });
 
   it('says just "From Canvas" for an unknown course, in the compact card too', () => {
-    render({ task: task(7, 'Problem Set 6', { canvas_html_url: url }), linkedTotal: 0, compact: true });
+    render({ task: task(7, 'Problem Set 6', { canvas_html_url: url }), compact: true });
     expect(container.querySelector('a[title="Open in Canvas"]')?.textContent).toBe('From Canvas');
   });
 
   it('shows no link for other tasks or a link that is not https', () => {
-    render({ task: task(7, 'Laundry', { canvas_html_url: 'javascript:alert(1)' }), linkedTotal: 0 });
+    render({ task: task(7, 'Laundry', { canvas_html_url: 'javascript:alert(1)' }) });
     expect(container.querySelector('a[title="Open in Canvas"]')).toBeNull();
   });
 });

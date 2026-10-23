@@ -278,6 +278,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           onEditTaskChange={handleEditTaskChange}
           onToggleEditTag={handlers.toggleEditTag}
           onSubmitEditTask={handlers.handleEditTask}
+          onSaveLinkedTask={handlers.handleSaveLinkedTask}
           // Create tag
           showCreateTagModal={state.showCreateTagModal}
           onCloseCreateTagModal={() => state.setShowCreateTagModal(false)}

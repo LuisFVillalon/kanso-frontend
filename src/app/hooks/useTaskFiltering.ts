@@ -1,22 +1,24 @@
 /*
 Purpose: This custom hook filters and sorts tasks based on the task view (which tasks to show,
-the sort key and its direction), search term, and selected tags, nests linked tasks under their
-parent, and computes statistics for different task categories.
+the sort key and its direction, top-level only), search term, and selected tags, and computes
+statistics for different task categories. Linked tasks are listed like any other task, each
+judged by the filters on its own.
 */
 
 import { useMemo } from 'react';
 import { StatsData, Tag, Task, TaskSortKey, TaskView } from '@/app/types/task';
-import { countTasksByTag, getTaskDateTime, groupLinkedTasks } from '@/app/utils/taskUtils';
+import { countTasksByTag, getTaskDateTime } from '@/app/utils/taskUtils';
 
 /** Everything, soonest due first: what the list showed before Show and Sort were split. */
-export const DEFAULT_TASK_VIEW: TaskView = { show: 'all', sortKey: 'due', sortOrder: 'asc' };
+export const DEFAULT_TASK_VIEW: TaskView = { show: 'all', sortKey: 'due', sortOrder: 'asc', topLevelOnly: false };
 
 export const isTaskView = (c: unknown): c is TaskView => {
   if (!c || typeof c !== 'object') return false;
   const v = c as Record<string, unknown>;
   return ['open', 'done', 'all'].includes(v.show as string)
     && ['due', 'priority', 'duration', 'created'].includes(v.sortKey as string)
-    && (v.sortOrder === 'asc' || v.sortOrder === 'desc');
+    && (v.sortOrder === 'asc' || v.sortOrder === 'desc')
+    && (v.topLevelOnly === undefined || typeof v.topLevelOnly === 'boolean');
 };
 
 // Ascending value per sort key; a task without one sorts last going up.
@@ -33,9 +35,10 @@ export const useTaskFiltering = (
   searchTerm: string,
   selectedTags: Tag[]
 ) => {
-  const { taskGroups, stats } = useMemo(() => {
+  const { visibleTasks, stats } = useMemo(() => {
     // Ensure tasks is always an array
     const safeTasks = Array.isArray(tasks) ? tasks : [];
+    const loadedIds = new Set(safeTasks.map(t => t.id));
 
     const normalizedSearch = (searchTerm ?? '').toLowerCase();
 
@@ -62,7 +65,11 @@ export const useTaskFiltering = (
             selectedTags.some(selected => selected.id === taskTag.id)
           );
 
-        return matchesStatus && matchesSearch && matchesTags;
+        // A task whose parent isn't loaded counts as top-level.
+        const matchesLevel =
+          !view.topLevelOnly || task.parent_task_id == null || !loadedIds.has(task.parent_task_id);
+
+        return matchesStatus && matchesSearch && matchesTags && matchesLevel;
       })
       .sort((a, b) => {
         const value = SORT_VALUE[view.sortKey];
@@ -90,8 +97,8 @@ export const useTaskFiltering = (
       }
     };
 
-    return { taskGroups: groupLinkedTasks(safeTasks, filtered), stats };
+    return { visibleTasks: filtered, stats };
   }, [tasks, view, searchTerm, selectedTags]);
 
-  return { taskGroups, stats };
+  return { visibleTasks, stats };
 };

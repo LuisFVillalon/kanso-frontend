@@ -50,6 +50,20 @@ describe('ToastProvider actions', () => {
     expect(undoButton()).toBeUndefined();
   });
 
+  it('shows a button for each of several actions', () => {
+    const complete = vi.fn();
+    act(() => showToast('All linked tasks are done.', 'info', [
+      { label: 'Complete it', onClick: complete },
+      { label: 'Show it', onClick: () => {} },
+    ]));
+    const labels = [...document.querySelectorAll('button')].map(b => b.textContent);
+    expect(labels).toContain('Complete it');
+    expect(labels).toContain('Show it');
+    act(() => [...document.querySelectorAll('button')].find(b => b.textContent === 'Complete it')!.click());
+    expect(complete).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain('All linked tasks are done.');
+  });
+
   it('shows no button without an action', () => {
     show();
     expect(undoButton()).toBeUndefined();

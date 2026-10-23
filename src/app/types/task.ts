@@ -42,6 +42,8 @@ export interface TaskView {
   show: TaskShow;
   sortKey: TaskSortKey;
   sortOrder: SortOrder;
+  /** Lists only tasks that aren't linked under another one; absent in views saved before it existed. */
+  topLevelOnly?: boolean;
 }
 export type TaskCategory = 'homework' | 'test' | 'project' | 'interview' | 'skill';
 
@@ -113,8 +115,23 @@ export interface EditTaskForm extends BaseTaskForm {
   completed_date: string | Date | null;
 }
 
-/** One linked task in a PUT /update-linked-tasks body: an existing task by id, or a new one by title. */
-export type LinkedTaskRef = { id: number } | { title: string };
+/**
+ * A task created as a linked task from the editor, with the same fields as
+ * POST /create-task. Leaving out `tags` gives it the parent's tags.
+ */
+export interface NewLinkedTask {
+  title: string;
+  description?: string;
+  priority?: number | null;
+  due_date?: string | null;
+  due_time?: string | null;
+  tags?: { id?: number; name: string; color?: string }[];
+  estimated_time?: number | null;
+  reminder_minutes?: number | null;
+}
+
+/** One linked task in a PUT /update-linked-tasks body: an existing task by id, or a new one. */
+export type LinkedTaskRef = { id: number } | NewLinkedTask;
 
 /**
  * What deleting or archiving a parent does with its linked tasks: `keep`

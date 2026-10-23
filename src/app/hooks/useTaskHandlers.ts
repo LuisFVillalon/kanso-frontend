@@ -102,6 +102,15 @@ export const useTaskHandlers = ({
     }
   };
 
+  // A linked task opened from the editor's Linked tasks section: saves it,
+  // then `linked` as its own linked tasks when given (a failure there throws a
+  // LinkedTasksSaveError). False when the task itself didn't save.
+  const handleSaveLinkedTask = async (task: Task, linked?: LinkedTaskRef[]): Promise<boolean> => {
+    if (!(await updateTask(task.id, taskToEditForm(task)))) return false;
+    if (linked) await saveLinkedTasks(task, linked);
+    return true;
+  };
+
   const handleCreateTag = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -164,6 +173,7 @@ export const useTaskHandlers = ({
   return {
     handleCreateTask,
     handleEditTask,
+    handleSaveLinkedTask,
     handleCreateTag,
     handleEditTag,
     handleDeleteTag,

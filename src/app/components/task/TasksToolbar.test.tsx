@@ -4,6 +4,9 @@ import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Tag, Task, TaskView } from '@/app/types/task';
 import { DEFAULT_TASK_VIEW, useTaskFiltering } from '@/app/hooks/useTaskFiltering';
+
+vi.mock('@/app/context/ToastContext', () => ({ useToast: () => vi.fn() }));
+
 import TasksPanel from './TasksPanel';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -18,6 +21,8 @@ const tasks = [
   task(1, 'Essay', { due_date: '2026-10-24', priority: 2, tags: [school] }),
   task(2, 'Quiz', { due_date: '2026-10-22', priority: 3, tags: [school] }),
   task(3, 'Leg day', { due_date: '2026-10-23', priority: 1, tags: [gym], completed: true }),
+  // A linked task under Essay, listed as its own task.
+  task(4, 'Outline', { parent_task_id: 1, tags: [school] }),
 ];
 
 let container: HTMLDivElement;
@@ -27,11 +32,12 @@ let root: Root;
 const Harness: React.FC<{ initial?: TaskView }> = ({ initial = DEFAULT_TASK_VIEW }) => {
   const [view, setView] = useState(initial);
   const [selected, setSelected] = useState<Tag[]>([]);
-  const { taskGroups } = useTaskFiltering(tasks, view, '', selected);
+  const { visibleTasks } = useTaskFiltering(tasks, view, '', selected);
   return (
     <TasksPanel
       tags={[school, gym]}
-      taskGroups={taskGroups}
+      tasks={visibleTasks}
+      allTasks={tasks}
       onToggleComplete={vi.fn()}
       onCompleteWithLinked={vi.fn()}
       onDeleteTask={vi.fn()}
@@ -70,11 +76,8 @@ const byName = (name: string) =>
 const byNameStart = (start: string) =>
   buttons().find(b => (b.getAttribute('aria-label') ?? '').startsWith(start))!;
 const click = (el: HTMLElement) => act(() => el.click());
-// The task titles on screen, top to bottom.
-const shown = () => {
-  const text = container.textContent ?? '';
-  return tasks.map(t => t.title).filter(t => text.includes(t)).sort((a, b) => text.indexOf(a) - text.indexOf(b));
-};
+// The task cards on screen, top to bottom.
+const shown = () => [...container.querySelectorAll('[data-task-id] h3')].map(h => h.textContent);
 const select = () => container.querySelector<HTMLSelectElement>('select')!;
 const pick = (value: string) => act(() => {
   const el = select();
@@ -86,24 +89,24 @@ const key = (el: Element, k: string) =>
 
 describe('Tasks toolbar Show and Sort', () => {
   it('shows open, completed or all tasks from the Show control', () => {
-    expect(shown()).toEqual(['Quiz', 'Leg day', 'Essay']);
+    expect(shown()).toEqual(['Quiz', 'Leg day', 'Essay', 'Outline']);
     click(byName('Open'));
     expect(byName('Open').getAttribute('aria-pressed')).toBe('true');
-    expect(shown()).toEqual(['Quiz', 'Essay']);
+    expect(shown()).toEqual(['Quiz', 'Essay', 'Outline']);
     click(byName('Completed'));
     expect(shown()).toEqual(['Leg day']);
     click(byName('All'));
-    expect(shown()).toHaveLength(3);
+    expect(shown()).toHaveLength(4);
   });
 
   it('sorts by the picked key and flips direction with a named button', () => {
     expect(select().labels?.[0]?.textContent).toBe('Sort tasks by');
     pick('priority');
-    expect(shown()).toEqual(['Leg day', 'Essay', 'Quiz']);
+    expect(shown()).toEqual(['Leg day', 'Essay', 'Quiz', 'Outline']);
     const dir = byNameStart('Sort direction');
     expect(dir.getAttribute('aria-label')).toBe('Sort direction: highest first. Switch to lowest first');
     click(dir);
-    expect(shown()).toEqual(['Quiz', 'Essay', 'Leg day']);
+    expect(shown()).toEqual(['Outline', 'Quiz', 'Essay', 'Leg day']);
     expect(byNameStart('Sort direction').getAttribute('aria-label')).toBe('Sort direction: lowest first. Switch to highest first');
   });
 });
@@ -125,7 +128,7 @@ describe('Tasks toolbar tag filter', () => {
     expect(byName('Tags').getAttribute('aria-expanded')).toBe('true');
 
     click(byName('Remove tag filter: Gym'));
-    expect(shown()).toHaveLength(3);
+    expect(shown()).toHaveLength(4);
   });
 
   it('moves with the arrow keys, clears tags, and closes on Escape back to its button', () => {
@@ -134,7 +137,7 @@ describe('Tasks toolbar tag filter', () => {
     expect(document.activeElement).toBe(item('Gym'));
     click(item('Gym'));
     click(item('School'));
-    expect(shown()).toEqual(['Quiz', 'Leg day', 'Essay']);
+    expect(shown()).toEqual(['Quiz', 'Leg day', 'Essay', 'Outline']);
     const clear = [...menu()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(b => b.textContent?.includes('Clear tags'))!;
     click(clear);
     expect(menu()).toBeNull();
@@ -144,5 +147,20 @@ describe('Tasks toolbar tag filter', () => {
     key(menu()!, 'Escape');
     expect(menu()).toBeNull();
     expect(document.activeElement).toBe(byName('Filter by tag'));
+  });
+});
+
+describe('Tasks toolbar "Only top-level tasks"', () => {
+  const toggle = () =>
+    [...container.querySelectorAll('label')].find(l => l.textContent?.includes('Only top-level tasks'))!
+      .querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+
+  it('hides linked tasks while checked, and shows them again when unchecked', () => {
+    expect(toggle().checked).toBe(false);
+    click(toggle());
+    expect(toggle().checked).toBe(true);
+    expect(shown()).toEqual(['Quiz', 'Leg day', 'Essay']);
+    click(toggle());
+    expect(shown()).toContain('Outline');
   });
 });

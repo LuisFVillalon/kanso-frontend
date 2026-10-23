@@ -168,100 +168,52 @@ export function subtaskTreeIds(tasks: Pick<Task, 'id' | 'parent_task_id'>[], roo
   return ids;
 }
 
-// ── Linked tasks (nesting for the task list) ────────────────────────────────
+// ── Linked tasks (lookups for the task list) ────────────────────────────────
 
-/** A task in the list with the linked tasks shown under it, each nesting its own the same way. */
-export interface TaskGroup {
-  task: Task;
-  /** Linked tasks to render under `task`, in their saved order (`position`, then id). */
-  linked: TaskGroup[];
-  /** Progress over `task`'s direct linked tasks, including ones the filters hide. */
-  linkedDone: number;
-  linkedTotal: number;
-  /** Open tasks anywhere under `task` (linked tasks, theirs, …), including hidden ones. */
-  openInTree: number;
+/** How the loaded tasks link up, for a flat list whose cards show their parents and linked tasks. */
+export interface LinkedTaskIndex {
+  byId: ReadonlyMap<number, Task>;
+  /** A task's direct linked tasks, in their saved order (`position`, then id). */
+  childrenOf: (id: number) => Task[];
+  /** Every task under `id` (linked tasks, theirs, …), not `id` itself. */
+  descendantsOf: (id: number) => Task[];
+  /** Open tasks anywhere under `id`. */
+  openUnder: (id: number) => number;
 }
 
 /**
- * Nests linked tasks (tasks with a parent_task_id) under their parent, at
- * any depth.
- *
- * `matching` is the filtered, sorted list; `allTasks` is everything loaded.
- * Each top-level group is a tree rooted at a task with no loaded parent. A
- * task whose parent isn't loaded, or whose chain loops, stays top-level.
- *
- * A group is shown when its root or any task in its tree matches the
- * filters, so a matching linked task never loses the tasks above it. A
- * matching task shows every task under it; otherwise only the branches that
- * lead to a match are shown. When the root matches, the group sits at the
- * root's place in the sort; otherwise it sits at the first match's place.
+ * Indexes the loaded tasks by id and by parent. A task whose parent isn't
+ * loaded has no place under it; a chain that loops stops where it repeats.
  */
-export function groupLinkedTasks(allTasks: Task[], matching: Task[]): TaskGroup[] {
+export function linkedTaskIndex(allTasks: Task[]): LinkedTaskIndex {
   const byId = new Map(allTasks.map(t => [t.id, t]));
-
-  const rootOf = (task: Task): number => {
-    const seen = new Set([task.id]);
-    let current = task;
-    while (current.parent_task_id != null) {
-      const parent = byId.get(current.parent_task_id);
-      if (!parent) break;
-      if (seen.has(parent.id)) return task.id;
-      seen.add(parent.id);
-      current = parent;
-    }
-    return current.id;
-  };
-
-  // Only tasks whose chain reaches a root hang under their parent, so the
-  // children map has no loops.
-  const childrenOf = new Map<number, Task[]>();
+  const children = new Map<number, Task[]>();
   for (const t of allTasks) {
-    if (rootOf(t) === t.id) continue;
-    const list = childrenOf.get(t.parent_task_id!) ?? [];
+    if (t.parent_task_id == null || !byId.has(t.parent_task_id) || t.parent_task_id === t.id) continue;
+    const list = children.get(t.parent_task_id) ?? [];
     list.push(t);
-    childrenOf.set(t.parent_task_id!, list);
+    children.set(t.parent_task_id, list);
   }
-  for (const list of childrenOf.values()) list.sort(compareLinkedOrder);
+  for (const list of children.values()) list.sort(compareLinkedOrder);
 
-  const matchingIds = new Set(matching.map(t => t.id));
-  const leadsToMatch = new Map<number, boolean>();
-  const hasMatch = (task: Task): boolean => {
-    let found = leadsToMatch.get(task.id);
-    if (found === undefined) {
-      found = matchingIds.has(task.id) || (childrenOf.get(task.id) ?? []).some(hasMatch);
-      leadsToMatch.set(task.id, found);
-    }
+  const childrenOf = (id: number) => children.get(id) ?? [];
+  const descendantsOf = (id: number) => {
+    const found: Task[] = [];
+    const seen = new Set([id]);
+    const visit = (parentId: number) => {
+      for (const c of childrenOf(parentId)) {
+        if (seen.has(c.id)) continue;
+        seen.add(c.id);
+        found.push(c);
+        visit(c.id);
+      }
+    };
+    visit(id);
     return found;
   };
+  const openUnder = (id: number) => descendantsOf(id).filter(t => !t.completed).length;
 
-  const openUnder = (task: Task): number =>
-    (childrenOf.get(task.id) ?? []).reduce((n, c) => n + (c.completed ? 0 : 1) + openUnder(c), 0);
-
-  const build = (task: Task, showAll: boolean): TaskGroup => {
-    const children = childrenOf.get(task.id) ?? [];
-    const all = showAll || matchingIds.has(task.id);
-    return {
-      task,
-      linked: children.filter(c => all || hasMatch(c)).map(c => build(c, all)),
-      linkedDone: children.filter(c => c.completed).length,
-      linkedTotal: children.length,
-      openInTree: openUnder(task),
-    };
-  };
-
-  const groups: TaskGroup[] = [];
-  const placed = new Set<number>();
-
-  for (const m of matching) {
-    const rootId = rootOf(m);
-    // A matching root gets placed at its own position in the sort.
-    if (rootId !== m.id && matchingIds.has(rootId)) continue;
-    if (placed.has(rootId)) continue;
-    placed.add(rootId);
-    groups.push(build(byId.get(rootId) ?? m, false));
-  }
-
-  return groups;
+  return { byId, childrenOf, descendantsOf, openUnder };
 }
 
 /**

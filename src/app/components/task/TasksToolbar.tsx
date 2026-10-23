@@ -39,8 +39,9 @@ interface TasksToolbarProps {
 
 /**
  * The Tasks panel's list controls: which tasks to show, how to sort them,
- * and which tags to filter by. Selected tags show as removable chips; the
- * full list is in the Tags menu.
+ * which tags to filter by, and whether to list only top-level tasks (not the
+ * linked tasks under them). Selected tags show as removable chips; the full
+ * list is in the Tags menu.
  */
 const TasksToolbar: React.FC<TasksToolbarProps> = ({
   view, onViewChange, tags, selectedTags, onToggleTag, onClearTags, compact = false,
@@ -114,6 +115,16 @@ const TasksToolbar: React.FC<TasksToolbarProps> = ({
           <TagIcon className="w-3.5 h-3.5" aria-hidden />
           {selectedTags.length > 0 ? 'Tags' : 'Filter by tag'}
         </button>
+
+        <label className="ml-auto flex-shrink-0 inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] text-text-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!view.topLevelOnly}
+            onChange={e => onViewChange({ ...view, topLevelOnly: e.target.checked })}
+            style={{ accentColor: 'var(--tm-accent)' }}
+          />
+          Only top-level tasks
+        </label>
       </div>
 
       {tagMenu.open && (

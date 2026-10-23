@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@/app/types/task';
 import {
-  LinkedDraft, compareLinkedOrder, describeLinkError, linkCandidates, linkedDraftsChanged, linkedDraftsFor,
-  moveItem, toLinkedRefs,
+  LinkedDraft, blankLinkedTaskForm, compareLinkedOrder, describeLinkError, isDueAfterParent, linkCandidates,
+  linkedDraftsChanged, linkedDraftsFor, moveItem, shiftDateStr, toLinkedRefs,
 } from './linkedTasks';
 
 const task = (id: number, title: string, extra: Partial<Task> = {}): Task => ({
@@ -33,17 +33,58 @@ describe('linkedDraftsChanged', () => {
     expect(linkedDraftsChanged(saved, [existing(1), existing(2)])).toBe(false);
     expect(linkedDraftsChanged(saved, [existing(2), existing(1)])).toBe(true);
     expect(linkedDraftsChanged(saved, [existing(1)])).toBe(true);
-    expect(linkedDraftsChanged(saved, [existing(1), { kind: 'new', key: 'n', title: 'x' }])).toBe(true);
+    expect(linkedDraftsChanged(saved, [existing(1), { kind: 'new', key: 'n', form: blankLinkedTaskForm([], 'x') }])).toBe(true);
   });
 });
 
 describe('toLinkedRefs', () => {
+  const school = { id: 4, name: 'School', color: '#123456' };
+
   it('keeps the order, trims new titles and skips tasks no longer loaded', () => {
     const refs = toLinkedRefs(
-      [existing(2), { kind: 'new', key: 'n', title: '  Draft cover letter ' }, existing(7)],
+      [existing(2), { kind: 'new', key: 'n', form: blankLinkedTaskForm([school], '  Draft cover letter ') }, existing(7)],
       [task(2, 'Mock interview')],
     );
-    expect(refs).toEqual([{ id: 2 }, { title: 'Draft cover letter' }]);
+    expect(refs).toEqual([
+      { id: 2 },
+      {
+        title: 'Draft cover letter', description: '', priority: null, due_date: null, due_time: null,
+        tags: [school], estimated_time: null, reminder_minutes: null,
+      },
+    ]);
+  });
+
+  it('sends every field of a new linked task', () => {
+    const form = {
+      ...blankLinkedTaskForm([], 'Practice questions'),
+      description: ' Two a day ', priority: 3, due_date: '2026-10-29', due_time: '17:00',
+      estimated_time: 1.5, reminder_minutes: 30,
+    };
+    expect(toLinkedRefs([{ kind: 'new', key: 'n', form }], [])).toEqual([{
+      title: 'Practice questions', description: 'Two a day', priority: 3, due_date: '2026-10-29', due_time: '17:00',
+      tags: [], estimated_time: 1.5, reminder_minutes: 30,
+    }]);
+  });
+});
+
+describe('new linked task helpers', () => {
+  it("starts a blank form with the parent's tags, as a copy", () => {
+    const tags = [{ id: 1, name: 'School', color: '#123456' }];
+    const form = blankLinkedTaskForm(tags, 'Outline');
+    expect(form).toMatchObject({ title: 'Outline', tags, due_date: '', priority: null });
+    expect(form.tags).not.toBe(tags);
+  });
+
+  it('moves a date by whole days across month ends', () => {
+    expect(shiftDateStr('2026-11-01', -1)).toBe('2026-10-31');
+    expect(shiftDateStr('2026-10-30', 0)).toBe('2026-10-30');
+  });
+
+  it('tells when a linked task is due after its parent', () => {
+    expect(isDueAfterParent('2026-10-31', '2026-10-30')).toBe(true);
+    expect(isDueAfterParent('2026-10-30', '2026-10-30')).toBe(false);
+    expect(isDueAfterParent(null, '2026-10-30')).toBe(false);
+    expect(isDueAfterParent('2026-10-31', null)).toBe(false);
   });
 });
 
