@@ -2,7 +2,7 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 import { ChevronDown, Download, Ellipsis, Info, ListTree, Loader2 } from 'lucide-react';
-import { KansoKeyIcon } from '@/app/components/common/KansoLogo';
+import { KansoKIcon } from '@/app/components/common/KansoLogo';
 import {
   MenuPanel, RING_STYLE, handleMenuArrowKeys, menuItemClass, useFocusOnOpen, usePopover,
 } from './EditorToolbar';
@@ -127,7 +127,7 @@ const NoteMoreMenu: React.FC<NoteMoreMenuProps> = ({
       ...(onDownloadPdf ? [pdfItem(onDownloadPdf, pdfLoading)] : []),
       { key: 'details', label: 'Note details', Icon: Info, run: onShowDetails },
       ...(onToggleOutline ? [{ key: 'outline', label: 'Outline', Icon: ListTree, checked: outlineOpen, run: onToggleOutline }] : []),
-      ...(onFocusMode ? [{ key: 'focus', label: 'Focus mode', hint: 'Ctrl+Shift+F', Icon: KansoKeyIcon, run: onFocusMode }] : []),
+      ...(onFocusMode ? [{ key: 'focus', label: 'Focus mode', hint: 'Ctrl+Shift+F', Icon: KansoKIcon, run: onFocusMode }] : []),
     ]}
   />
 );

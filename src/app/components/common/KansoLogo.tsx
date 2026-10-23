@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React from 'react';
 
 // The kanso k key and wordmark, inlined from brand/logo/ so they swap with
 // the theme: the key and wordmark read --kanso-key*, --kanso-key-glyph and
@@ -64,30 +64,13 @@ export const KansoMark: React.FC<LogoSvgProps> = ({ className, title }) => (
 );
 
 /**
- * The key at icon size, in one color: the button's own ink (currentColor),
- * never key red, so it sits on any accent. The k and the face's outline are
- * cut out with masks, so the button's background shows through whatever it
- * is. It keeps the kanso-key-face group, so a press (.key-press-play) drops
- * the face like the full key. The one place the 3D key goes below 48 px.
+ * The k from the key, alone, at icon size: the kanso controls (the home
+ * page's kanso mode and the notes Focus button). It's in the button's own
+ * ink (currentColor), never key red, so it sits on any accent. A press
+ * (.key-press-play) dips it like any toggle icon.
  */
-export const KansoKeyIcon: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => {
-  const id = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  return (
-    <svg viewBox="0 0 200 200" className={className} style={style} aria-hidden>
-      <defs>
-        <mask id={`${id}-side`} maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
-          <rect width="200" height="200" fill="white" />
-          <rect x="22" y="20" width="156" height="140" rx="34" fill="black" />
-        </mask>
-        <mask id={`${id}-face`} maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
-          <rect width="200" height="200" fill="white" />
-          <path transform="translate(60.77 146) scale(0.07500)" fill="black" d={K_GLYPH} />
-        </mask>
-      </defs>
-      <rect x="22" y="32" width="156" height="148" rx="34" fill="currentColor" opacity="0.55" mask={`url(#${id}-side)`} />
-      <g className="kanso-key-face">
-        <rect x="22" y="20" width="156" height="140" rx="34" fill="currentColor" mask={`url(#${id}-face)`} />
-      </g>
-    </svg>
-  );
-};
+export const KansoKIcon: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className, style }) => (
+  <svg viewBox="-257 -1519 1560 1560" className={className} style={style} aria-hidden>
+    <path fill="currentColor" d={K_GLYPH} />
+  </svg>
+);
