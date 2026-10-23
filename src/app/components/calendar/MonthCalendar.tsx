@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Sun } from 'lucide-react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
-import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
+import { gridKeyTarget, monthCells } from '@/app/utils/monthGrid';
 import {
   MONTH_NAMES,
   MONTHS,
@@ -26,6 +27,14 @@ interface MonthCalendarProps {
   dayData: Map<string, DayData>;
   todayStr: string;
   onSelectDay: (date: Date) => void;
+  /** The picked day, highlighted in the grid. Omit where the grid has no picked day. */
+  selectedDate?: Date | null;
+  /**
+   * Turns on keyboard movement: arrows, Home/End and PageUp/PageDown pick
+   * the day they land on, which may be in another month — the parent pages
+   * there, and focus follows once that day is rendered.
+   */
+  onNavigate?: (date: Date) => void;
 }
 
 const DAY_HEADERS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -51,33 +60,40 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
   dayData,
   todayStr,
   onSelectDay,
+  selectedDate,
+  onNavigate,
 }) => {
   const now = new Date();
   const isCurrent = year === now.getFullYear() && month === now.getMonth();
 
-  const cells = useMemo(() => {
-    const firstOfMonth = new Date(year, month, 1);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = useMemo(() => monthCells(year, month), [year, month]);
 
-    // JS getDay() is 0=Sun — shift so the grid starts on Monday.
-    const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
+  const selectedStr = selectedDate ? toLocalDateStr(selectedDate) : null;
+  // One tab stop per grid: the picked day, else today, else the 1st.
+  const tabStopStr = useMemo(() => {
+    const inMonth = (s: string | null) => s !== null && cells.some(d => d && toLocalDateStr(d) === s);
+    if (inMonth(selectedStr)) return selectedStr;
+    if (inMonth(todayStr)) return todayStr;
+    return toLocalDateStr(new Date(year, month, 1));
+  }, [cells, selectedStr, todayStr, year, month]);
 
-    const result: (Date | null)[] = Array(leadingBlanks).fill(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingFocus.current) return;
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-date="${pendingFocus.current}"]`)?.focus();
+    pendingFocus.current = null;
+  });
 
-    for (let day = 1; day <= daysInMonth; day++) {
-      result.push(new Date(year, month, day));
-    }
-
-    // Always pad to a fixed 6 rows (42 cells) so every month renders the
-    // same grid height — some months only need 4-5 rows, which otherwise
-    // makes the card shorter and shifts surrounding layout while paging
-    // through months.
-    while (result.length < 42) {
-      result.push(null);
-    }
-
-    return result;
-  }, [year, month]);
+  const handleGridKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!onNavigate) return;
+    const from = (e.target as HTMLElement).closest('[data-date]')?.getAttribute('data-date');
+    const next = from ? gridKeyTarget(parseLocalDate(from), e.key) : null;
+    if (!next) return;
+    e.preventDefault();
+    pendingFocus.current = toLocalDateStr(next);
+    onNavigate(next);
+  };
 
   const monthHolidays = useMemo(() => getHolidays(year)[month] ?? {}, [year, month]);
 
@@ -187,7 +203,13 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-0.5">
+        <div
+          ref={gridRef}
+          role="group"
+          aria-label={`${MONTH_NAMES[month]} ${year}`}
+          onKeyDown={handleGridKeyDown}
+          className="grid grid-cols-7 gap-0.5"
+        >
           {cells.map((date, i) => {
             if (!date) {
               return <div key={`blank-${i}`} style={{ minHeight: 60 }} />;
@@ -204,6 +226,8 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
                 onSelect={onSelectDay}
                 hue={hue}
                 holidayName={monthHolidays[date.getDate()]}
+                isSelected={selectedDate === undefined ? undefined : dateStr === selectedStr}
+                tabIndex={onNavigate ? (dateStr === tabStopStr ? 0 : -1) : undefined}
               />
             );
           })}

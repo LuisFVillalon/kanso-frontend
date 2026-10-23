@@ -13,6 +13,10 @@ interface MonthCarouselProps {
   dayData: Map<string, DayData>;
   todayStr: string;
   onSelectDay: (date: Date) => void;
+  /** The picked day, highlighted in the grid. */
+  selectedDate: Date | null;
+  /** Keyboard movement in the grid; see MonthCalendar. */
+  onNavigate: (date: Date) => void;
 }
 
 const ARROW_CLASS =
@@ -21,7 +25,7 @@ const ARROW_CLASS =
 // Single-month carousel — arrows step the displayed month back and forth,
 // crossing into the previous or next year at the ends (December -> January
 // of the next year and back).
-const MonthCarousel: React.FC<MonthCarouselProps> = ({ year, month, onChangeMonth, dayData, todayStr, onSelectDay }) => {
+const MonthCarousel: React.FC<MonthCarouselProps> = ({ year, month, onChangeMonth, dayData, todayStr, onSelectDay, selectedDate, onNavigate }) => {
   const step = (offset: number) => {
     const next = new Date(year, month + offset, 1);
     onChangeMonth(next.getFullYear(), next.getMonth());
@@ -45,6 +49,8 @@ const MonthCarousel: React.FC<MonthCarouselProps> = ({ year, month, onChangeMont
           dayData={dayData}
           todayStr={todayStr}
           onSelectDay={onSelectDay}
+          selectedDate={selectedDate}
+          onNavigate={onNavigate}
         />
       </div>
 

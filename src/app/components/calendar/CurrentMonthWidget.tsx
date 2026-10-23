@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { useYearCalendarData, type DayData } from '@/app/hooks/useYearCalendarData';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { monthCells } from '@/app/utils/monthGrid';
 import { CardShell } from '@/app/components/stats/CardShell';
 import TileTools from '@/app/components/stats/TileTools';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
@@ -23,18 +24,6 @@ const CurrentMonthWidgetSkeleton: React.FC = () => (
     </div>
   </CardShell>
 );
-
-// Monday-start 6×7 grid of the current month, padded with nulls on both ends
-// (matching MonthCalendar's cell layout) so the two stay visually aligned.
-const monthCells = (year: number, month: number): (Date | null)[] => {
-  const firstOfMonth = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
-  const result: (Date | null)[] = Array(leadingBlanks).fill(null);
-  for (let day = 1; day <= daysInMonth; day++) result.push(new Date(year, month, day));
-  while (result.length < 42) result.push(null);
-  return result;
-};
 
 interface CompactMonthGridProps {
   cells: (Date | null)[];
