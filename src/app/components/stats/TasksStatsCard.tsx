@@ -64,7 +64,7 @@ const tagCategoriesFromTasks = (taskList: Task[]): TagPriorityCategory[] => {
 
 // ── Shared derived stats — used by both the compact tile and the overlay ────
 
-const useTaskStats = (tasks: Task[], total: number) => {
+const useTaskStats = (tasks: Task[]) => {
   const todayDate = new Date();
   const todayStr = toLocalDateStr(todayDate);
   const todayDateLabel = todayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -79,6 +79,8 @@ const useTaskStats = (tasks: Task[], total: number) => {
   const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + mondayOffset);
   const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
   const weekRangeLabel = formatDateRange(monday, sunday);
+  const mondayStr = toLocalDateStr(monday);
+  const sundayStr = toLocalDateStr(sunday);
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
     const dStr = toLocalDateStr(d);
@@ -89,21 +91,33 @@ const useTaskStats = (tasks: Task[], total: number) => {
   const weekTotal = weekDays.reduce((sum, d) => sum + d.total, 0);
   const weekCompleted = weekDays.reduce((sum, d) => sum + d.completed, 0);
   const weekPct = weekTotal > 0 ? Math.round((weekCompleted / weekTotal) * 100) : 0;
+  // The week's workload — estimated hours of every task due this week, done
+  // or not, same total the Workload slide charts day by day.
+  const weekHours = weekDays.reduce((sum, d) => sum + d.hours, 0);
 
-  const activeTagCategories = tagCategoriesFromTasks(tasks.filter(t => !t.completed));
-  const completedTagCategories = tagCategoriesFromTasks(tasks.filter(t => t.completed));
-  const tagPriorityCategories = tagCategoriesFromTasks(tasks.filter(t => !t.completed && t.priority != null));
-  const activeCount = tasks.filter(t => !t.completed).length;
-  const completedCount = tasks.filter(t => t.completed).length;
-  const completedHours = tasks.reduce((sum, t) => sum + (t.completed ? (t.estimated_time ?? 0) : 0), 0);
-  const prioritizedCount = tasks.filter(t => !t.completed && t.priority != null).length;
-  const overallPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+  // The Active/Completed/Priority slides and the Active ring all look at the
+  // same Monday–Sunday week as the This Week ring, never every task ever.
+  const weekTasks = tasks.filter(t => {
+    if (!t.due_date) return false;
+    const dStr = toLocalDateStr(t.due_date);
+    return dStr >= mondayStr && dStr <= sundayStr;
+  });
+  const weekActive = weekTasks.filter(t => !t.completed);
+  const weekDone = weekTasks.filter(t => t.completed);
+  const weekPrioritized = weekActive.filter(t => t.priority != null);
+  const activeTagCategories = tagCategoriesFromTasks(weekActive);
+  const completedTagCategories = tagCategoriesFromTasks(weekDone);
+  const tagPriorityCategories = tagCategoriesFromTasks(weekPrioritized);
+  const activeCount = weekActive.length;
+  const completedCount = weekDone.length;
+  const prioritizedCount = weekPrioritized.length;
+  const activePct = weekTotal > 0 ? Math.round((activeCount / weekTotal) * 100) : 0;
 
   return {
     todayDateLabel, todayTotal, todayCompleted, todayPct,
-    weekDays, weekRangeLabel, weekTotal, weekCompleted, weekPct,
+    weekDays, weekRangeLabel, weekTotal, weekCompleted, weekPct, weekHours,
     activeTagCategories, completedTagCategories, tagPriorityCategories,
-    activeCount, completedCount, completedHours, prioritizedCount, overallPct,
+    activeCount, completedCount, prioritizedCount, activePct,
   };
 };
 
@@ -266,7 +280,7 @@ const TaskStatsCarousel: React.FC<TaskStatsCarouselProps> = ({ slides }) => {
 
 /** Full-detail body rendered inside the shared expand overlay. */
 export const TasksOverlay: React.FC<{ tasks: Task[]; total: number }> = ({ tasks, total }) => {
-  const stats = useTaskStats(tasks, total);
+  const stats = useTaskStats(tasks);
   const weekSegments: WeekSegment[] = stats.weekDays;
 
   if (total === 0) {
@@ -300,9 +314,10 @@ export const TasksOverlay: React.FC<{ tasks: Task[]; total: number }> = ({ tasks
             fluid
           />
           <ProgressRing
-            label="Active"
-            detail={`${stats.completedCount} / ${total} done`}
-            pct={stats.overallPct}
+            label="Active this week"
+            detail={stats.weekTotal > 0 ? `${stats.activeCount} of ${stats.weekTotal} still open` : 'No tasks this week'}
+            pct={stats.activePct}
+            centerLabel={`${stats.activeCount}`}
             color="color-mix(in srgb, var(--tm-accent) 75%, black)"
             fluid
           />
@@ -318,37 +333,37 @@ export const TasksOverlay: React.FC<{ tasks: Task[]; total: number }> = ({ tasks
     },
     {
       key: 'priority',
-      label: 'Priority',
+      label: `Priority · This week (${stats.weekRangeLabel})`,
       content: (
         <TagPriorityChart
           categories={stats.tagPriorityCategories}
           total={stats.prioritizedCount}
-          totalLabel="total prioritized tasks"
-          emptyMessage="No priorities set yet"
+          totalLabel="prioritized tasks due this week"
+          emptyMessage="No prioritized tasks due this week"
         />
       ),
     },
     {
       key: 'active',
-      label: 'Active',
+      label: `Active · This week (${stats.weekRangeLabel})`,
       content: (
         <CategoryBarChart
           categories={stats.activeTagCategories}
           total={stats.activeCount}
-          totalLabel="total active tasks"
-          emptyMessage="All caught up — nothing active"
+          totalLabel="active tasks due this week"
+          emptyMessage="All caught up — nothing active this week"
         />
       ),
     },
     {
       key: 'completed',
-      label: 'Completed',
+      label: `Completed · This week (${stats.weekRangeLabel})`,
       content: (
         <CategoryBarChart
           categories={stats.completedTagCategories}
           total={stats.completedCount}
-          totalLabel="total completed tasks"
-          emptyMessage="Nothing completed yet"
+          totalLabel="completed tasks due this week"
+          emptyMessage="Nothing completed this week yet"
         />
       ),
     },
@@ -371,7 +386,7 @@ interface TasksStatsCardProps {
 }
 
 const TasksStatsCard: React.FC<TasksStatsCardProps> = ({ tasks, total, onExpand, dragHandleProps }) => {
-  const stats = useTaskStats(tasks, total);
+  const stats = useTaskStats(tasks);
 
   return (
     <CardShell
@@ -389,9 +404,12 @@ const TasksStatsCard: React.FC<TasksStatsCardProps> = ({ tasks, total, onExpand,
         <div className="flex-1 min-h-0 flex items-center gap-3">
           <div className="flex flex-col items-center gap-1 flex-shrink-0">
             <ProgressRing pct={stats.todayPct} color="var(--tm-accent)" size={58} strokeWidth={6} hideLabel />
-            {stats.completedHours > 0 && (
-              <span className="text-[9px] leading-none text-text-muted whitespace-nowrap">
-                {formatHours(stats.completedHours)}h done
+            {stats.weekHours > 0 && (
+              <span
+                className="text-[9px] leading-none text-text-muted whitespace-nowrap"
+                title={`Estimated hours of tasks due this week (${stats.weekRangeLabel})`}
+              >
+                {formatHours(stats.weekHours)}h this week
               </span>
             )}
           </div>

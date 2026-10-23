@@ -1,26 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { fetchAllNoteTimeSpent, fetchNoteTimeSpentForRange } from '@/app/lib/backend-api';
-
-/**
- * Fetches total time-spent (seconds) per note, keyed by note id, once on
- * mount — for stats widgets that rank notes by time spent rather than the
- * single-note total `useNoteSession` tracks for the open editor.
- */
-export function useNoteTimeTotals(): Record<number, number> {
-  const [totals, setTotals] = useState<Record<number, number>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchAllNoteTimeSpent()
-      .then(result => { if (!cancelled) setTotals(result); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
-  return totals;
-}
+import { fetchNoteTimeSpentForRange } from '@/app/lib/backend-api';
 
 /**
  * Fetches total time-spent (seconds) per note, keyed by note id, restricted

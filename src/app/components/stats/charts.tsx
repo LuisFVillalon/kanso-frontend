@@ -97,7 +97,10 @@ interface SegmentedProgressRingProps {
 
 // Like ProgressRing, but the arc is split into one hairline-gapped segment
 // per day (Mon–Sun) instead of a single continuous sweep — a flat-fill
-// glance at which days are done, pending, or empty this week.
+// glance at which days are done, pending, or empty this week. The gaps are
+// the day boundaries, which the ring's tooltip and accessible name say.
+const SEGMENT_HINT = 'One segment per day with tasks due';
+
 export const SegmentedProgressRing: React.FC<SegmentedProgressRingProps> = ({
   segments, pct, color, label, detail, size = 76, strokeWidth = 7, fluid,
 }) => {
@@ -148,8 +151,14 @@ export const SegmentedProgressRing: React.FC<SegmentedProgressRingProps> = ({
 
   return (
     <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-      <div className={fluid ? 'relative aspect-square mx-auto' : 'relative flex-shrink-0'} style={fluid ? { width: '39%' } : { width: size, height: size }}>
-        <svg width={fluid ? '100%' : size} height={fluid ? '100%' : size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+      <div
+        className={fluid ? 'relative aspect-square mx-auto' : 'relative flex-shrink-0'}
+        style={fluid ? { width: '39%' } : { width: size, height: size }}
+        role="img"
+        title={SEGMENT_HINT}
+        aria-label={`${clamped}% done. ${SEGMENT_HINT}`}
+      >
+        <svg width={fluid ? '100%' : size} height={fluid ? '100%' : size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true">
           <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--tm-surface-raised)" strokeWidth={strokeWidth} />
           {fillArcs}
         </svg>
