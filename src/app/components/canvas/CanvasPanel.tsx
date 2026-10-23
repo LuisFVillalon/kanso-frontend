@@ -372,6 +372,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
           classes={shownClasses}
           classFilter={filter}
           onClassFilterChange={setClassFilter}
+          onShowHiddenClasses={classes.length > 0 && shownClasses.length === 0 ? () => openTab('classes') : undefined}
         />
       );
     } else if (tab === 'classes') {

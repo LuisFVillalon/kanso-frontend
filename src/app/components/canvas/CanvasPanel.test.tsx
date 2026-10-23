@@ -272,11 +272,17 @@ describe('CanvasPanel', () => {
     api.updateCanvasHiddenCourses.mockResolvedValue(connected({ hidden_course_ids: [460] }));
     api.fetchCanvasPanelCourses.mockResolvedValue(courses({ courses: [] }));
     api.fetchCanvasClasses.mockResolvedValue(classes([{ hidden: true }]));
+    api.fetchCanvasOverview.mockResolvedValue(overview({ upcoming: [], missing: [] }));
     await click(button('Hide CS 460'));
     expect(api.updateCanvasHiddenCourses).toHaveBeenCalledWith([460]);
     expect(container.querySelector('[role="tablist"]')).not.toBeNull();
     expect(text()).not.toContain('No active courses');
     expect(text()).toContain('Hidden from Upcoming. Tap the eye to show it again.');
+    await click(button('Upcoming'));
+    expect(text()).toContain('Every class is hidden');
+    expect(text()).not.toContain('Nothing due');
+    await click(button('Show classes'));
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toMatch(/^Classes/);
     api.updateCanvasHiddenCourses.mockResolvedValue(connected());
     await click(button('Show CS 460'));
     expect(api.updateCanvasHiddenCourses).toHaveBeenLastCalledWith([]);
@@ -363,6 +369,15 @@ describe('CanvasPanel', () => {
       expect(button('Add "Homework 5" to tasks')).toBeTruthy();
       expect(api.fetchCanvasPanelCourses).not.toHaveBeenCalled();
       expect(api.fetchCanvasAnnouncements).not.toHaveBeenCalled();
+    });
+
+    it('says every class is hidden instead of nothing due', async () => {
+      api.fetchCanvasConnection.mockResolvedValue(feedConnection({ hidden_course_ids: [460] }));
+      api.fetchCanvasClasses.mockResolvedValue(classes([{ hidden: true }]));
+      api.fetchCanvasOverview.mockResolvedValue(overview({ upcoming: [], missing: [] }));
+      await render();
+      expect(text()).toContain('Every class is hidden');
+      expect(text()).not.toContain('Nothing due');
     });
 
     it('shows Upcoming and Classes, leaving out Announcements without mentioning a token', async () => {

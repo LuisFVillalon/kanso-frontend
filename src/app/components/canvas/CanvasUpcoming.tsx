@@ -39,6 +39,8 @@ interface CanvasUpcomingProps {
   /** The class the list is narrowed to, or null for all of them. */
   classFilter: number | null;
   onClassFilterChange: (courseId: number | null) => void;
+  /** Set when every class is hidden: opens the Classes tab to show them again. */
+  onShowHiddenClasses?: () => void;
 }
 
 /**
@@ -46,7 +48,7 @@ interface CanvasUpcomingProps {
  * has coming by week, and recently graded work, for every class or just one.
  */
 const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
-  overview, course, now, addToTasks, range, onRangeChange, classes, classFilter, onClassFilterChange,
+  overview, course, now, addToTasks, range, onRangeChange, classes, classFilter, onClassFilterChange, onShowHiddenClasses,
 }) => {
   const inClass = (items: CanvasItem[]) => (classFilter == null ? items : items.filter(i => i.course_id === classFilter));
   const ahead = overview.upcoming;
@@ -148,14 +150,20 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
               <CalendarDays className="w-6 h-6" />
             </div>
             <h3 className="text-base font-semibold text-text-primary">
-              {range === 'week' ? `Nothing${forClass} due in the next 7 days` : `Nothing${forClass} due ahead`}
+              {onShowHiddenClasses
+                ? 'Every class is hidden'
+                : range === 'week' ? `Nothing${forClass} due in the next 7 days` : `Nothing${forClass} due ahead`}
             </h3>
             <p className="text-[13px] text-text-secondary max-w-[340px]">
-              {range === 'week'
-                ? 'Try All upcoming to look further ahead.'
-                : "Canvas has nothing coming up on your calendar. New due dates show up here as soon as they're posted."}
+              {onShowHiddenClasses
+                ? "Their due dates are left out of Upcoming. Show a class again from the Classes tab."
+                : range === 'week'
+                  ? 'Try All upcoming to look further ahead.'
+                  : "Canvas has nothing coming up on your calendar. New due dates show up here as soon as they're posted."}
             </p>
-            {nextLater?.due_at && (
+            {onShowHiddenClasses ? (
+              <button type="button" onClick={onShowHiddenClasses} className="btn btn-outline">Show classes</button>
+            ) : nextLater?.due_at && (
               <button type="button" onClick={() => onRangeChange('all')} className="btn btn-outline">
                 Next up: {nextLater.title} · {formatShortDate(nextLater.due_at)}
               </button>
