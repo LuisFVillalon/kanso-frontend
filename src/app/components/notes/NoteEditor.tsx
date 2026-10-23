@@ -201,7 +201,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     },
   });
 
-  const { pdfLoading, pdfError, downloadPDF } = useNotePdfExport({ editor, title });
+  const { pdfLoading, pdfError, downloadPDF } = useNotePdfExport({
+    editor, title, tags: note?.tags, updatedDate: note?.updated_date,
+  });
   // Time spent in this note on earlier visits (closed note_sessions rows) and
   // the visible time of this visit; the hook also opens and closes this
   // visit's session on the backend.
