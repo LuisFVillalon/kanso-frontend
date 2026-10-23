@@ -26,7 +26,7 @@ const ProfilePage: React.FC<Props> = ({ name, avatar, onNameChange, onAvatarChan
   const monthly = monthlyAvatarOptions();
   // A saved avatar that rotated out of this month's set stays visible as its own tile.
   const current = findAvatarOption(avatar);
-  const options = current && !monthly.some(o => o.key === current.key) ? [current, ...monthly] : monthly;
+  const past = current && !monthly.some(o => o.key === current.key) ? current : null;
 
   return (
     <div className="space-y-5">
@@ -62,32 +62,57 @@ const ProfilePage: React.FC<Props> = ({ name, avatar, onNameChange, onAvatarChan
 
       <div>
         <p id="settings-avatar-label" className="block text-xs font-medium text-text-muted mb-2">Avatar</p>
-        <div className="grid grid-cols-7 gap-3 max-w-md" role="group" aria-labelledby="settings-avatar-label">
-          <button
-            type="button"
-            onClick={() => onAvatarChange(null)}
-            title="Your initial"
-            aria-label="Your initial"
-            aria-pressed={!avatar}
-            className="aspect-square w-full flex items-center justify-center rounded-full transition-transform hover:scale-105"
-            style={avatarStyle(!avatar)}
-          >
-            <span className="text-sm font-bold">{(name.trim()[0] ?? '?').toUpperCase()}</span>
-          </button>
-          {options.map(({ key, label, icon: Icon }) => (
+        <div role="group" aria-labelledby="settings-avatar-label">
+          <p className="text-[11px] uppercase tracking-wide text-text-muted mb-1.5">This month</p>
+          <div className="grid grid-cols-7 gap-3 max-w-md">
             <button
-              key={key}
               type="button"
-              onClick={() => onAvatarChange(key)}
-              title={key === current?.key && options.length > monthly.length ? `${label} (current)` : label}
-              aria-label={label}
-              aria-pressed={avatar === key}
+              onClick={() => onAvatarChange(null)}
+              title="Your initial"
+              aria-label="Your initial"
+              aria-pressed={!avatar}
               className="aspect-square w-full flex items-center justify-center rounded-full transition-transform hover:scale-105"
-              style={avatarStyle(avatar === key)}
+              style={avatarStyle(!avatar)}
             >
-              <Icon className="w-5 h-5" />
+              <span className="text-sm font-bold">{(name.trim()[0] ?? '?').toUpperCase()}</span>
             </button>
-          ))}
+            {monthly.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onAvatarChange(key)}
+                title={label}
+                aria-label={label}
+                aria-pressed={avatar === key}
+                className="aspect-square w-full flex items-center justify-center rounded-full transition-transform hover:scale-105"
+                style={avatarStyle(avatar === key)}
+              >
+                <Icon className="w-5 h-5" />
+              </button>
+            ))}
+          </div>
+          {past && (
+            <>
+              <p className="text-[11px] uppercase tracking-wide text-text-muted mt-3 mb-1.5">From a past month</p>
+              <div className="flex items-center gap-3 max-w-md">
+                <button
+                  type="button"
+                  onClick={() => onAvatarChange(past.key)}
+                  title={`${past.label} (current, from a past month)`}
+                  aria-label={past.label}
+                  aria-describedby="settings-avatar-past-note"
+                  aria-pressed={avatar === past.key}
+                  className="aspect-square w-[calc((100%-4.5rem)/7)] shrink-0 flex items-center justify-center rounded-full transition-transform hover:scale-105"
+                  style={avatarStyle(avatar === past.key)}
+                >
+                  <past.icon className="w-5 h-5" />
+                </button>
+                <p id="settings-avatar-past-note" className="text-xs text-text-muted">
+                  Pick another and this one goes away.
+                </p>
+              </div>
+            </>
+          )}
         </div>
         <p className="text-xs text-text-muted mt-2">New icons every month.</p>
       </div>
