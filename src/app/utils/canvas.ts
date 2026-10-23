@@ -279,7 +279,7 @@ export const formatNumber = (n: number) => (Number.isInteger(n) ? String(n) : n.
 // Canvas sends no course colors through the API, so each course takes a
 // color by its place in the course list. Never key red or coral: red is
 // brand-only, and kanso doesn't paint coursework red.
-const COURSE_COLORS = ['var(--tm-accent)', 'var(--tm-mood-4)', 'var(--tm-mood-3)', 'var(--tm-success)', 'var(--tm-pencil)', 'var(--tm-mood-5)'];
+const COURSE_COLORS = ['var(--tm-accent)', 'var(--tm-course-sky)', 'var(--tm-course-saffron)', 'var(--tm-success)', 'var(--tm-pencil)', 'var(--tm-course-blue)'];
 
 /** A stable color for `courseId`, given the course ids in list order. */
 export function courseColor(courseId: number | null, courseIds: number[]): string {

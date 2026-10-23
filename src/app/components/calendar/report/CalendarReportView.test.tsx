@@ -179,10 +179,41 @@ describe('CalendarReportView mood', () => {
     await click(buttonLabelled(/^Day by day$/));
     expect(container.querySelector('svg[aria-label="Habits completed per day with mood"]')).not.toBeNull();
 
-    // Exercised is on the Good and Great days: 8 of them.
+    // Exercised is on the Good and Great days: 8 of them, against a usual 3.0 over all 20.
     expect(text()).toContain('Exercised');
-    expect(text()).toContain('average mood 4.5');
     expect(text()).toContain('8 days');
+    expect(text()).toContain('your usual 3.0 · Okay');
+    expect(text()).toContain('+1.5');
+    expect(text()).toContain('On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
+    expect(text()).toContain('Your usual is your average mood across all 20 check-ins this month.');
+    expect(text()).not.toContain('overall');
+  });
+
+  it('shows a tag row’s sentence under it on tap, one row at a time', async () => {
+    const days = Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 2).padStart(2, '0')}`);
+    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({
+      ...checkin(d, (i % 5) + 1), id: i + 1, tags: i % 5 >= 3 ? ['Exercised'] : i % 5 <= 1 ? ['Tired'] : [],
+    })));
+    await render();
+    await click(buttonLabelled(/^Month$/));
+
+    const exercised = buttonLabelled(/^On the 8 days you tagged “Exercised”/);
+    const tired = buttonLabelled(/^On the 8 days you tagged “Tired”/);
+    const captions = () => [...container.querySelectorAll('li > p')].map(p => p.textContent);
+    expect(exercised.getAttribute('title')).toBe('On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
+    expect(captions()).toEqual([]);
+
+    await click(exercised);
+    expect(exercised.getAttribute('aria-expanded')).toBe('true');
+    expect(captions()).toEqual(['On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.']);
+
+    await click(tired);
+    expect(exercised.getAttribute('aria-expanded')).toBe('false');
+    expect(tired.getAttribute('aria-expanded')).toBe('true');
+    expect(captions()).toEqual(['On the 8 days you tagged “Tired”, your mood averaged 1.5 (Low) — 1.5 lower than your usual 3.0.']);
+
+    await click(tired);
+    expect(captions()).toEqual([]);
   });
 
   it('opens a month from the year chart', async () => {
