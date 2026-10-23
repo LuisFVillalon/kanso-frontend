@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
 import { DEFAULT_MOOD_SETTINGS } from '@/app/types/mood';
+import { monthlyAvatarOptions } from '@/app/lib/avatar';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -237,8 +238,9 @@ describe('SettingsModal autosave', () => {
     expect(onSaveProfileField).toHaveBeenCalledOnce();
     expect(onSaveProfileField).toHaveBeenCalledWith({ name: 'Maya Chen' });
 
-    await click(document.querySelector<HTMLButtonElement>('[aria-label="Tractor"]')!);
-    expect(onSaveProfileField).toHaveBeenLastCalledWith({ avatar: 'tractor' });
+    const [first] = monthlyAvatarOptions();
+    await click(document.querySelector<HTMLButtonElement>(`[aria-label="${first.label}"]`)!);
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ avatar: first.key });
     expect(document.querySelector('[role="status"]')?.textContent).toContain('Saved');
   });
 
@@ -275,11 +277,12 @@ describe('SettingsModal autosave', () => {
   it("says when a save failed and retries it", async () => {
     onSaveProfileField.mockRejectedValueOnce(new Error('offline'));
     render();
-    await click(document.querySelector<HTMLButtonElement>('[aria-label="Origami"]')!);
+    const [first] = monthlyAvatarOptions();
+    await click(document.querySelector<HTMLButtonElement>(`[aria-label="${first.label}"]`)!);
     expect(document.body.textContent).toContain("Couldn't save");
     await click(button('Retry'));
     expect(onSaveProfileField).toHaveBeenCalledTimes(2);
-    expect(onSaveProfileField).toHaveBeenLastCalledWith({ avatar: 'origami' });
+    expect(onSaveProfileField).toHaveBeenLastCalledWith({ avatar: first.key });
     expect(document.body.textContent).not.toContain("Couldn't save");
   });
 

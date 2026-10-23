@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { AVATAR_OPTIONS } from '@/app/lib/avatar';
+import { findAvatarOption } from '@/app/lib/avatar';
 
 interface ProfileAvatarProps {
   avatar?: string | null;
@@ -12,7 +12,7 @@ interface ProfileAvatarProps {
 
 /** Circular profile avatar — a chosen icon, or the name's initial as a fallback. */
 export default function ProfileAvatar({ avatar, name, size = 32, className = '' }: ProfileAvatarProps) {
-  const option = AVATAR_OPTIONS.find(a => a.key === avatar) ?? null;
+  const option = findAvatarOption(avatar);
   const initial = (name?.trim()?.[0] ?? '?').toUpperCase();
 
   return (
