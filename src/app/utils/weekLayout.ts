@@ -300,3 +300,48 @@ export function layoutDayEvents(events: TimedEvent[]): PositionedEvent[] {
   flush();
   return result;
 }
+
+/** How one day column shows the user's work window (Settings → Work day and rest). */
+export interface WorkDayMarks {
+  /** The day is one of the user's rest days. */
+  rest: boolean;
+  /** [start, end) minute ranges of the day outside any work window. */
+  off: [number, number][];
+  /** Minute the day's own window opens, or null on a rest day. */
+  opensAt: number | null;
+  /** Minute a window closes on this day, or null when none does. */
+  closesAt: number | null;
+}
+
+/**
+ * Where the work window falls on `day`: it opens at `startMin` on each day
+ * that isn't a rest day and closes at `endMin`. A window that ends at or
+ * before it starts runs past midnight, so its tail (and its close) lands on
+ * the next day, rest day or not. One that ends at midnight closes at the
+ * bottom of its own day.
+ */
+export function workDayMarks(day: Date, restDays: number[], startMin: number, endTime: number): WorkDayMarks {
+  const endMin = endTime === 0 && startMin > 0 ? MINUTES_PER_DAY : endTime;
+  const rest = restDays.includes(day.getDay());
+  const previousRest = restDays.includes((day.getDay() + 6) % 7);
+  const pastMidnight = endMin <= startMin;
+
+  const windows: [number, number][] = [];
+  if (pastMidnight && !previousRest) windows.push([0, endMin]);
+  if (!rest) windows.push([startMin, pastMidnight ? MINUTES_PER_DAY : endMin]);
+
+  const off: [number, number][] = [];
+  let from = 0;
+  for (const [start, end] of windows) {
+    if (start > from) off.push([from, start]);
+    from = Math.max(from, end);
+  }
+  if (from < MINUTES_PER_DAY) off.push([from, MINUTES_PER_DAY]);
+
+  return {
+    rest,
+    off,
+    opensAt: rest ? null : startMin,
+    closesAt: (pastMidnight ? !previousRest : !rest) ? endMin : null,
+  };
+}

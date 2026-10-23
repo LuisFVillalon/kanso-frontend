@@ -11,6 +11,7 @@ import {
   startOfWeek,
   TimedEvent,
   weekDays,
+  workDayMarks,
 } from './weekLayout';
 
 // Mon 19 Oct 2026, local midnight.
@@ -246,5 +247,52 @@ describe('layoutDayEvents', () => {
     ]);
     const byKey = Object.fromEntries(laid.map(e => [e.key, [e.column, e.columns]]));
     expect(byKey).toEqual({ long: [0, 2], mid: [1, 2], late: [1, 2], after: [0, 1] });
+  });
+});
+
+describe('workDayMarks', () => {
+  const monday = new Date(2026, 9, 19);
+  const saturday = new Date(2026, 9, 24);
+  const sunday = new Date(2026, 9, 25);
+  const weekend = [0, 6];
+
+  it('washes out the hours outside the window on a work day', () => {
+    expect(workDayMarks(monday, weekend, 480, 1320)).toEqual({
+      rest: false, off: [[0, 480], [1320, 1440]], opensAt: 480, closesAt: 1320,
+    });
+  });
+
+  it('leaves a rest day off all day, with no window lines', () => {
+    expect(workDayMarks(saturday, weekend, 480, 1320)).toEqual({
+      rest: true, off: [[0, 1440]], opensAt: null, closesAt: null,
+    });
+  });
+
+  it('carries a window that runs past midnight into the next day, rest day or not', () => {
+    // 6 PM – 2 AM: Friday's window closes on Saturday morning.
+    expect(workDayMarks(saturday, weekend, 1080, 120)).toEqual({
+      rest: true, off: [[120, 1440]], opensAt: null, closesAt: 120,
+    });
+    // Saturday was off, so nothing spills into Sunday.
+    expect(workDayMarks(sunday, weekend, 1080, 120)).toEqual({
+      rest: true, off: [[0, 1440]], opensAt: null, closesAt: null,
+    });
+    // Sunday was off, so Monday's only window is its own.
+    expect(workDayMarks(monday, weekend, 1080, 120)).toEqual({
+      rest: false, off: [[0, 1080]], opensAt: 1080, closesAt: null,
+    });
+    expect(workDayMarks(new Date(2026, 9, 20), weekend, 1080, 120)).toEqual({
+      rest: false, off: [[120, 1080]], opensAt: 1080, closesAt: 120,
+    });
+  });
+
+  it('closes a window that ends at midnight at the bottom of its own day', () => {
+    expect(workDayMarks(monday, weekend, 480, 0)).toEqual({
+      rest: false, off: [[0, 480]], opensAt: 480, closesAt: 1440,
+    });
+  });
+
+  it('marks every day a work day when there are no rest days', () => {
+    expect(workDayMarks(sunday, [], 540, 1020).rest).toBe(false);
   });
 });

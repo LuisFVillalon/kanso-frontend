@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalendarActivity } from '@/app/types/activity';
 import type { BaseTaskForm, Task } from '@/app/types/task';
 import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
+import { AppShellContext, type AppShellValue } from '@/app/context/AppShellContext';
+import type { ProfileFields } from '@/app/hooks/useProfile';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -66,6 +68,17 @@ const render = async (props: React.ComponentProps<typeof WeekView> = {}) => {
   await act(async () => root.render(<WeekView {...props} />));
 };
 
+/** WeekView inside an app shell whose profile carries this work schedule. */
+const renderWithSchedule = async (schedule: Pick<ProfileFields, 'dayStartTime' | 'shutoffTime' | 'restDays'>) => {
+  const shell = { profileState: { profile: schedule } } as unknown as AppShellValue;
+  await act(async () => root.render(<AppShellContext.Provider value={shell}><WeekView /></AppShellContext.Provider>));
+};
+
+/** Each day header's screen-reader description of its work schedule, Monday first. */
+const daySchedules = () => [...container.querySelectorAll('.sr-only')]
+  .map(el => el.textContent)
+  .filter(text => /^(Work|Rest) day/.test(text ?? ''));
+
 const button = (label: string): HTMLButtonElement => {
   const el = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
   if (!el) throw new Error(`No button labelled "${label}"`);
@@ -80,6 +93,7 @@ beforeEach(() => {
   mocks.updateTask.mockReset();
   mocks.saveLinkedTasks.mockReset();
   mocks.push.mockReset();
+  localStorage.clear();
   mocks.fetchCalendarActivity.mockReset().mockImplementation(async (start: string, end: string) => activityFor(start, end));
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -111,11 +125,49 @@ describe('WeekView', { timeout: 30_000 }, () => {
 
   it('colors each legend kind with its own week color', async () => {
     await render();
-    const swatches = [...container.querySelectorAll<HTMLElement>('ul[aria-label="Legend"] li span')];
+    const swatches = [...container.querySelectorAll<HTMLElement>('ul[aria-label="Legend"] li span')].slice(0, 4);
     expect(swatches.map(s => s.parentElement!.textContent)).toEqual(['Planned task', 'Completed', 'Note session', 'Habit']);
     expect(swatches.map(s => s.style.backgroundColor)).toEqual([
       'var(--tm-week-task)', 'var(--tm-week-completed)', 'var(--tm-week-note)', 'var(--tm-week-habit)',
     ]);
+  });
+
+  it('shows rest days and when the work window opens and closes, from the local cache outside the app shell', async () => {
+    await render();
+    // The defaults: weekends off, 8 AM to 10 PM.
+    expect(daySchedules()).toEqual([
+      ...Array(5).fill('Work day, work window opens at 8:00 AM, closes at 10:00 PM'),
+      'Rest day', 'Rest day',
+    ]);
+    const columns = [...container.querySelectorAll<HTMLElement>('[data-rest-day]')];
+    expect(columns).toHaveLength(2);
+    expect(columns[0].querySelectorAll('[data-window-edge]')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-window-edge="opens"]')).toHaveLength(5);
+    expect([...container.querySelectorAll('[data-window-edge]')].slice(0, 2).map(e => e.textContent)).toEqual(['Opens 8:00 AM', 'Closes 10:00 PM']);
+    const legend = [...container.querySelectorAll('ul[aria-label="Legend"] li')].map(li => li.textContent);
+    expect(legend.slice(4)).toEqual(['Outside work hours', 'Rest day']);
+
+    localStorage.setItem('tm_rest_days', '[3]');
+    localStorage.setItem('tm_day_start_time', '09:30');
+    localStorage.setItem('tm_call_it_a_day', '17:00');
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render();
+    expect(daySchedules()[2]).toBe('Rest day');
+    expect(daySchedules()[0]).toBe('Work day, work window opens at 9:30 AM, closes at 5:00 PM');
+  });
+
+  it("follows the app shell profile's work schedule as it changes", async () => {
+    await renderWithSchedule({ dayStartTime: '08:00', shutoffTime: '22:00', restDays: [0, 6] });
+    expect(container.querySelectorAll('[data-rest-day]')).toHaveLength(2);
+
+    await renderWithSchedule({ dayStartTime: '18:00', shutoffTime: '02:00', restDays: [1] });
+    expect(daySchedules()).toEqual([
+      'Rest day, work window closes at 2:00 AM',
+      'Work day, work window opens at 6:00 PM',
+      ...Array(5).fill('Work day, work window closes at 2:00 AM, opens at 6:00 PM'),
+    ]);
+    expect(container.querySelectorAll('[data-rest-day]')).toHaveLength(1);
   });
 
   it('has no resize handle unless the parent takes the height', async () => {
