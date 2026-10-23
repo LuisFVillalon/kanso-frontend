@@ -85,6 +85,7 @@ let splitChanges: HomePanels[];
 let phoneChanges: PanelKey[];
 let orderChanges: PanelKey[][];
 let drags: [number, number][];
+let panelRenders: number;
 let handle: PanelCarouselHandle | null;
 
 /** A panel with its own state, to check it survives being switched away and back. */
@@ -129,7 +130,7 @@ const Harness = React.forwardRef<PanelCarouselHandle, HarnessProps>(function Har
       dividersMovable={() => movable}
       splitRef={splitRef}
       onDividerPointerDown={(count, index) => { drags.push([count, index]); }}
-      renderPanel={(key, { widthPct }) => <Counter name={key} widthPct={widthPct} />}
+      renderPanel={(key, { widthPct }) => { panelRenders++; return <Counter name={key} widthPct={widthPct} />; }}
     />
   );
 });
@@ -184,6 +185,7 @@ beforeEach(() => {
   phoneChanges = [];
   orderChanges = [];
   drags = [];
+  panelRenders = 0;
   handle = null;
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query.includes('max-width') ? media.phone : false,
@@ -410,6 +412,21 @@ describe('PanelCarousel', () => {
       vi.useRealTimers();
     });
 
+    it('picks the next tapped tab when a tab drag\'s release makes no click', async () => {
+      vi.useFakeTimers();
+      await render();
+      layOut();
+      await pointer('pointerdown', tab('Canvas'), 250, 20);
+      await act(async () => { vi.advanceTimersByTime(350); });
+      await pointer('pointermove', window, 30, 20);
+      await pointer('pointerup', window, 30, 20);
+      expect(orderChanges).toEqual([['canvas', 'tasks', 'notes']]);
+      await act(async () => { vi.advanceTimersByTime(0); });
+      await click(tab('Notes'));
+      expect(phoneChanges).toEqual(['notes']);
+      vi.useRealTimers();
+    });
+
     it('treats a tab pressed and moved straight away as a swipe, not a drag', async () => {
       vi.useFakeTimers();
       await render();
@@ -465,6 +482,24 @@ describe('PanelCarousel', () => {
       expect(width('notes')).toBe('calc(50% - 5.333333333333333px)');
       expect(dividers().map(d => d.style.order)).toEqual(['1', '3']);
       expect(changes).toEqual([]);
+    });
+
+    it('moves the ghost without re-rendering the panels until the drop target changes', async () => {
+      await render({ initial: 'tasks,notes,canvas' });
+      layOut();
+      await pointer('pointerdown', grip('notes'), 150, 10);
+      await pointer('pointermove', window, 30, 10);
+      const ghost = [...document.body.querySelectorAll<HTMLElement>('[aria-hidden]')].find(el => el.textContent === 'Moving Notes')!;
+      const renders = panelRenders;
+      await pointer('pointermove', window, 40, 20);
+      await pointer('pointermove', window, 20, 30);
+      expect(panelRenders).toBe(renders);
+      expect([ghost.style.left, ghost.style.top]).toEqual(['32px', '18px']);
+      expect(indicator()).toEqual(['tasks', 'before']);
+      await pointer('pointermove', window, 280, 10);
+      expect(indicator()).toEqual(['canvas', 'after']);
+      expect(panelRenders).toBeGreaterThan(renders);
+      await pointer('pointerup', window, 280, 10);
     });
 
     it('puts a dragged panel back when Escape is pressed', async () => {

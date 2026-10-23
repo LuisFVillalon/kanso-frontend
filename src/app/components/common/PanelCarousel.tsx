@@ -192,8 +192,19 @@ function PanelControl({ label, icon: Icon, pressed, onClick, tipSide }: {
 type DragFrom = 'panel' | 'rail' | 'tab';
 const DROP_KINDS: Record<DragFrom, readonly DragFrom[]> = { panel: ['panel'], rail: ['panel', 'rail'], tab: ['tab'] };
 
+/** What's dragged, and where the pointer picked it up. */
 interface Drag { key: PanelKey; from: DragFrom; x: number; y: number }
 interface Drop { key: PanelKey; kind: DragFrom; after: boolean }
+
+const sameDrop = (a: Drop | null, b: Drop | null) =>
+  a === b || (!!a && !!b && a.key === b.key && a.kind === b.kind && a.after === b.after);
+
+/** The ghost's place beside the pointer, on whichever side has the room. */
+const ghostPlace = (x: number, y: number) => ({
+  left: `${x + 12}px`,
+  top: `${y - 12}px`,
+  transform: x > window.innerWidth / 2 ? 'translateX(calc(-100% - 24px))' : '',
+});
 
 /** The drop target nearest the pointer among `root`'s targets of `kinds`, and which side of it the pointer is on. */
 function dropAt(root: HTMLElement, kinds: readonly DragFrom[], x: number, y: number): Drop | null {
@@ -275,9 +286,14 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
   const holdStart = useRef<{ x: number; y: number } | null>(null);
   // A held-and-dragged tab's click is its release, not a pick.
   const swallowClick = useRef(false);
+  // The panels' DOM stays put while the pointer moves; only the ghost follows it.
+  const ghostRef = useRef<HTMLDivElement>(null);
+  // Whatever had focus when a reorder moved it in the DOM, to give focus back to.
+  const refocus = useRef<Element | null>(null);
 
   const reorder = (key: PanelKey, next: PanelKey[], group: readonly PanelKey[]) => {
     if (next.join() === order.join()) return;
+    refocus.current = document.activeElement;
     if (!phone && !prefersReducedMotion() && splitRef.current) {
       reflowFrom.current = new Map([...splitRef.current.querySelectorAll<HTMLElement>('.split-slot')].map(el => [el, el.getBoundingClientRect()]));
     }
@@ -288,6 +304,11 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
 
   // FLIP: each panel starts where it was and slides to its new place.
   const orderKey = order.join();
+  useLayoutEffect(() => {
+    const el = refocus.current;
+    refocus.current = null;
+    if (el instanceof HTMLElement && el !== document.activeElement && el.isConnected && rootRef.current?.contains(el)) el.focus();
+  }, [orderKey]);
   useLayoutEffect(() => {
     const from = reflowFrom.current;
     reflowFrom.current = null;
@@ -339,17 +360,24 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
       const current = dragRef.current;
       if (!current || !rootRef.current) return;
       e.preventDefault();
-      setDrag({ ...current, x: e.clientX, y: e.clientY });
-      const at = dropAt(rootRef.current, DROP_KINDS[current.from], e.clientX, e.clientY);
-      setDrop(at && at.key !== current.key ? at : null);
       document.body.style.setProperty('cursor', 'grabbing');
+      if (ghostRef.current) Object.assign(ghostRef.current.style, ghostPlace(e.clientX, e.clientY));
+      const at = dropAt(rootRef.current, DROP_KINDS[current.from], e.clientX, e.clientY);
+      const next = at && at.key !== current.key ? at : null;
+      if (sameDrop(next, dropRef.current)) return;
+      dropRef.current = next;
+      setDrop(next);
     };
     const up = () => {
       const current = dragRef.current;
       const at = dropRef.current;
       end();
       if (!current || !at) return;
-      if (current.from === 'tab') swallowClick.current = true;
+      if (current.from === 'tab') {
+        // Only the click this release makes, if it makes one at all.
+        swallowClick.current = true;
+        setTimeout(() => { swallowClick.current = false; }, 0);
+      }
       const next = movePanel(order, current.key, at.key, at.after);
       const group = current.from === 'tab' ? available : current.from === 'rail' && at.kind === 'rail' ? hidden : on;
       if (current.from === 'rail' && at.kind === 'panel') {
@@ -624,10 +652,10 @@ const PanelCarousel = forwardRef<PanelCarouselHandle, PanelCarouselProps>(functi
     const { label, icon: Icon } = PANEL_META[drag.key];
     return createPortal(
       <div
+        ref={ghostRef}
         aria-hidden
         className="fixed pointer-events-none z-[70] flex items-center gap-1.5 rounded-lg border border-accent bg-surface px-3 py-1.5 text-xs font-semibold text-accent shadow-lg"
-        // Beside the pointer, on whichever side has the room.
-        style={{ left: drag.x + 12, top: drag.y - 12, transform: drag.x > window.innerWidth / 2 ? 'translateX(calc(-100% - 24px))' : undefined }}
+        style={ghostPlace(drag.x, drag.y)}
       >
         <Move className="w-3.5 h-3.5 flex-shrink-0" />
         <Icon className="w-3.5 h-3.5 flex-shrink-0" />
