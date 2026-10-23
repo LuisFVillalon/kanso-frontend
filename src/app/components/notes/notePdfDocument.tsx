@@ -89,6 +89,19 @@ export const registerNotePdfFonts = (base: string) => {
   Font.registerHyphenationCallback(word => [word]);
 };
 
+/**
+ * Lets fonts that failed to load be fetched again. react-pdf keeps a failed
+ * load's promise, so otherwise every later export would fail the same way
+ * until the page is reloaded.
+ */
+export const retryFailedNotePdfFonts = () => {
+  for (const family of Object.values(Font.getRegisteredFonts())) {
+    for (const source of family.sources) {
+      if (!source.data) source.loadResultPromise = null;
+    }
+  }
+};
+
 /** The fonts a note's PDF draws text with: kanso's sans first, then its kanji if the note has any. */
 export const notePdfFontFaces = (kanji: boolean) =>
   [SANS, ...(kanji ? [KANJI] : [])].flatMap(family =>
@@ -98,7 +111,8 @@ const KANJI_TEXT = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/;
 
 /** Every bit of text a note's PDF prints. */
 const allText = (node: JSONContent): string =>
-  (node.text ?? '') + (node.content ?? []).map(allText).join('');
+  (node.text ?? '') + (node.type === 'image' && typeof node.attrs?.alt === 'string' ? node.attrs.alt : '')
+  + (node.content ?? []).map(allText).join('');
 
 export const needsKanji = (doc: JSONContent, title: string, tags: Tag[] = []) =>
   KANJI_TEXT.test(title + tags.map(tag => tag.name).join('') + allText(doc));
@@ -132,6 +146,8 @@ export interface NotePdfOptions {
 
 interface Ctx {
   options: NotePdfOptions;
+  /** The width this block's content is laid out at. */
+  width: number;
   /** The font stack for this block's text. */
   family: string[];
   fontSize: number;
@@ -341,13 +357,129 @@ const checkbox = (checked: boolean) => {
   );
 };
 
+const listMarkerWidth = (task: boolean) => (task ? 0.95 * BODY + ITEM_GAP : MARKER_WIDTH);
+const listPadding = (task: boolean) => (task ? 0.125 * BODY : 0);
+/** The width a list item's blocks are laid out at, beside its marker. */
+const listItemCtx = (ctx: Ctx, task: boolean): Ctx =>
+  ({ ...ctx, width: ctx.width - listPadding(task) - listMarkerWidth(task) });
+
+const CELL_PADDING_X = 0.6 * BODY;
+const CELL_PADDING_Y = 0.4 * BODY;
+const CELL_BORDER = 0.75;
+
 /**
- * Blocks with less text than this move to the next page whole when they
- * don't fit, keeping a list marker beside its text or a table row together.
- * Longer ones (rare) split between lines instead, so they're never cut.
+ * A table's rows, each cell with the width it prints at: the width its
+ * column was dragged to in the editor, scaled to the space the table has.
  */
-const KEEP_TOGETHER_CHARS = 1500;
-const short = (node: JSONContent | undefined) => !node || allText(node).length < KEEP_TOGETHER_CHARS;
+const tableRows = (node: JSONContent, width: number) => {
+  const rows = (node.content ?? []).filter(row => row.type === 'tableRow');
+  const span = (cell: JSONContent) => Math.max(1, Number(cell.attrs?.colspan) || 1);
+  const columns = Math.max(1, ...rows.map(row => (row.content ?? []).reduce((sum, cell) => sum + span(cell), 0)));
+  const widths: number[] = Array(columns).fill(0);
+  (rows[0]?.content ?? []).reduce((col, cell) => {
+    const set: unknown = cell.attrs?.colwidth;
+    (Array.isArray(set) ? set : []).forEach((w, j) => { if (Number(w) > 0) widths[col + j] = Number(w); });
+    return col + span(cell);
+  }, 0);
+  const known = widths.filter(Boolean);
+  const fallback = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
+  const total = widths.reduce((sum, w) => sum + (w || fallback), 0);
+  const share = (col: number, count: number) =>
+    widths.slice(col, col + count).reduce((sum, w) => sum + (w || fallback), 0) / total;
+
+  return rows.map(row => {
+    let col = 0;
+    return (row.content ?? []).map(cell => {
+      const cellWidth = share(col, span(cell)) * width - CELL_BORDER / columns;
+      col += span(cell);
+      return { cell, width: cellWidth };
+    });
+  });
+};
+
+const cellCtx = (cell: JSONContent, width: number, ctx: Ctx): Ctx => ({
+  ...(cell.type === 'tableHeader' ? { ...ctx, color: INK.primary, fontWeight: 700 } : ctx),
+  width: width - CELL_BORDER - 2 * CELL_PADDING_X,
+});
+
+/** How wide a character is, as a share of the font size: on the wide side, so a block is never taken for shorter than it is. */
+const CHAR_WIDTH = 0.6;
+
+/** The height of text lines at `width`, each wrapping onto as many lines as it needs. */
+const linesHeight = (lines: string[], width: number, fontSize: number, lineHeight: number) => {
+  const perLine = Math.max(1, Math.floor(width / (CHAR_WIDTH * fontSize)));
+  return lines.reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / perLine)), 0)
+    * lineBox(fontSize, lineHeight);
+};
+
+/** Inline content split at its line breaks. */
+const inlineLines = (nodes: JSONContent[] = []) =>
+  nodes.reduce<string[]>((lines, node) => {
+    if (node.type === 'hardBreak') lines.push('');
+    else lines[lines.length - 1] += allText(node);
+    return lines;
+  }, ['']);
+
+const contentHeight = (nodes: JSONContent[] = [], ctx: Ctx): number =>
+  nodes.reduce((sum, node) => sum + estimateHeight(node, ctx), 0);
+
+type TableCells = ReturnType<typeof tableRows>[number];
+
+const rowHeight = (cells: TableCells, ctx: Ctx) =>
+  Math.max(0, ...cells.map(({ cell, width }) => contentHeight(cell.content, cellCtx(cell, width, ctx))))
+  + 2 * CELL_PADDING_Y + CELL_BORDER;
+
+/** Roughly how tall a block prints at the context's width, margins included, in points. */
+function estimateHeight(node: JSONContent, ctx: Ctx): number {
+  const { top, bottom } = spacing(node);
+  let height: number;
+  switch (node.type) {
+    case 'heading': {
+      const { size, lineHeight } = HEADINGS[Number(node.attrs?.level) || 1] ?? HEADINGS[5];
+      height = linesHeight(inlineLines(node.content), ctx.width, size * BODY, lineHeight);
+      break;
+    }
+    case 'bulletList':
+    case 'orderedList':
+    case 'taskList': {
+      const itemCtx = listItemCtx(ctx, node.type === 'taskList');
+      height = (node.content ?? []).reduce((sum, item) => sum + contentHeight(item.content, itemCtx) + ITEM_GAP, 0);
+      break;
+    }
+    case 'codeBlock':
+      height = linesHeight(allText(node).split('\n'), ctx.width - 1.5 * BODY, 0.875 * BODY, 1.6) + 1.25 * BODY;
+      break;
+    case 'blockquote':
+      height = contentHeight(node.content, { ...ctx, width: ctx.width - 2.25 - 0.875 * BODY }) + 0.25 * BODY;
+      break;
+    case 'table':
+      height = tableRows(node, ctx.width).reduce((sum, cells) => sum + rowHeight(cells, ctx), 0);
+      break;
+    case 'image': {
+      const loaded = ctx.options.images?.get(node.attrs?.src ?? '');
+      height = loaded
+        ? fitImage(loaded, node.attrs?.width).height
+        : linesHeight([allText(node)], ctx.width, ctx.fontSize, 1.7);
+      break;
+    }
+    case 'horizontalRule':
+      height = 0;
+      break;
+    default:
+      height = node.type === 'paragraph' || !node.content?.length
+        || node.content.some(child => child.type === 'text' || child.type === 'hardBreak')
+        ? linesHeight(inlineLines(node.content), ctx.width, ctx.fontSize, 1.7)
+        : contentHeight(node.content, ctx);
+  }
+  return top + height + bottom;
+}
+
+/**
+ * Blocks well under a page tall move to the next page whole when they don't
+ * fit, keeping a list marker beside its text or a table row together. Taller
+ * ones split between lines instead, so they're never cut.
+ */
+const keepsTogether = (height: number) => height < PDF_CONTENT_HEIGHT / 2;
 
 const list = (node: JSONContent, ctx: Ctx, margins: Style) => {
   const ordered = node.type === 'orderedList';
@@ -356,13 +488,14 @@ const list = (node: JSONContent, ctx: Ctx, margins: Style) => {
   const firstNumber = Number.isFinite(start) ? start : 1;
   const items = (node.content ?? []).filter(item => item.type === 'listItem' || item.type === 'taskItem');
   const line = lineBox(ctx.fontSize, 1.7);
-  const markerWidth = task ? 0.95 * BODY + ITEM_GAP : MARKER_WIDTH;
+  const markerWidth = listMarkerWidth(task);
+  const contentCtx = listItemCtx(ctx, task);
 
   return (
-    <View style={{ ...margins, paddingLeft: task ? 0.125 * BODY : 0 }}>
+    <View style={{ ...margins, paddingLeft: listPadding(task) }}>
       {items.map((item, i) => {
         const checked = task && item.attrs?.checked === true;
-        const itemCtx: Ctx = checked ? { ...ctx, struck: true, color: INK.muted } : ctx;
+        const itemCtx: Ctx = checked ? { ...contentCtx, struck: true, color: INK.muted } : contentCtx;
         let marker: React.ReactNode;
         if (task) {
           marker = (
@@ -386,9 +519,10 @@ const list = (node: JSONContent, ctx: Ctx, margins: Style) => {
         // The marker shares a row with the item's first block only; the rest
         // (a nested list, more paragraphs) flows on beneath it.
         const [first, ...rest] = blocks(item.content, itemCtx, { trailing: false });
+        const firstBlock = item.content?.[0];
         return (
           <View key={i} style={{ marginBottom: i === items.length - 1 ? 0 : task ? 0.25 * BODY : ITEM_GAP }}>
-            <View wrap={!short(item.content?.[0])} style={{ flexDirection: 'row' }}>
+            <View wrap={!!firstBlock && !keepsTogether(estimateHeight(firstBlock, itemCtx))} style={{ flexDirection: 'row' }}>
               {marker}
               <View style={{ flex: 1 }}>{first}</View>
             </View>
@@ -441,57 +575,31 @@ const blockquote = (node: JSONContent, ctx: Ctx, margins: Style) => (
     paddingLeft: 0.875 * BODY,
     paddingVertical: 0.125 * BODY,
   }}>
-    {blocks(node.content, { ...ctx, color: INK.muted }, { trailing: false })}
+    {blocks(node.content, { ...ctx, color: INK.muted, width: ctx.width - 2.25 - 0.875 * BODY }, { trailing: false })}
   </View>
 );
 
-const table = (node: JSONContent, ctx: Ctx, margins: Style) => {
-  const rows = (node.content ?? []).filter(row => row.type === 'tableRow');
-  const span = (cell: JSONContent) => Math.max(1, Number(cell.attrs?.colspan) || 1);
-  const columns = Math.max(1, ...rows.map(row => (row.content ?? []).reduce((sum, cell) => sum + span(cell), 0)));
-  // Columns keep the widths they were dragged to in the editor, scaled to the page.
-  const widths: number[] = Array(columns).fill(0);
-  (rows[0]?.content ?? []).reduce((col, cell) => {
-    const set: unknown = cell.attrs?.colwidth;
-    (Array.isArray(set) ? set : []).forEach((w, j) => { if (Number(w) > 0) widths[col + j] = Number(w); });
-    return col + span(cell);
-  }, 0);
-  const known = widths.filter(Boolean);
-  const fallback = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
-  const total = widths.reduce((sum, w) => sum + (w || fallback), 0);
-  const share = (col: number, count: number) =>
-    widths.slice(col, col + count).reduce((sum, w) => sum + (w || fallback), 0) / total;
-
-  return (
-    <View style={{ ...margins, borderTopWidth: 0.75, borderLeftWidth: 0.75, borderColor: INK.border }}>
-      {rows.map((row, r) => {
-        let col = 0;
-        return (
-          <View key={r} wrap={!short(row)} style={{ flexDirection: 'row' }}>
-            {(row.content ?? []).map((cell, c) => {
-              const header = cell.type === 'tableHeader';
-              const width = share(col, span(cell)) * PDF_CONTENT_WIDTH - 0.75 / columns;
-              col += span(cell);
-              return (
-                <View key={c} style={{
-                  width,
-                  borderRightWidth: 0.75,
-                  borderBottomWidth: 0.75,
-                  borderColor: INK.border,
-                  paddingVertical: 0.4 * BODY,
-                  paddingHorizontal: 0.6 * BODY,
-                  backgroundColor: header ? INK.chip : undefined,
-                }}>
-                  {blocks(cell.content, header ? { ...ctx, color: INK.primary, fontWeight: 700 } : ctx, { trailing: false })}
-                </View>
-              );
-            })}
+const table = (node: JSONContent, ctx: Ctx, margins: Style) => (
+  <View style={{ ...margins, borderTopWidth: CELL_BORDER, borderLeftWidth: CELL_BORDER, borderColor: INK.border }}>
+    {tableRows(node, ctx.width).map((cells, r) => (
+      <View key={r} wrap={!keepsTogether(rowHeight(cells, ctx))} style={{ flexDirection: 'row' }}>
+        {cells.map(({ cell, width }, c) => (
+          <View key={c} style={{
+            width,
+            borderRightWidth: CELL_BORDER,
+            borderBottomWidth: CELL_BORDER,
+            borderColor: INK.border,
+            paddingVertical: CELL_PADDING_Y,
+            paddingHorizontal: CELL_PADDING_X,
+            backgroundColor: cell.type === 'tableHeader' ? INK.chip : undefined,
+          }}>
+            {blocks(cell.content, cellCtx(cell, width, ctx), { trailing: false })}
           </View>
-        );
-      })}
-    </View>
-  );
-};
+        ))}
+      </View>
+    ))}
+  </View>
+);
 
 /**
  * Fits an image to the page: no wider than the content box (or the width it
@@ -513,7 +621,11 @@ const image = (node: JSONContent, ctx: Ctx, margins: Style) => {
   if (!loaded) {
     // An image that can't be fetched (a dead link, a blocked host) prints as its caption.
     const label = node.attrs?.alt ? `[Image: ${node.attrs.alt}]` : '[Image]';
-    return <Text style={{ ...margins, fontFamily: ctx.family, fontSize: ctx.fontSize, color: INK.muted, fontStyle: 'italic' }}>{label}</Text>;
+    return (
+      <Text style={{ ...margins, fontFamily: ctx.family, fontSize: ctx.fontSize, color: INK.muted, fontStyle: 'italic' }}>
+        {textWithGlyphs(label, ctx, ctx.fontSize, INK.muted)}
+      </Text>
+    );
   }
   const { width, height } = fitImage(loaded, node.attrs?.width);
   return <Picture src={loaded.src} style={{ ...margins, width, height, borderRadius: 6 }} />;
@@ -544,7 +656,7 @@ function block(node: JSONContent, ctx: Ctx, margins: Style): React.ReactNode {
 
 export const NotePdfDocument = ({ options }: { options: NotePdfOptions }) => {
   const { title, doc, tags = [], dateLabel, kanji = false } = options;
-  const ctx: Ctx = { options, family: stack(SANS, kanji), fontSize: BODY, color: INK.secondary };
+  const ctx: Ctx = { options, width: PDF_CONTENT_WIDTH, family: stack(SANS, kanji), fontSize: BODY, color: INK.secondary };
   const shownTitle = title.trim() || 'Untitled Note';
   const meta = { fontFamily: ctx.family, fontSize: 0.8 * BODY, color: INK.muted };
 

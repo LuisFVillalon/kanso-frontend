@@ -160,12 +160,26 @@ describe('note PDF document', () => {
     expect(rows[1].props.wrap).toBe(true);
   });
 
+  it('lets a list item or table row with little text but many lines split', () => {
+    const lines = Array.from({ length: 60 }, (_, i) => `Line ${i}`).join('<br>');
+    const paragraphs = Array.from({ length: 50 }, (_, i) => `<li><p>Point ${i}</p></li>`).join('');
+    const { all } = render(`<ul><li><p>${lines}</p></li><li><p>Short</p></li></ul>`
+      + `<table><tbody><tr><td><ul>${paragraphs}</ul></td><td><p>Side</p></td></tr><tr><td><p>A</p></td><td><p>B</p></td></tr></tbody></table>`);
+    const rows = all.filter(el => el.type === View && el.props.style?.flexDirection === 'row' && 'wrap' in el.props);
+    const row = (text: string) => rows.find(el => textOf(el).startsWith(text))!;
+    expect(row('Line 0').props.wrap).toBe(true);
+    expect(row('Short').props.wrap).toBe(false);
+    expect(row('Point 0Point 1').props.wrap).toBe(true);
+    expect(row('AB').props.wrap).toBe(false);
+  });
+
   it('adds the kanji font only for notes with kanji', () => {
     expect(needsKanji(editorJson('<p>Plain café</p>'), 'Title')).toBe(false);
     expect(needsKanji(editorJson('<p>ひらがな</p>'), 'Title')).toBe(false);
     expect(needsKanji(editorJson('<p>日本語</p>'), 'Title')).toBe(true);
     expect(needsKanji(editorJson('<p>x</p>'), '中文')).toBe(true);
     expect(needsKanji(editorJson('<p>x</p>'), 'x', [{ id: 1, name: '生物', color: '#000000' }])).toBe(true);
+    expect(needsKanji(editorJson('<img src="https://example.com/a.png" alt="細胞">'), 'x')).toBe(true);
   });
 
   it('numbers ordered lists from their start and nests their own counters', () => {
@@ -213,6 +227,19 @@ describe('note PDF document', () => {
     const { all, text } = render('<img src="https://example.com/a.png" alt="Diagram">', { images: new Map() });
     expect(all.some(el => el.type === Image)).toBe(false);
     expect(text).toContain('[Image: Diagram]');
+  });
+
+  it('draws emoji in an unloaded image\'s caption as pictures', () => {
+    const drawn: string[] = [];
+    const { text } = render('<img src="https://example.com/a.png" alt="Cell 🧬">', {
+      images: new Map(),
+      drawGlyph: grapheme => {
+        drawn.push(grapheme);
+        return { src: PNG, width: 10, height: 10 };
+      },
+    });
+    expect(drawn).toEqual(['🧬']);
+    expect(text).toContain('[Image: Cell ]');
   });
 
   it('draws characters the fonts lack, and emoji, as pictures', () => {

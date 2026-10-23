@@ -3,7 +3,7 @@ import { Font } from '@react-pdf/renderer';
 import type { Tag } from '@/app/types/task';
 import {
   type PdfGlyph, type PdfImage,
-  needsKanji, notePdfFontFaces, registerNotePdfFonts, renderNotePdf,
+  needsKanji, notePdfFontFaces, registerNotePdfFonts, renderNotePdf, retryFailedNotePdfFonts,
 } from './notePdfDocument';
 
 /**
@@ -111,12 +111,17 @@ export const exportNotePdf = async ({ title, doc, tags, dateLabel }: ExportNoteP
   registerNotePdfFonts(new URL(FONT_BASE, window.location.origin).href);
   const kanji = needsKanji(doc, title, tags);
   const faces = notePdfFontFaces(kanji);
-  const [images] = await Promise.all([loadImages(doc), ...faces.map(face => Font.load(face))]);
-  const fonts = faces.map(face => Font.getFont(face)?.data).filter(Boolean);
-  const hasGlyph = (codePoint: number) =>
-    fonts.some(font => font && 'hasGlyphForCodePoint' in font && font.hasGlyphForCodePoint(codePoint));
+  try {
+    const [images] = await Promise.all([loadImages(doc), ...faces.map(face => Font.load(face))]);
+    const fonts = faces.map(face => Font.getFont(face)?.data).filter(Boolean);
+    const hasGlyph = (codePoint: number) =>
+      fonts.some(font => font && 'hasGlyphForCodePoint' in font && font.hasGlyphForCodePoint(codePoint));
 
-  return renderNotePdf({ title, doc, tags, dateLabel, images, kanji, hasGlyph, drawGlyph });
+    return await renderNotePdf({ title, doc, tags, dateLabel, images, kanji, hasGlyph, drawGlyph });
+  } catch (err) {
+    retryFailedNotePdfFonts();
+    throw err;
+  }
 };
 
 /** Saves a file through a temporary link, with no print dialog. */
