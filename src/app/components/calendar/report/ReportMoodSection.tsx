@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Activity, Info, Smile } from 'lucide-react';
+import { Activity, ChartScatter, Smile } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
 import MoodCheckinModal, { type DaySummary, type PeriodSummary } from '@/app/components/mood/MoodCheckinModal';
 import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
@@ -10,7 +10,7 @@ import { useToast } from '@/app/context/ToastContext';
 import { deleteMoodCheckin, describeError, saveMoodCheckin } from '@/app/lib/backend-api';
 import type { CalendarActivity } from '@/app/types/activity';
 import { checkinToSave, MOOD_LABELS, moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
-import { formatDateRange, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
+import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import { describePeriod, periodContaining, periodLength, type CalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
 import {
   hasMoodCheckins,
@@ -18,7 +18,6 @@ import {
   PATTERN_MIN_DAYS,
   summarizeMood,
   weekCheckinsIn,
-  type MoodScope,
   type MoodSummary,
 } from '@/app/utils/moodReport';
 import ReportMoodChart from './ReportMoodChart';
@@ -26,29 +25,18 @@ import ReportMoodRelations from './ReportMoodRelations';
 import ReportPeriodCheckins from './ReportPeriodCheckins';
 
 /** How the Check-ins card and empty state name the days they cover. */
-const scopeName = (period: ReportPeriod, scope: MoodScope): string => {
-  if (scope.widened) {
-    return toLocalDateStr(scope.end) === toLocalDateStr(new Date())
-      ? 'in the last 4 weeks'
-      : `in the 4 weeks to ${scope.end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-  }
+const scopeName = (period: ReportPeriod): string => {
   const name = describePeriod(period);
   return name.startsWith('this ') || name.startsWith('last ') ? name : `in ${name}`;
 };
 
-const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: ReportPeriod; children?: React.ReactNode }> = ({ summary, scope, period, children }) => {
+const CheckinsCard: React.FC<{ summary: MoodSummary; period: ReportPeriod; children?: React.ReactNode }> = ({ summary, period, children }) => {
   const average = summary.average ?? 3;
   const mood = Math.round(average);
   return (
     <CardShell icon={<Smile className="w-4 h-4" style={{ color: moodColor(mood) }} />} header="Check-ins">
-      {scope.widened && (
-        <span className="self-start inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-warning-subtle text-warning">
-          <Info className="w-3 h-3" aria-hidden="true" />
-          Using 4 weeks — one week is too short
-        </span>
-      )}
       {summary.logged === 0 ? (
-        <p className="text-xs text-text-secondary">No daily check-ins {scopeName(period, scope)}.</p>
+        <p className="text-xs text-text-secondary">No daily check-ins {scopeName(period)}.</p>
       ) : (
         <>
           <div className="flex items-center gap-3">
@@ -61,7 +49,6 @@ const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: R
               </p>
               <p className="text-xs text-text-secondary mt-1">
                 average · {summary.logged} of {summary.days} {summary.days === 1 ? 'day' : 'days'} logged
-                {scope.widened && <span className="text-text-muted"> · {formatDateRange(scope.start, scope.end)}</span>}
               </p>
             </div>
           </div>
@@ -85,10 +72,10 @@ const CheckinsCard: React.FC<{ summary: MoodSummary; scope: MoodScope; period: R
 
       {children}
 
-      {summary.logged < PATTERN_MIN_DAYS && (
+      {period.kind !== 'week' && summary.logged < PATTERN_MIN_DAYS && (
         <div className="mt-auto flex flex-col gap-1.5 rounded-lg p-3 bg-surface-raised">
           <p className="text-xs text-text-secondary">
-            Patterns in your mood show up after about {PATTERN_MIN_DAYS} days with a check-in — {summary.logged} so far {scopeName(period, scope)}.
+            Patterns in your mood show up after about {PATTERN_MIN_DAYS} days with a check-in — {summary.logged} so far {scopeName(period)}.
           </p>
           <span className="h-1.5 rounded-full overflow-hidden bg-surface" aria-hidden="true">
             <span className="block h-full rounded-full bg-accent" style={{ width: `${(summary.logged / PATTERN_MIN_DAYS) * 100}%` }} />
@@ -108,7 +95,6 @@ interface ReportMoodSectionProps {
   /** Every loaded check-in, for the weekly and monthly ones. */
   checkins: MoodCheckin[];
   settings: MoodCheckinSettings;
-  scope: MoodScope;
   /** Puts a saved check-in in place of its period's old one, or removes it (`saved` null). */
   replaceDay: (date: string, saved: MoodCheckin | null, kind?: MoodPeriodKind) => void;
   onSelectPeriod: (monthStart: Date) => void;
@@ -119,19 +105,21 @@ interface ReportMoodSectionProps {
  * then "Mood & your activity" and "Tags & mood", or an empty card with
  * "Log today". Any day dot opens its check-in to edit, and a hollow one logs
  * that day; weekly and monthly check-ins open from their spans and the
- * Check-ins list. A week's summary and correlations cover the trailing
- * 4 weeks, with a note saying so.
+ * Check-ins list. A week is too short for mood patterns, so in their place
+ * it points to its Month report.
  */
-const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, scope, replaceDay, onSelectPeriod }) => {
+const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod }) => {
   const showToast = useToast();
   const { habits } = useHabitsContext();
   const [modal, setModal] = useState<{ kind: MoodPeriodKind; date: string; existing: MoodCheckin | null } | null>(null);
-  const summary = summarizeMood(byDay, scope.start, scope.end);
+  const summary = summarizeMood(byDay, period.start, period.end);
   const weeks = weekCheckinsIn(checkins, period.start, period.end);
   const months = indexMonthCheckins(checkins);
 
   const todayStr = toLocalDateStr(new Date());
   const includesToday = todayStr >= toLocalDateStr(period.start) && todayStr <= toLocalDateStr(period.end);
+  // The week's Month report: the month holding today while it's the current week, else its last day's.
+  const weekMonth = includesToday ? parseLocalDate(todayStr) : period.end;
 
   const daySummary = (date: string): DaySummary | null => {
     const bucket = period.kind === 'year' ? undefined : report.buckets.find(b => b.key === date);
@@ -200,12 +188,12 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
         <span className="text-xs text-text-muted">from your check-ins</span>
       </div>
 
-      {!hasMoodCheckins(period, scope, byDay, checkins) ? (
+      {!hasMoodCheckins(period, byDay, checkins) ? (
         <div className="card-glass p-8 flex flex-col items-center text-center gap-2">
           <span className="w-10 h-10 rounded-full flex items-center justify-center bg-surface-raised text-text-muted">
             <Smile className="w-5 h-5" aria-hidden="true" />
           </span>
-          <h4 className="text-base font-semibold text-text-primary">No mood check-ins {scopeName(period, scope)}</h4>
+          <h4 className="text-base font-semibold text-text-primary">No mood check-ins {scopeName(period)}</h4>
           <p className="text-sm text-text-muted max-w-md">
             Log how your day felt when you call it a day, and your mood will show up here next to your tasks, notes and
             habits. Reminders are in Settings, under Mood check-ins.
@@ -232,7 +220,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
               />
             </CardShell>
           </div>
-          <CheckinsCard summary={summary} scope={scope} period={period}>
+          <CheckinsCard summary={summary} period={period}>
             <ReportPeriodCheckins
               period={period}
               weeks={weeks}
@@ -244,12 +232,24 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
         </div>
       )}
 
-      {summary.average != null && (
+      {summary.average != null && period.kind === 'week' && (
+        <div className="card-glass p-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <ChartScatter className="w-4 h-4 shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden="true" />
+          <p className="text-sm text-text-secondary">
+            A week is too short to show patterns in your mood — they appear in the Month and Year reports.
+          </p>
+          <button type="button" onClick={() => onSelectPeriod(weekMonth)} className="btn btn-secondary py-1 px-3 text-xs sm:ml-auto">
+            See {weekMonth.toLocaleDateString('en-US', { month: 'long' })}
+          </button>
+        </div>
+      )}
+
+      {summary.average != null && period.kind !== 'week' && (
         <ReportMoodRelations
           activity={activity}
           byDay={byDay}
-          scope={scope}
-          scopeLabel={scopeName(period, scope)}
+          period={period}
+          scopeLabel={scopeName(period)}
           average={summary.average}
           byWeek={period.kind === 'year'}
         />

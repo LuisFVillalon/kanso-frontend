@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { ChartScatter, ChevronRight, Info, Tags } from 'lucide-react';
+import { ChartScatter, ChevronRight, Tags } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
 import { moodColor } from '@/app/components/mood/MoodFacePicker';
 import type { CalendarActivity } from '@/app/types/activity';
@@ -20,8 +20,9 @@ import {
   STRONG_MIN_DAYS,
   type CorrelationLevel,
   type MoodMetric,
+  type ReportPeriod,
 } from '@/app/utils/calendarReport';
-import { moodByTag, PATTERN_MIN_DAYS, TAG_MIN_DAYS, type MoodScope } from '@/app/utils/moodReport';
+import { moodByTag, PATTERN_MIN_DAYS, TAG_MIN_DAYS } from '@/app/utils/moodReport';
 import ReportMoodRelationChart, { dayItems, METRIC_INFO, type RelationView } from './ReportMoodRelationChart';
 import { MetricButton } from './ReportActivityChart';
 
@@ -42,18 +43,14 @@ const StrengthMeter: React.FC<{ level: CorrelationLevel }> = ({ level }) => (
   </span>
 );
 
-const Chip: React.FC<{ tone?: 'muted' | 'warning'; children: React.ReactNode }> = ({ tone = 'muted', children }) => (
-  <span
-    className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${
-      tone === 'warning' ? 'bg-warning-subtle text-warning' : 'bg-surface text-text-secondary'
-    }`}
-  >
+const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-surface text-text-secondary">
     {children}
   </span>
 );
 
-const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; scope: MoodScope; average: number }> = ({ byDay, scope, average }) => {
-  const rows = moodByTag(byDay, scope.start, scope.end);
+const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod; average: number }> = ({ byDay, period, average }) => {
+  const rows = moodByTag(byDay, period.start, period.end);
   const markerLeft = `${((average - 1) / 4) * 100}%`;
   return (
     <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Tags & mood">
@@ -93,13 +90,14 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; scope: MoodScope; av
 };
 
 interface ReportMoodRelationsProps {
-  /** The report's calendar activity — for a week it reaches back over the 4 weeks the scope covers. */
+  /** The report's calendar activity. */
   activity: CalendarActivity;
   byDay: Map<string, MoodCheckin>;
-  scope: MoodScope;
-  /** How the statement names the scope: "this month", "in the last 4 weeks". */
+  /** A month or year: a week is too short for patterns. */
+  period: ReportPeriod;
+  /** How the statement names the period: "this month", "in 2025". */
   scopeLabel: string;
-  /** Average mood over the scope. */
+  /** Average mood over the period. */
   average: number;
   /** A year's "Day by day" view groups days into weeks. */
   byWeek: boolean;
@@ -111,24 +109,24 @@ interface ReportMoodRelationsProps {
  * sample size, and a mini card per metric — beside "Tags & mood". Nothing
  * here says what causes what.
  */
-const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byDay, scope, scopeLabel, average, byWeek }) => {
+const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byDay, period, scopeLabel, average, byWeek }) => {
   const [metric, setMetric] = useState<MoodMetric>('tasks');
   const [view, setView] = useState<RelationView>('scatter');
 
-  const startStr = toLocalDateStr(scope.start);
-  const endStr = toLocalDateStr(scope.end);
-  // `scope` is rebuilt every render; its days identify it.
+  const startStr = toLocalDateStr(period.start);
+  const endStr = toLocalDateStr(period.end);
+  // `period` is rebuilt every render; its days identify it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const days = useMemo(() => dailyActivity(activity, scope.start, scope.end), [activity, startStr, endStr]);
+  const days = useMemo(() => dailyActivity(activity, period.start, period.end), [activity, startStr, endStr]);
   const results = useMemo(
-    () => Object.fromEntries(MOOD_METRICS.map(m => [m, analyseCorrelation(moodActivityPoints(byDay, days, scope.start, scope.end, m))])) as Record<MoodMetric, ReturnType<typeof analyseCorrelation>>,
+    () => Object.fromEntries(MOOD_METRICS.map(m => [m, analyseCorrelation(moodActivityPoints(byDay, days, period.start, period.end, m))])) as Record<MoodMetric, ReturnType<typeof analyseCorrelation>>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [byDay, days, startStr, endStr],
   );
 
   const result = results[metric];
-  const points = moodActivityPoints(byDay, days, scope.start, scope.end, metric);
-  const items = view === 'days' ? dayItems(byDay, days, scope.start, scope.end, metric, byWeek) : [];
+  const points = moodActivityPoints(byDay, days, period.start, period.end, metric);
+  const items = view === 'days' ? dayItems(byDay, days, period.start, period.end, metric, byWeek) : [];
   const info = METRIC_INFO[metric];
 
   return (
@@ -154,12 +152,6 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
               <StrengthMeter level={result.level} />
               <span className="text-sm font-semibold text-text-primary">{CORRELATION_LABELS[result.level]}</span>
               <Chip>{result.n} {result.n === 1 ? 'day' : 'days'} with a check-in</Chip>
-              {scope.widened && (
-                <Chip tone="warning">
-                  <Info className="w-3 h-3" aria-hidden="true" />
-                  Using 4 weeks — one week is too short
-                </Chip>
-              )}
               {result.level === 'insufficient' && (
                 <span
                   className="flex-1 min-w-24 h-1.5 rounded-full overflow-hidden bg-surface"
@@ -227,7 +219,7 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
           </div>
         </CardShell>
       </div>
-      <TagsCard byDay={byDay} scope={scope} average={average} />
+      <TagsCard byDay={byDay} period={period} average={average} />
     </div>
   );
 };
