@@ -440,12 +440,12 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
         </p>
       </div>
     );
-    if (!offersPeriodCheckins) return empty;
+    if (!offersPeriodCheckins || view !== 'mood') return empty;
     return (
-      <div className="flex flex-col gap-3 sm:gap-4">
+      <>
         {empty}
         {moodSection}
-      </div>
+      </>
     );
   }
 
