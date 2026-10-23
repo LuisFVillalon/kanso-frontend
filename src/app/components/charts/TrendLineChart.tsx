@@ -19,7 +19,7 @@ export interface TrendPoint {
 }
 
 interface TrendLineChartProps {
-  days: TrendPoint[]; // seven entries, Monday through Sunday
+  days: TrendPoint[]; // seven entries, one per day in order
   /** SVG element classes — callers size/center it differently (dashboard card vs. full day-detail view). */
   svgClassName?: string;
   /** When set, adds role="img" + this as the aria-label. Omit for callers that don't want it announced. */

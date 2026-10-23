@@ -41,7 +41,7 @@ interface MonthCalendarProps {
   terms?: TermPeriod[];
 }
 
-const DAY_HEADERS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const NO_TERMS: TermPeriod[] = [];
 
 const shapeStyle = (s: MonthShape, color: string, animate: boolean): React.CSSProperties => ({

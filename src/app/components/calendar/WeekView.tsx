@@ -86,7 +86,7 @@ const toggleById = (tags: Tag[], tag: Tag): Tag[] =>
 
 /**
  * Google Calendar–style week: planned tasks, completions, note sessions and
- * habit completions for one Monday–Sunday week, with prev/next/Today
+ * habit completions for one Sunday–Saturday week, with prev/next/Today
  * navigation. Clicking an empty slot opens the New Task modal prefilled with
  * that day and time; clicking an item opens it (task edit modal, the note,
  * or the habit's history).

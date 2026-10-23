@@ -41,6 +41,15 @@ afterEach(() => {
 });
 
 describe('MonthCalendar', () => {
+  it('runs each week Sunday to Saturday', () => {
+    act(() => root.render(<MonthCalendar year={2026} month={9} dayData={new Map()} todayStr="2026-10-21" onSelectDay={() => {}} />));
+    const headers = [...container.querySelectorAll('.grid-cols-7')][0].children;
+    expect([...headers].map(h => h.textContent)).toEqual(['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']);
+    // 1 Oct 2026 is a Thursday: four blanks, then the 1st under Th.
+    const firstRow = [...container.querySelectorAll('[role="group"] > *')].slice(0, 7);
+    expect(firstRow.map(c => c.getAttribute('data-date'))).toEqual([null, null, null, null, '2026-10-01', '2026-10-02', '2026-10-03']);
+  });
+
   it('highlights the picked day and makes it the only tab stop', () => {
     act(() => root.render(<Picker start={new Date(2026, 9, 14)} />));
     expect(cell('2026-10-14').getAttribute('aria-pressed')).toBe('true');

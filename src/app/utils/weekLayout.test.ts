@@ -8,6 +8,7 @@ import {
   NOTE_MERGE_GAP_MINUTES,
   parseTimeToMinutes,
   snapMinutes,
+  startOfMondayWeek,
   startOfWeek,
   TimedEvent,
   weekDays,
@@ -26,10 +27,18 @@ const timedEvent = (key: string, drawStartMin: number, drawEndMin: number): Time
 });
 
 describe('week arithmetic', () => {
-  it('starts weeks on Monday', () => {
-    expect(startOfWeek(new Date(2026, 9, 21, 15, 30))).toEqual(weekStart); // Wednesday
-    expect(startOfWeek(new Date(2026, 9, 25, 23, 59))).toEqual(weekStart); // Sunday
-    expect(startOfWeek(weekStart)).toEqual(weekStart);
+  it('starts the calendar week on Sunday', () => {
+    const sunday = new Date(2026, 9, 18);
+    expect(startOfWeek(new Date(2026, 9, 21, 15, 30))).toEqual(sunday); // Wednesday
+    expect(startOfWeek(new Date(2026, 9, 24, 23, 59))).toEqual(sunday); // Saturday
+    expect(startOfWeek(new Date(2026, 9, 25))).toEqual(new Date(2026, 9, 25)); // the next Sunday
+    expect(startOfWeek(sunday)).toEqual(sunday);
+  });
+
+  it('starts a Mon–Sun week on Monday', () => {
+    expect(startOfMondayWeek(new Date(2026, 9, 21, 15, 30))).toEqual(weekStart); // Wednesday
+    expect(startOfMondayWeek(new Date(2026, 9, 25, 23, 59))).toEqual(weekStart); // Sunday
+    expect(startOfMondayWeek(weekStart)).toEqual(weekStart);
   });
 
   it('steps calendar days across month ends', () => {

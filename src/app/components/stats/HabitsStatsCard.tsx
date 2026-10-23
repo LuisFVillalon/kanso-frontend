@@ -113,8 +113,8 @@ interface HabitHeatmapProps {
   habit: Habit;
 }
 
-// GitHub-contribution-style 90-day heatmap for a single habit — weeks run
-// left→right as columns, Mon–Sun top→bottom within each column. Overlay-only
+// GitHub-contribution-style 90-day heatmap for a single habit — a rolling
+// window in fixed-width rows, oldest first (see below). Overlay-only
 // (the compact tile shows a 7-day dot strip per row instead — see
 // useHabitWeekDots below).
 const HEATMAP_DAYS = 90;

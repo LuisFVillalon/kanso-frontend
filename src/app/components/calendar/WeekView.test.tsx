@@ -76,7 +76,7 @@ const renderWithSchedule = async (schedule: Schedule, props: React.ComponentProp
 
 const render = (props: React.ComponentProps<typeof WeekView> = {}) => renderWithSchedule(DEFAULT_SCHEDULE, props);
 
-/** Each day header's screen-reader description of its work schedule, Monday first. */
+/** Each day header's screen-reader description of its work schedule, Sunday first. */
 const daySchedules = () => [...container.querySelectorAll('.sr-only')]
   .map(el => el.textContent)
   .filter(text => /^(Work|Rest) day/.test(text ?? ''));
@@ -138,8 +138,9 @@ describe('WeekView', { timeout: 30_000 }, () => {
     await render();
     // Weekends off, 8 AM to 10 PM.
     expect(daySchedules()).toEqual([
+      'Rest day',
       ...Array(5).fill('Work day, work window opens at 8:00 AM, closes at 10:00 PM'),
-      'Rest day', 'Rest day',
+      'Rest day',
     ]);
     const columns = [...container.querySelectorAll<HTMLElement>('[data-rest-day]')];
     expect(columns).toHaveLength(2);
@@ -150,7 +151,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(legend.slice(4)).toEqual(['Outside work hours', 'Rest day']);
 
     await renderWithSchedule({ dayStartTime: '09:30', shutoffTime: '17:00', restDays: [3] });
-    expect(daySchedules()[2]).toBe('Rest day');
+    expect(daySchedules()[3]).toBe('Rest day');
     expect(daySchedules()[0]).toBe('Work day, work window opens at 9:30 AM, closes at 5:00 PM');
   });
 
@@ -160,9 +161,10 @@ describe('WeekView', { timeout: 30_000 }, () => {
 
     await renderWithSchedule({ dayStartTime: '18:00', shutoffTime: '02:00', restDays: [1] });
     expect(daySchedules()).toEqual([
+      'Work day, work window closes at 2:00 AM, opens at 6:00 PM',
       'Rest day, work window closes at 2:00 AM',
       'Work day, work window opens at 6:00 PM',
-      ...Array(5).fill('Work day, work window closes at 2:00 AM, opens at 6:00 PM'),
+      ...Array(4).fill('Work day, work window closes at 2:00 AM, opens at 6:00 PM'),
     ]);
     expect(container.querySelectorAll('[data-rest-day]')).toHaveLength(1);
   });
@@ -173,10 +175,11 @@ describe('WeekView', { timeout: 30_000 }, () => {
       dayWindows: { '1': { start: '10:00', end: '16:00' }, '5': { start: '09:00', end: '13:00' } },
     });
     expect(daySchedules()).toEqual([
+      'Rest day',
       'Work day, work window opens at 10:00 AM, closes at 4:00 PM',
       ...Array(3).fill('Work day, work window opens at 8:00 AM, closes at 10:00 PM'),
       'Work day, work window opens at 9:00 AM, closes at 1:00 PM',
-      'Rest day', 'Rest day',
+      'Rest day',
     ]);
   });
 
@@ -236,10 +239,10 @@ describe('WeekView', { timeout: 30_000 }, () => {
     vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore();
   });
 
-  it('loads the Monday–Sunday week containing today and plots its activity', async () => {
+  it('loads the Sunday–Saturday week containing today and plots its activity', async () => {
     mocks.tasks = [task({ id: 3, title: 'Essay', due_date: '2026-10-22', due_time: '14:00', estimated_time: 1 })];
     await render();
-    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-19', '2026-10-25');
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-18', '2026-10-24');
     expect(button('Planned task: Essay, 2:00 PM – 3:00 PM')).toBeTruthy();
     expect(button('Note session: Lecture notes, 9:00 AM – 10:00 AM, 1 hr worked')).toBeTruthy();
     expect(button('Habit completed: Run')).toBeTruthy();
@@ -248,21 +251,21 @@ describe('WeekView', { timeout: 30_000 }, () => {
   it('pages to the next week and back to today', async () => {
     await render();
     await act(async () => button('Next week').click());
-    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-10-26', '2026-11-01');
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-10-25', '2026-10-31');
     expect(container.querySelector('button[aria-label^="Note session"]')).toBeNull();
     await act(async () => [...container.querySelectorAll('button')].find(b => b.textContent === 'Today')!.click());
-    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-10-19', '2026-10-25');
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-10-18', '2026-10-24');
   });
 
   it('pages across the new year without stopping, naming both years on the spanning week', async () => {
     vi.setSystemTime(new Date(2026, 11, 30, 12, 0)); // Wed 30 Dec 2026
     await render();
     const heading = () => container.querySelector('h2')!.textContent;
-    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-12-28', '2027-01-03');
-    expect(heading()).toBe('Dec 28, 2026 – Jan 3, 2027');
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2026-12-27', '2027-01-02');
+    expect(heading()).toBe('Dec 27, 2026 – Jan 2, 2027');
     await act(async () => button('Next week').click());
-    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2027-01-04', '2027-01-10');
-    expect(heading()).toBe('Jan 4–10, 2027');
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2027-01-03', '2027-01-09');
+    expect(heading()).toBe('Jan 3–9, 2027');
   });
 
   it('opens the New Task modal prefilled with the clicked slot and creates the task there', async () => {

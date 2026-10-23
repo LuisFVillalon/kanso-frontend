@@ -13,7 +13,7 @@ interface HabitHistoryModalProps {
   onToggleDate: (habitId: number, date: string) => Promise<void>;
 }
 
-const DAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const HabitHistoryModal: React.FC<HabitHistoryModalProps> = ({ habit, showBackButton = false, onClose, onToggleDate }) => {
   const [history, setHistory] = useState<HabitHistoryEntry[]>([]);
@@ -35,14 +35,14 @@ const HabitHistoryModal: React.FC<HabitHistoryModalProps> = ({ habit, showBackBu
 
   if (!habit) return null;
 
-  // Build a calendar grid for the past 30 days aligned to Mon–Sun weeks
+  // Build a calendar grid for the past 30 days aligned to Sun–Sat weeks
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const startDate = new Date(today);
   startDate.setDate(today.getDate() - 29); // 30 days including today
 
-  // Convert JS day-of-week (0=Sun) → ISO (0=Mon, 6=Sun) for column alignment
-  const startDow = (startDate.getDay() + 6) % 7;
+  // JS day-of-week (0=Sun) is the grid column
+  const startDow = startDate.getDay();
 
   const loggedSet = new Set(history.filter(e => e.logged).map(e => e.date));
   const todayStr = toLocalDateStr(today);

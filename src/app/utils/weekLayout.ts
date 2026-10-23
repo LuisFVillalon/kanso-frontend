@@ -30,7 +30,7 @@ export interface TimedEvent {
   key: string;
   kind: TimedEventKind;
   title: string;
-  /** 0 = Monday … 6 = Sunday, within the displayed week. */
+  /** 0 = Sunday … 6 = Saturday, within the displayed week. */
   dayIndex: number;
   /** The real start/end, used for labels. */
   startMin: number;
@@ -67,8 +67,12 @@ export interface PositionedEvent extends TimedEvent {
 export const addDays = (date: Date, n: number): Date =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
 
-/** Local midnight of the Monday starting the week that contains `date`. */
+/** Local midnight of the Sunday starting the week that contains `date`, as the calendar shows it. */
 export const startOfWeek = (date: Date): Date =>
+  addDays(date, -date.getDay());
+
+/** Local midnight of the Monday starting the Mon–Sun week that contains `date`. */
+export const startOfMondayWeek = (date: Date): Date =>
   addDays(date, -((date.getDay() + 6) % 7));
 
 /** The seven local-midnight days of the week starting `weekStart`. */

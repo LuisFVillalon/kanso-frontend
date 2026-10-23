@@ -23,7 +23,7 @@ export interface ReportPeriod {
 
 const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-/** The week (Monday–Sunday, like the rest of the calendar), month or year containing `date`. */
+/** The week (Monday–Sunday), month or year containing `date`. */
 export const periodContaining = (kind: ReportPeriodKind, date: Date): ReportPeriod => {
   const day = startOfDay(date);
   if (kind === 'week') {

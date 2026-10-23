@@ -178,17 +178,16 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
 
   const dateStr = toLocalDateStr(date);
   const noteTimeTotals = useNoteTimeTotalsForRange(dateStr, dateStr);
-  const dowMonFirst = (date.getDay() + 6) % 7;
-  const monday = new Date(date);
-  monday.setDate(date.getDate() - dowMonFirst);
+  const sunday = new Date(date);
+  sunday.setDate(date.getDate() - date.getDay());
   // Planned hours, not "hours actually logged" — every habit counts toward
   // every day (habits recur daily and carry no per-day schedule of their
   // own), same as the "Planned hours by tag" donut above. Only tasks vary
   // by day, via each day's own due tasks.
   const allHabitsHours = allHabits.reduce((sum, h) => sum + (h.estimated_time ?? 0), 0);
   const weekDates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const d = new Date(sunday);
+    d.setDate(sunday.getDate() + i);
     return d;
   });
   const weekDateStrs = weekDates.map(toLocalDateStr);
@@ -198,7 +197,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
     return { date: d, hours: dueTasksHours + allHabitsHours, isSelected: ds === dateStr };
   });
   const weekEnd = weekDays[6].date;
-  const rangeLabel = `Week of ${monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  const rangeLabel = `Week of ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 
   const noteTimeTotalsByDay = useNoteTimeTotalsByDay(weekDateStrs);
   const actualWeekDays: DayPoint[] = weekDates.map((d, i) => {
