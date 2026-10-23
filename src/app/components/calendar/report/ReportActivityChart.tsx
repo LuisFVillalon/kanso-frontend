@@ -127,7 +127,8 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
               </span>
             ))}
           </div>
-          <p className="mt-1.5 text-[11px] text-text-muted">
+          {/* Hidden on a phone to keep the report tabs on one screen. */}
+          <p className="hidden sm:block mt-1.5 text-[11px] text-text-muted">
             Peak: {metric === 'completions' ? `${max} completed` : formatDurationShort(max)} in one {unit}
           </p>
         </div>

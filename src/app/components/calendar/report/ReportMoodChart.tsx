@@ -167,7 +167,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       <div>
         <div className="flex gap-2">
           {/* Scale labels */}
-          <div className="relative w-14 sm:w-16 shrink-0 h-44 sm:h-48" aria-hidden="true">
+          <div className="relative w-14 sm:w-16 shrink-0 h-36 sm:h-48" aria-hidden="true">
             {names.map((name, i) => (
               <span
                 key={name}
@@ -186,7 +186,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
             ))}
           </div>
 
-          <div className="relative flex-1 min-w-0 h-44 sm:h-48" role="group" aria-label={`${seriesLabel} over time`}>
+          <div className="relative flex-1 min-w-0 h-36 sm:h-48" role="group" aria-label={`${seriesLabel} over time`}>
             {buckets.map((b, i) =>
               b.isCurrent ? (
                 <div

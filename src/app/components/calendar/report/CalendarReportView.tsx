@@ -100,7 +100,7 @@ const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, 
       <span className="hidden sm:block text-xs text-text-secondary">{detail}</span>
     </>
   );
-  const className = 'p-2 sm:p-3 rounded-lg border border-border-subtle flex flex-col gap-1 min-w-0 text-left';
+  const className = 'p-1.5 sm:p-3 rounded-lg border border-border-subtle flex flex-col gap-1 min-w-0 text-left';
   if (!onClick) return <div className={className} style={{ backgroundColor: bg }}>{body}</div>;
   return (
     <button

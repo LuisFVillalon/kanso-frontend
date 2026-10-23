@@ -386,7 +386,7 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
                 title={m === 'time'
                   ? 'Task and habit estimates, plus time spent editing notes'
                   : 'Tasks completed, notes worked on and habit check-ins'}
-                className={`px-2.5 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                   measure === m ? 'bg-surface-raised text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
@@ -403,7 +403,7 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
                   type="button"
                   onClick={() => toggleKind(k)}
                   aria-pressed={kinds[k]}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
+                  className={`inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
                     kinds[k] ? 'border-border-strong bg-surface-raised text-text-primary' : 'border-border text-text-muted hover:text-text-primary'
                   }`}
                 >
