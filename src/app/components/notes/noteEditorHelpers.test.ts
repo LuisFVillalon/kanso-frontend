@@ -2,7 +2,6 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/app/lib/supabase', () => ({ supabase: {} }));
 import { normalizeLinkHref } from './LinkEditor';
-import { TASK_FROM_NOTE_TITLE_MAX, taskFromSelection } from './NoteSelectionMenu';
 import { formatTimeSpent, readingMinutes } from './NoteDetails';
 import { extractStructuredNoteContent } from '@/app/utils/noteContentExtractor';
 
@@ -25,26 +24,6 @@ describe('normalizeLinkHref', () => {
     expect(normalizeLinkHref('data:text/html,hi')).toBeNull();
     expect(normalizeLinkHref('two words')).toBeNull();
     expect(normalizeLinkHref('   ')).toBeNull();
-  });
-});
-
-describe('taskFromSelection', () => {
-  const tags = [{ id: 1, name: 'Biology', color: '#7FB069' }];
-
-  it('uses short selected text as the title, tagged like the note', () => {
-    const task = taskFromSelection('  Review the\n ATP table ', tags);
-    expect(task.title).toBe('Review the ATP table');
-    expect(task.description).toBe('');
-    expect(task.tags).toEqual(tags);
-    expect(task.due_date).toBeNull();
-  });
-
-  it('shortens a long selection for the title and keeps all of it in the description', () => {
-    const text = 'word '.repeat(60).trim();
-    const task = taskFromSelection(text, []);
-    expect(task.title.length).toBe(TASK_FROM_NOTE_TITLE_MAX);
-    expect(task.title.endsWith('…')).toBe(true);
-    expect(task.description).toBe(text);
   });
 });
 

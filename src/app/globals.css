@@ -674,12 +674,20 @@ html[data-page-style="blank"] body {
   animation: kanso-key-press 300ms 200ms;
 }
 
+/* A key pressed by a click (the notes Focus button) moves right away. */
+.kanso-key-press.kanso-key-press-now .kanso-key-face {
+  animation-delay: 0ms;
+}
+
 @keyframes kanso-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes kanso-fade-out { from { opacity: 1; } to { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   .kanso-key-press .kanso-key-face {
     animation: kanso-key-hold 300ms 200ms;
+  }
+  .kanso-key-press.kanso-key-press-now .kanso-key-face {
+    animation-delay: 0ms;
   }
   .kanso-key-press.animate-fade-in {
     animation-name: kanso-fade;

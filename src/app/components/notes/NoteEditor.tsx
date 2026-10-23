@@ -9,12 +9,12 @@ import TiptapHighlight from '@tiptap/extension-highlight';
 import TiptapTextAlign from '@tiptap/extension-text-align';
 import { TableKit } from '@tiptap/extension-table';
 import {
-  ChevronDown, ChevronUp, Type, Link2, FileText, Loader2,
+  ChevronDown, ChevronUp, Type, Link2, FileText, ListTree, Loader2,
   PanelLeftClose, PanelLeftOpen, LibraryBig, X,
 } from 'lucide-react';
-import { BottomFormattingBar, EditorToolbar, RING_STYLE } from './EditorToolbar';
+import { BottomFormattingBar, EditorToolbar, RING_STYLE, ToolbarButton } from './EditorToolbar';
 import NoteSaveStatus from './NoteSaveStatus';
-import NoteMoreMenu from './NoteMoreMenu';
+import NoteMoreMenu, { NoteExportMenu } from './NoteMoreMenu';
 import NoteDetails, { type NoteStats } from './NoteDetails';
 import NoteOutline from './NoteOutline';
 import NoteSelectionMenu, { repositionSelectionMenu } from './NoteSelectionMenu';
@@ -34,6 +34,7 @@ import { useNoteSession } from '@/app/hooks/useNoteSession';
 import { useNoteAutosave } from '@/app/hooks/useNoteAutosave';
 import { useElementWidth } from '@/app/hooks/useElementWidth';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
+import { KansoMark } from '@/app/components/common/KansoLogo';
 
 // Splits on whitespace and drops empty tokens, so blank/whitespace-only
 // content (Tiptap's getText() for an "empty" doc) counts as zero words.
@@ -43,11 +44,23 @@ const countWords = (text: string) => {
 };
 
 /**
- * Below these editor widths the formatting tools move from the top bar to a
- * bar under the note, so the top bar never wraps. The Notes page's bar also
- * holds the sidebar toggle and Resources, so it needs more room.
+ * Below this editor width (phones, narrow editors) the formatting tools move
+ * from the top bar's second row to a bar under the note.
  */
-const TOP_FORMATTING_MIN_WIDTH = { notesPage: 700, overlay: 600 } as const;
+const BOTTOM_BAR_MAX_WIDTH = 640;
+
+/**
+ * Below this editor width the note row's word count, Outline, Focus mode and
+ * Export move into the More menu, so the row keeps room for the breadcrumb.
+ */
+const NOTE_ROW_FULL_WIDTH = 720;
+
+/**
+ * The Focus button's k key presses down (globals.css .kanso-key-press), and
+ * focus mode opens once it springs back; this is the fallback where the
+ * animation never runs or ends.
+ */
+const FOCUS_KEY_PRESS_FALLBACK_MS = 600;
 
 type SidePanel = 'resources' | 'outline';
 
@@ -86,6 +99,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const [linkEditorOpen, setLinkEditorOpen]   = useState(false);
   const [details, setDetails]                 = useState<NoteStats | null>(null);
   const [focusMode, setFocusMode]             = useState(false);
+  const [focusKeyPressed, setFocusKeyPressed] = useState(false);
+  const focusKeyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -221,6 +236,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   useEffect(() => {
     slashStore.setActions({ pickImage: () => imageInputRef.current?.click() });
   }, [slashStore]);
+
+  useEffect(() => () => {
+    if (focusKeyTimer.current) clearTimeout(focusKeyTimer.current);
+  }, []);
 
   // The editor moves when focus mode or a side panel opens or closes; keep
   // the selection menu next to the selected text once the layout settles.
@@ -419,10 +438,26 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const compact = editorWidth !== null
-    && editorWidth < (onToggleSidebar ? TOP_FORMATTING_MIN_WIDTH.notesPage : TOP_FORMATTING_MIN_WIDTH.overlay);
+  const compact = editorWidth !== null && editorWidth < BOTTOM_BAR_MAX_WIDTH;
+  // The note row's own buttons; jsdom measures no width, so tests get the full row.
+  const roomy = editorWidth === null || editorWidth >= NOTE_ROW_FULL_WIDTH;
 
   const resourcesOpen = sidePanel === 'resources';
+  const outlineOpen = sidePanel === 'outline';
+  const toggleOutline = () => setSidePanel(p => (p === 'outline' ? null : 'outline'));
+  const startFocusMode = showExtendedActions ? () => setFocusMode(true) : undefined;
+  const finishFocusKey = () => {
+    if (focusKeyTimer.current) clearTimeout(focusKeyTimer.current);
+    focusKeyTimer.current = null;
+    setFocusKeyPressed(false);
+    setFocusMode(true);
+  };
+  const pressFocusKey = () => {
+    if (focusKeyPressed) return;
+    setFocusKeyPressed(true);
+    focusKeyTimer.current = setTimeout(finishFocusKey, FOCUS_KEY_PRESS_FALLBACK_MS);
+  };
+  const folder = note.tags[0];
 
   return (
     <div
@@ -456,22 +491,53 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           showFormatting={!compact}
           onPickImage={pickImage}
           onEditLink={openLinkEditor}
+          breadcrumb={!compact && (
+            <div className="flex items-center gap-1.5 min-w-0 px-1.5 text-sm" style={{ color: 'var(--tm-text-muted)' }}>
+              {folder && (
+                <>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: folder.color }} aria-hidden="true" />
+                  <span className="truncate max-w-[10rem] shrink-0">{folder.name}</span>
+                  <span aria-hidden="true">/</span>
+                </>
+              )}
+              <span className="truncate font-medium" style={{ color: 'var(--tm-text-primary)' }}>{title || 'Untitled Note'}</span>
+            </div>
+          )}
         >
           <NoteSaveStatus status={saveStatus} savedAt={savedAt} onRetry={saveNoteNow} />
 
-          {wordCount > 0 && (
+          {roomy && wordCount > 0 && (
             <button
               type="button"
               data-note-details-trigger
               onClick={toggleDetails}
               title="Words, reading time and time spent"
               aria-expanded={!!details}
-              className="hidden @4xl:flex items-center gap-1 h-8 px-2 rounded-md text-xs font-medium outline-none transition-colors focus-visible:ring-2 text-[var(--tm-text-muted)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)]"
+              className="flex items-center gap-1 h-8 px-2 rounded-md text-xs font-medium outline-none transition-colors focus-visible:ring-2 text-[var(--tm-text-muted)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)]"
               style={RING_STYLE}
             >
               <Type className="w-3.5 h-3.5" aria-hidden="true" />
               {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}
             </button>
+          )}
+
+          {roomy && (
+            <ToolbarButton toggle active={outlineOpen} title="Outline" onClick={toggleOutline}>
+              <ListTree className="w-4 h-4" />
+            </ToolbarButton>
+          )}
+
+          {roomy && startFocusMode && (
+            <span className="contents" onAnimationEnd={focusKeyPressed ? finishFocusKey : undefined}>
+              <ToolbarButton
+                toggle={false}
+                title="Focus mode (Ctrl+Shift+F)"
+                onClick={pressFocusKey}
+                className={focusKeyPressed ? 'kanso-key-press kanso-key-press-now' : ''}
+              >
+                <KansoMark className="w-[18px] h-[18px]" />
+              </ToolbarButton>
+            </span>
           )}
 
           {showExtendedActions && (
@@ -491,18 +557,22 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               {resourcesStatus === 'loading' && !resourcesOpen
                 ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 : <LibraryBig className="w-3.5 h-3.5" />}
-              <span className="hidden @4xl:inline">Resources</span>
+              <span className="hidden @3xl:inline">Resources</span>
             </button>
+          )}
+
+          {roomy && showExtendedActions && (
+            <NoteExportMenu onDownloadPdf={handleDownloadPDF} pdfLoading={pdfLoading} />
           )}
 
           <div data-note-details-trigger className="contents">
             <NoteMoreMenu
-              onDownloadPdf={showExtendedActions ? handleDownloadPDF : undefined}
+              onDownloadPdf={!roomy && showExtendedActions ? handleDownloadPDF : undefined}
               pdfLoading={pdfLoading}
               onShowDetails={toggleDetails}
-              outlineOpen={sidePanel === 'outline'}
-              onToggleOutline={() => setSidePanel(p => (p === 'outline' ? null : 'outline'))}
-              onFocusMode={showExtendedActions ? () => setFocusMode(true) : undefined}
+              outlineOpen={outlineOpen}
+              onToggleOutline={roomy ? undefined : toggleOutline}
+              onFocusMode={roomy ? undefined : startFocusMode}
             />
           </div>
 
@@ -706,7 +776,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
       {editor && (
         <NoteSelectionMenu
           editor={editor}
-          noteTags={note.tags}
           onEditLink={openLinkEditor}
           linkEditorOpen={linkEditorOpen}
         />
