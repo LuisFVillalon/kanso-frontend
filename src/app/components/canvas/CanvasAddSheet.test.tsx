@@ -148,6 +148,17 @@ describe('CanvasAddSheet', () => {
     expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
   });
 
+  it('disables remembering with no tags, and still adds the task', async () => {
+    await render({ initial: [TAGS[1]], fromDefaults: true });
+    const remember = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(remember.disabled).toBe(false);
+    await click(button('Remove CS')!);
+    expect(remember.disabled).toBe(true);
+    expect(container.textContent).toContain('Remembering tags for CS 460-01 needs at least one tag.');
+    await click(button('Add task')!);
+    expect(onConfirm).toHaveBeenCalledWith([], false);
+  });
+
   it('offers no remembering for an item without a class', async () => {
     await render({ classLabel: null, initial: [], canRemember: false });
     expect(container.querySelector('input[type="checkbox"]')).toBeNull();
@@ -161,6 +172,15 @@ describe('CanvasAddSheet', () => {
     await click(button('CS')!);
     await click(button('Save')!);
     expect(onConfirm).toHaveBeenCalledWith([CANVAS_TAG, TAGS[1]], true);
+  });
+
+  it("won't save a class's tags with none chosen", async () => {
+    await render({ mode: 'class', item: null });
+    await click(button('Remove CS 460-01')!);
+    expect(button('Save')!.disabled).toBe(true);
+    expect(container.textContent).toContain('Saving tags for CS 460-01 needs at least one tag.');
+    await key('Enter');
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
   it('marks the class tag when it is one of your tags already', async () => {

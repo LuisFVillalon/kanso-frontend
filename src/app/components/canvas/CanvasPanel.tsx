@@ -233,7 +233,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     if (!sheet || !adding) return;
     if (sheet.mode === 'add') {
       const created = await adding.add(sheet.item, tags);
-      if (created && sheet.courseId != null) {
+      if (created && sheet.courseId != null && tags.length) {
         const hadChoice = !!courseTags.tagsOf(sheet.courseId);
         // The backend made any new tag with the task; the class's choice names them as it did.
         if (remember) {
@@ -249,12 +249,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
     const made = await createNewTags(tags);
     if (!made) return;
     if (await courseTags.save(sheet.courseId, made)) {
-      showToast(
-        made.length
-          ? `${sheet.classLabel} tasks will start with ${made.map(t => t.name).join(', ')}.`
-          : `${sheet.classLabel} tasks will start with their Canvas tag.`,
-        'success',
-      );
+      showToast(`${sheet.classLabel} tasks will start with ${made.map(t => t.name).join(', ')}.`, 'success');
       setSheet(null);
     }
   };

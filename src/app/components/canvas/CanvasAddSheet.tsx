@@ -96,6 +96,7 @@ const CanvasAddSheet: React.FC<CanvasAddSheetProps> = ({
   const offerCanvasTag = !!canvasTag && canvasTag.id === 0 && !isChosen(canvasTag.name)
     && (!q || canvasTag.name.toLowerCase().includes(q.toLowerCase()));
   const exists = !!q && (tags.some(t => sameName(t.name, q)) || isChosen(q) || (!!canvasTag && sameName(canvasTag.name, q)));
+  const empty = selected.length === 0;
   const isCanvas = (tag: Tag) => !!classLabel && sameName(tag.name, classLabel);
 
   const pick = (tag: Tag) => {
@@ -114,10 +115,10 @@ const CanvasAddSheet: React.FC<CanvasAddSheetProps> = ({
     inputRef.current?.focus();
   };
   const confirm = async () => {
-    if (busy) return;
+    if (busy || (mode === 'class' && empty)) return;
     setBusy(true);
     try {
-      await onConfirm(selected, canRemember && remember);
+      await onConfirm(selected, canRemember && remember && !empty);
     } finally {
       setBusy(false);
     }
@@ -254,16 +255,20 @@ const CanvasAddSheet: React.FC<CanvasAddSheetProps> = ({
           )}
 
           {mode === 'add' && canRemember && (
-            <label className="flex gap-2 items-start mt-3.5 text-[12.5px] text-text-secondary cursor-pointer">
+            <label className={`flex gap-2 items-start mt-3.5 text-[12.5px] text-text-secondary ${empty ? 'opacity-60' : 'cursor-pointer'}`}>
               <input
                 type="checkbox"
                 checked={remember}
+                disabled={empty}
                 onChange={e => setRemember(e.target.checked)}
                 className="mt-0.5"
                 style={{ accentColor: 'var(--tm-accent)' }}
               />
               <span>Use these tags for every {label} task I add from Canvas</span>
             </label>
+          )}
+          {canRemember && empty && (
+            <p className="mt-1 text-[11.5px] text-text-muted">{mode === 'add' ? 'Remembering' : 'Saving'} tags for {label} needs at least one tag.</p>
           )}
         </div>
 
@@ -273,7 +278,7 @@ const CanvasAddSheet: React.FC<CanvasAddSheetProps> = ({
             {q ? (exists ? 'adds the tag' : 'creates the tag') : mode === 'add' ? 'adds the task' : 'saves'}
           </span>
           <button type="button" onClick={onClose} className="btn btn-ghost ml-auto sm:ml-0">Cancel</button>
-          <button type="button" onClick={() => void confirm()} disabled={busy} className="btn btn-primary disabled:opacity-60">
+          <button type="button" onClick={() => void confirm()} disabled={busy || (mode === 'class' && empty)} className="btn btn-primary disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === 'add' && <ListPlus className="w-4 h-4" />}
             {mode === 'add' ? 'Add task' : 'Save'}
           </button>
