@@ -34,7 +34,7 @@ import { useNoteSession } from '@/app/hooks/useNoteSession';
 import { useNoteAutosave } from '@/app/hooks/useNoteAutosave';
 import { useElementWidth } from '@/app/hooks/useElementWidth';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
-import { KansoMark } from '@/app/components/common/KansoLogo';
+import { KansoKeyIcon } from '@/app/components/common/KansoLogo';
 
 // Splits on whitespace and drops empty tokens, so blank/whitespace-only
 // content (Tiptap's getText() for an "empty" doc) counts as zero words.
@@ -56,7 +56,7 @@ const BOTTOM_BAR_MAX_WIDTH = 640;
 const NOTE_ROW_FULL_WIDTH = 720;
 
 /**
- * The Focus button's k key presses down (globals.css .kanso-key-press), and
+ * The Focus button's k key presses down (globals.css .key-press-play), and
  * focus mode opens once it springs back; this is the fallback where the
  * animation never runs or ends.
  */
@@ -533,9 +533,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 toggle={false}
                 title="Focus mode (Ctrl+Shift+F)"
                 onClick={pressFocusKey}
-                className={focusKeyPressed ? 'kanso-key-press kanso-key-press-now' : ''}
+                className={focusKeyPressed ? 'key-press-play' : ''}
               >
-                <KansoMark className="w-[18px] h-[18px]" />
+                <KansoKeyIcon className="w-[18px] h-[18px]" />
               </ToolbarButton>
             </span>
           )}

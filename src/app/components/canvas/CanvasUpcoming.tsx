@@ -107,7 +107,7 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
           </span>
         </div>
         {classes.length > 1 && (
-          <div role="group" aria-label="Filter by class" className="flex gap-1.5 overflow-x-auto pt-2 pb-0.5" style={{ scrollbarWidth: 'none' }}>
+          <div role="group" aria-label="Filter by class" className="flex gap-1.5 overflow-x-auto overscroll-x-contain pt-2 pb-0.5" style={{ scrollbarWidth: 'none' }}>
             <ClassChip pressed={classFilter == null} onClick={() => onClassFilterChange(null)}>All classes</ClassChip>
             {classes.map(c => {
               const { color } = course(c.id);

@@ -496,7 +496,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
       </div>
 
       {showTabs && (
-        <div role="tablist" aria-label="Canvas" className="flex gap-1 px-3.5 py-2 border-b border-border-subtle overflow-x-auto scrollbar-custom">
+        <div role="tablist" aria-label="Canvas" className="flex gap-1 px-3.5 py-2 border-b border-border-subtle overflow-x-auto overscroll-x-contain scrollbar-custom">
           {tabs.map(({ key, label, icon: Icon }) => {
             const selected = tab === key;
             const count = key === 'upcoming' ? overview?.missing.length ?? 0 : key === 'announcements' ? unread : 0;

@@ -21,8 +21,9 @@ const render = async () => {
   await act(async () => root.render(<WidgetsArea widgets={<div data-testid="widgets">tiles</div>} />));
 };
 
+// The selected tab shows its name; the other is an icon named by aria-label.
 const tab = (name: string) =>
-  [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(b => b.textContent?.includes(name))!;
+  [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(b => (b.getAttribute('aria-label') ?? b.textContent) === name)!;
 
 beforeEach(() => {
   localStorage.clear();
@@ -42,6 +43,22 @@ describe('WidgetsArea', () => {
     const widgetsCell = container.querySelector('[data-testid="widgets"]')!.parentElement!;
     expect(widgetsCell.classList.contains('invisible')).toBe(false);
     expect(container.querySelector('[data-testid="week-view"]')).toBeNull();
+  });
+
+  it('names only the selected tab, leaving the other an icon with a tooltip, and presses the clicked one', async () => {
+    await render();
+    expect(tab('Widgets').textContent).toBe('Widgets');
+    expect(tab('Widgets').querySelector('svg')!.classList.contains('lucide-shapes')).toBe(true);
+    expect(tab('Week calendar').textContent).toBe('');
+    expect(tab('Week calendar').dataset.tip).toBe('Week calendar');
+    expect(tab('Week calendar').querySelector('svg')!.classList.contains('lucide-calendar-days')).toBe(true);
+
+    await act(async () => tab('Week calendar').click());
+    expect(tab('Week calendar').textContent).toBe('Week calendar');
+    expect(tab('Week calendar').hasAttribute('data-tip')).toBe(false);
+    expect(tab('Week calendar').className).toContain('key-press-play');
+    expect(tab('Widgets').textContent).toBe('');
+    expect(tab('Widgets').getAttribute('aria-label')).toBe('Widgets');
   });
 
   it('fits the week calendar to the widgets box, which keeps setting the height', async () => {
