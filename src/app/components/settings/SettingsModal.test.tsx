@@ -3,7 +3,7 @@ import React, { act, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProfileFields } from '@/app/hooks/useProfile';
-import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
+import type { ArchivedTerm, CalendarSettings, TermDates, TermRollover } from '@/app/types/calendar';
 import { DEFAULT_MOOD_SETTINGS } from '@/app/types/mood';
 import { monthlyAvatarOptions } from '@/app/lib/avatar';
 
@@ -80,12 +80,25 @@ const onSaveCalendarSettings = vi.fn(async (changes: Partial<Omit<CalendarSettin
 const springTerm: ArchivedTerm = { id: 7, title: 'Spring 2026', start_date: '2026-01-20', end_date: '2026-05-15', archived_at: '2026-05-20T00:00:00Z' };
 const onArchiveTerm = vi.fn<() => Promise<void>>();
 const onDeleteArchivedTerm = vi.fn<(id: number) => Promise<void>>();
+const onSaveNextTerm = vi.fn<(term: TermDates) => Promise<void>>();
+const onRemoveNextTerm = vi.fn<() => Promise<void>>();
+const onSetAutoArchive = vi.fn<(on: boolean) => Promise<void>>();
+const onArchiveEndedTerm = vi.fn<() => Promise<void>>();
+const onDropEndedTerm = vi.fn<() => Promise<void>>();
+const noRollover: TermRollover = { auto_archive: false, next_term: null, ended_term: null };
+const springNext: TermDates = { title: 'Spring 2027', start_date: '2027-01-19', end_date: '2027-05-14' };
 
 /** Commits each successful save to the props, as TaskManager's hooks do. */
-function Harness({ initialSection, initialProfile }: { initialSection?: SettingsSection; initialProfile: ProfileFields }) {
+function Harness({ initialSection, initialProfile, initialTerm, initialRollover }: {
+  initialSection?: SettingsSection;
+  initialProfile: ProfileFields;
+  initialTerm: CalendarSettings;
+  initialRollover: TermRollover;
+}) {
   const [saved, setSaved] = useState(initialProfile);
-  const [term, setTerm] = useState(calendarSettings);
+  const [term, setTerm] = useState(initialTerm);
   const [archived, setArchived] = useState([springTerm]);
+  const [rollover, setRollover] = useState(initialRollover);
   return (
     <SettingsModal
       isOpen
@@ -115,13 +128,45 @@ function Harness({ initialSection, initialProfile }: { initialSection?: Settings
         await onDeleteArchivedTerm(id);
         setArchived(prev => prev.filter(t => t.id !== id));
       }}
+      termRollover={{
+        rollover,
+        saveQueuedNextTerm: async next => {
+          await onSaveNextTerm(next);
+          setRollover(prev => ({ ...prev, next_term: next }));
+        },
+        removeNextTerm: async () => {
+          await onRemoveNextTerm();
+          setRollover(prev => ({ ...prev, next_term: null }));
+        },
+        setAutoArchive: async on => {
+          await onSetAutoArchive(on);
+          setRollover(prev => ({ ...prev, auto_archive: on }));
+        },
+        archiveReplacedTerm: async () => {
+          await onArchiveEndedTerm();
+          setRollover(prev => ({ ...prev, ended_term: null }));
+          return { ...springTerm, id: 8 };
+        },
+        dropReplacedTerm: async () => {
+          await onDropEndedTerm();
+          setRollover(prev => ({ ...prev, ended_term: null }));
+        },
+      }}
       initialSection={initialSection}
     />
   );
 }
 
-const render = (initialSection?: SettingsSection, overrides: Partial<ProfileFields> = {}) => {
-  act(() => root.render(<ToastProvider><Harness initialSection={initialSection} initialProfile={{ ...profile, ...overrides }} /></ToastProvider>));
+const render = (
+  initialSection?: SettingsSection,
+  overrides: Partial<ProfileFields> = {},
+  { term = calendarSettings, rollover = noRollover }: { term?: CalendarSettings; rollover?: TermRollover } = {},
+) => {
+  act(() => root.render(
+    <ToastProvider>
+      <Harness initialSection={initialSection} initialProfile={{ ...profile, ...overrides }} initialTerm={term} initialRollover={rollover} />
+    </ToastProvider>,
+  ));
 };
 
 const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('button')];
@@ -345,6 +390,97 @@ describe('SettingsModal autosave', () => {
     await click(button('Delete'));
     expect(onDeleteArchivedTerm).toHaveBeenCalledWith(7);
     expect(document.querySelector('ul[aria-label="Archived terms"]')).toBeNull();
+  });
+
+  it('sets up the next term, starting the day after this one ends by default, and shows it queued', async () => {
+    render('term');
+    await click(button('Set up next term'));
+    expect(field('next-term-start-date').value).toBe('2026-12-19');
+    act(() => {
+      typeInto(field('next-term-title'), 'Spring 2027');
+      typeInto(field('next-term-start-date'), '2027-01-19');
+      typeInto(field('next-term-end-date'), '2027-05-14');
+    });
+    await submit(field('next-term-title'));
+    expect(onSaveNextTerm).toHaveBeenCalledWith(springNext);
+    expect(document.querySelector('form[aria-label="Next term"]')).toBeNull();
+    expect(document.body.textContent).toContain('Starts Jan 19, 2027');
+    expect(document.body.textContent).toContain('Spring 2027 is set to take over when this term ends.');
+  });
+
+  it("won't queue a next term that starts before this one ends", async () => {
+    render('term');
+    await click(button('Set up next term'));
+    act(() => {
+      typeInto(field('next-term-title'), 'Spring 2027');
+      typeInto(field('next-term-start-date'), '2026-12-18');
+      typeInto(field('next-term-end-date'), '2027-05-14');
+    });
+    await submit(field('next-term-title'));
+    expect(onSaveNextTerm).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="alert"]')!.textContent).toBe('It must start after this term ends (Dec 18, 2026).');
+  });
+
+  it('keeps the next term form open and says so when saving fails', async () => {
+    onSaveNextTerm.mockRejectedValueOnce(new Error('offline'));
+    render('term');
+    await click(button('Set up next term'));
+    act(() => {
+      typeInto(field('next-term-title'), 'Spring 2027');
+      typeInto(field('next-term-end-date'), '2027-05-14');
+    });
+    await submit(field('next-term-title'));
+    expect(document.querySelector('form[aria-label="Next term"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Couldn't save the next term. Try again.");
+  });
+
+  it('edits and removes the queued next term', async () => {
+    render('term', {}, { rollover: { ...noRollover, next_term: springNext } });
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Edit Spring 2027"]')!);
+    expect(field('next-term-title').value).toBe('Spring 2027');
+    act(() => typeInto(field('next-term-title'), 'Spring 2027 (CS)'));
+    await submit(field('next-term-title'));
+    expect(onSaveNextTerm).toHaveBeenCalledWith({ ...springNext, title: 'Spring 2027 (CS)' });
+
+    await click(document.querySelector<HTMLButtonElement>('[aria-label="Remove Spring 2027 (CS)"]')!);
+    expect(onRemoveNextTerm).not.toHaveBeenCalled();
+    await click(button('Remove'));
+    expect(onRemoveNextTerm).toHaveBeenCalledOnce();
+    expect(button('Set up next term')).toBeTruthy();
+  });
+
+  it('asks for a saved term before the next one can be set up', () => {
+    render('term', {}, { term: { id: 0, title: 'Term Tracker', start_date: '2026-10-01', end_date: '2026-12-31' } });
+    expect(document.body.textContent).toContain('Save this term first, then set up the one after it.');
+    expect(button('Set up next term')).toBeUndefined();
+  });
+
+  it('turns automatic archiving on, explaining archived terms stay on the calendars', async () => {
+    render('term');
+    const autoArchive = () => document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="term-auto-archive-label"]')!;
+    expect(document.getElementById('term-auto-archive-label')!.textContent).toBe('Archive this term automatically when it ends');
+    expect(document.body.textContent).toContain('Archived terms still show on your month calendars.');
+    expect(autoArchive().getAttribute('aria-checked')).toBe('false');
+    await click(autoArchive());
+    expect(onSetAutoArchive).toHaveBeenCalledWith(true);
+    expect(autoArchive().getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('offers to archive or let go of the term the next one replaced', async () => {
+    const ended = { title: 'Summer 2026', start_date: '2026-06-01', end_date: '2026-08-14' };
+    render('term', {}, { rollover: { ...noRollover, ended_term: ended } });
+    expect(document.body.textContent).toContain('Summer 2026 has ended');
+    await click(button('Archive it'));
+    expect(onArchiveEndedTerm).toHaveBeenCalledOnce();
+    expect(document.body.textContent).not.toContain('Summer 2026 has ended');
+    expect(document.body.textContent).toContain('Summer 2026 archived. It stays on your month calendars.');
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    render('term', {}, { rollover: { ...noRollover, ended_term: ended } });
+    await click(button("Don't keep it"));
+    expect(onDropEndedTerm).toHaveBeenCalledOnce();
+    expect(onArchiveEndedTerm).toHaveBeenCalledOnce();
   });
 
   it('offers Undo for a rest day, which saves the days back', async () => {

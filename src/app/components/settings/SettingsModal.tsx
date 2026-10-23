@@ -51,7 +51,8 @@ import { useFieldAutosave, useSaveTracker, type SaveStatus, type TrackSave } fro
 import { useOptionalNotifications } from '@/app/context/NotificationsContextValue';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { DayWindow } from '@/app/types/profile';
-import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
+import type { ArchivedTerm, CalendarSettings, TermDates } from '@/app/types/calendar';
+import type { TermRolloverControls } from '@/app/hooks/useCalendarSettings';
 import type { MoodCheckinSettings } from '@/app/types/mood';
 
 interface Props {
@@ -72,6 +73,8 @@ interface Props {
   onArchiveTerm: () => Promise<unknown>;
   /** Deletes an archived term for good. Throws when it couldn't. */
   onDeleteArchivedTerm: (id: number) => Promise<void>;
+  /** The queued next term and auto-archive switch, and the actions on them (each throws when it couldn't). */
+  termRollover: TermRolloverControls;
   /** The page to show when the modal opens, e.g. 'canvas' from the Canvas panel. */
   initialSection?: SettingsSection;
 }
@@ -173,6 +176,7 @@ export default function SettingsModal({
   archivedTerms,
   onArchiveTerm,
   onDeleteArchivedTerm,
+  termRollover,
   initialSection,
 }: Props) {
   const { user, isDemo } = useAuth();
@@ -346,6 +350,33 @@ export default function SettingsModal({
     }
     showToast(`${termDraft.title || 'Term'} archived. It stays on your month calendars.`, 'success');
   };
+  /** Runs a term rollover action, saying so in a toast when it fails (and rethrowing, so the control stays put). */
+  const termAction = async (action: () => Promise<unknown>, failure: string, success?: string) => {
+    try {
+      await action();
+    } catch (err) {
+      showToast(describeError(err, failure), 'error');
+      throw err;
+    }
+    if (success) showToast(success, 'success');
+  };
+  const saveNextTerm = (term: TermDates) => termAction(
+    () => termRollover.saveQueuedNextTerm(term),
+    "Couldn't save the next term. Try again.",
+    `${term.title} is set to take over when this term ends.`,
+  );
+  const removeNextTerm = () => termAction(termRollover.removeNextTerm, "Couldn't remove the next term. Try again.");
+  const changeAutoArchive = (autoArchive: boolean) => termAction(
+    () => termRollover.setAutoArchive(autoArchive),
+    "Couldn't change automatic archiving. Try again.",
+  );
+  const endedTitle = termRollover.rollover?.ended_term?.title ?? 'The term';
+  const archiveEndedTerm = () => termAction(
+    termRollover.archiveReplacedTerm,
+    "Couldn't archive the term. Try again.",
+    `${endedTitle} archived. It stays on your month calendars.`,
+  );
+  const dropEndedTerm = () => termAction(termRollover.dropReplacedTerm, "Couldn't remove the ended term. Try again.");
   const deleteArchivedTerm = async (id: number) => {
     try {
       await onDeleteArchivedTerm(id);
@@ -404,6 +435,13 @@ export default function SettingsModal({
             archivedTerms={archivedTerms}
             onDeleteArchived={deleteArchivedTerm}
             onDialogChange={setTermDialogOpen}
+            rollover={termRollover.rollover}
+            hasCurrentTerm={calendarSettings.id !== 0}
+            onSaveNextTerm={saveNextTerm}
+            onRemoveNextTerm={removeNextTerm}
+            onAutoArchiveChange={changeAutoArchive}
+            onArchiveEnded={archiveEndedTerm}
+            onDropEnded={dropEndedTerm}
           />
         );
       case 'notifications': {

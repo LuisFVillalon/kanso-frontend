@@ -14,6 +14,7 @@ import { Tag, BaseTaskForm, NewTag, NewHabit, Task, LinkedTaskRef } from '@/app/
 import type { Habit } from '@/app/types/habit';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { ArchivedTerm, CalendarSettings } from '@/app/types/calendar';
+import type { TermRolloverControls } from '@/app/hooks/useCalendarSettings';
 
 interface TaskManagerModalsProps {
   // New task
@@ -94,6 +95,7 @@ interface TaskManagerModalsProps {
   archivedTerms: ArchivedTerm[];
   onArchiveTerm: () => Promise<unknown>;
   onDeleteArchivedTerm: (id: number) => Promise<void>;
+  termRollover: TermRolloverControls;
 }
 
 const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
@@ -108,7 +110,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
   historyHabit, historyShowBackButton, onCloseHabitHistory, onToggleHabitDate,
   showSettings, settingsSection, onCloseSettings, onAccountDeleted, onSignOut, profile, profileLoading, onSaveProfileField,
   calendarSettings, calendarSettingsLoading, onSaveCalendarSettings,
-  archivedTerms, onArchiveTerm, onDeleteArchivedTerm,
+  archivedTerms, onArchiveTerm, onDeleteArchivedTerm, termRollover,
 }) => {
   return (
     <>
@@ -202,6 +204,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         archivedTerms={archivedTerms}
         onArchiveTerm={onArchiveTerm}
         onDeleteArchivedTerm={onDeleteArchivedTerm}
+        termRollover={termRollover}
       />
     </>
   );
