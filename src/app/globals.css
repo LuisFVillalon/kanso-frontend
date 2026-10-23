@@ -76,14 +76,22 @@
   --font-sans: var(--font-mplus-rounded), system-ui, -apple-system, sans-serif;
   --font-display-settings: "SOFT" 100, "WONK" 0;
 
-  /* Mood scale, 1 Rough → 5 Great: coral → saffron → sky. The orange and
-     blue ends stay apart under red/green color blindness; the faces and
-     labels carry the meaning too, never color alone. */
-  --tm-mood-1:           #E5432D;
-  --tm-mood-2:           #EC7A2A;
-  --tm-mood-3:           #D99A00;
-  --tm-mood-4:           #4E9DE0;
-  --tm-mood-5:           #1F6FC4;
+  /* Mood scale, 1 Rough → 5 Great: "Ember & blue" — brick → amber → stone
+     → steel blue → ink blue. Each step is 3.3:1 or more on paper and surface
+     in both themes, and simulated deuteranopia, protanopia and tritanopia
+     keep every pair at CIEDE2000 ΔE 14 or more. Faces and labels carry the
+     meaning too, never color alone. */
+  --tm-mood-1:           #A8341F;
+  --tm-mood-2:           #BA7116;
+  --tm-mood-3:           #8A8378;
+  --tm-mood-4:           #3F8AB5;
+  --tm-mood-5:           #1C4A87;
+
+  /* Canvas course colors: their own tokens, so a mood palette change
+     doesn't recolor courses. */
+  --tm-course-sky:       #4E9DE0;
+  --tm-course-saffron:   #D99A00;
+  --tm-course-blue:      #1F6FC4;
 
   /* Week calendar kinds: planned task, completed, note session, habit. Four
      hues (blue, green, magenta, orange) that stay apart under red/green and
@@ -157,11 +165,14 @@
     --tm-danger:           #E5534B;
     --tm-danger-subtle:    #3A211C;
     --tm-wire:             rgba(237, 230, 214, 0.18);
-    --tm-mood-1:           #FF6A52;
-    --tm-mood-2:           #FF9A4D;
-    --tm-mood-3:           #F2BE3A;
-    --tm-mood-4:           #7DBCF3;
-    --tm-mood-5:           #4A9DF0;
+    --tm-mood-1:           #E0714A;
+    --tm-mood-2:           #F5BE55;
+    --tm-mood-3:           #A6A096;
+    --tm-mood-4:           #86CDEE;
+    --tm-mood-5:           #5B8FD6;
+    --tm-course-sky:       #7DBCF3;
+    --tm-course-saffron:   #F2BE3A;
+    --tm-course-blue:      #4A9DF0;
     --tm-week-task:        #7DB6F5;
     --tm-week-completed:   #45CFA3;
     --tm-week-note:        #E77FC8;
@@ -210,11 +221,14 @@
   --tm-danger:           #E5534B;
   --tm-danger-subtle:    #3A211C;
   --tm-wire:             rgba(237, 230, 214, 0.18);
-  --tm-mood-1:           #FF6A52;
-  --tm-mood-2:           #FF9A4D;
-  --tm-mood-3:           #F2BE3A;
-  --tm-mood-4:           #7DBCF3;
-  --tm-mood-5:           #4A9DF0;
+  --tm-mood-1:           #E0714A;
+  --tm-mood-2:           #F5BE55;
+  --tm-mood-3:           #A6A096;
+  --tm-mood-4:           #86CDEE;
+  --tm-mood-5:           #5B8FD6;
+  --tm-course-sky:       #7DBCF3;
+  --tm-course-saffron:   #F2BE3A;
+  --tm-course-blue:      #4A9DF0;
   --tm-week-task:        #7DB6F5;
   --tm-week-completed:   #45CFA3;
   --tm-week-note:        #E77FC8;

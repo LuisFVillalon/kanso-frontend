@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { moodColor } from '@/app/components/mood/MoodFacePicker';
+import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import { ENERGY_LABELS, MOOD_LABELS, STRESS_LABELS, WORKLOAD_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
 import type { ReportBucket, ReportPeriod } from '@/app/utils/calendarReport';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
@@ -174,10 +174,13 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
                 className="absolute left-0 right-0 -translate-y-1/2 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-text-muted leading-none"
                 style={{ top: `${yOf(i + 1)}%` }}
               >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: series === 'mood' ? moodColor(i + 1) : 'var(--tm-border)' }}
-                />
+                {series === 'mood' ? (
+                  <span className="w-3.5 h-3.5 shrink-0" style={{ color: moodColor(i + 1) }}>
+                    <MoodFace mood={i + 1} filled className="w-full h-full" />
+                  </span>
+                ) : (
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--tm-border)' }} />
+                )}
                 <span className="truncate">{name}</span>
               </span>
             ))}

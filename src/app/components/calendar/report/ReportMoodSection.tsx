@@ -61,7 +61,10 @@ const CheckinsCard: React.FC<{ summary: MoodSummary; period: ReportPeriod; child
             </div>
             <div className="flex flex-wrap justify-between gap-x-2 mt-1.5" aria-hidden="true">
               {summary.distribution.map((count, i) => (
-                <span key={i} className="text-[11px] text-text-muted">
+                <span key={i} className="inline-flex items-center gap-1 text-[11px] text-text-muted">
+                  <span className="w-3.5 h-3.5 shrink-0" style={{ color: moodColor(i + 1) }}>
+                    <MoodFace mood={i + 1} filled className="w-full h-full" />
+                  </span>
                   <b className="text-text-secondary">{count}</b> {MOOD_LABELS[i]}
                 </span>
               ))}
@@ -220,7 +223,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
           <div className="lg:col-span-2 min-w-0">
-            <CardShell icon={<Activity className="w-4 h-4" style={{ color: 'var(--tm-mood-4)' }} />} header="Mood over time">
+            <CardShell icon={<Activity className="w-4 h-4" style={{ color: moodColor(4) }} />} header="Mood over time">
               <ReportMoodChart
                 period={period}
                 buckets={report.buckets}
@@ -265,6 +268,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
           period={period}
           scopeLabel={scopeName(period)}
           average={summary.average}
+          logged={summary.logged}
           byWeek={period.kind === 'year'}
         />
       )}

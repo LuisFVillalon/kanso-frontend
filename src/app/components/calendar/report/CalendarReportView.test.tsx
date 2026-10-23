@@ -179,10 +179,14 @@ describe('CalendarReportView mood', () => {
     await click(buttonLabelled(/^Day by day$/));
     expect(container.querySelector('svg[aria-label="Habits completed per day with mood"]')).not.toBeNull();
 
-    // Exercised is on the Good and Great days: 8 of them.
+    // Exercised is on the Good and Great days: 8 of them, against a usual 3.0 over all 20.
     expect(text()).toContain('Exercised');
-    expect(text()).toContain('average mood 4.5');
     expect(text()).toContain('8 days');
+    expect(text()).toContain('your usual 3.0 · Okay');
+    expect(text()).toContain('+1.5');
+    expect(text()).toContain('On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
+    expect(text()).toContain('Your usual is your average mood across all 20 check-ins this month.');
+    expect(text()).not.toContain('overall');
   });
 
   it('opens a month from the year chart', async () => {
