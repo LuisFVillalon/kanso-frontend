@@ -81,16 +81,17 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
   const [openMode, setOpenMode] = usePersistedPref<NoteOpenMode>('tm-note-open-mode', 'panel', isNoteOpenMode);
   const [notesFolderOverlay, setNotesFolderOverlay] = useState<Tag | null>(null);
   // The folder the open note was picked from, so its header can lead back there.
-  const [openedFromFolder, setOpenedFromFolder] = useState<Tag | null>(null);
+  const [openedFrom, setOpenedFrom] = useState<{ noteId: number; folder: Tag } | null>(null);
   const openNote = (note: Note, folder: Tag | null = null) => {
     setActiveNoteId(note.id);
-    setOpenedFromFolder(folder);
+    setOpenedFrom(folder ? { noteId: note.id, folder } : null);
     onEditorChange(note);
   };
   const closeNote = () => {
-    setOpenedFromFolder(null);
+    setOpenedFrom(null);
     onEditorChange(null);
   };
+  const openedFromFolder = openedFrom && openedFrom.noteId === noteEditorOverlay?.id ? openedFrom.folder : null;
   // Read live so notes archived or deleted from inside the open folder leave it.
   const folderNotes = useMemo(
     () => (notesFolderOverlay ? notes.filter(n => n.tags.some(t => t.id === notesFolderOverlay.id)) : []),

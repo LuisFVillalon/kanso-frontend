@@ -99,6 +99,9 @@ describe('NotesPanel tag filter indicator', () => {
 const OpenNoteHarness: React.FC<{ viewMode: 'cards' | 'folders' }> = ({ viewMode }) => {
   const [open, setOpen] = useState<Note | null>(null);
   return (
+    <>
+    {/* Stands in for the New menu / N key, which opens a note from outside the panel. */}
+    <button type="button" aria-label="New note" onClick={() => setOpen(note(3, 'Untitled', []))} />
     <NotesPanel
       notes={notes}
       tags={[school, gym]}
@@ -115,6 +118,7 @@ const OpenNoteHarness: React.FC<{ viewMode: 'cards' | 'folders' }> = ({ viewMode
       noteOrder="newest"
       onNoteOrderChange={vi.fn()}
     />
+    </>
   );
 };
 
@@ -178,5 +182,15 @@ describe('NotesPanel opening a note', () => {
     clickText('Workout plan');
     expect(openIn()).toBe('centered');
     expect(anyLabel('Back to Gym')).not.toBeNull();
+  });
+
+  it('drops the folder back-link when another note is opened from outside the panel', () => {
+    renderOpen('folders');
+    clickText('School');
+    clickText('Lecture notes');
+    expect(anyLabel('Back to School')).not.toBeNull();
+    act(() => anyLabel('New note')!.click());
+    expect(editor()!.textContent).toBe('Untitled');
+    expect(anyLabel('Back to School')).toBeNull();
   });
 });
