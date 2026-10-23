@@ -151,13 +151,13 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
         <div className="ml-auto flex flex-wrap items-center gap-3">
           {isYear ? (
             <>
-              <LegendLine label="Monthly average" />
+              <LegendLine label="Month’s typical" />
               {isMood && monthCheckins.size > 0 && <LegendDiamond label="Monthly check-in" />}
             </>
           ) : (
             <>
               <LegendDot color={seriesColor(series, 4)} label="Daily check-in" />
-              {period.kind === 'month' && <LegendLine label="7-day average" />}
+              {period.kind === 'month' && <LegendLine label="7-day trend" />}
               {isMood && weeks.length > 0 && <LegendDash label="Weekly check-in" />}
             </>
           )}
@@ -271,10 +271,10 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
                     className={buttonClass}
                     style={{ left, width, top: `${m.average != null ? yOf(m.average) : AXIS_Y}%` }}
                     aria-label={`${m.average != null
-                      ? `${monthName}: average ${lowerName} ${m.average.toFixed(1)} across ${m.n} ${m.n === 1 ? 'day' : 'days'}.`
+                      ? `${monthName}: typical ${lowerName} ${m.average.toFixed(1)} across ${m.n} ${m.n === 1 ? 'day' : 'days'}.`
                       : `${monthName}: no ${lowerName} recorded.`}${monthly ? ` ${monthly}.` : ''} Open ${monthName}`}
                     title={`${m.average != null && m.q1 != null && m.q3 != null
-                      ? `${b.longLabel}\nAverage ${m.average.toFixed(1)} across ${m.n} ${m.n === 1 ? 'day' : 'days'}\nMiddle half of days: ${m.q1.toFixed(1)}–${m.q3.toFixed(1)}`
+                      ? `${b.longLabel}\nTypical ${lowerName} ${m.average.toFixed(1)} across ${m.n} ${m.n === 1 ? 'day' : 'days'}\nHalf of the days fell between ${m.q1.toFixed(1)} and ${m.q3.toFixed(1)}`
                       : `${b.longLabel}: no ${lowerName} recorded`}${monthly ? `\n${monthly}` : ''}`}
                   >
                     <MoodDot size={m.average != null ? dotSize : hollowSize} color={m.average != null ? seriesColor(series, m.average) : null} />
@@ -348,8 +348,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
       <p className="text-[11px] text-text-muted">
         {isYear
-          ? `Dots are each month’s average; the shaded bar covers the middle half of its days${isMood && monthCheckins.size > 0 ? '; ◇ marks the monthly check-in — click it to edit' : ''}. Click a month to open it.`
-          : `Click a dot to edit that day’s check-in. Hollow dots are days without one — click to log it.${period.kind === 'month' ? ' The solid line is your 7-day average: each point averages that day and the 6 before it, shown once 3 of those days have a check-in.' : ''}${weekSpans.length > 0 ? ' Dashed lines are weekly check-ins.' : ''}`}
+          ? `The dot is the month’s typical ${lowerName}; the shaded bar shows where half of its days fell, leaving out the highest and lowest days${isMood && monthCheckins.size > 0 ? '; ◇ marks the monthly check-in — click it to edit' : ''}. Click a month to open it.`
+          : `Click a dot to edit that day’s check-in. Hollow dots are days without one — click to log it.${period.kind === 'month' ? ` The solid line evens out day-to-day ups and downs: each point is your typical ${lowerName} over that day and the 6 before it, shown once 3 of those days have a check-in.` : ''}${weekSpans.length > 0 ? ' Dashed lines are weekly check-ins.' : ''}`}
       </p>
     </div>
   );

@@ -278,7 +278,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
             fill={info.color}
             fillOpacity={0.3}
           >
-            <title>{`${it.longLabel}: ${lowerLabel} ${formatMetric(metric, it.value)}${byWeek ? ' a day on average' : ''}; mood ${it.mood != null ? (byWeek ? it.mood.toFixed(1) : moodLabel(it.mood)) : 'not logged'}`}</title>
+            <title>{`${it.longLabel}: ${lowerLabel} ${formatMetric(metric, it.value)}${byWeek ? ' on a typical day' : ''}; mood ${it.mood != null ? (byWeek ? it.mood.toFixed(1) : moodLabel(it.mood)) : 'not logged'}`}</title>
           </rect>
         ))}
         {[0, max / 2, max].map(t => (
@@ -294,7 +294,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
           ) : null,
         )}
         <text x={padLeft + plotWidth / 2} y={height - 3} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--tm-text-muted)">
-          Bars: {lowerLabel}{byWeek ? ' per day, averaged by week' : ''} · dots: mood
+          Bars: {lowerLabel}{byWeek ? ' on a typical day that week' : ''} · dots: mood
         </text>
       </>
     );
@@ -302,7 +302,7 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
 
   const summary = view === 'scatter'
     ? `Mood compared with ${lowerLabel}, one dot per day with a check-in`
-    : `${info.label}${byWeek ? ' per day, averaged by week,' : ' per day'} with mood`;
+    : `${info.label}${byWeek ? ' on a typical day each week,' : ' per day'} with mood`;
 
   return (
     <div ref={ref} className="w-full">
@@ -310,6 +310,11 @@ const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metri
         {scale}
         {body}
       </svg>
+      {view === 'scatter' && (
+        <p className="m-0 mt-1 text-[11px] text-text-muted">
+          Each dot is a day. The dark line follows your typical mood as {lowerLabel} goes up.
+        </p>
+      )}
 
       {/* sr-only on the table itself doesn't shrink it — tables size to their content. */}
       <div className="sr-only">

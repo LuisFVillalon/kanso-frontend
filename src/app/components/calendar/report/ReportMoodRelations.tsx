@@ -14,7 +14,6 @@ import {
   describeCorrelation,
   EARLY_SIGN_DAYS,
   MAX_P,
-  MIN_RHO,
   MOOD_METRICS,
   moodActivityPoints,
   STRONG_MIN_DAYS,
@@ -137,7 +136,7 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod
             })}
           </ul>
           <p className="text-[11px] text-text-muted mt-auto">
-            Your usual is your average mood across all {logged} {logged === 1 ? 'check-in' : 'check-ins'} {scopeLabel}. Each bar is how days with that tag compared. Tags on fewer than {TAG_MIN_DAYS} days are hidden.
+            Your usual is your typical mood across all {logged} {logged === 1 ? 'check-in' : 'check-ins'} {scopeLabel}. Each bar is how days with that tag compared. Tags on fewer than {TAG_MIN_DAYS} days are hidden.
           </p>
         </>
       )}
@@ -244,14 +243,14 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
               <div className="mt-2 pl-4 flex flex-col gap-1 leading-relaxed">
                 <p>
                   Each day with a daily check-in is one data point: its mood (1–5) and that day’s {info.label.toLowerCase()}.
-                  Days without a check-in are left out. Both are ranked, and the ranks are compared to see how often they rise
-                  and fall together (Spearman’s rank correlation{result.rho != null ? `, ρ = ${result.rho.toFixed(2)}` : ''}).
+                  Days without a check-in are left out. Your days are put in order twice — from lowest to highest mood, and from
+                  least to most {info.label.toLowerCase()} — and the two orders are compared: the more they match, the stronger the link.
                 </p>
                 <p>
-                  Under {PATTERN_MIN_DAYS} days nothing is said. Weak or likely-chance results (ρ under {MIN_RHO}, or more than a
-                  1-in-{Math.round(1 / MAX_P)} chance of turning up in random data) read as “no clear link”, as do results where
-                  days with more {info.label.toLowerCase()} didn’t actually average a different mood in that direction. Otherwise under 0.3 is
-                  “slight”, under 0.5 “moderate” and above that “strong” — but under {EARLY_SIGN_DAYS} days anything is only an
+                  Under {PATTERN_MIN_DAYS} days nothing is said. If the orders barely match, or the match could easily be luck
+                  (more than a 1-in-{Math.round(1 / MAX_P)} chance), it reads “no clear link” — as it does when days with more{' '}
+                  {info.label.toLowerCase()} didn’t really have a different mood in that direction. Otherwise a loose match is “slight”, a
+                  closer one “moderate” and a close one “strong” — but under {EARLY_SIGN_DAYS} days anything is only an
                   “early sign”, and under {STRONG_MIN_DAYS} days nothing is called “strong”.
                 </p>
               </div>

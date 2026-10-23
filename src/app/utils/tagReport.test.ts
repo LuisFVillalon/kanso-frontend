@@ -4,14 +4,11 @@ import { periodContaining } from './calendarReport';
 import {
   buildTagBreakdown,
   collectTagItems,
-  comparisonRange,
   MAX_TAG_ROWS,
   OTHER_KEY,
-  rowTotalIn,
   UNTAGGED_KEY,
   type TagItemKind,
 } from './tagReport';
-import { toLocalDateStr } from './dateUtils';
 
 beforeAll(() => {
   process.env.TZ = 'America/Los_Angeles';
@@ -180,32 +177,5 @@ describe('buildTagBreakdown', () => {
     expect(other.total).toBe(4 + 2 + 2);
     expect(other.shares.map(s => s.item.title)).toEqual(['Task 8', 'Both small ones', 'Task 9']);
     expect(other.counts.task).toBe(3);
-
-    const unfolded = buildTagBreakdown(many, 'time', all, { fold: false });
-    expect(unfolded.rows).toHaveLength(MAX_TAG_ROWS + 2);
-    expect(rowTotalIn(other, unfolded)).toBe(8);
-  });
-});
-
-describe('comparisonRange', () => {
-  const now = new Date(2026, 9, 22, 15, 0); // Thursday Oct 22
-
-  it('compares a running week with the same days of the week before', () => {
-    const range = comparisonRange(periodContaining('week', now), now)!;
-    expect([toLocalDateStr(range.start), toLocalDateStr(range.end), range.partial]).toEqual(['2026-10-12', '2026-10-15', true]);
-  });
-
-  it('compares a running month with the same days of the month before, capped at its end', () => {
-    const range = comparisonRange(periodContaining('month', new Date(2026, 2, 31)), new Date(2026, 2, 31))!;
-    expect([toLocalDateStr(range.start), toLocalDateStr(range.end), range.partial]).toEqual(['2026-02-01', '2026-02-28', true]);
-  });
-
-  it('compares a finished period with all of the one before', () => {
-    const range = comparisonRange(periodContaining('year', new Date(2025, 5, 1)), now)!;
-    expect([toLocalDateStr(range.start), toLocalDateStr(range.end), range.partial]).toEqual(['2024-01-01', '2024-12-31', false]);
-  });
-
-  it('has nothing to compare for a period that has not started', () => {
-    expect(comparisonRange(periodContaining('week', new Date(2026, 10, 2)), now)).toBeNull();
   });
 });

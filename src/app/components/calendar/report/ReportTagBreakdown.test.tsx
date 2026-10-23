@@ -51,7 +51,6 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   // Wednesday: the week is Oct 19–25, three days in.
   vi.setSystemTime(new Date(2026, 9, 21, 20, 0));
-  api.fetchCalendarActivity.mockResolvedValue(empty({ completed_tasks: [task(4, 'Old lab', 1, 13)] }));
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -77,7 +76,7 @@ const button = (pattern: RegExp) =>
 const click = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); };
 
 describe('ReportTagBreakdown', () => {
-  it('shares time out by tag, splitting several tags evenly, and compares with the same days last week', async () => {
+  it('shares time out by tag, splitting several tags evenly, without comparing to last week', async () => {
     await render('week', weekActivity);
     expect(text()).toContain('8h');
     expect(text()).toContain('estimated and tracked this week');
@@ -88,9 +87,9 @@ describe('ReportTagBreakdown', () => {
       'Health, 1h, 13%. Show its items',
       'Untagged, 1h, 13%. Show its items',
     ]);
-    expect(text()).toContain('↑ 3.5h vs last week, same days');
-    expect(text()).toContain('new vs last week');
-    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-12', '2026-10-14', { includeArchived: true });
+    expect(text()).toContain('Tap a tag to see its tasks, notes and habits.');
+    expect(text()).not.toMatch(/vs last|new vs|same as last/);
+    expect(api.fetchCalendarActivity).not.toHaveBeenCalled();
   });
 
   it('counts instead of timing, and leaves out a kind that is switched off', async () => {
@@ -115,18 +114,10 @@ describe('ReportTagBreakdown', () => {
     expect(rowNames()).toHaveLength(4);
   });
 
-  it('loads the same days of last month to compare a month against', async () => {
-    api.fetchCalendarActivity.mockResolvedValue(empty({ completed_tasks: [task(9, 'September lab', 1, 10, [cs], 8)] }));
-    await render('month', empty({ completed_tasks: [task(2, 'Lab writeup', 2, 21)] }));
-    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-09-01', '2026-09-21', { includeArchived: true });
-    expect(text()).toContain('↑ 1h vs last month, same days');
-  });
-
-  it('still shows the breakdown without a change when last month fails to load', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    api.fetchCalendarActivity.mockRejectedValue(new Error('offline'));
+  it('shows a month without loading or comparing to last month', async () => {
     await render('month', empty({ completed_tasks: [task(2, 'Lab writeup', 2, 21)] }));
     expect(rowNames()).toEqual(['CS 460, 2h, 100%. Show its items']);
-    expect(text()).not.toContain('vs last month');
+    expect(text()).not.toContain('last month');
+    expect(api.fetchCalendarActivity).not.toHaveBeenCalled();
   });
 });

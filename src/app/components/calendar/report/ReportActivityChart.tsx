@@ -42,6 +42,26 @@ export const LegendDot: React.FC<{ color: string; label: string }> = ({ color, l
   </span>
 );
 
+// Steps the y axis can count in: whole numbers of things done, or round
+// stretches of time (in seconds) for note time.
+const COUNT_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+const TIME_STEPS = [5, 10, 15, 30, 60, 120, 180, 300, 600, 1200].map(m => m * 60);
+const MAX_GRIDLINES = 4;
+
+/** The y axis ticks from 0 up to a round number at or above `max`, at most MAX_GRIDLINES above 0. */
+export const axisTicks = (max: number, metric: ActivityMetric): number[] => {
+  const steps = metric === 'completions' ? COUNT_STEPS : TIME_STEPS;
+  const step = steps.find(st => Math.ceil(max / st) <= MAX_GRIDLINES) ?? Math.ceil(max / MAX_GRIDLINES);
+  const top = Math.max(Math.ceil(max / step), 1);
+  return Array.from({ length: top + 1 }, (_, i) => i * step);
+};
+
+/** "30m" under an hour, "1.5h" from there, so a label fits the narrow axis. */
+const formatTick = (value: number, metric: ActivityMetric) => {
+  if (metric === 'completions' || value === 0) return String(value);
+  return value < 3600 ? `${value / 60}m` : `${Math.round((value / 3600) * 10) / 10}h`;
+};
+
 const describeBucket = (b: ReportBucket): string =>
   `${b.longLabel}: ${b.tasksCompleted} ${b.tasksCompleted === 1 ? 'task' : 'tasks'}, ` +
   `${b.habitsCompleted} habit ${b.habitsCompleted === 1 ? 'check-in' : 'check-ins'}, ` +
@@ -59,6 +79,8 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
 
   const valueOf = (b: ReportBucket) => (metric === 'completions' ? b.tasksCompleted + b.habitsCompleted : b.noteSeconds);
   const max = Math.max(...buckets.map(valueOf), 0);
+  const ticks = axisTicks(max, metric);
+  const scaleTop = ticks[ticks.length - 1];
   const unit = kind === 'year' ? 'month' : 'day';
   const summary = metric === 'completions'
     ? `Tasks completed and habit check-ins per ${unit}`
@@ -93,39 +115,64 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
         </div>
       ) : (
         <div role="img" aria-label={summary}>
-          <div className="flex items-end h-24 sm:h-36 gap-[2px] sm:gap-1 border-b" style={{ borderColor: 'var(--tm-border)' }} aria-hidden="true">
-            {buckets.map(b => {
-              const total = valueOf(b);
-              const pct = (total / max) * 100;
-              return (
-                <div
-                  key={b.key}
-                  className="flex-1 min-w-0 h-full flex flex-col justify-end rounded-t-sm"
-                  style={{ backgroundColor: b.isCurrent ? 'var(--tm-accent-subtle)' : undefined }}
-                  title={describeBucket(b)}
+          <p className="m-0 mb-1 text-[10px] sm:text-[11px] text-text-muted" aria-hidden="true">
+            {metric === 'completions' ? 'Tasks & habits done' : 'Time in notes'}
+          </p>
+          <div className="flex gap-1.5">
+            <div className="relative w-7 sm:w-8 flex-shrink-0 h-24 sm:h-36" aria-hidden="true">
+              {ticks.map(t => (
+                <span
+                  key={t}
+                  className="absolute right-0 text-[10px] sm:text-[11px] leading-none text-text-muted tabular-nums whitespace-nowrap"
+                  style={{ bottom: `${(t / scaleTop) * 100}%`, transform: 'translateY(50%)' }}
                 >
-                  {metric === 'completions' ? (
-                    <div className="flex flex-col justify-end overflow-hidden rounded-t-sm" style={{ height: `${pct}%`, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }}>
-                      <div style={{ flexGrow: b.habitsCompleted, backgroundColor: HABIT_COLOR }} />
-                      <div style={{ flexGrow: b.tasksCompleted, backgroundColor: TASK_COLOR }} />
+                  {formatTick(t, metric)}
+                </span>
+              ))}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="relative flex items-end h-24 sm:h-36 gap-[2px] sm:gap-1 border-b" style={{ borderColor: 'var(--tm-border)' }} aria-hidden="true">
+                {ticks.slice(1).map(t => (
+                  <span
+                    key={t}
+                    className="absolute inset-x-0 border-t border-dashed pointer-events-none"
+                    style={{ bottom: `${(t / scaleTop) * 100}%`, borderColor: 'var(--tm-border-subtle)' }}
+                  />
+                ))}
+                {buckets.map(b => {
+                  const total = valueOf(b);
+                  const pct = (total / scaleTop) * 100;
+                  return (
+                    <div
+                      key={b.key}
+                      className="relative flex-1 min-w-0 h-full flex flex-col justify-end rounded-t-sm"
+                      style={{ backgroundColor: b.isCurrent ? 'var(--tm-accent-subtle)' : undefined }}
+                      title={describeBucket(b)}
+                    >
+                      {metric === 'completions' ? (
+                        <div className="flex flex-col justify-end overflow-hidden rounded-t-sm" style={{ height: `${pct}%`, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }}>
+                          <div style={{ flexGrow: b.habitsCompleted, backgroundColor: HABIT_COLOR }} />
+                          <div style={{ flexGrow: b.tasksCompleted, backgroundColor: TASK_COLOR }} />
+                        </div>
+                      ) : (
+                        <div className="rounded-t-sm" style={{ height: `${pct}%`, backgroundColor: NOTE_COLOR, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }} />
+                      )}
                     </div>
-                  ) : (
-                    <div className="rounded-t-sm" style={{ height: `${pct}%`, backgroundColor: NOTE_COLOR, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex gap-[2px] sm:gap-1 pt-1" aria-hidden="true">
-            {buckets.map((b, i) => (
-              <span
-                key={b.key}
-                className={`flex-1 min-w-0 text-center text-[10px] sm:text-xs leading-none ${b.isCurrent ? 'font-bold' : ''}`}
-                style={{ color: b.isCurrent ? 'var(--tm-accent)' : 'var(--tm-text-muted)' }}
-              >
-                {showLabel(kind, i) ? b.label : ''}
-              </span>
-            ))}
+                  );
+                })}
+              </div>
+              <div className="flex gap-[2px] sm:gap-1 pt-1" aria-hidden="true">
+                {buckets.map((b, i) => (
+                  <span
+                    key={b.key}
+                    className={`flex-1 min-w-0 text-center text-[10px] sm:text-xs leading-none ${b.isCurrent ? 'font-bold' : ''}`}
+                    style={{ color: b.isCurrent ? 'var(--tm-accent)' : 'var(--tm-text-muted)' }}
+                  >
+                    {showLabel(kind, i) ? b.label : ''}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
           {/* Hidden on a phone to keep the report tabs on one screen. */}
           <p className="hidden sm:block mt-1.5 text-[11px] text-text-muted">
