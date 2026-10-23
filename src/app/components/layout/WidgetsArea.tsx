@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid } from 'lucide-react';
+import { CalendarDays, Shapes } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
 import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/components/common/SegmentedTabs';
@@ -11,7 +11,7 @@ export type WidgetsView = 'widgets' | 'week';
 export const isWidgetsView = (c: unknown): c is WidgetsView => c === 'widgets' || c === 'week';
 
 const TABS: readonly SegmentedTab<WidgetsView>[] = [
-  { value: 'widgets', label: 'Widgets', icon: LayoutGrid },
+  { value: 'widgets', label: 'Widgets', icon: Shapes },
   { value: 'week', label: 'Week calendar', icon: CalendarDays },
 ];
 
@@ -20,7 +20,8 @@ const TABPANEL_ID = 'home-widgets-tabpanel';
 
 /**
  * The home page's widgets section: the widget grid, or the week calendar in
- * its place, switched by the tabs at its top right. The choice is remembered on
+ * its place, switched by the tabs at its top right (the selected one named,
+ * the other an icon). The choice is remembered on
  * this device, per user. The week calendar can be dragged taller for as long
  * as it's showing; switching to the widgets or leaving the page resets it.
  */
@@ -44,6 +45,7 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
           onChange={changeView}
           idBase={TABS_ID}
           panelId={TABPANEL_ID}
+          labels="selected"
         />
       </div>
       <div id={TABPANEL_ID} role="tabpanel" aria-labelledby={segmentedTabId(TABS_ID, view)}>

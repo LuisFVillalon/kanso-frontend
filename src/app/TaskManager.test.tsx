@@ -195,7 +195,7 @@ describe('TaskManager home panels', () => {
 });
 
 describe('TaskManager widgets area', () => {
-  const tab = (name: string) => [...container.querySelectorAll('[role="tab"]')].find(t => t.textContent === name)!;
+  const tab = (name: string) => [...container.querySelectorAll('[role="tab"]')].find(t => (t.getAttribute('aria-label') ?? t.textContent) === name)!;
 
   it('switches between the widgets and the week calendar and remembers the choice per user', async () => {
     await render();

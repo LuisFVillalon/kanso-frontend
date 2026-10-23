@@ -72,6 +72,8 @@ const TaskManager: React.FC = () => {
   );
   // The one panel a phone shows, remembered on this device so it leaves the wide screen's alone.
   const [phonePanel, setPhonePanel] = usePersistedPref<PanelKey>(`tm-home-phone-panel:${dataUserId ?? 'guest'}`, 'tasks', isPanelKey);
+  // The last split on a wide screen, which a panel shown alone goes back to; remembered on this device.
+  const [homeSplit, setHomeSplit] = usePersistedPref<HomePanels>(`tm-home-split:${dataUserId ?? 'guest'}`, DEFAULT_HOME_PANELS, isHomePanels);
   const carouselRef = useRef<PanelCarouselHandle>(null);
   const focusMode = mode === 'focus';
   const doodleMode = mode === 'doodle';
@@ -397,7 +399,7 @@ const TaskManager: React.FC = () => {
             )}
             <HeaderSearch value={searchTerm} onChange={setSearchTerm} className="flex-1 min-w-0 sm:max-w-sm xl:flex-none xl:w-60" />
             <NotificationBell onOpenTask={openNotifiedTask} onOpenHabits={openNotifiedHabits} onOpenMoodCheckin={openMoodCheckin} />
-            <ModeSwitcher mode={mode} onChange={handleModeChange} labels className="w-full sm:w-auto" />
+            <ModeSwitcher mode={mode} onChange={handleModeChange} className="flex-shrink-0" />
           </div>
         </div>
 
@@ -432,12 +434,14 @@ const TaskManager: React.FC = () => {
               </div>
             )}
 
-            {/* Tasks, Notes & Canvas — each on or off, side by side in the resizable split */}
+            {/* Tasks, Notes & Canvas — side by side in the resizable split, hidden ones as rails */}
             <div ref={panelAreaRef} className="space-y-4">
               <PanelCarousel
                 ref={carouselRef}
                 value={homePanels}
                 onChange={setHomePanels}
+                splitValue={homeSplit}
+                onSplitChange={setHomeSplit}
                 phoneValue={phonePanel}
                 onPhoneChange={setPhonePanel}
                 available={homePanelKeys}

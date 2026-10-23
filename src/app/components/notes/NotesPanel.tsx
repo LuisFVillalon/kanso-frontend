@@ -89,7 +89,7 @@ const NotesPanel: React.FC<NotesPanelProps> = ({
       {!isLoading && (notes.length > 0 || tagFilter.length > 0) && (
         <div className="panel-header">
           {tagFilter.length > 0 && (
-            <div role="group" aria-label="Tag filter" className="flex items-center gap-1.5 min-w-0 overflow-x-auto scrollbar-none">
+            <div role="group" aria-label="Tag filter" className="flex items-center gap-1.5 min-w-0 overflow-x-auto overscroll-x-contain scrollbar-none">
               {tagFilter.map(tag => (
                 <button
                   key={tag.id}

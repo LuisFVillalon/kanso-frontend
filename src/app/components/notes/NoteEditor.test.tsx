@@ -248,9 +248,11 @@ describe('NoteEditor toolbar', () => {
   it('presses the k key on the Focus button, then opens focus mode and leaves it with Escape', () => {
     render(vi.fn<Update>().mockResolvedValue(true));
     const focus = byLabel('Focus mode (Ctrl+Shift+F)')!;
-    expect(focus.querySelector('svg .kanso-key-face')).not.toBeNull();
+    // The one-color k key, in the button's ink: no key red.
+    expect(focus.querySelector('svg .kanso-key-face rect')!.getAttribute('fill')).toBe('currentColor');
+    expect(focus.innerHTML).not.toContain('--kanso-key');
     act(() => focus.click());
-    expect(focus.className).toContain('kanso-key-press kanso-key-press-now');
+    expect(focus.className).toContain('key-press-play');
     expect(byLabel('More note actions')).not.toBeNull();
     // Focus mode opens once the key springs back (jsdom never runs the animation, so the fallback).
     act(() => { vi.advanceTimersByTime(600); });

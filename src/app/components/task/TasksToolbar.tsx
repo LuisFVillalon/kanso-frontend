@@ -56,7 +56,7 @@ const TasksToolbar: React.FC<TasksToolbarProps> = ({
       <div
         role="toolbar"
         aria-label="Task list controls"
-        className={`tasks-toolbar scrollbar-none ${compact ? 'flex-nowrap overflow-x-auto' : 'flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible'}`}
+        className={`tasks-toolbar scrollbar-none overscroll-x-contain ${compact ? 'flex-nowrap overflow-x-auto' : 'flex-nowrap overflow-x-auto md:flex-wrap md:overflow-visible'}`}
       >
         <div className="seg flex-shrink-0" role="group" aria-label="Show">
           {SHOWS.map(({ key, label }) => (

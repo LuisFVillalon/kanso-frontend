@@ -549,6 +549,8 @@ html[data-page-style="blank"] body {
   100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes tip-in { from { opacity: 0; } to { opacity: 1; } }
+
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -679,6 +681,26 @@ html[data-page-style="blank"] body {
   animation-delay: 0ms;
 }
 
+/* A toggle pressed by a click (useKeyPress): its icon dips 2 px on the same
+   timing, and a k key's face drops onto its base. Played once, right away. */
+@keyframes key-press-dip {
+  0%   { transform: translateY(0);   animation-timing-function: ease-in; }
+  40%  { transform: translateY(2px); animation-timing-function: ease-out; }
+  100% { transform: translateY(0); }
+}
+
+@keyframes key-press-dip-hold {
+  from, to { transform: translateY(2px); }
+}
+
+.key-press-play svg {
+  animation: key-press-dip 300ms;
+}
+
+.key-press-play .kanso-key-face {
+  animation: kanso-key-press 300ms;
+}
+
 @keyframes kanso-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes kanso-fade-out { from { opacity: 1; } to { opacity: 0; } }
 
@@ -688,6 +710,12 @@ html[data-page-style="blank"] body {
   }
   .kanso-key-press.kanso-key-press-now .kanso-key-face {
     animation-delay: 0ms;
+  }
+  .key-press-play svg {
+    animation: key-press-dip-hold 300ms;
+  }
+  .key-press-play .kanso-key-face {
+    animation: kanso-key-hold 300ms;
   }
   .kanso-key-press.animate-fade-in {
     animation-name: kanso-fade;
@@ -717,6 +745,60 @@ html[data-page-style="blank"] body {
    COMPONENT PRIMITIVES
 ═══════════════════════════════════════════════════════════════════════════ */
 @layer components {
+  /* Tooltip for an icon-only control: data-tip names it, shown below on
+     hover and keyboard focus after a beat, and on a long press (longPressTip
+     sets data-tip-open). data-tip-side="left" puts it beside the control,
+     data-tip-align="end" lines it up with the control's right edge. It isn't
+     rendered while hidden, so it never widens the page. */
+  [data-tip] {
+    position: relative;
+    -webkit-touch-callout: none;
+  }
+  [data-tip]::after {
+    content: attr(data-tip);
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    translate: -50% 0;
+    z-index: 50;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    white-space: nowrap;
+    pointer-events: none;
+    background-color: var(--tm-text-primary);
+    color: var(--tm-bg);
+    box-shadow: var(--tm-shadow-sm);
+  }
+  @media (hover: hover) {
+    [data-tip]:hover::after {
+      display: block;
+      animation: tip-in 120ms ease-out 350ms both;
+    }
+  }
+  [data-tip]:focus-visible::after {
+    display: block;
+    animation: tip-in 120ms ease-out 350ms both;
+  }
+  [data-tip][data-tip-open]::after {
+    display: block;
+    animation: tip-in 120ms ease-out both;
+  }
+  [data-tip-align="end"]::after {
+    left: auto;
+    right: 0;
+    translate: none;
+  }
+  [data-tip-side="left"]::after {
+    top: 50%;
+    left: auto;
+    right: calc(100% + 6px);
+    translate: 0 -50%;
+  }
+
   /* Buttons */
   .btn {
     display: inline-flex;

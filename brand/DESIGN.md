@@ -28,7 +28,7 @@ Files are in `logo/`. Every letter is outlined into a shape, so no font is neede
 Rules:
 - Keep clear space of at least a quarter of the key's width on every side.
 - Never put anything on the key except the k. Never recolor the key outside the files provided, stretch it, rotate it or add effects.
-- Use the flat mark below 48 px. Use the 3D key at 48 px and up.
+- Use the flat mark below 48 px. Use the 3D key at 48 px and up. The one exception is the app's Focus controls (the home page's Focus mode and the notes Focus button), which use the one-color 3D key at icon size in the button's ink (never key red), so its face can press.
 - Always write the product name in lowercase: kanso.
 - The old app mark (lucide's notebook-pen, `kanso-icon.svg`) is retired. Replace every use of it.
 
@@ -39,6 +39,7 @@ Icons are in `icons/`: `favicon.ico`, `favicon.svg`, `favicon-16/32/48/64.png`, 
 The brand's signature motion. The key moves down by 8% of its height (16 units in the 200-unit viewBox), the side strip disappearing under it, then springs back.
 - Use it when the user finishes their day's plan (the daily debrief is fully checked off) and when they enter focus mode (Ctrl + Zen).
 - Timing: 120 ms down (ease-in), 180 ms back up (ease-out). Play it once, never loop.
+- A smaller version plays on the home page's toggles when clicked (`.key-press-play`): the icon dips 2 px on the same timing, and the Focus k key's face drops. The full moment, with its line of copy, stays reserved for the two moments above.
 - With `prefers-reduced-motion: reduce`, skip the motion and show the pressed frame for 300 ms.
 - Copy for the day-complete moment: "Done. Your day, settled."
 
