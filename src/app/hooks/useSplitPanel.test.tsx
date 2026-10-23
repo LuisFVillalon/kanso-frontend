@@ -167,10 +167,14 @@ describe('useSplitPanel widths', () => {
   let movable: (count: number) => boolean;
 
   // The split is 1200px wide, so 120px is 10% of it and a 240px column 20%.
-  const WidthProbe: React.FC<{ onWidths: (w: (count: number) => number[]) => void; width?: number }> = ({ onWidths, width = 1200 }) => {
+  const WidthProbe: React.FC<{
+    onWidths: (w: (count: number) => number[]) => void;
+    onMovable: (m: (count: number) => boolean) => void;
+    width?: number;
+  }> = ({ onWidths, onMovable, width = 1200 }) => {
     const { panelWidths, dividersMovable, splitContainerRef, panelAreaRef, handleDividerPointerDown } = useSplitPanel();
     onWidths(panelWidths);
-    movable = dividersMovable;
+    onMovable(dividersMovable);
     return (
       <div ref={panelAreaRef} data-width={width}>
         <div ref={splitContainerRef} data-width={width}>
@@ -192,7 +196,7 @@ describe('useSplitPanel widths', () => {
   };
 
   beforeEach(async () => {
-    await act(async () => root.render(<WidthProbe onWidths={w => { widths = w; }} />));
+    await act(async () => root.render(<WidthProbe onWidths={w => { widths = w; }} onMovable={m => { movable = m; }} />));
   });
 
   it('splits evenly until a divider is dragged', () => {
@@ -221,7 +225,7 @@ describe('useSplitPanel widths', () => {
   });
 
   it('moves the three columns\' dividers on a laptop-sized split', async () => {
-    await act(async () => root.render(<WidthProbe width={950} onWidths={w => { widths = w; }} />));
+    await act(async () => root.render(<WidthProbe width={950} onWidths={w => { widths = w; }} onMovable={m => { movable = m; }} />));
     await act(async () => { window.dispatchEvent(new Event('resize')); });
     expect(movable(3)).toBe(true);
     await drag('divider-0', 0);
@@ -234,7 +238,7 @@ describe('useSplitPanel widths', () => {
     await drag('divider-0', 0);
     await drag('divider-1', 480);
     expect(widths(3)).toEqual([20, 20, 60]);
-    await act(async () => root.render(<WidthProbe width={950} onWidths={w => { widths = w; }} />));
+    await act(async () => root.render(<WidthProbe width={950} onWidths={w => { widths = w; }} onMovable={m => { movable = m; }} />));
     await act(async () => { window.dispatchEvent(new Event('resize')); });
     const px = widths(3).map(w => w * 9.5);
     expect(px[0]).toBeCloseTo(240);
@@ -246,7 +250,7 @@ describe('useSplitPanel widths', () => {
 
   it('keeps three columns even, without movable dividers, on a split too narrow for 240px each', async () => {
     await drag('divider-0', 120);
-    await act(async () => root.render(<WidthProbe width={700} onWidths={w => { widths = w; }} />));
+    await act(async () => root.render(<WidthProbe width={700} onWidths={w => { widths = w; }} onMovable={m => { movable = m; }} />));
     await act(async () => { window.dispatchEvent(new Event('resize')); });
     expect(movable(3)).toBe(false);
     expect(movable(2)).toBe(true);
