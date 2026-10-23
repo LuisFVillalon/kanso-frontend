@@ -407,6 +407,27 @@ describe('CalendarReportView mood', () => {
       expect(buttonLabelled(/^Week of Sep 14: no weekly check-in\. Log it$/)).toBeDefined();
     });
 
+    it('drops the first "Saved" Undo once that week is edited, after the empty state ends', async () => {
+      api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { weekly: true } });
+      api.fetchMoodCheckins.mockResolvedValue([]);
+      api.saveMoodCheckin.mockImplementation(async (body: MoodCheckin) => ({ ...week(body.period_start, body.mood), ...body }));
+      await render();
+      await click(buttonLabelled(/^Month$/));
+      await click(buttonLabelled(/^Previous month$/));
+      await click(buttonLabelled(/^Week of Sep 14: no weekly check-in/));
+      await click(buttonLabelled(/^Good$/));
+      await click(buttonLabelled(/^Save check-in$/));
+      expect(text()).toContain('Saved · Good');
+
+      await click(buttonLabelled(/^Week of Sep 14: Good\. Edit$/));
+      await click(buttonLabelled(/^Low$/));
+      await click(buttonLabelled(/^Save changes$/));
+      expect(text()).toContain('Check-in updated.');
+      expect(text()).not.toContain('Saved · Good');
+      expect([...document.body.querySelectorAll('button')].filter(b => b.textContent === 'Undo')).toHaveLength(1);
+      expect(api.deleteMoodCheckin).not.toHaveBeenCalled();
+    });
+
     it('offers the months of a year with no check-ins of any kind, and logs one', async () => {
       api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: { monthly: true } });
       api.fetchMoodCheckins.mockResolvedValue([]);

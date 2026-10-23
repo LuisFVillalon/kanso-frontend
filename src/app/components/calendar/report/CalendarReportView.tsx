@@ -273,6 +273,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
 
   const moodSection = (
     <ReportMoodSection
+      key="mood"
       period={period}
       report={report}
       activity={activity}
