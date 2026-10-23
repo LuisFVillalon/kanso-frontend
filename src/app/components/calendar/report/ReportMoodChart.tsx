@@ -66,6 +66,20 @@ const LegendDash: React.FC<{ label: string }> = ({ label }) => (
   </span>
 );
 
+const LegendHollow: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+    <span className="w-2.5 h-2.5 rounded-full border-[1.5px] border-dashed" style={{ borderColor: moodColor(4) }} />
+    {label}
+  </span>
+);
+
+const LegendBand: React.FC<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+    <span className="w-2 h-3 rounded-full" style={{ backgroundColor: `color-mix(in srgb, ${moodColor(4)} 18%, transparent)` }} />
+    {label}
+  </span>
+);
+
 const LegendFaded: React.FC<{ label: string }> = ({ label }) => (
   <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
     <span className="w-2.5 h-2.5 rounded-full opacity-35" style={{ backgroundColor: moodColor(4) }} />
@@ -171,6 +185,9 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       })
     : [];
   const hasFaded = isYear && rows.some(r => r.months.some(m => m.n > 0 && m.n < YEAR_FADE_DAYS));
+  const hasBand = isYear && rows.some(r => r.months.some(m => m.n > 0));
+  const hasHollow = !isYear && buckets.some(b => !b.isFuture && !byDay.has(b.key));
+  const hasMarks = isYear || period.kind === 'month' || hasHollow || weekSpans.length > 0;
 
   const dotSize = period.kind === 'week' ? 'w-3 h-3' : isYear ? 'w-2.5 h-2.5' : 'w-2 h-2';
   const hollowSize = period.kind === 'week' ? 'w-2.5 h-2.5' : 'w-2 h-2';
@@ -376,21 +393,23 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-2">
         <p className="text-xs text-text-secondary">
-          Each line is one feeling from your daily check-ins; line them up to see how they move together.
+          Mood, energy and stress from your daily check-ins, one line each.
         </p>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <LegendDot color={moodColor(4)} label="Mood" />
           <LegendDot color="var(--tm-accent)" label="Energy" />
           <LegendDot color="var(--tm-accent-2)" label="Stress" />
-          {(isYear || period.kind === 'month' || weekSpans.length > 0) && <span className="w-px h-3 bg-border" aria-hidden="true" />}
+          {hasMarks && <span className="w-px h-3 bg-border" aria-hidden="true" />}
           {isYear ? (
             <>
-              <LegendLine label="Month’s typical" />
+              <LegendLine label="How the month felt" />
+              {hasBand && <LegendBand label="Most days fell here" />}
               {hasFaded && <LegendFaded label={`Fewer than ${YEAR_FADE_DAYS} days`} />}
-              {monthCheckins.size > 0 && <LegendDiamond label="Monthly check-in" />}
+              {monthCheckins.size > 0 && <LegendDiamond label="Monthly check-in (click to edit)" />}
             </>
           ) : (
             <>
+              {hasHollow && <LegendHollow label="No check-in yet" />}
               {period.kind === 'month' && <LegendLine label="7-day trend" />}
               {weekSpans.length > 0 && <LegendDash label="Weekly check-in" />}
             </>
@@ -534,8 +553,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
       <p className="text-[11px] text-text-muted">
         {isYear
-          ? `Each dot is the month’s typical value; the shaded bar shows where half of its days fell, leaving out the highest and lowest days. Faded months have fewer than ${YEAR_FADE_DAYS} days logged, so read them loosely${monthCheckins.size > 0 ? '; ◇ marks the monthly check-in — click it to edit' : ''}. Point at a month to compare all three, and click it to open it.`
-          : `Point at a day to see all three; click it to edit that day’s check-in, or log one where the dot is hollow.${period.kind === 'month' ? ' Each line evens out day-to-day ups and downs: a point is your typical value over that day and the 6 before it, shown once 3 of those days have one.' : ''} Energy and stress are optional, so a day without them is a gap.${weekSpans.length > 0 ? ' Dashed lines are weekly check-ins.' : ''} Stress at the top means more stress.`}
+          ? 'Each dot shows how a month felt overall. Point at a month to compare all three, and click it to open it.'
+          : `${period.kind === 'month' ? 'Each line shows your trend over the past week.' : 'Each line shows how you felt day to day.'} Point at a day to compare all three, and click it to edit or log it. A break in energy or stress means you skipped it that day.`}
       </p>
     </div>
   );
