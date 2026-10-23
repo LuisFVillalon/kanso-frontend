@@ -205,7 +205,8 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Moderate link');
     expect(text()).toContain('↑ together');
     expect(text()).toContain('Shows what tends to move together — not what causes what.');
-    expect(text()).toContain('ρ = 1.00');
+    expect(text()).toContain('the more they match, the stronger the link');
+    expect(text()).not.toMatch(/ρ|Spearman/);
 
     await click(buttonLabelled(/^Day by day$/));
     expect(container.querySelector('svg[aria-label="Habits completed per day with mood"]')).not.toBeNull();
@@ -216,7 +217,7 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('your usual 3.0 · Okay');
     expect(text()).toContain('+1.5');
     expect(text()).toContain('On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
-    expect(text()).toContain('Your usual is your average mood across all 20 check-ins this month.');
+    expect(text()).toContain('Your usual is your typical mood across all 20 check-ins this month.');
     expect(text()).not.toContain('overall');
   });
 
@@ -253,7 +254,7 @@ describe('CalendarReportView mood', () => {
     await render();
     await openTab('Mood');
     await click(buttonLabelled(/^Year$/));
-    await click(buttonLabelled(/^October: average mood 3\.0/));
+    await click(buttonLabelled(/^October: typical mood 3\.0/));
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
   });
 
@@ -359,7 +360,7 @@ describe('CalendarReportView mood', () => {
       expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-01-01', '2026-12-31');
 
       expect(text()).toContain('Monthly check-in');
-      expect(buttonLabelled(/^September: average mood 3\.0 across 1 day\. Monthly check-in: Low · “Grind”\. Open September$/)).toBeDefined();
+      expect(buttonLabelled(/^September: typical mood 3\.0 across 1 day\. Monthly check-in: Low · “Grind”\. Open September$/)).toBeDefined();
       expect(text()).toContain('Months in a word');
       expect(text()).not.toContain('Weekly check-ins');
       expect(buttonLabelled(/^September: Low, “Grind”\. Edit$/)).toBeDefined();

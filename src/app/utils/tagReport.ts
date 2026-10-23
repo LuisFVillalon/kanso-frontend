@@ -12,7 +12,6 @@
 
 import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
-import { elapsedDays, shiftPeriod, type ReportPeriod } from '@/app/utils/calendarReport';
 
 export type TagMeasure = 'time' | 'count';
 
@@ -197,13 +196,12 @@ const addShare = (row: TagRow, item: TagReportItem, value: number) => {
  * Shares each item's value out among its tags. An item with several tags is
  * split evenly between them, so the rows always add up to `total`; one with
  * none goes to Untagged. Past MAX_TAG_ROWS tags, the smaller ones fold into
- * one "Other tags (n)" row unless `fold` is off.
+ * one "Other tags (n)" row.
  */
 export const buildTagBreakdown = (
   items: TagReportItem[],
   measure: TagMeasure,
   kinds: Record<TagItemKind, boolean>,
-  { fold = true }: { fold?: boolean } = {},
 ): TagBreakdown => {
   const tags = new Map<string, TagRow>();
   const untagged = newRow(UNTAGGED_KEY, 'Untagged', null);
@@ -231,7 +229,7 @@ export const buildTagBreakdown = (
   }
 
   const tagRows = [...tags.values()].sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
-  const rows = fold && tagRows.length > MAX_TAG_ROWS ? tagRows.slice(0, MAX_TAG_ROWS) : tagRows;
+  const rows = tagRows.length > MAX_TAG_ROWS ? tagRows.slice(0, MAX_TAG_ROWS) : tagRows;
   if (rows.length < tagRows.length) {
     const rest = tagRows.slice(MAX_TAG_ROWS);
     const other = newRow(OTHER_KEY, `Other tags (${rest.length})`, null);
@@ -241,32 +239,4 @@ export const buildTagBreakdown = (
   }
   if (untagged.total > 0) rows.push(untagged);
   return { total, rows };
-};
-
-/** A row's total in another breakdown — for Other tags, the tags it folded in. */
-export const rowTotalIn = (row: TagRow, breakdown: TagBreakdown): number => {
-  const keys = row.foldedKeys ?? [row.key];
-  return breakdown.rows.filter(r => keys.includes(r.key)).reduce((sum, r) => sum + r.total, 0);
-};
-
-export interface ComparisonRange {
-  start: Date;
-  end: Date;
-  /** Cut to the days this period has had so far, because it's still running. */
-  partial: boolean;
-}
-
-/**
- * The period before `period` to compare against: all of it once `period` is
- * over, otherwise only as many days as `period` has had so far. Null for a
- * period that hasn't started.
- */
-export const comparisonRange = (period: ReportPeriod, now: Date = new Date()): ComparisonRange | null => {
-  const elapsed = elapsedDays(period, now);
-  if (elapsed === 0) return null;
-  const previous = shiftPeriod(period, -1);
-  const full = startOfDay(now) > period.end;
-  if (full) return { start: previous.start, end: previous.end, partial: false };
-  const end = new Date(previous.start.getFullYear(), previous.start.getMonth(), previous.start.getDate() + elapsed - 1);
-  return { start: previous.start, end: end < previous.end ? end : previous.end, partial: true };
 };

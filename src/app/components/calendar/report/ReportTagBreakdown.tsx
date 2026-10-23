@@ -4,14 +4,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ChevronRight, CircleCheck, FileText, Repeat, Tag as TagIcon } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
 import { formatHours } from '@/app/components/stats/charts';
-import { useTagComparison } from '@/app/hooks/useTagComparison';
 import type { CalendarActivity } from '@/app/types/activity';
 import { formatDurationShort, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import type { ReportPeriod } from '@/app/utils/calendarReport';
 import {
   buildTagBreakdown,
   collectTagItems,
-  rowTotalIn,
   TAG_ITEM_KINDS,
   UNTAGGED_KEY,
   type TagBreakdown,
@@ -53,23 +51,6 @@ const kindCount = (kind: TagItemKind, n: number) =>
 
 const periodWord = (period: ReportPeriod) => (period.kind === 'year' ? `in ${period.start.getFullYear()}` : `this ${period.kind}`);
 
-interface Delta {
-  previous: TagBreakdown;
-  partial: boolean;
-}
-
-/** "↑ 2.5h vs last week, same days" · "new vs last month" · "same as last year". */
-const describeDelta = (row: TagRow, current: number, delta: Delta, period: ReportPeriod, measure: TagMeasure): string => {
-  const last = period.kind === 'year' ? 'last year' : `last ${period.kind}`;
-  const previous = rowTotalIn(row, delta.previous);
-  const sameDays = delta.partial ? ', same days' : '';
-  if (previous <= 0) return `new vs ${last}`;
-  const diff = current - previous;
-  const tiny = measure === 'time' ? Math.abs(diff) < 1 / 60 : Math.abs(diff) < 0.5;
-  if (tiny) return `same as ${last}${sameDays}`;
-  return `${diff > 0 ? '↑' : '↓'} ${formatValue(Math.abs(diff), measure)} vs ${last}${sameDays}`;
-};
-
 // ── Pieces ──────────────────────────────────────────────────────────────────
 
 const Swatch: React.FC<{ color: string; size?: string }> = ({ color, size = 'w-2.5 h-2.5' }) => (
@@ -96,11 +77,10 @@ interface OverviewProps {
   measure: TagMeasure;
   kinds: Record<TagItemKind, boolean>;
   period: ReportPeriod;
-  delta: Delta | null;
   onOpen: (key: string) => void;
 }
 
-const Overview: React.FC<OverviewProps> = ({ breakdown, measure, kinds, period, delta, onOpen }) => {
+const Overview: React.FC<OverviewProps> = ({ breakdown, measure, kinds, period, onOpen }) => {
   const { rows, total } = breakdown;
   const top = rows.find(r => r.key !== UNTAGGED_KEY && !r.foldedKeys);
   const max = Math.max(...rows.map(r => r.total));
@@ -133,13 +113,14 @@ const Overview: React.FC<OverviewProps> = ({ breakdown, measure, kinds, period, 
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[11px] text-text-muted" aria-hidden="true">
+      <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-[11px] text-text-muted">
         {TAG_ITEM_KINDS.filter(k => kinds[k]).map(k => (
-          <span key={k} className="inline-flex items-center gap-1.5">
+          <span key={k} className="inline-flex items-center gap-1.5" aria-hidden="true">
             <span className="w-3.5 h-2 rounded-sm" style={{ backgroundColor: tint('var(--tm-text-secondary)', KIND_TINT[k]) }} />
             {KIND_LABEL[k]}
           </span>
         ))}
+        <span className="ml-auto">Tap a tag to see its tasks, notes and habits.</span>
       </div>
 
       <ul className="flex flex-col gap-0.5 m-0 p-0 list-none">
@@ -173,9 +154,6 @@ const Overview: React.FC<OverviewProps> = ({ breakdown, measure, kinds, period, 
                 <span className="text-right whitespace-nowrap">
                   <span className="text-sm sm:text-base font-bold text-text-primary">{formatValue(row.total, measure)}</span>
                   <span className="text-xs text-text-muted ml-1.5">{pct}%</span>
-                  {delta && (
-                    <span className="block text-[11px] text-text-muted">{describeDelta(row, row.total, delta, period, measure)}</span>
-                  )}
                 </span>
               </button>
             </li>
@@ -234,11 +212,10 @@ interface DetailProps {
   measure: TagMeasure;
   kinds: Record<TagItemKind, boolean>;
   period: ReportPeriod;
-  delta: Delta | null;
   onBack: () => void;
 }
 
-const Detail: React.FC<DetailProps> = ({ row, total, measure, kinds, period, delta, onBack }) => {
+const Detail: React.FC<DetailProps> = ({ row, total, measure, kinds, period, onBack }) => {
   const [showAll, setShowAll] = useState<Partial<Record<TagItemKind, boolean>>>({});
   const backRef = useRef<HTMLButtonElement>(null);
   useEffect(() => backRef.current?.focus(), []);
@@ -262,7 +239,6 @@ const Detail: React.FC<DetailProps> = ({ row, total, measure, kinds, period, del
         <span className="font-display text-2xl sm:text-3xl text-text-primary">{formatValue(row.total, measure)}</span>
         <span className="text-xs sm:text-sm text-text-secondary">
           {percent(row.total, total)}% of your {measure === 'time' ? 'time' : 'things done'} {periodWord(period)}
-          {delta && ` · ${describeDelta(row, row.total, delta, period, measure)}`}
         </span>
       </p>
       {row.key === UNTAGGED_KEY && (
@@ -342,7 +318,6 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
   const [kinds, setKinds] = useState<Record<TagItemKind, boolean>>({ task: true, note: true, habit: true });
   const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
   const [open, setOpen] = useState<{ periodKey: string; key: string } | null>(null);
-  const comparison = useTagComparison(period);
 
   const items = useMemo(
     () => collectTagItems(activity, period.start, period.end),
@@ -351,11 +326,6 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
     [activity, periodKey],
   );
   const breakdown = useMemo(() => buildTagBreakdown(items, measure, kinds), [items, measure, kinds]);
-  const delta = useMemo<Delta | null>(() => {
-    if (!comparison) return null;
-    const previous = collectTagItems(comparison.activity, comparison.start, comparison.end);
-    return { previous: buildTagBreakdown(previous, measure, kinds, { fold: false }), partial: comparison.partial };
-  }, [comparison, measure, kinds]);
 
   const openKey = open?.periodKey === periodKey ? open.key : null;
   const openRow = openKey ? breakdown.rows.find(r => r.key === openKey) ?? null : null;
@@ -424,7 +394,6 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
               measure={measure}
               kinds={kinds}
               period={period}
-              delta={delta}
               onBack={() => setOpen(null)}
             />
           ) : (
@@ -441,7 +410,6 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
             measure={measure}
             kinds={kinds}
             period={period}
-            delta={delta}
             onOpen={key => setOpen({ periodKey, key })}
           />
         ) : (
