@@ -525,6 +525,27 @@ describe('CanvasPanel', () => {
       expect(addToTasks.add).toHaveBeenCalledWith(expect.anything(), [own]);
     });
 
+    it("keeps a class's saved tags when its task is added with none", async () => {
+      api.fetchCanvasCourseTags.mockResolvedValue([{ course_id: 460, tags: [own] }]);
+      await renderWithAdd();
+      await click(button('Add "Homework 5" to tasks'));
+      await click(button('Remove Exam prep'));
+      await click(button('Add task'));
+      expect(addToTasks.add).toHaveBeenCalledWith(expect.anything(), []);
+      expect(api.saveCanvasCourseTags).not.toHaveBeenCalled();
+      expect(dialog()).toBeNull();
+    });
+
+    it("forgets a class's saved tags when unticked, even with no tags", async () => {
+      api.fetchCanvasCourseTags.mockResolvedValue([{ course_id: 460, tags: [own] }]);
+      await renderWithAdd();
+      await click(button('Add "Homework 5" to tasks'));
+      await click(dialog()!.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+      await click(button('Remove Exam prep'));
+      await click(button('Add task'));
+      expect(api.saveCanvasCourseTags).toHaveBeenCalledWith(460, []);
+    });
+
     it("chooses a class's tags from its card, creating a new tag first", async () => {
       await renderWithAdd();
       await click(button('Classes'));

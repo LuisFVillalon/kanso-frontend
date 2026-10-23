@@ -156,7 +156,7 @@ describe('CanvasAddSheet', () => {
     expect(remember.disabled).toBe(true);
     expect(container.textContent).toContain('Remembering tags for CS 460-01 needs at least one tag.');
     await click(button('Add task')!);
-    expect(onConfirm).toHaveBeenCalledWith([], false);
+    expect(onConfirm).toHaveBeenCalledWith([], true);
   });
 
   it('offers no remembering for an item without a class', async () => {

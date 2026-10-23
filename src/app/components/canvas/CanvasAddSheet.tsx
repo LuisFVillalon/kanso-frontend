@@ -118,7 +118,7 @@ const CanvasAddSheet: React.FC<CanvasAddSheetProps> = ({
     if (busy || (mode === 'class' && empty)) return;
     setBusy(true);
     try {
-      await onConfirm(selected, canRemember && remember && !empty);
+      await onConfirm(selected, canRemember && remember);
     } finally {
       setBusy(false);
     }
