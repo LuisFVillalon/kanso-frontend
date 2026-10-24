@@ -16,10 +16,9 @@ import {
   occurrenceKey,
   occurrenceMinutesOn,
   occurrenceSpanOn,
-  repeatLabel,
   timeToMinutes,
 } from '@/app/utils/eventOccurrences';
-import { eventColor } from '@/app/utils/events';
+import { eventColor, repeatText } from '@/app/utils/events';
 import { useNoteTimeTotalsForRange, useNoteTimeTotalsByDay } from '@/app/hooks/useNoteTimeTotals';
 import TagChipList from '@/app/components/common/TagChipList';
 import { CategoryDonutChart, WeekTrendLineChart, type ChartCategory, type DayPoint } from './DayCharts';
@@ -190,7 +189,7 @@ const StatusChip: React.FC<{ children: React.ReactNode; muted?: boolean }> = ({ 
  */
 function EventItem({ event, compact = false }: { event: EventOccurrence; compact?: boolean }) {
   const color = eventColor(event.tags);
-  const repeat = repeatLabel(event);
+  const repeat = repeatText(event);
   const description = event.description?.trim() ?? '';
   return (
     <div

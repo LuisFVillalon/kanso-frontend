@@ -65,8 +65,8 @@ describe('DaySummary events', () => {
     expect(headings.indexOf('Events')).toBeLessThan(headings.indexOf('Habits completed'));
     expect(rows[2].textContent).toContain('1:00 – 3:50 PM');
     expect(rows[2].textContent).toContain('Bring the charcoal set');
-    expect(rows[2].textContent).toContain('Weekly');
-    expect(rows[1].textContent).toContain('Every 2 weeks');
+    expect(rows[2].textContent).toContain('Weekly on Fri');
+    expect(rows[1].textContent).toContain('Every 2 weeks on Mon, Wed and Fri');
     expect(rows[1].textContent).toContain('Past');
     expect(rows[0].textContent).toContain('Archived');
   });

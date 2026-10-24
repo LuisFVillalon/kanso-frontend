@@ -554,7 +554,9 @@ function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: R
   const completedItems = collectCompletedItems(debrief);
   const totalMinutes = completedItems.reduce((sum, i) => sum + i.minutes, 0);
   // A rest day has no capacity to measure against, so the log just counts.
-  const availableMinutes = workload.is_rest_day ? null : workload.available_minutes;
+  // Finished events are in the log, so it is measured against the whole work window.
+  const windowMinutes = workload.window_minutes ?? 0;
+  const availableMinutes = workload.is_rest_day ? null : (windowMinutes > 0 ? windowMinutes : workload.available_minutes);
 
   const tagBuckets = bucketByTag(completedItems, item => item.minutes);
   const tagTotal = tagBuckets.reduce((sum, b) => sum + b.value, 0);
@@ -565,11 +567,7 @@ function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: R
   }));
 
   const pct = availableMinutes ? (totalMinutes / availableMinutes) * 100 : null;
-  // Event time in the work window comes out of today's capacity; say so.
-  const eventMinutes = workload.event_minutes ?? 0;
-  const capacityNote = eventMinutes > 0 && workload.window_minutes != null
-    ? `${formatMinutes(workload.window_minutes)} window − ${formatMinutes(eventMinutes)} of events`
-    : null;
+  const capacityNote = windowMinutes > 0 ? `of your ${formatMinutes(windowMinutes)} work window` : null;
   const overCap = availableMinutes != null && totalMinutes > availableMinutes;
   const barPct = pct != null ? Math.min(Math.max(pct, 0), 100) : (totalMinutes > 0 ? 100 : 0);
   const barColor = overCap ? 'var(--tm-danger)' : (pct != null && pct >= 70 ? 'var(--tm-warning)' : 'var(--tm-success)');

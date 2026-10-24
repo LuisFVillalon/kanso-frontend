@@ -435,15 +435,34 @@ describe('TaskDebriefPanel events', () => {
     expect(scheduleCard()!.textContent).toContain('Now: ART 157 Studio until 3:50 PM');
   });
 
-  it("logs the events that have passed by their tags, against capacity left after events", async () => {
+  it("logs the events that have passed by their tags, against the whole work window", async () => {
     await render();
     const log = activityLogCard()!;
-    expect(log.textContent).toContain('1h 50m / 6h 20m');
-    expect(log.textContent).toContain('29% of today\'s capacity used');
-    expect(log.textContent).toContain('10h window − 3h 40m of events');
+    expect(log.textContent).toContain('1h 50m / 10h');
+    expect(log.textContent).toContain('18% of today\'s capacity used');
+    expect(log.textContent).toContain('of your 10h work window');
     expect(log.textContent).toContain('Event: CS 460 Lecture');
     expect(log.textContent).toContain('Health');
     expect(log.textContent).not.toContain('Studio');
+  });
+
+  it('counts a finished event once against the work window', async () => {
+    const meeting = event('Planning', '08:00', '12:00', [cs], { past: true });
+    api.fetchTaskDebrief.mockResolvedValue({
+      ...workday,
+      completed_today_tasks: [{ id: 1, title: 'Draft', priority: null, due_date: null, due_time: null, category: null, estimated_time: 0.5, tags: [] }],
+      workload: {
+        is_rest_day: false, window_minutes: 480, event_minutes: 240, available_minutes: 240,
+        committed_minutes: 0, free_minutes: 240, utilization_pct: 0, is_overcommitted: false,
+      },
+      events_today: [meeting],
+      passed_events_today: [meeting],
+    });
+    await render();
+    const log = activityLogCard()!.textContent ?? '';
+    expect(log).toContain('4h 30m / 8h');
+    expect(log).toContain('56% of today\'s capacity used');
+    expect(log).not.toContain('Overcommitted');
   });
 
   it("puts today's live events in the time allocation bar by tag", async () => {

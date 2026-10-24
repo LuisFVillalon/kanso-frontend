@@ -10,7 +10,6 @@ import {
   occurrenceSpanOn,
   occurrencesByDay,
   occurrencesStartingOn,
-  repeatLabel,
 } from './eventOccurrences';
 
 const occurrence = (overrides: Partial<EventOccurrence> = {}): EventOccurrence => ({
@@ -94,9 +93,6 @@ describe('formatting', () => {
   });
 
   it('names how a series repeats', () => {
-    expect(repeatLabel(occurrence())).toBeNull();
-    expect(repeatLabel(occurrence({ repeat_days: [1, 3, 5] }))).toBe('Weekly');
-    expect(repeatLabel(occurrence({ repeat_days: [2], repeat_interval: 2 }))).toBe('Every 2 weeks');
     expect(describeRepeat({ repeat_days: [5, 1, 3], repeat_interval: 1, start_date: '2026-08-24' })).toBe('Weekly on Mon, Wed and Fri');
     expect(describeRepeat({ repeat_days: [1, 2, 3, 4, 5], repeat_interval: 1, start_date: '2026-08-24' })).toBe('Weekly on weekdays');
     expect(describeRepeat({ repeat_days: [2], repeat_interval: 2, start_date: '2026-08-24' })).toBe('Every 2 weeks on Tue');

@@ -82,12 +82,6 @@ export function formatEventTime(o: Pick<EventOccurrence, 'all_day' | 'start_time
 /** "10 AM" or "10:30 AM": a time with no ":00" for whole hours. */
 export const formatClock = (time: string) => formatTime12Hour(time).replace(':00 ', ' ');
 
-/** "Weekly" or "Every 2 weeks" for a repeating event; null for a one-off. */
-export function repeatLabel(o: Pick<EventOccurrence, 'repeat_days' | 'repeat_interval'>): string | null {
-  if (o.repeat_days.length === 0) return null;
-  return o.repeat_interval > 1 ? `Every ${o.repeat_interval} weeks` : 'Weekly';
-}
-
 /** How a series repeats, in words ("Weekly on Mon, Wed and Fri"), or the one day of a one-off. */
 export function describeRepeat(e: Pick<CalendarEvent, 'repeat_days' | 'repeat_interval' | 'start_date'>): string {
   return repeatText(e)
