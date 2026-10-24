@@ -123,17 +123,25 @@ interface ReportTagKindsProps {
 const ReportTagKinds: React.FC<ReportTagKindsProps> = ({ days, counts, period, scopeLabel, widen, wide }) => {
   const seedKey = `${toLocalDateStr(period.start)}|${toLocalDateStr(period.end)}`;
   const tags = useMemo(() => kindTags(days, counts.byDay, counts.tags).slice(0, MAX_CHART_TAGS), [days, counts]);
-  const fallback = useMemo(
-    () => defaultKindTag(tags, key => analyseTagKinds(days, counts.byDay, key, seedKey)),
-    [tags, days, counts, seedKey],
-  );
+  const { fallback, found } = useMemo(() => {
+    const found = new Map<string, KindComparison[]>();
+    const fallback = defaultKindTag(tags, key => {
+      const rows = analyseTagKinds(days, counts.byDay, key, seedKey);
+      found.set(key, rows);
+      return rows;
+    });
+    return { fallback, found };
+  }, [tags, days, counts, seedKey]);
   const [picked, setPicked] = useState<string | null>(null);
   const [open, setOpen] = useState<ActivityKind | null>(null);
 
   const week = period.kind === 'week';
   const tagKey = tags.some(t => t.tag.key === picked) ? picked! : fallback;
   const tag = tags.find(t => t.tag.key === tagKey)?.tag ?? null;
-  const rows = useMemo(() => (tagKey ? analyseTagKinds(days, counts.byDay, tagKey, seedKey) : []), [tagKey, days, counts, seedKey]);
+  const rows = useMemo(
+    () => (tagKey ? found.get(tagKey) ?? analyseTagKinds(days, counts.byDay, tagKey, seedKey) : []),
+    [tagKey, found, days, counts, seedKey],
+  );
 
   return (
     <>
