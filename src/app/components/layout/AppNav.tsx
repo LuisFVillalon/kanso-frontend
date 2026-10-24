@@ -4,8 +4,8 @@ import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Archive, Blocks, CalendarDays, ChartColumn, Ellipsis, FilePlus, FolderCog, House, LogOut, Moon, NotebookText,
-  PanelLeftClose, PanelLeftOpen, Plus, Settings, SquarePlus, Sun, Trash2, type LucideIcon,
+  Archive, Blocks, CalendarDays, CalendarPlus, ChartColumn, Ellipsis, FilePlus, FolderCog, House, LogOut, Moon, NotebookText,
+  PanelLeftClose, PanelLeftOpen, Plus, Settings, SquarePlus, Sun, Tag as TagIcon, Trash2, type LucideIcon,
 } from 'lucide-react';
 import Logo from '@/app/components/common/Logo';
 import { KansoMark } from '@/app/components/common/KansoLogo';
@@ -49,6 +49,8 @@ interface AppNavProps {
   onNewTask: () => void;
   onNewNote: () => void;
   onNewHabit: () => void;
+  onNewEvent: () => void;
+  onNewTag: () => void;
   onSettings: () => void;
   onManageTags: () => void;
   onManageHabits: () => void;
@@ -204,7 +206,7 @@ const SheetRow: React.FC<{
  */
 const AppNav: React.FC<AppNavProps> = ({
   expanded, onToggleExpanded, profileName, profileAvatar, email, isDemo,
-  onNewTask, onNewNote, onNewHabit, onSettings, onManageTags, onManageHabits, onLogout,
+  onNewTask, onNewNote, onNewHabit, onNewEvent, onNewTag, onSettings, onManageTags, onManageHabits, onLogout,
 }) => {
   const pathname = usePathname() ?? '/';
   const newMenu = useMenu();
@@ -241,7 +243,9 @@ const AppNav: React.FC<AppNavProps> = ({
             <div {...newMenu.menuProps} aria-label="Create" className="menu-pop rail-pop-new">
               <MenuRow icon={SquarePlus} label="New task" kbd="T" onSelect={fromMenu(newMenu, onNewTask)} />
               <MenuRow icon={FilePlus} label="New note" kbd="N" onSelect={fromMenu(newMenu, onNewNote)} />
+              <MenuRow icon={CalendarPlus} label="New event" onSelect={fromMenu(newMenu, onNewEvent)} />
               <MenuRow icon={Blocks} label="New habit" onSelect={fromMenu(newMenu, onNewHabit)} />
+              <MenuRow icon={TagIcon} label="New tag" onSelect={fromMenu(newMenu, onNewTag)} />
             </div>
           )}
         </div>
@@ -316,7 +320,9 @@ const AppNav: React.FC<AppNavProps> = ({
           <p className="px-2 pb-1.5 text-[0.6875rem] font-bold uppercase tracking-wide text-text-muted">Create</p>
           <SheetRow icon={SquarePlus} label="New task" onClick={fromSheet(onNewTask)} />
           <SheetRow icon={FilePlus} label="New note" onClick={fromSheet(onNewNote)} />
+          <SheetRow icon={CalendarPlus} label="New event" onClick={fromSheet(onNewEvent)} />
           <SheetRow icon={Blocks} label="New habit" onClick={fromSheet(onNewHabit)} />
+          <SheetRow icon={TagIcon} label="New tag" onClick={fromSheet(onNewTag)} />
         </Sheet>
       )}
 

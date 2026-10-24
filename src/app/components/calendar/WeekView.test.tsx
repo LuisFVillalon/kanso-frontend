@@ -448,6 +448,25 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(tabbable()).toHaveLength(1);
   });
   describe('events', () => {
+    const newEventButton = () => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === 'New event');
+    const eventFormTimes = () => [...document.querySelectorAll<HTMLInputElement>('input[type=date], input[type=time]')].map(i => i.value);
+
+    it('opens New event today from the next full hour, or on a browsed week at its first day and the day start', async () => {
+      await render();
+      await act(async () => newEventButton()!.click());
+      expect(eventFormTimes()).toEqual(['2026-10-21', '13:00', '14:00']);
+      await act(async () => buttonByText('Cancel').click());
+
+      await act(async () => button('Next week').click());
+      await act(async () => newEventButton()!.click());
+      expect(eventFormTimes()).toEqual(['2026-10-25', '08:00', '09:00']);
+    });
+
+    it('leaves out the New event button when newEventButton is false', async () => {
+      await render({ newEventButton: false });
+      expect(newEventButton()).toBeUndefined();
+    });
+
     it('draws events in their tag color beside tasks, past and archived ones styled, and marks a task during one', async () => {
       mocks.tasks = [task({ id: 3, title: 'Review notes', due_date: '2026-10-21', due_time: '14:30', estimated_time: 1 })];
       withEvents([

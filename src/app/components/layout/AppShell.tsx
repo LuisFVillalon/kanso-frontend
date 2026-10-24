@@ -21,6 +21,7 @@ import type { SettingsSection } from '@/app/components/settings/SettingsModal';
 import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import AppNav, { NAV_ITEMS } from '@/app/components/layout/AppNav';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
+import NewEventModal from '@/app/components/event/NewEventModal';
 import type { Note } from '@/app/types/notes';
 import type { Tag, Task } from '@/app/types/task';
 
@@ -65,6 +66,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
   const [settingsClosedToken, setSettingsClosedToken] = useState(0);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const [showNewEvent, setShowNewEvent] = useState(false);
   const noteOpener = useRef<((note: Note) => void) | null>(null);
 
   const { tasks, addTask, updateTask, saveLinkedTasks, setTasks } = useTasksContext();
@@ -252,6 +254,8 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           onNewTask={value.openNewTask}
           onNewNote={createNote}
           onNewHabit={value.openNewHabit}
+          onNewEvent={() => setShowNewEvent(true)}
+          onNewTag={() => state.setShowCreateTagModal(true)}
           onSettings={() => openSettings()}
           onManageTags={openManageTags}
           onManageHabits={value.openManageHabits}
@@ -265,6 +269,10 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       >
         {children}
       </div>
+
+      {signedIn && showNewEvent && (
+        <NewEventModal onClose={() => setShowNewEvent(false)} />
+      )}
 
       {signedIn && (
         <TaskManagerModals

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchCalendarActivity } from '@/app/lib/backend-api';
 import { useTasksContext } from '@/app/context/TasksContext';
+import { useEventsVersion } from '@/app/hooks/useEventsVersion';
 import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { addDays } from '@/app/utils/weekLayout';
@@ -15,19 +16,21 @@ interface ActivityResult {
 /**
  * Loads GET /get-calendar-activity for the seven days starting `weekStart`.
  * Refetches when the week changes and whenever the server confirms a task
- * completion toggle or archive (TasksContext's completionSyncToken), so
+ * completion toggle or archive (TasksContext's completionSyncToken) or an
+ * event changes (useEventsVersion), so
  * completions made elsewhere on the page show up without a reload. Call
  * `refetch` after any other change that alters activity (e.g. a habit date
  * toggled). While a refetch is in flight the last result stays on screen.
  */
 export function useWeekActivity(weekStart: Date) {
   const { completionSyncToken } = useTasksContext();
+  const eventsVersion = useEventsVersion();
   const [result, setResult] = useState<ActivityResult | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const startStr = toLocalDateStr(weekStart);
   const endStr = toLocalDateStr(addDays(weekStart, 6));
-  const requestKey = `${startStr}|${completionSyncToken}|${reloadToken}`;
+  const requestKey = `${startStr}|${completionSyncToken}|${eventsVersion}|${reloadToken}`;
 
   useEffect(() => {
     let cancelled = false;
