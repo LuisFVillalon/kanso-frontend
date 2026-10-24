@@ -75,7 +75,7 @@ interface BriefScheduleProps {
  * time, tags and whether it has passed, is on now or is coming up, then how
  * much event time there is and how much of the work window is left
  * after events and tasks due, then any clashes: a task due during an event,
- * an event outside the work window (which takes no capacity), or two events
+ * an event outside the work window (which doesn't take from your free time), or two events
  * that overlap. Shown on rest days too; hidden when no event starts today.
  */
 const BriefSchedule: React.FC<BriefScheduleProps> = ({ debrief, profile, now = new Date() }) => {
@@ -260,8 +260,8 @@ const BriefSchedule: React.FC<BriefScheduleProps> = ({ debrief, profile, now = n
             <ClashLine key={`out-${occurrenceKey(event)}`} muted>
               <b className="text-text-primary">{event.title}</b> ({formatEventTime(event)}){' '}
               {fully
-                ? 'is outside your work window, so it doesn’t count against today’s capacity.'
-                : 'runs outside your work window; only the part inside counts against today’s capacity.'}
+                ? 'is outside your work window, so it doesn’t take from your free time today.'
+                : 'runs outside your work window; only the part inside takes from your free time today.'}
             </ClashLine>
           ))}
           {overlaps.map(([a, b]) => (

@@ -386,7 +386,7 @@ describe('TaskDebriefPanel events', () => {
     expect(card.textContent).toContain('3 events · 4h 40m');
     expect(card.textContent).toContain('5h 20m free in your work window after events and tasks due');
     expect(card.textContent).toContain('Pick up prescription is due at 1:00 PM, during ART 157 Studio. Do it before 1 PM or after 3:50 PM.');
-    expect(card.textContent).toContain('Gym (7:00 – 8:00 AM) is outside your work window, so it doesn’t count against today’s capacity.');
+    expect(card.textContent).toContain('Gym (7:00 – 8:00 AM) is outside your work window, so it doesn’t take from your free time today.');
     expect(card.querySelector('[data-work-window]')).not.toBeNull();
     expect(card.querySelector('[data-schedule-now]')).not.toBeNull();
   });
