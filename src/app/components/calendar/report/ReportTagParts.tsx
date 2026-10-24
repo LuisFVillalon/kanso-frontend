@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
-import { useShortWindow } from './ReportMoodRelationChart';
+import { useShortWindow } from './useChartSize';
 
 // Pieces the Tags & moments card's charts share.
 

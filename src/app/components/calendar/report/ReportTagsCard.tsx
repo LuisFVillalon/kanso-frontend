@@ -33,10 +33,10 @@ interface ReportTagsCardProps {
 }
 
 /**
- * Mood › Patterns' one "Tags & moments" card: a switch in place swaps
+ * A week's Mood › Patterns card, "Tags & moments": a switch in place swaps
  * "Your task & note tags" (how you felt on days you worked on each of your own tags)
  * and "Moments" (how mood went on days with each moment picked when checking
- * in), so both sit beside "Mood & your activity" without scrolling.
+ * in). A month or year shows ReportPatterns instead.
  */
 const ReportTagsCard: React.FC<ReportTagsCardProps> = ({ activity, byDay, period, scopeLabel, restDays, average, logged, widen, wide, headerAction }) => {
   const [source, setSource] = useState<TagSource>('mine');

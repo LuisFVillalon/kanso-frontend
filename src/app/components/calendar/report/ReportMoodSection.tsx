@@ -21,11 +21,11 @@ import {
   type MoodSummary,
 } from '@/app/utils/moodReport';
 import ReportMoodChart from './ReportMoodChart';
-import ReportMoodRelations from './ReportMoodRelations';
+import ReportPatterns, { PatternsHeading } from './ReportPatterns';
 import ReportPeriodCheckins from './ReportPeriodCheckins';
 import ReportTagsCard from './ReportTagsCard';
 
-/** Which part of the Mood tab shows: the chart and check-ins, or how mood moved with activity and tags. */
+/** Which part of the Mood tab shows: the chart and check-ins, or what tends to go with your mood, energy and stress. */
 export type MoodView = 'time' | 'patterns';
 
 /** How the Check-ins card and empty state name the days they cover. */
@@ -96,7 +96,7 @@ const CheckinsCard: React.FC<{ summary: MoodSummary; period: ReportPeriod; child
 interface ReportMoodSectionProps {
   period: ReportPeriod;
   report: CalendarReport;
-  /** The report's calendar activity, which "Mood & your activity" compares mood against. */
+  /** The report's calendar activity, which Patterns compares your check-ins against. */
   activity: CalendarActivity;
   byDay: Map<string, MoodCheckin>;
   /** Every loaded check-in, for the weekly and monthly ones. */
@@ -116,9 +116,9 @@ interface ReportMoodSectionProps {
 
 /**
  * The report's Mood tab: "Over time" shows "Mood over time" and the
- * Check-ins summary, "Patterns" shows "Mood & your activity" beside one
- * "Tags & moments" card that switches between "Your task & note tags" and
- * "Moments"; with no check-ins it's an empty card with "Log today" and, while
+ * Check-ins summary, "Patterns" shows what tends to go with your mood,
+ * energy and stress (ReportPatterns): a summary over "Mood & your activity"
+ * and "Tags & moments"; with no check-ins it's an empty card with "Log today" and, while
  * weekly or monthly check-ins are on, the period's weeks or months to log.
  * Any day dot opens its check-in to edit, and a hollow one logs that day;
  * weekly and monthly check-ins open from their spans, ◇ and the Check-ins
@@ -258,42 +258,34 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
             </CheckinsCard>
           </div>
         ) : period.kind === 'week' ? (
-          <ReportTagsCard
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <PatternsHeading />
+            <ReportTagsCard
+              activity={activity}
+              byDay={byDay}
+              period={period}
+              scopeLabel={scopeName(period)}
+              restDays={restDays}
+              average={summary.average}
+              logged={summary.logged}
+              widen={{ label: `See ${weekMonth.toLocaleDateString('en-US', { month: 'long' })}`, onClick: () => onSelectPeriod(weekMonth) }}
+              wide
+            />
+          </div>
+        ) : summary.average != null ? (
+          <ReportPatterns
+            // Each period opens on its own clearest finding.
+            key={`${toLocalDateStr(period.start)}|${toLocalDateStr(period.end)}`}
             activity={activity}
             byDay={byDay}
             period={period}
             scopeLabel={scopeName(period)}
             restDays={restDays}
-            average={summary.average}
-            logged={summary.logged}
-            widen={{ label: `See ${weekMonth.toLocaleDateString('en-US', { month: 'long' })}`, onClick: () => onSelectPeriod(weekMonth) }}
-            wide
-          />
-        ) : summary.average != null ? (
-          <ReportMoodRelations
-            activity={activity}
-            byDay={byDay}
-            period={period}
-            scopeLabel={scopeName(period)}
-            byWeek={period.kind === 'year'}
-            renderTags={headerAction => (
-              <ReportTagsCard
-                activity={activity}
-                byDay={byDay}
-                period={period}
-                scopeLabel={scopeName(period)}
-                restDays={restDays}
-                average={summary.average}
-                logged={summary.logged}
-                widen={period.kind === 'month' ? { label: `See ${period.start.getFullYear()}`, onClick: () => onSelectYear(period.start) } : undefined}
-                wide={false}
-                headerAction={headerAction}
-              />
-            )}
+            widen={period.kind === 'month' ? { label: `See ${period.start.getFullYear()}`, onClick: () => onSelectYear(period.start) } : undefined}
           />
         ) : (
           <div className="card-glass p-6 text-center text-sm text-text-muted">
-            Mood & your activity, Moments & mood and Your task & note tags use your daily check-ins — there are none {scopeName(period)}.
+            Patterns use your daily check-ins — there are none {scopeName(period)}.
           </div>
         )
       )}
