@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Activity, ChartScatter, Smile } from 'lucide-react';
+import { Activity, Smile } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
 import MoodCheckinModal, { type DaySummary, type PeriodSummary } from '@/app/components/mood/MoodCheckinModal';
 import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
@@ -23,6 +23,7 @@ import {
 import ReportMoodChart from './ReportMoodChart';
 import ReportMoodRelations from './ReportMoodRelations';
 import ReportPeriodCheckins from './ReportPeriodCheckins';
+import ReportTagFeelings from './ReportTagFeelings';
 
 /** Which part of the Mood tab shows: the chart and check-ins, or how mood moved with activity and tags. */
 export type MoodView = 'time' | 'patterns';
@@ -104,20 +105,25 @@ interface ReportMoodSectionProps {
   /** Puts a saved check-in in place of its period's old one, or removes it (`saved` null). */
   replaceDay: (date: string, saved: MoodCheckin | null, kind?: MoodPeriodKind) => void;
   onSelectPeriod: (monthStart: Date) => void;
+  /** Opens the Year report holding `date`. */
+  onSelectYear: (date: Date) => void;
+  /** The profile's rest days, which "Tags & feelings" compares apart from work days. */
+  restDays: number[];
   view: MoodView;
 }
 
 /**
  * The report's Mood tab: "Over time" shows "Mood over time" and the
- * Check-ins summary, "Patterns" shows "Mood & your activity" and "Tags &
- * mood"; with no check-ins it's an empty card with "Log today" and, while
+ * Check-ins summary, "Patterns" shows "Mood & your activity", "Tags &
+ * mood" and "Tags & feelings"; with no check-ins it's an empty card with "Log today" and, while
  * weekly or monthly check-ins are on, the period's weeks or months to log.
  * Any day dot opens its check-in to edit, and a hollow one logs that day;
  * weekly and monthly check-ins open from their spans, ◇ and the Check-ins
  * list, which also logs a past week or month without one. A week is too
- * short for mood patterns, so its Patterns point to its Month report.
+ * short for mood patterns, so its Patterns show "Tags & feelings" hatched
+ * and point to its Month report.
  */
-const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, view }) => {
+const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, onSelectYear, restDays, view }) => {
   const showToast = useToast();
   const { habits } = useHabitsContext();
   const [modal, setModal] = useState<{ kind: MoodPeriodKind; date: string; existing: MoodCheckin | null } | null>(null);
@@ -248,28 +254,37 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
             </CheckinsCard>
           </div>
         ) : period.kind === 'week' ? (
-          <div className="card-glass p-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-            <ChartScatter className="w-4 h-4 shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden="true" />
-            <p className="text-sm text-text-secondary">
-              A week is too short to show patterns in your mood — they appear in the Month and Year reports.
-            </p>
-            <button type="button" onClick={() => onSelectPeriod(weekMonth)} className="btn btn-secondary py-1 px-3 text-xs sm:ml-auto">
-              See {weekMonth.toLocaleDateString('en-US', { month: 'long' })}
-            </button>
-          </div>
-        ) : summary.average != null ? (
-          <ReportMoodRelations
+          <ReportTagFeelings
             activity={activity}
             byDay={byDay}
             period={period}
             scopeLabel={scopeName(period)}
-            average={summary.average}
-            logged={summary.logged}
-            byWeek={period.kind === 'year'}
+            restDays={restDays}
+            widen={{ label: `See ${weekMonth.toLocaleDateString('en-US', { month: 'long' })}`, onClick: () => onSelectPeriod(weekMonth) }}
           />
+        ) : summary.average != null ? (
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <ReportMoodRelations
+              activity={activity}
+              byDay={byDay}
+              period={period}
+              scopeLabel={scopeName(period)}
+              average={summary.average}
+              logged={summary.logged}
+              byWeek={period.kind === 'year'}
+            />
+            <ReportTagFeelings
+              activity={activity}
+              byDay={byDay}
+              period={period}
+              scopeLabel={scopeName(period)}
+              restDays={restDays}
+              widen={period.kind === 'month' ? { label: `See ${period.start.getFullYear()}`, onClick: () => onSelectYear(period.start) } : undefined}
+            />
+          </div>
         ) : (
           <div className="card-glass p-6 text-center text-sm text-text-muted">
-            Mood & your activity and Tags & mood use your daily check-ins — there are none {scopeName(period)}.
+            Mood & your activity, Tags & mood and Tags & feelings use your daily check-ins — there are none {scopeName(period)}.
           </div>
         )
       )}

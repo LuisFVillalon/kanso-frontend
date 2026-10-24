@@ -412,13 +412,15 @@ interface ReportBodyProps {
   report: CalendarReport;
   activity: CalendarActivity;
   mood: ReportMood;
+  /** The profile's rest days, which "Tags & feelings" compares apart from work days. */
+  restDays: number[];
   view: ReportView;
   moodView: MoodView;
   onOpen: (view: ReportView, moodView?: MoodView) => void;
   onSelectPeriod: (period: ReportPeriod) => void;
 }
 
-const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, view, moodView, onOpen, onSelectPeriod }) => {
+const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, restDays, view, moodView, onOpen, onSelectPeriod }) => {
   const days = elapsedDays(period);
   const checkins = mood.checkins;
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
@@ -438,6 +440,8 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
       settings={mood.settings}
       replaceDay={mood.replaceDay}
       onSelectPeriod={monthStart => onSelectPeriod(periodContaining('month', monthStart))}
+      onSelectYear={date => onSelectPeriod(periodContaining('year', date))}
+      restDays={restDays}
       view={moodView}
     />
   );
@@ -735,6 +739,7 @@ const CalendarReportView: React.FC = () => {
             report={report}
             activity={activity}
             mood={{ ...mood, settings: profile.moodCheckins }}
+            restDays={profile.restDays}
             view={view}
             moodView={moodView}
             onOpen={navigate}
