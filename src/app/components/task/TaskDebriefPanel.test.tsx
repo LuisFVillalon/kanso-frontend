@@ -108,8 +108,7 @@ const dialogTitle = () => document.getElementById('mood-checkin-title')?.textCon
 
 const cardWithHeading = (heading: string) =>
   [...document.body.querySelectorAll('span')].find(el => el.textContent === heading)?.closest('.rounded-md');
-/** Today's Activity Log: its "Rest day" line on a rest day. */
-const activityLogCard = () => cardWithHeading("Today's Activity Log") ?? cardWithHeading('Rest day');
+const activityLogCard = () => cardWithHeading("Today's Activity Log");
 const focusNextCard = () => cardWithHeading('Focus Next');
 
 describe('TaskDebriefPanel mood chip', () => {
@@ -158,6 +157,30 @@ describe('TaskDebriefPanel mood chip', () => {
     expect(card.textContent).toContain('Overcommitted');
     expect(card.contains(button('Log today’s mood'))).toBe(true);
     expect(focusNextCard()?.contains(button('Log today’s mood'))).toBe(false);
+  });
+
+  it("still shows Today's Activity Log on a rest day, with a gentle reminder and no capacity", async () => {
+    api.fetchTaskDebrief.mockResolvedValue({
+      ...debrief,
+      completed_today_tasks: [{ id: 1, title: 'Draft', priority: null, due_date: null, due_time: null, category: null, estimated_time: 2, tags: [{ id: 1, name: 'Writing', color: null }] }],
+      workload: { is_rest_day: true, available_minutes: 60, committed_minutes: 0, utilization_pct: null, is_overcommitted: false },
+    });
+    await render();
+    const card = activityLogCard()!.textContent ?? '';
+    expect(card).toContain('Today is a rest day. Take it easy; anything you do still shows here.');
+    expect(card).toContain('Writing');
+    expect(card).not.toContain('capacity');
+    expect(card).not.toContain('Overcommitted');
+    expect(text()).not.toContain('no workload scheduled');
+  });
+
+  it('shows no rest-day reminder on a work day', async () => {
+    api.fetchTaskDebrief.mockResolvedValue({
+      ...debrief,
+      workload: { is_rest_day: false, available_minutes: 480, committed_minutes: 0, utilization_pct: 0, is_overcommitted: false },
+    });
+    await render();
+    expect(activityLogCard()?.textContent).not.toContain('rest day');
   });
 
   it('is hidden while the brief is collapsed, and shows once it opens', async () => {
