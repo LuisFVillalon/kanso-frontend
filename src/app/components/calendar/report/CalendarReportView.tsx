@@ -559,6 +559,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
               byDay={checkins ? byDay : null}
               mood={periodMood}
               scopeLabel={scopeName(period)}
+              restDays={restDays}
               onOpen={onOpen}
             />
           </div>

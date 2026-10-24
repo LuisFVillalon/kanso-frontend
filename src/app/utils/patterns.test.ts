@@ -40,10 +40,13 @@ describe('answerOf', () => {
 });
 
 describe('activitySplit', () => {
-  it('splits at the middle, raised past the lowest, and not at all under three values', () => {
+  it('splits at the middle, raised past the lowest, and not at all when the count never changed', () => {
     expect(activitySplit([3, 0, 2, 1, 0, 0])).toBe(1);
     expect(activitySplit([1, 1, 1, 1, 2, 3])).toBe(2);
-    expect(activitySplit([0, 1, 0, 1, 1])).toBeNull();
+    expect(activitySplit([0, 1, 0, 1, 1])).toBe(1);
+    expect(activitySplit([0, 0, 0, 0, 1])).toBe(1);
+    expect(activitySplit([2, 2, 2])).toBeNull();
+    expect(activitySplit([])).toBeNull();
   });
 });
 

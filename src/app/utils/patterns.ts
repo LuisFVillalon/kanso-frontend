@@ -19,9 +19,10 @@
  * never what caused what.
  */
 
+import type { CalendarActivity } from '@/app/types/activity';
 import type { MoodCheckin } from '@/app/types/mood';
-import { metricValue, MOOD_METRICS, type DayActivity, type MoodMetric } from '@/app/utils/calendarReport';
-import { formatDurationShort } from '@/app/utils/dateUtils';
+import { dailyActivity, metricValue, MOOD_METRICS, type DayActivity, type MoodMetric } from '@/app/utils/calendarReport';
+import { formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
 import {
   compareFeeling,
   feelingWord,
@@ -31,7 +32,9 @@ import {
   hash,
   MIN_GAP,
   settleVerdicts,
+  tagDayRows,
   TAG_MIN_SIDE,
+  tagsByDay,
   type Feeling,
   type FeelingComparison,
   type FeelingTag,
@@ -119,10 +122,10 @@ export const answerOf = (c: FeelingComparison): PatternAnswer => {
 
 /**
  * The middle of the days' counts, raised past the lowest so both sides have
- * days; null when the count took fewer than three values, too few to split.
+ * days; null when the count never changed, so there's nothing to split.
  */
 export const activitySplit = (values: number[]): number | null => {
-  if (new Set(values).size < 3) return null;
+  if (new Set(values).size < 2) return null;
   const sorted = [...values].sort((a, b) => a - b);
   const t = sorted[Math.floor(sorted.length / 2)];
   return t === sorted[0] ? sorted.find(v => v > t)! : t;
@@ -227,6 +230,13 @@ export const analysePatterns = (days: PatternDay[], tags: Map<string, FeelingTag
   for (const f of FEELINGS) settleVerdicts(drafts.map(r => r.feel[f]));
   const rows = drafts.map(r => ({ ...r, answer: Object.fromEntries(FEELINGS.map(f => [f, answerOf(r.feel[f])])) as Record<Feeling, PatternAnswer> }));
   return { days, rows };
+};
+
+/** Every row of the page for a period: its check-in days with their tags, moments and activity, work days apart from `restDays`. */
+export const periodPatterns = (activity: CalendarActivity, byDay: Map<string, MoodCheckin>, start: Date, end: Date, restDays: number[]): PatternsAnalysis => {
+  const { byDay: tagDays, tags } = tagsByDay(activity, start, end);
+  const rows = tagDayRows(byDay, tagDays, start, end, restDays);
+  return analysePatterns(patternDays(rows, byDay, dailyActivity(activity, start, end)), tags, `${toLocalDateStr(start)}|${toLocalDateStr(end)}`);
 };
 
 /** Whether a check-in day is on a row's "with it" or busier side. */

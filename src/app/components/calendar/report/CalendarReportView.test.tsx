@@ -204,6 +204,9 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('How is your mood on days you pick each moment?');
     expect(text()).not.toContain('How is your mood on days with each tag?');
     expect(text()).toContain('Mood & your activity');
+    // The Overview says the same as the activity card.
+    await openTab('Productivity');
+    expect(buttonLabelled(/^Mood & your activity/).getAttribute('aria-label')).toBe('Mood & your activity: Can’t tell yet · Your tasks barely changed from day to day');
   });
 
   it('answers mood, energy and stress by one rule, opening on the clearest finding', async () => {
@@ -249,12 +252,28 @@ describe('CalendarReportView mood', () => {
     expect(buttonLabelled(/^Exercised, 8 days: Maybe higher$/).getAttribute('aria-pressed')).toBe('true');
     expect(text()).toContain('Your mood was maybe higher on days you picked “Exercised”. Too early to be sure · 8 days vs 12 other. Mood averaged');
 
-    // The Overview names the link with its direction, short enough for one line, with the whole sentence on hover.
+    // The Overview gives the activity card's answer in the same words, with the whole sentence on hover.
     await openTab('Productivity');
-    expect(text()).toContain('More habits, higher mood');
+    expect(text()).toContain('Habits · Maybe higher mood');
     const link = buttonLabelled(/^Mood & your activity/);
-    expect(link.getAttribute('aria-label')).toBe('Mood & your activity: Moderate link: higher mood on days with more habits checked off this month');
-    expect(link.querySelector('[title]')?.getAttribute('title')).toBe('Moderate link: higher mood on days with more habits checked off this month');
+    const full = 'Your mood was maybe higher on days with more habits checked off · Too early to be sure · 12 days vs 8 other';
+    expect(link.getAttribute('aria-label')).toBe(`Mood & your activity: ${full}`);
+    expect(link.querySelector('[title]')?.getAttribute('title')).toBe(full);
+  });
+
+  it('opens on a finding past the first 8 rows with its row shown and picked', async () => {
+    // Eight moments on every day outrank "Exercised", the only one with a finding.
+    const days = Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 2).padStart(2, '0')}`);
+    const always = Array.from({ length: 8 }, (_, k) => `Always ${k + 1}`);
+    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, (i % 5) + 1), id: i + 1, tags: [...always, ...(i % 5 >= 3 ? ['Exercised'] : [])] })));
+    await render();
+    await openTab('Mood');
+    await click(buttonLabelled(/^Month$/));
+    await openPatterns();
+    expect(tab('Moments').getAttribute('aria-selected')).toBe('true');
+    expect(buttonLabelled(/^Always 8, 20 days: /)).toBeDefined();
+    expect(buttonLabelled(/^Exercised, 8 days: Maybe higher$/).getAttribute('aria-pressed')).toBe('true');
+    expect(text()).toContain('Your mood was maybe higher on days you picked “Exercised”. Too early to be sure · 8 days vs 12 other. Mood averaged');
   });
 
   it('shows a tag row’s numbers under the list on tap, one row at a time', async () => {

@@ -5,26 +5,25 @@ import { ChartScatter, ChevronRight, ListChecks, Sparkles, Tag, Tags } from 'luc
 import { CardShell } from '@/app/components/stats/CardShell';
 import type { CalendarActivity } from '@/app/types/activity';
 import type { MoodCheckin } from '@/app/types/mood';
-import { dailyActivity, MOOD_METRICS, type MoodMetric, type ReportPeriod } from '@/app/utils/calendarReport';
+import { MOOD_METRICS, type MoodMetric, type ReportPeriod } from '@/app/utils/calendarReport';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import {
   activityQuestion,
-  analysePatterns,
   CLEAR_GAP,
   describePattern,
   METRIC_NAME,
-  patternDays,
   patternFindings,
   patternNumbers,
   patternsRest,
   patternSupport,
+  periodPatterns,
   PLAIN_GAP,
   SURE_SIDE,
   tagsQuestion,
   type PatternFinding,
   type PatternsAnalysis,
 } from '@/app/utils/patterns';
-import { CHANCE_LEVEL, FEELING_NAME, FEELINGS, MAX_CHART_TAGS, MIN_GAP, TAG_MIN_SIDE, tagDayRows, tagsByDay, type Feeling } from '@/app/utils/tagFeelings';
+import { CHANCE_LEVEL, FEELING_NAME, FEELINGS, MAX_CHART_TAGS, MIN_GAP, TAG_MIN_SIDE, type Feeling } from '@/app/utils/tagFeelings';
 import { MetricButton } from './ReportActivityChart';
 import { AnswerBubble, AnswerIcon, Dumbbell, lineColor, PatternLine } from './ReportPatternParts';
 
@@ -106,13 +105,12 @@ const ReportPatterns: React.FC<ReportPatternsProps> = ({ activity, byDay, period
   const startStr = toLocalDateStr(period.start);
   const endStr = toLocalDateStr(period.end);
   const restKey = restDays.join(',');
-  const analysis = useMemo(() => {
-    const { byDay: tagDays, tags } = tagsByDay(activity, period.start, period.end);
-    const rows = tagDayRows(byDay, tagDays, period.start, period.end, restDays);
-    return analysePatterns(patternDays(rows, byDay, dailyActivity(activity, period.start, period.end)), tags, `${startStr}|${endStr}`);
+  const analysis = useMemo(
+    () => periodPatterns(activity, byDay, period.start, period.end, restDays),
     // `period` and `restDays` are rebuilt every render; their days identify them.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activity, byDay, startStr, endStr, restKey]);
+    [activity, byDay, startStr, endStr, restKey],
+  );
   const findings = useMemo(() => patternFindings(analysis.rows), [analysis]);
 
   const [start] = useState(() => opening(findings));
@@ -287,8 +285,9 @@ const TagsCard: React.FC<{
 }> = ({ analysis, pick, onPick, headerAction }) => {
   const f = pick.feeling;
   const all = analysis.rows.filter(r => r.source === pick.source);
-  const rows = all.slice(0, MAX_CHART_TAGS);
-  const selected = rows.find(r => r.key === pick.row) ?? null;
+  const top = all.slice(0, MAX_CHART_TAGS);
+  const selected = all.find(r => r.key === pick.row) ?? null;
+  const rows = selected && !top.includes(selected) ? [...top, selected] : top;
   const tag = pick.source === 'tag';
   return (
     <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={<span className="whitespace-nowrap">Tags &amp; moments</span>} headerAction={headerAction}>
