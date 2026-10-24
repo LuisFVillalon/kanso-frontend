@@ -199,7 +199,8 @@ export const mulberry32 = (seed: number) => () => {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
 
-const hash = (s: string): number => {
+/** A string's FNV-1a hash, to seed the chance check. */
+export const hash = (s: string): number => {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;

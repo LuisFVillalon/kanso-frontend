@@ -12,8 +12,8 @@ interface Fetched {
 
 /**
  * Loads the mood check-ins a report period needs — daily, weekly and
- * monthly — whose first day falls in moodFetchRange (a month also pulls in
- * the week before it). Saving or
+ * monthly — whose first day falls in moodFetchRange (the period before it
+ * too, which the Mood over time summary compares with). Saving or
  * deleting a check-in from the report patches the loaded list in place.
  */
 export function useReportMood(period: ReportPeriod) {

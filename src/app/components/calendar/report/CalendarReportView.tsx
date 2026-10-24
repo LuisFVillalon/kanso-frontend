@@ -443,6 +443,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
       onSelectYear={date => onSelectPeriod(periodContaining('year', date))}
       restDays={restDays}
       view={moodView}
+      onSeePatterns={() => onOpen('mood', 'patterns')}
     />
   );
 

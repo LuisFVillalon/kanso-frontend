@@ -43,17 +43,19 @@ const checkin = (period_start: string, mood: number, overrides: Partial<MoodChec
 });
 
 describe('moodFetchRange', () => {
-  it('fetches just the week, the 6 days before a month, or the year', () => {
+  it('fetches the period and the whole one before it, and a month’s last week', () => {
     const now = new Date(2026, 9, 21);
     const week = moodFetchRange(periodContaining('week', now));
-    expect([day(week.start), day(week.end)]).toEqual(['2026-10-19', '2026-10-25']);
+    expect([day(week.start), day(week.end)]).toEqual(['2026-10-12', '2026-10-25']);
     const month = moodFetchRange(periodContaining('month', now));
     // October ends on a Saturday, so its last week runs to Sunday Nov 1.
-    expect([day(month.start), day(month.end)]).toEqual(['2026-09-25', '2026-11-01']);
+    expect([day(month.start), day(month.end)]).toEqual(['2026-09-01', '2026-11-01']);
     const may = moodFetchRange(periodContaining('month', new Date(2026, 4, 10))); // ends on a Sunday
-    expect([day(may.start), day(may.end)]).toEqual(['2026-04-25', '2026-05-31']);
+    expect([day(may.start), day(may.end)]).toEqual(['2026-04-01', '2026-05-31']);
+    const january = moodFetchRange(periodContaining('month', new Date(2026, 0, 10)));
+    expect([day(january.start), day(january.end)]).toEqual(['2025-12-01', '2026-02-01']);
     const year = moodFetchRange(periodContaining('year', now));
-    expect([day(year.start), day(year.end)]).toEqual(['2026-01-01', '2026-12-31']);
+    expect([day(year.start), day(year.end)]).toEqual(['2025-01-01', '2026-12-31']);
   });
 });
 

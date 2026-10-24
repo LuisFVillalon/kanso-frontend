@@ -98,7 +98,8 @@ const openPatterns = () => click([...document.querySelectorAll('[aria-label="Moo
 describe('CalendarReportView mood', () => {
   it('adds the Mood tile and keeps the week summary to the week', async () => {
     await render();
-    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-19', '2026-10-25');
+    // The week before too, which the Mood over time summary compares with.
+    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-12', '2026-10-25');
     expect(text()).toContain('1 of 3 days logged');
     expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
     await openTab('Mood');
@@ -284,9 +285,8 @@ describe('CalendarReportView mood', () => {
       api.fetchMoodCheckins.mockResolvedValue([full('2026-10-19', 2, 1, 5), full('2026-10-20', 4, null, null), full('2026-10-21', 5, 5, 1)]);
       await render();
       await openTab('Mood');
-      expect(text()).toContain('Mood, energy and stress from your daily check-ins, one line each.');
-      expect(text()).toContain('Each line shows how you felt day to day.');
-      expect(text()).not.toContain('No check-in yet');
+      expect(text()).toContain('A week of ups and downs.');
+      expect(container.querySelector('[data-gap-day]')).toBeNull();
       for (const word of ['Rough', 'Okay', 'Great', 'Drained', 'Steady', 'Charged', 'Calm', 'Some', 'Maxed']) expect(text()).toContain(word);
       expect(dots('mood').map(d => d.dataset.day)).toEqual(['2026-10-19', '2026-10-20', '2026-10-21']);
       // A skipped energy or stress is a gap, never a zero.
@@ -298,12 +298,85 @@ describe('CalendarReportView mood', () => {
       expect(container.querySelectorAll('[aria-label="Mood, energy and stress over time"] > button')).toHaveLength(3);
     });
 
+    it('sums the period up above the chart and numbers each note once on it', async () => {
+      api.fetchMoodCheckins.mockResolvedValue([full('2026-10-19', 2, 1, 5), full('2026-10-20', 4, 3, 2), full('2026-10-21', 5, 5, 1)]);
+      await render();
+      await openTab('Mood');
+      expect(text()).toContain('A week of ups and downs.');
+      expect(text()).toContain('Why it matters: Your best and hardest days stand out. What was different about them?');
+      const notes = [...container.querySelectorAll('ol li')].map(li => li.textContent);
+      expect(notes).toEqual(['1Best day: Wednesday (Great). Hardest: Monday (Low, with stress Maxed).']);
+      expect(container.querySelector('[data-mark="best"]')).not.toBeNull();
+      expect(container.querySelector('[data-mark="hardest"]')).not.toBeNull();
+      // Its number shows once on the chart and once by its note.
+      const chart = container.querySelector('[aria-label="Mood, energy and stress over time"]')!;
+      expect([...chart.querySelectorAll('span')].filter(el => el.textContent === '1' && !el.children.length)).toHaveLength(1);
+      expect(text()).toContain('Based on 3 check-ins over 3 days so far. Shows what happened together, not what caused it.');
+    });
+
+    it('compares with the week before and explains the chart’s marks on request', async () => {
+      const before = ['12', '13', '14', '15', '16', '17', '18'].map(d => full(`2026-10-${d}`, 2, 2, 4));
+      api.fetchMoodCheckins.mockResolvedValue([...before, full('2026-10-19', 5, 4, 1), full('2026-10-20', 5, 4, 1), full('2026-10-21', 5, 4, 2)]);
+      await render();
+      await openTab('Mood');
+      expect(text()).toContain('A brighter week than the week before.');
+      expect(text()).toContain('Why it matters: Something is going right. Notice what’s different and keep it up.');
+      expect([...container.querySelectorAll('ol li')].map(li => li.textContent)).toEqual(['1A brighter week than the week before: mood averaged 5.0, up from 2.0.']);
+      expect(text()).toContain('Last week avg 2.0');
+      // The week before only feeds the comparison: its days aren't on this week's chart.
+      expect(dots('mood').map(d => d.dataset.day)).toEqual(['2026-10-19', '2026-10-20', '2026-10-21']);
+
+      const explain = buttonLabelled(/^Explain this chart$/);
+      expect(explain.getAttribute('aria-expanded')).toBe('false');
+      await click(explain);
+      const panel = container.querySelector('[role="dialog"][aria-label="About this chart"]')!;
+      expect(explain.getAttribute('aria-expanded')).toBe('true');
+      expect(document.activeElement).toBe(panel);
+      expect([...panel.querySelectorAll('li')].map(li => li.textContent)).toEqual([
+        'Headline: Compares 3 check-ins with 7 from the week before.',
+        'Dot = one day',
+        'Line joins your days',
+        'Dashed line = last week’s average',
+        'Want to see what might be behind this? See Patterns',
+      ]);
+      expect(panel.textContent).not.toContain('Numbers');
+      expect(panel.textContent).not.toContain('Why it matters');
+
+      await act(async () => { panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+      expect(container.querySelector('[aria-label="About this chart"]')).toBeNull();
+      expect(document.activeElement).toBe(explain);
+
+      await click(explain);
+      await click(buttonLabelled(/^See Patterns$/));
+      expect(window.location.search).toBe('?view=mood&mood=patterns');
+    });
+
+    it('nudges for more check-ins until a week has 3, and explains its hollow dots', async () => {
+      await render();
+      await openTab('Mood');
+      expect(text()).toContain('Check in a few more days to see a pattern — 1 of 3 so far.');
+      expect(text()).toContain('A few more check-ins and this chart will show your patterns.');
+      expect(text()).not.toContain('Why it matters');
+      expect(text()).not.toContain('not what caused it');
+      expect(container.querySelector('ol')).toBeNull();
+      await click(buttonLabelled(/^Explain this chart$/));
+      const rows = [...container.querySelectorAll('[aria-label="About this chart"] li')].map(li => li.textContent);
+      expect(rows).toEqual([
+        'Headline: Patterns show after 3 check-ins; you have 1.',
+        'Dot = one day',
+        'Hollow dot = no check-in. Tap it to log that day',
+        'Want to see what might be behind this? See Patterns',
+      ]);
+      await click(buttonLabelled(/^Close$/));
+      expect(container.querySelector('[aria-label="About this chart"]')).toBeNull();
+    });
+
     it('lights a day up in all three rows and lists its values', async () => {
       api.fetchMoodCheckins.mockResolvedValue([full('2026-10-19', 2, 1, 5), full('2026-10-20', 4, null, null)]);
       await render();
       await openTab('Mood');
       expect(tooltip()).toBeNull();
-      expect(text()).toContain('No check-in yet');
+      expect(container.querySelector('[data-gap-day]')?.getAttribute('data-gap-day')).toBe('2026-10-21');
 
       await act(async () => { buttonLabelled(/^Monday, October 19:/).focus(); });
       expect(container.querySelector('[data-active-column]')?.getAttribute('data-active-column')).toBe('2026-10-19');
@@ -341,8 +414,6 @@ describe('CalendarReportView mood', () => {
       await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
       expect(text()).toContain('7-day trend');
-      expect(text()).toContain('Each line shows your trend over the past week.');
-      expect(text()).not.toContain('Each line shows how you felt day to day.');
       const paths = [...container.querySelectorAll('[aria-label="Mood, energy and stress over time"] svg path')].map(p => p.getAttribute('d') ?? '');
       expect(paths).toHaveLength(3);
       for (const d of paths) expect(d).toMatch(/^M/);
@@ -369,8 +440,7 @@ describe('CalendarReportView mood', () => {
       await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
       expect(text()).toContain('Fewer than 8 days');
-      expect(text()).toContain('Each dot shows how a month felt overall.');
-      expect(text()).toContain('Most days fell here');
+      expect(text()).toContain('How the month felt');
       const opacity = (series: string, day: string) => dots(series).find(d => d.dataset.day === day)?.style.opacity;
       for (const series of ['mood', 'energy', 'stress']) {
         expect(opacity(series, '2026-09')).toBe('1');
@@ -396,7 +466,7 @@ describe('CalendarReportView mood', () => {
       await render();
       await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
-      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-11-01');
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-01', '2026-11-01');
 
       expect(buttonLabelled(/^Weekly check-in\. Week of Oct 12: Great · Too much workload · “Finished the proposal”\. Edit$/)).toBeDefined();
       expect(buttonLabelled(/^Weekly check-in\. Week of Sep 28: Low\. Edit$/)).toBeDefined();
@@ -421,7 +491,7 @@ describe('CalendarReportView mood', () => {
       await openTab('Mood');
       await click(buttonLabelled(/^Month$/));
       await click(buttonLabelled(/^Previous month$/));
-      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-25', '2026-11-01');
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-09-01', '2026-11-01');
       await click(buttonLabelled(/^Week of Oct 26: Okay/));
       expect(text()).toContain('2 of 7');
     });
@@ -479,7 +549,7 @@ describe('CalendarReportView mood', () => {
       await render();
       await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
-      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-01-01', '2026-12-31');
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2025-01-01', '2026-12-31');
 
       expect(text()).toContain('Monthly check-in');
       expect(buttonLabelled(/^September: typical mood 3\.0 across 1 day\. Monthly check-in: Low · “Grind”\. Open September$/)).toBeDefined();
