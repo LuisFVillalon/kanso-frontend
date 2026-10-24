@@ -133,7 +133,7 @@ describe('analyseMoodInsights on the demo and invented scenarios', () => {
     expect(headline('sparse', 'month')).toBe('Check in a few more days to see a pattern — 2 of 5 so far.');
     const year = analyse(SCENARIOS.sparse, 'year');
     expect(year.headline).toBe('Check in a few more days to see a pattern — 2 of 10 so far.');
-    expect(year).toMatchObject({ sparse: true, why: WHY.sparse, notes: [], insights: [], head: null });
+    expect(year).toMatchObject({ sparse: true, why: WHY.sparse, notes: [], head: null });
     expect(headlineBasis(year)).toBe('Patterns show after 10 check-ins; you have 2.');
     expect(headline('sparse', 'month', new Date(2026, 8, 10))).toBe('No check-ins for September yet.');
   });
@@ -161,34 +161,33 @@ describe('the rules', () => {
   });
 
   it('says how it felt: most days, half, a mix, or the average’s word', () => {
-    const level = (moods: number[]) => analyse(run('2026-10-01', moods), 'month').insights.find(i => i.kind === 'level')?.text;
-    expect(level([4, 4, 4, 3, 2])).toBe('Most days felt Good (3 of 5).');
-    expect(level([4, 4, 4, 3, 3, 2])).toBe('Half your days felt Good (3 of 6).');
-    expect(analyse(run('2026-10-01', [5, 4, 3, 2, 1, 3, 4, 2]), 'month').headline).toBe('A month of ups and downs.');
-    expect(level([3, 3, 4, 4, 5, 2])).toBe('Your days sat between Okay and Good, averaging 3.5 out of 5.');
+    const headline = (moods: number[]) => analyse(run('2026-10-12', moods), 'week', new Date(2026, 9, 14)).headline;
+    expect(headline([4, 4, 4, 2])).toBe('Mostly Good days.');
+    expect(headline([4, 4, 4, 3, 3, 2])).toBe('Half your days felt Good.');
+    expect(headline([5, 4, 2, 1, 3, 4, 2])).toBe('A week of ups and downs.');
+    expect(headline([3, 3, 4, 4, 5, 2])).toBe('Mostly Okay and Good days.');
   });
 
   it('calls a change clear only past half a step and the 1-in-20 chance check', () => {
     const many = (v: number) => Array(12).fill(v);
-    expect(compareGroups(many(4), many(3), 'a').verdict).toBe('clear');
+    expect(compareGroups(many(4), many(3), 'a').clear).toBe(true);
     // Half a step apart, but on two days each that's easily luck.
-    expect(compareGroups([4, 3], [3, 3], 'b')).toMatchObject({ verdict: 'little' });
-    expect(compareGroups([3, 4, 3, 4], [3, 3, 4, 3], 'c').verdict).toBe('same');
+    expect(compareGroups([4, 3], [3, 3], 'b').clear).toBe(false);
     // A gap too small to count, however many days.
-    expect(compareGroups([...many(4), ...many(3)], [...many(4), 3, ...Array(11).fill(3.6)], 'd').verdict).not.toBe('clear');
+    expect(compareGroups([...many(4), ...many(3)], [...many(4), 3, ...Array(11).fill(3.6)], 'd').clear).toBe(false);
     // Splitting the bar across tests makes a borderline gap too close to call.
     const a = [4, 4, 4, 3, 4, 5, 4, 4, 4];
     const b = [3, 4, 3, 3, 4, 3, 3, 4, 3];
     const one = compareGroups(a, b, 'e');
     expect(one.p).toBeGreaterThan(0.025);
     expect(one.p).toBeLessThan(0.05);
-    expect(one.verdict).toBe('clear');
-    expect(compareGroups(a, b, 'e', 2).verdict).toBe('little');
+    expect(one.clear).toBe(true);
+    expect(compareGroups(a, b, 'e', 2).clear).toBe(false);
   });
 
   it('compares with the period before only once it has enough check-ins', () => {
     const october = run('2026-10-01', [4, 4, 4, 4, 4, 4, 4, 4, 4, 4]);
-    expect(analyse([...run('2026-09-01', [3, 3, 3, 3]), ...october], 'month').insights.find(i => i.kind === 'change')).toBeUndefined();
+    expect(analyse([...run('2026-09-01', [3, 3, 3, 3]), ...october], 'month').head?.kind).not.toBe('change');
     const brighter = analyse([...run('2026-09-01', Array(10).fill(3)), ...october], 'month');
     expect(brighter.headline).toBe('A brighter month than September.');
     expect(brighter.why).toBe(WHY.better);
@@ -198,7 +197,7 @@ describe('the rules', () => {
     expect(harder.why).toBe(WHY.harder);
     const same = analyse([...run('2026-09-01', Array(10).fill(4)), ...october], 'month');
     expect(same.headline).toBe('A steady month, mostly Good days.');
-    expect(same.insights.map(i => i.text)).not.toContain('About the same as September (4.0 vs 4.0).');
+    expect(same.notes.map(n => n.insight.kind)).not.toContain('change');
   });
 
   it('compares a year with the year before', () => {
@@ -207,7 +206,7 @@ describe('the rules', () => {
   });
 
   it('splits the month into halves of at least 4 check-ins to call a climb or dip', () => {
-    expect(analyse(run('2026-10-01', [2, 2, 2, 4, 4, 4]), 'month').insights.some(i => i.kind === 'direction')).toBe(false);
+    expect(analyse(run('2026-10-01', [2, 2, 2, 4, 4, 4]), 'month').head?.kind).not.toBe('direction');
     const dip = analyse(run('2026-10-01', [4, 4, 4, 4, 5, 4, 4, 4, 2, 2, 2, 1, 2, 2, 2, 2]), 'month');
     expect(dip.headline).toBe('Your mood has dipped lately this month.');
     expect(dip.why).toBe(WHY.harder);
@@ -216,8 +215,8 @@ describe('the rules', () => {
   });
 
   it('names a week’s best and hardest days only when they are 2 steps apart', () => {
-    expect(analyse(run('2026-10-19', [3, 4, 3]), 'week').insights.find(i => i.kind === 'steady')?.text).toBe('Every day sat between Okay and Good.');
-    expect(analyse(run('2026-10-19', [3, 3, 3]), 'week').insights.find(i => i.kind === 'steady')?.text).toBe('Every day felt Okay.');
+    expect(analyse(run('2026-10-19', [3, 4, 3]), 'week')).toMatchObject({ headline: 'A steady week, mostly Okay days.', why: WHY.steady, notes: [] });
+    expect(analyse(run('2026-10-19', [3, 3, 3]), 'week').headline).toBe('A steady week, mostly Okay days.');
     const r = analyse(run('2026-10-19', [2, 4, 4, 3], i => (i === 0 ? 5 : 2)), 'week');
     expect(r.notes[0].insight.text).toBe('Best days: Tuesday and Wednesday (Good). Hardest: Monday (Low, with stress Maxed).');
     expect(r.why).toBe(WHY.days);
@@ -241,7 +240,7 @@ describe('the rules', () => {
   it('only uses whole 7-day stretches inside the month', () => {
     // A rough end of September doesn't make Oct 1–3 the month's toughest stretch.
     const r = analyse([...run('2026-09-24', [1, 1, 1, 1, 1, 1, 1]), ...run('2026-10-01', [3, 3, 3, 3, 3, 3, 3, 3, 3, 3])], 'month');
-    expect(r.insights.find(i => i.kind === 'stretch')).toBeUndefined();
+    expect(r.notes.map(n => n.insight.kind)).not.toContain('stretch');
   });
 
   it('names the year’s best and hardest months with at least 8 check-ins', () => {
@@ -250,22 +249,31 @@ describe('the rules', () => {
       ...run('2026-06-01', Array(8).fill(4)), ...run('2026-07-01', Array(4).fill(1)),
       ...run('2026-08-01', Array(8).fill(2)), ...run('2026-09-01', Array(8).fill(4)),
     ], 'year');
-    expect(r.insights.find(i => i.kind === 'stretch')?.text).toBe('Best month: June (4.0). Hardest: August (2.0).');
+    expect(r.notes[0].insight.text).toBe('Best month: June (4.0). Hardest: August (2.0).');
     expect(r.notes[0].insight.mark).toMatchObject({ type: 'months', best: ['2026-06'], worst: ['2026-08'] });
   });
 
   it('says mood moved with stress only with 10 check-ins and 5 days on each side', () => {
     const moods = [4, 4, 4, 4, 4, 2, 2, 2, 2, 2];
-    const together = (stress: (i: number) => number) => analyse(run('2026-10-01', moods, stress), 'month').insights.find(i => i.kind === 'together');
+    const together = (stress: (i: number) => number) => analyse(run('2026-10-01', moods, stress), 'month').notes.find(n => n.insight.kind === 'together')?.insight;
     expect(together(i => (i < 5 ? 1 : 5))?.text).toBe('Mood and stress moved together. On higher-stress days your mood averaged 2.0 (5 days); on calmer days, 4.0 (5 days).');
     // Four calm days aren't enough to compare.
     expect(together(i => (i < 4 ? 1 : 5))).toBeUndefined();
-    expect(analyse(run('2026-10-01', moods.slice(1), i => (i < 4 ? 1 : 5)), 'month').insights.find(i => i.kind === 'together')).toBeUndefined();
+    expect(analyse(run('2026-10-01', moods.slice(1), i => (i < 4 ? 1 : 5)), 'month').notes.find(n => n.insight.kind === 'together')).toBeUndefined();
   });
 
-  it('asks for more check-ins when they cover under half the days', () => {
+  it('never says mood moved with stress or energy when the gap goes the other way', () => {
+    const moods = [4, 4, 4, 4, 4, 2, 2, 2, 2, 2];
+    // Here the higher-stress, lower-energy days were the happier ones.
+    const r = analyse(run('2026-10-01', moods, i => (i < 5 ? 5 : 1), i => (i < 5 ? 1 : 5)), 'month');
+    expect(r.notes.map(n => n.insight.kind)).not.toContain('together');
+    expect(r.why).not.toBe(WHY.stress);
+    expect(r.why).not.toBe(WHY.energy);
+    expect(chartMarks(r.notes, Array.from({ length: 31 }, (_, i) => addDays('2026-10-01', i)), 'month').tags.filter(t => t.series !== 'mood')).toEqual([]);
+  });
+
+  it('says how many check-ins the summary is based on', () => {
     const sparse = analyse(run('2026-10-01', [4, null, null, 4, null, null, 4, null, null, 4, null, null, 4]), 'month');
-    expect(sparse.insights.map(i => i.text)).toContain('You checked in on 5 of 23 days. More check-ins make this picture sharper.');
     expect(sparse.sure).toBe('Based on 5 check-ins over 23 days so far.');
     expect(analyse(run('2026-09-01', Array(30).fill(4)), 'month', new Date(2026, 8, 10)).sure).toBe('Based on 30 check-ins over 30 days.');
   });
@@ -327,7 +335,7 @@ describe('numbered notes', () => {
 });
 
 describe('aboutRows', () => {
-  const drawn = { line: true, hollow: true, weekly: true };
+  const drawn = { line: true, band: false, hollow: true, weekly: true };
   const strong = (r: MoodInsights, d = drawn) => aboutRows(r, d).map(x => x.strong);
 
   it('explains only the marks on the chart, and never a numbers row', () => {
@@ -339,29 +347,35 @@ describe('aboutRows', () => {
       { icon: 'hollow', strong: 'Hollow dot = no check-in.', rest: 'Tap it to log that day' },
       { icon: 'dash', strong: 'Dashed line = your weekly check-in, or your average early on and lately', rest: '' },
     ]);
-    expect(strong(r, { line: true, hollow: false, weekly: false }))
+    expect(strong(r, { ...drawn, hollow: false, weekly: false }))
       .toEqual(['Headline:', 'Dot = one day', 'Line = your usual', 'Dashed line = your average early on and lately']);
-    expect(strong(analyse(DEMO, 'month'), { line: true, hollow: false, weekly: false })).toEqual(['Headline:', 'Dot = one day', 'Line = your usual']);
+    expect(strong(analyse(DEMO, 'month'), { ...drawn, hollow: false, weekly: false })).toEqual(['Headline:', 'Dot = one day', 'Line = your usual']);
   });
 
   it('names the period before’s average among the dashed lines', () => {
-    expect(strong(analyse(SCENARIOS.improving, 'week'), { line: true, hollow: false, weekly: false }))
+    expect(strong(analyse(SCENARIOS.improving, 'week'), { ...drawn, hollow: false, weekly: false }))
       .toEqual(['Headline:', 'Dot = one day', 'Line', 'Dashed line = last week’s average']);
     const october = run('2026-10-01', Array(10).fill(4));
-    expect(strong(analyse([...run('2026-09-01', Array(10).fill(3)), ...october], 'month'), { line: true, hollow: true, weekly: true }))
+    expect(strong(analyse([...run('2026-09-01', Array(10).fill(3)), ...october], 'month'), drawn))
       .toContain('Dashed line = your weekly check-in, or September’s average');
   });
 
   it('reads a year’s dots as months, its band as where most days fell, and has no hollow dots', () => {
-    expect(aboutRows(analyse(DEMO, 'year'), drawn)).toEqual([
+    expect(aboutRows(analyse(DEMO, 'year'), { ...drawn, band: true })).toEqual([
       { icon: 'headline', strong: 'Headline:', rest: 'How your 76 check-ins felt.' },
       { icon: 'dot', strong: 'Dot = one month', rest: '(its average)' },
       { icon: 'bar', strong: 'Soft bar = where most days fell', rest: '' },
     ]);
   });
 
+  it('explains a year’s soft bar whenever one is drawn, even without a line', () => {
+    const oneMonth = analyse(run('2026-10-01', Array(10).fill(4)), 'year');
+    expect(strong(oneMonth, { line: false, band: true, hollow: false, weekly: false })).toContain('Soft bar = where most days fell');
+    expect(strong(oneMonth, { line: true, band: false, hollow: false, weekly: false })).not.toContain('Soft bar = where most days fell');
+  });
+
   it('leaves out the line while too few days draw one', () => {
-    expect(strong(analyse(SCENARIOS.sparse, 'month'), { line: false, hollow: true, weekly: false }))
+    expect(strong(analyse(SCENARIOS.sparse, 'month'), { ...drawn, line: false, weekly: false }))
       .toEqual(['Headline:', 'Dot = one day', 'Hollow dot = no check-in.']);
   });
 });

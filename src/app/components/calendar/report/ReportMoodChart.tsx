@@ -258,8 +258,10 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
   const hasFaded = isYear && rows.some(r => r.months.some(m => m.n > 0 && m.n < YEAR_FADE_DAYS));
   const hasHollow = !isYear && buckets.some(b => !b.isFuture && !byDay.has(b.key));
   const hasLine = rows.some(r => r.line.filter(v => v != null).length >= (period.kind === 'month' ? 1 : 2));
+  const hasBand = isYear && rows.some(r => r.months.some(m => m.q1 != null && m.q3 != null && m.average != null));
+  const hasMonthCheckin = isYear && buckets.some(b => monthCheckins.has(b.key));
   const marks = chartMarks(insights.notes, buckets.map(b => b.key), period.kind);
-  const about = aboutRows(insights, { line: hasLine, hollow: hasHollow, weekly: weekSpans.length > 0 });
+  const about = aboutRows(insights, { line: hasLine, band: hasBand, hollow: hasHollow, weekly: weekSpans.length > 0 });
   const spanLabels = marks.tags.filter(t => t.spanLabel).map(t => `${t.label}@${t.at}`).join('|');
 
   // The two stretches' labels give way to one key wherever they would overlap.
@@ -276,7 +278,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
     observer.observe(strip);
     return () => observer.disconnect();
   }, [spanLabels]);
-  const legend = isYear || period.kind === 'month' || monthCheckins.size > 0;
+  const legend = isYear || period.kind === 'month';
 
   const dotSize = period.kind === 'week' ? 'w-3 h-3' : isYear ? 'w-2.5 h-2.5' : 'w-2 h-2';
   const hollowSize = period.kind === 'week' ? 'w-2.5 h-2.5' : 'w-2 h-2';
@@ -542,7 +544,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
             <>
               <LegendLine label="How the month felt" />
               {hasFaded && <LegendFaded label={`Fewer than ${YEAR_FADE_DAYS} days`} />}
-              {monthCheckins.size > 0 && <LegendDiamond label="Monthly check-in (click to edit)" />}
+              {hasMonthCheckin && <LegendDiamond label="Monthly check-in (click to edit)" />}
             </>
           ) : period.kind === 'month' && <LegendLine label="7-day trend" />}
         </div>
