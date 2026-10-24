@@ -9,9 +9,9 @@
  * - A change (climbing or dipping, or against the period before) is called
  *   only when the gap is at least MIN_GAP and a seeded reshuffle of the same
  *   days finds one that big less than CHANCE_LEVEL of the time — the same
- *   test as the Tags & feelings card. Otherwise it is "about the same" or
- *   "too close to call", and the headline says the period was steady.
- * - Mood moving with stress or energy never says "because".
+ *   test as the Tags & feelings card. Otherwise nothing is said about it.
+ * - Mood moving with stress or energy is named only when higher-stress (or
+ *   lower-energy) days were the lower-mood ones, and never says "because".
  */
 
 import { MOOD_LABELS, STRESS_LABELS, type MoodCheckin } from '@/app/types/mood';
@@ -22,8 +22,6 @@ import { CHANCE_LEVEL, chanceOf, hash, MIN_GAP } from '@/app/utils/tagFeelings';
 
 /** Below this many daily check-ins in the period, only the nudge shows. */
 export const GATE: Record<ReportPeriodKind, number> = { week: 3, month: 5, year: 10 };
-/** Under this gap two averages read as "about the same". */
-export const SAME_GAP = 0.3;
 /** Earlier vs later half of the period's check-ins: each half needs this many. */
 export const HALF_MIN = { month: 4, year: 10 } as const;
 /** A month's best and hardest 7-day stretch are named only this far apart. */
@@ -36,18 +34,14 @@ export const SIDE_MIN = 5;
 export const TOGETHER_MIN = 10;
 /** A stretch "ran high on stress" when its average stress is at least this. */
 export const STRESS_HIGH = 3.5;
-/** Checked in on under this share of the period's days: a gentle note. */
-export const LOW_COVERAGE = 0.5;
 /** A hard stretch ending this few days before today is still going on. */
 const RECENT_DAYS = 3;
-
-export type Verdict = 'clear' | 'little' | 'same';
 
 export interface Comparison {
   /** `a` minus `b`. */
   gap: number;
   p: number;
-  verdict: Verdict;
+  clear: boolean;
   a: number;
   b: number;
   na: number;
@@ -69,12 +63,10 @@ export type InsightMark =
   | { type: 'band'; lo: number; hi: number }
   | { type: 'series'; series: 'energy' | 'stress' };
 
-export type InsightKind = 'level' | 'change' | 'direction' | 'stretch' | 'steady' | 'together' | 'coverage';
+export type InsightKind = 'level' | 'change' | 'direction' | 'stretch' | 'steady' | 'together';
 
 export interface Insight {
   kind: InsightKind;
-  /** Whether the rule found something clear; 'info' for the plain level and coverage notes. */
-  verdict: Verdict | 'thin' | 'info';
   text: string;
   mark?: InsightMark;
   c?: Comparison;
@@ -104,8 +96,6 @@ export interface MoodInsights {
   sure: string;
   /** The insight the headline says; null while sparse. */
   head: Insight | null;
-  /** The notes worth showing, the headline's own first, up to 3. */
-  insights: Insight[];
   /** The insights drawn on the chart, numbered 1, 2. */
   notes: NumberedNote[];
 }
@@ -162,8 +152,7 @@ export const compareGroups = (a: number[], b: number[], key: string, split = 1):
   const mb = mean(b)!;
   const gap = ma - mb;
   const p = chanceOf([{ tag: [...a], other: [...b] }], gap, hash(key));
-  const verdict: Verdict = Math.abs(gap) >= MIN_GAP && p < CHANCE_LEVEL / split ? 'clear' : Math.abs(gap) < SAME_GAP ? 'same' : 'little';
-  return { gap, p, verdict, a: ma, b: mb, na: a.length, nb: b.length };
+  return { gap, p, clear: Math.abs(gap) >= MIN_GAP && p < CHANCE_LEVEL / split, a: ma, b: mb, na: a.length, nb: b.length };
 };
 
 /** The period's name in copy: "Oct 19–25", "October", "2026". */
@@ -198,8 +187,8 @@ export const WHY = {
   better: 'Something is going right. Notice what’s different and keep it up.',
   harder: 'Harder stretches happen. Plan some lighter days if you can.',
   now: 'Go easy on yourself. Plan some lighter days if you can.',
-  stress: 'Stressful days were also your low days. Easing stress may help your mood.',
-  energy: 'Low-energy days were also your low days. Rest may help your mood.',
+  stress: 'Stressful days were also your low days.',
+  energy: 'Low-energy days were also your low days.',
   stretch: 'Think about what was going on then. It can help you plan ahead.',
   days: 'Your best and hardest days stand out. What was different about them?',
   steady: 'Things have been even. That makes changes easy to spot later.',
@@ -218,24 +207,21 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
   const end = toLocalDateStr(period.end);
   const rows = rowsIn(byDay, period, today);
   const lastDay = end < today ? end : today;
-  const span = start <= lastDay ? eachDay(start, lastDay).length : 0;
   const n = rows.length;
   const gate = GATE[kind];
 
-  let coverage: number;
   let sure: string;
   if (kind === 'year') {
     const first = rows[0]?.date;
-    coverage = first ? n / eachDay(first, lastDay).length : 0;
     sure = first ? `Based on ${checkins(n)} since ${shortDay(first)}.` : '';
   } else {
-    coverage = span ? n / span : 0;
+    const span = start <= lastDay ? eachDay(start, lastDay).length : 0;
     sure = `Based on ${checkins(n)} over ${days(span)}${end > today ? ' so far' : ''}.`;
   }
 
   if (n < gate) {
     return {
-      kind, n, sparse: true, gate, sure, head: null, insights: [], notes: [],
+      kind, n, sparse: true, gate, sure, head: null, notes: [],
       headline: n === 0 ? `No check-ins for ${periodName(period)} yet.` : `Check in a few more days to see a pattern — ${n} of ${gate} so far.`,
       why: WHY.sparse,
     };
@@ -253,45 +239,33 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
   const highDays = counts[3] + counts[4];
   let shape: 'mode' | 'mix' | 'avg';
   let levelText: string;
-  let levelShort: string;
   if (topCount / n > 0.5) {
     shape = 'mode';
-    levelText = `Most days felt ${top} (${topCount} of ${n}).`;
-    levelShort = `Mostly ${top} days.`;
+    levelText = `Mostly ${top} days.`;
   } else if (topCount / n === 0.5 && counts.filter(c => c === topCount).length === 1) {
     shape = 'mode';
-    levelText = `Half your days felt ${top} (${topCount} of ${n}).`;
-    levelShort = `Half your days felt ${top}.`;
+    levelText = `Half your days felt ${top}.`;
   } else if (lowDays / n >= 0.25 && highDays / n >= 0.25) {
     shape = 'mix';
-    levelText = `A mix of better and harder days: ${highDays} Good or Great, ${lowDays} Low or Rough, out of ${n}.`;
-    levelShort = `A ${kind} of ups and downs.`;
+    levelText = `A ${kind} of ups and downs.`;
   } else {
     shape = 'avg';
-    const felt = feltWord(avg);
-    levelText = felt.startsWith('between')
-      ? `Your days sat ${felt}, averaging ${f1(avg)} out of 5.`
-      : `Your days mostly felt ${felt}, averaging ${f1(avg)} out of 5.`;
-    levelShort = `Mostly ${felt.replace('between ', '')} days.`;
+    levelText = `Mostly ${feltWord(avg).replace('between ', '')} days.`;
   }
-  const level: Insight = { kind: 'level', verdict: 'info', text: levelText };
+  const level: Insight = { kind: 'level', text: levelText };
 
   // 2. Change: against the period before.
   let change: Insight | undefined;
   {
     const prev = shiftPeriod(period, -1);
     const prevRows = rowsIn(byDay, prev, today);
-    if (prevRows.length >= gate) {
-      const c = compareGroups(moods, prevRows.map(r => r.mood), `change|${start}`);
+    const c = prevRows.length >= gate ? compareGroups(moods, prevRows.map(r => r.mood), `change|${start}`) : undefined;
+    if (c?.clear) {
       const name = prevName(period);
-      let text: string;
-      if (c.verdict === 'clear') {
-        text = c.gap > 0
-          ? `A brighter ${kind} than ${name}: mood averaged ${f1(c.a)}, up from ${f1(c.b)}.`
-          : `A harder ${kind} than ${name}: mood averaged ${f1(c.a)}, down from ${f1(c.b)}.`;
-      } else if (c.verdict === 'same') text = `About the same as ${name} (${f1(c.a)} vs ${f1(c.b)}).`;
-      else text = `A little ${c.gap > 0 ? 'higher' : 'lower'} than ${name} (${f1(c.a)} vs ${f1(c.b)}), but too close to call.`;
-      change = { kind: 'change', verdict: c.verdict, text, c, prevLabel: name, mark: { type: 'change', value: c.b, label: `${prevShort(period)} avg ${f1(c.b)}` } };
+      const text = c.gap > 0
+        ? `A brighter ${kind} than ${name}: mood averaged ${f1(c.a)}, up from ${f1(c.b)}.`
+        : `A harder ${kind} than ${name}: mood averaged ${f1(c.a)}, down from ${f1(c.b)}.`;
+      change = { kind: 'change', text, c, prevLabel: name, mark: { type: 'change', value: c.b, label: `${prevShort(period)} avg ${f1(c.b)}` } };
     }
   }
 
@@ -303,24 +277,21 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
       const early = rows.slice(0, h);
       const late = rows.slice(n - h);
       const c = compareGroups(late.map(r => r.mood), early.map(r => r.mood), `dir|${start}`);
-      const ea = dayRange(early[0].date, early[h - 1].date);
-      const la = dayRange(late[0].date, late[h - 1].date);
-      let text: string;
-      if (c.verdict === 'clear') {
-        text = c.gap > 0
-          ? `Your mood climbed: ${f1(c.b)} early on (${ea}), ${f1(c.a)} lately (${la}).`
-          : `Your mood dipped: ${f1(c.b)} early on (${ea}), ${f1(c.a)} lately (${la}).`;
-      } else if (c.verdict === 'same') text = `It held steady from start to finish (${f1(c.b)}, then ${f1(c.a)}).`;
-      else text = `A little ${c.gap > 0 ? 'higher' : 'lower'} lately (${f1(c.b)}, then ${f1(c.a)}), but too close to call.`;
-      direction = {
-        kind: 'direction', verdict: c.verdict, text, c,
-        mark: { type: 'halves', early: { from: early[0].date, to: early[h - 1].date }, late: { from: late[0].date, to: late[h - 1].date }, earlyAvg: c.b, lateAvg: c.a },
-      };
+      if (c.clear) {
+        const ea = dayRange(early[0].date, early[h - 1].date);
+        const la = dayRange(late[0].date, late[h - 1].date);
+        direction = {
+          kind: 'direction', c,
+          text: `Your mood ${c.gap > 0 ? 'climbed' : 'dipped'}: ${f1(c.b)} early on (${ea}), ${f1(c.a)} lately (${la}).`,
+          mark: { type: 'halves', early: { from: early[0].date, to: early[h - 1].date }, late: { from: late[0].date, to: late[h - 1].date }, earlyAvg: c.b, lateAvg: c.a },
+        };
+      }
     }
   }
 
-  // 4. Stretch: the best and hardest part.
+  // 4. Stretch: the best and hardest part, or whether the period was steady.
   let stretch: Insight | undefined;
+  let steady = false;
   if (kind === 'week') {
     const hi = Math.max(...moods);
     const lo = Math.min(...moods);
@@ -332,15 +303,12 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
       const stressed = worsts.every(r => r.stress != null && r.stress >= 4);
       const stressNote = stressed ? `, with stress ${worsts.length === 1 ? STRESS_LABELS[worsts[0].stress! - 1] : 'High or more'}` : '';
       stretch = {
-        kind: 'stretch', verdict: 'clear',
+        kind: 'stretch',
         text: `Best ${bests.length === 1 ? 'day' : 'days'}: ${names(bests)} (${MOOD_LABELS[hi - 1]}). Hardest: ${names(worsts)} (${MOOD_LABELS[lo - 1]}${stressNote}).`,
         mark: { type: 'days', best: bests.map(r => r.date), worst: worsts.map(r => r.date), bestValue: hi, worstValue: lo },
       };
     } else {
-      stretch = {
-        kind: 'steady', verdict: 'same',
-        text: lo === hi ? `Every day felt ${MOOD_LABELS[lo - 1]}.` : `Every day sat between ${MOOD_LABELS[lo - 1]} and ${MOOD_LABELS[hi - 1]}.`,
-      };
+      steady = true;
     }
   } else if (kind === 'month') {
     const line = periodRollingAverage(period, byDay, 'mood', now);
@@ -371,10 +339,11 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
       const hardText = recent
         ? `Things have felt harder since about ${shortDay(w.from)}${stressy ? ', and stress has run high too' : ''}. Go easy on yourself.`
         : `The ${worstAvg >= 2.5 ? 'dip' : 'toughest stretch'} was ${dayRange(w.from, w.to)} (mostly ${moodWord(worstAvg)}${stressy ? ', and stress ran high then too' : ''}).`;
-      stretch = { kind: 'stretch', verdict: 'clear', text: `${bestText} ${hardText}`, recent, mark: { type: 'spans', best: b, worst: w, bestAvg, worstAvg } };
+      stretch = { kind: 'stretch', text: `${bestText} ${hardText}`, recent, mark: { type: 'spans', best: b, worst: w, bestAvg, worstAvg } };
     } else if (bi >= 0) {
+      steady = true;
       stretch = {
-        kind: 'steady', verdict: 'same',
+        kind: 'steady',
         text: f1(line[wi]!) === f1(line[bi]!)
           ? `No stretch stood out: your 7-day trend stayed at ${f1(line[wi]!)}.`
           : `No stretch stood out: your 7-day trend stayed between ${f1(line[wi]!)} and ${f1(line[bi]!)}.`,
@@ -391,17 +360,19 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
     if (months.length >= 2) {
       const best = months.reduce((x, y) => (y.avg > x.avg ? y : x));
       const worst = months.reduce((x, y) => (y.avg < x.avg ? y : x));
-      stretch = best.avg - worst.avg >= MIN_GAP
-        ? {
-            kind: 'stretch', verdict: 'clear',
-            text: `Best month: ${best.name} (${f1(best.avg)}). Hardest: ${worst.name} (${f1(worst.avg)}).`,
-            mark: { type: 'months', best: [best.key], worst: [worst.key], bestValue: best.avg, worstValue: worst.avg },
-          }
-        : { kind: 'steady', verdict: 'same', text: `Every month felt about the same, between ${f1(worst.avg)} and ${f1(best.avg)}.` };
+      if (best.avg - worst.avg >= MIN_GAP) {
+        stretch = {
+          kind: 'stretch',
+          text: `Best month: ${best.name} (${f1(best.avg)}). Hardest: ${worst.name} (${f1(worst.avg)}).`,
+          mark: { type: 'months', best: [best.key], worst: [worst.key], bestValue: best.avg, worstValue: worst.avg },
+        };
+      } else {
+        steady = true;
+      }
     }
   }
 
-  // 5. Together: how stress and energy moved with mood (not on a week).
+  // 5. Together: whether higher-stress or lower-energy days were the lower-mood ones (not on a week).
   let together: Insight | undefined;
   if (kind !== 'week') {
     const tests: { series: 'stress' | 'energy'; c?: Comparison }[] = [];
@@ -417,37 +388,20 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
       const hi = en.filter(r => r.energy! >= 4).map(r => r.mood);
       tests.push({ series: 'energy', c: hi.length >= SIDE_MIN && lo.length >= SIDE_MIN ? compareGroups(lo, hi, `en|${start}`, 2) : undefined });
     }
-    const clear = tests.filter(t => t.c?.verdict === 'clear').sort((x, y) => Math.abs(y.c!.gap) - Math.abs(x.c!.gap));
+    // Both comparisons put the side expected to have the lower mood first.
+    const clear = tests.filter(t => t.c?.clear && t.c.gap < 0).sort((x, y) => Math.abs(y.c!.gap) - Math.abs(x.c!.gap));
     if (clear.length) {
       const { series, c } = clear[0];
       const text = series === 'stress'
         ? `Mood and stress moved together. On higher-stress days your mood averaged ${f1(c!.a)} (${days(c!.na)}); on calmer days, ${f1(c!.b)} (${days(c!.nb)}).`
         : `Mood and energy moved together. On low-energy days your mood averaged ${f1(c!.a)} (${days(c!.na)}); on high-energy days, ${f1(c!.b)} (${days(c!.nb)}).`;
-      together = { kind: 'together', verdict: 'clear', series, text, c, mark: { type: 'series', series } };
-    } else if (tests.some(t => t.c)) {
-      together = { kind: 'together', verdict: 'same', text: `Energy and stress didn’t line up clearly with your mood this ${kind}.` };
-    } else if (tests.length) {
-      together = { kind: 'together', verdict: 'thin', text: `Not enough higher- and lower-${tests[0].series} days yet to compare with your mood.` };
+      together = { kind: 'together', series, text, c, mark: { type: 'series', series } };
     }
   }
 
-  // 6. Coverage: a note only when check-ins are few.
-  const cov: Insight | undefined = coverage < LOW_COVERAGE
-    ? {
-        kind: 'coverage', verdict: 'info',
-        text: kind === 'year'
-          ? `You checked in on ${Math.round(coverage * 100)}% of days since you started. More check-ins make this picture sharper.`
-          : `You checked in on ${n} of ${span} days. More check-ins make this picture sharper.`,
-      }
-    : undefined;
-
   // The headline: the first that applies.
   const isStretch = stretch?.kind === 'stretch';
-  const head: Insight = direction?.verdict === 'clear' ? direction
-    : change?.verdict === 'clear' ? change
-      : isStretch && stretch!.recent ? stretch!
-        : isStretch && kind === 'month' ? stretch!
-          : level;
+  const head: Insight = direction ?? change ?? (isStretch && kind === 'month' ? stretch! : level);
 
   let headline: string;
   if (head === direction) {
@@ -461,37 +415,32 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
   } else if (head === stretch && stretch.mark?.type === 'spans') {
     const { worst, worstAvg } = stretch.mark;
     headline = `Mostly ${moodWord(avg)}, with ${worstAvg >= 2.5 ? 'a dip' : 'one harder stretch'} around ${dayRange(worst.from, worst.to)}.`;
-  } else if (stretch?.kind === 'steady' && shape !== 'mix') {
+  } else if (steady && shape !== 'mix') {
     const felt = feltWord(avg);
     headline = `A steady ${kind}, ${shape === 'mode' ? `mostly ${top} days` : felt.startsWith('between') ? felt : `mostly ${felt} days`}.`;
   } else {
-    headline = levelShort;
+    headline = levelText;
   }
 
-  const t = together?.verdict === 'clear' ? together : undefined;
   let why: string;
   if ((head === direction || head === change) && head.c!.gap > 0) why = WHY.better;
   else if (head === direction || head === change) why = WHY.harder;
   else if (head === stretch && stretch.recent) why = WHY.now;
-  else if (t) why = WHY[t.series!];
+  else if (together) why = WHY[together.series!];
   else if (head === stretch) why = WHY.stretch;
   else if (kind === 'week' && isStretch) why = WHY.days;
   else why = WHY.steady;
 
-  // The notes: the headline's own first, then the others that say something.
-  const insights = [head, direction, change, stretch, t, cov, level]
-    .filter((x, i, all): x is Insight => !!x && all.indexOf(x) === i)
-    .filter(x => x === head || x.verdict === 'clear' || x.kind === 'steady' || x.kind === 'coverage')
+  // The notes: the headline's own first, then the others. Only notes with a
+  // place on the chart are numbered; every number has exactly one note.
+  const notes = [head, direction, change, stretch, together]
+    .filter((x, i, all): x is Insight => !!x?.mark && all.indexOf(x) === i)
     // A clear climb or dip already says where the better and harder days were.
     .filter(x => !(x === stretch && head === direction))
-    // "Your days sat between Okay and Good" and "Every day sat between…" say the same thing.
-    .filter(x => !(x === stretch && x.kind === 'steady' && shape === 'avg' && kind === 'week'))
-    .slice(0, 3);
+    .slice(0, 2)
+    .map((insight, k) => ({ num: k + 1, insight }));
 
-  // Only notes with a place on the chart are numbered; every number has exactly one note.
-  const notes = insights.filter(i => i.mark).slice(0, 2).map((insight, k) => ({ num: k + 1, insight }));
-
-  return { kind, n, sparse: false, gate, headline, why, sure, head, insights, notes };
+  return { kind, n, sparse: false, gate, headline, why, sure, head, notes };
 };
 
 /** What the headline is based on, in one line, for "About this chart". */
@@ -517,6 +466,8 @@ export interface AboutRow {
 export interface DrawnMarks {
   /** A line is drawn through at least one row. */
   line: boolean;
+  /** Year only: at least one month's soft bar is drawn. */
+  band: boolean;
   /** A past day without a check-in shows as a hollow dot. */
   hollow: boolean;
   /** A weekly check-in shows as a dashed span. */
@@ -528,10 +479,10 @@ export const aboutRows = (r: MoodInsights, drawn: DrawnMarks): AboutRow[] => {
   const k = r.kind;
   const rows: AboutRow[] = [{ icon: 'headline', strong: 'Headline:', rest: headlineBasis(r) }];
   rows.push(k === 'year' ? { icon: 'dot', strong: 'Dot = one month', rest: '(its average)' } : { icon: 'dot', strong: 'Dot = one day', rest: '' });
-  if (drawn.line) {
-    rows.push(k === 'month'
-      ? { icon: 'line', strong: 'Line = your usual', rest: 'over the past week' }
-      : k === 'year' ? { icon: 'bar', strong: 'Soft bar = where most days fell', rest: '' } : { icon: 'line', strong: 'Line', rest: 'joins your days' });
+  if (k === 'year') {
+    if (drawn.band) rows.push({ icon: 'bar', strong: 'Soft bar = where most days fell', rest: '' });
+  } else if (drawn.line) {
+    rows.push(k === 'month' ? { icon: 'line', strong: 'Line = your usual', rest: 'over the past week' } : { icon: 'line', strong: 'Line', rest: 'joins your days' });
   }
   if (drawn.hollow && k !== 'year') rows.push({ icon: 'hollow', strong: 'Hollow dot = no check-in.', rest: 'Tap it to log that day' });
   const marks = r.notes.map(n => n.insight.mark?.type);
