@@ -3,8 +3,18 @@ import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import type { MoodCheckin } from '@/app/types/mood';
 import {
   analyseTagFeelings,
+  analyseTagKinds,
   chanceOf,
+  defaultKindTag,
+  describeKind,
+  describeKindFeeling,
   describeTagFeeling,
+  feelingWord,
+  kindLineText,
+  kindSides,
+  kindTags,
+  tagKindCounts,
+  type KindCounts,
   formatAverage,
   isDayOff,
   summarizeTagFeelings,
@@ -310,5 +320,123 @@ describe('chanceOf', () => {
   it('gives an empty summary when no tag has enough days', () => {
     const a = analyseTagFeelings(repeat(3, () => row(3, { tags: ['tag:1'] })), TAGS, 'p');
     expect(summarizeTagFeelings(a, 'this week')).toBe('');
+  });
+});
+
+describe('tagKindCounts', () => {
+  it('counts each tag’s tasks, notes, habits and events per day apart', () => {
+    const { byDay, tags } = tagKindCounts(activity({
+      completed_tasks: [
+        task({ id: 1, completed_date: at(20), tags: [cs] }),
+        task({ id: 2, completed_date: at(20, 16), tags: [cs, work] }),
+      ],
+      note_sessions: [
+        // Two sessions on one note in a day count it once; one past midnight counts on both days.
+        { id: 1, note_id: 7, note_title: 'Essay', started_at: at(20, 9), ended_at: at(20, 10), duration_seconds: 3600 },
+        { id: 2, note_id: 7, note_title: 'Essay', started_at: at(20, 14), ended_at: at(20, 15), duration_seconds: 3600 },
+        { id: 3, note_id: 7, note_title: 'Essay', started_at: at(21, 23), ended_at: at(22, 0, 30), duration_seconds: 5400 },
+      ],
+      notes: [{ id: 7, title: 'Essay', tags: [cs] }],
+      habit_completions: [
+        { habit_id: 9, habit_title: 'Run', date: '2026-10-20', estimated_time: null },
+        { habit_id: 9, habit_title: 'Run', date: '2026-10-26', estimated_time: null },
+      ],
+      habits: [{ id: 9, title: 'Run', estimated_time: null, tags: [health] }],
+      events: [{ event_id: 3, occurrence_date: '2026-10-21', date: '2026-10-21', tags: [cs] } as NonNullable<CalendarActivity['events']>[number]],
+    }), new Date(2026, 9, 19), new Date(2026, 9, 25));
+    const of = (day: string, key: string) => byDay.get(day)?.get(key);
+    expect(of('2026-10-20', 'tag:1')).toEqual({ tasks: 2, notes: 1, habits: 0, events: 0 });
+    expect(of('2026-10-20', 'tag:2')).toEqual({ tasks: 1, notes: 0, habits: 0, events: 0 });
+    expect(of('2026-10-20', 'tag:3')).toEqual({ tasks: 0, notes: 0, habits: 1, events: 0 });
+    expect(of('2026-10-21', 'tag:1')).toEqual({ tasks: 0, notes: 1, habits: 0, events: 1 });
+    expect(of('2026-10-22', 'tag:1')).toEqual({ tasks: 0, notes: 1, habits: 0, events: 0 });
+    // Outside the range.
+    expect(byDay.has('2026-10-26')).toBe(false);
+    expect(tags.get('tag:3')?.name).toBe('Health');
+  });
+});
+
+describe('analyseTagKinds', () => {
+  const counts = (perDay: Partial<KindCounts>[]): Map<string, Map<string, KindCounts>> =>
+    new Map(perDay.map((c, i) => [`2026-02-${String(i + 1).padStart(3, '0')}`, new Map([['tag:1', { tasks: 0, notes: 0, habits: 0, events: 0, ...c }]])]));
+  const days = (moods: number[], stress?: number[]): TagDay[] => moods.map((m, i) => ({
+    day: `2026-02-${String(i + 1).padStart(3, '0')}`, mood: m, energy: m, stress: stress ? stress[i] : 3, off: false, tags: new Set(),
+  }));
+
+  it('splits each kind at “did it at least once” and says what went with doing more', () => {
+    // Ten days with a task are stressed; ten without are calm. Notes are every other day and change nothing.
+    const c = counts(Array.from({ length: 20 }, (_, i) => ({ tasks: i < 10 ? 1 : 0, notes: i % 2 })));
+    const d = days(Array(20).fill(3), Array.from({ length: 20 }, (_, i) => (i < 10 ? 5 : 1)));
+    const [tasks, notes, habits, events] = analyseTagKinds(d, c, 'tag:1', 'p');
+    expect(tasks).toMatchObject({ kind: 'tasks', none: false, threshold: 1, moreDays: 10, lessDays: 10 });
+    expect(tasks.feel!.stress).toMatchObject({ verdict: 'clear', good: false, avg: 5, other: 1 });
+    expect(tasks.feel!.mood.verdict).toBe('same');
+    expect(kindLineText(describeKind(tasks, 'COMM 103', 'this month'))).toBe('Doing more COMM 103 tasks is linked to more stress');
+    expect(describeKind(notes, 'COMM 103', 'this month')).toEqual({ tone: 'same', text: 'No clear difference' });
+    expect(habits.none).toBe(true);
+    expect(describeKind(habits, 'COMM 103', 'this month')).toEqual({ tone: 'none', text: 'No COMM 103 habits this month' });
+    expect(describeKind(events, 'COMM 103', 'in 2026').tone).toBe('none');
+    expect(kindSides(tasks, 'COMM 103')).toEqual(['Days you finished a COMM 103 task', 'Days you didn’t']);
+    expect(kindSides(tasks, null)).toEqual(['Days you finished a task', 'Days you didn’t']);
+    expect(describeKindFeeling(tasks, 'stress', 'COMM 103')).toBe(
+      'Stress: usually Maxed on the 10 days you finished a COMM 103 task, usually Calm on the other 10 days. That’s a clear difference: on those days you were more stressed.',
+    );
+  });
+
+  it('names every clear feeling, with the verb for the kind', () => {
+    const c = counts(Array.from({ length: 20 }, (_, i) => ({ notes: i < 10 ? 1 : 0 })));
+    const d = days(Array.from({ length: 20 }, (_, i) => (i < 10 ? 1 : 5)), Array(20).fill(3));
+    const notes = analyseTagKinds(d, c, 'tag:1', 'p')[1];
+    const line = describeKind(notes, 'Work', 'this year');
+    expect(line).toMatchObject({ tone: 'clear', lead: 'Editing more Work notes is linked to' });
+    expect(kindLineText(line)).toBe('Editing more Work notes is linked to a lower mood and less energy');
+    expect(line.tone === 'clear' && line.effects.map(e => e.good)).toEqual([false, false]);
+  });
+
+  it('raises the split past the lowest count, so a habit done daily compares 2+ days with fewer', () => {
+    const c = counts(Array.from({ length: 20 }, (_, i) => ({ habits: i < 12 ? 2 : 1, events: 1 })));
+    const d = days(Array(20).fill(3));
+    const [, , habits, events] = analyseTagKinds(d, c, 'tag:1', 'p');
+    expect(habits).toMatchObject({ threshold: 2, moreDays: 12, lessDays: 8 });
+    expect(kindSides(habits, 'Health')).toEqual(['Days you checked off 2 or more Health habits', 'Days with fewer']);
+    // An event every day: nothing to compare with.
+    expect(events).toMatchObject({ moreDays: 20, lessDays: 0 });
+    expect(describeKind(events, 'Health', 'this month')).toEqual({ tone: 'thin', text: 'Too few days to tell' });
+    expect(kindSides({ ...events, threshold: 1 }, 'ART 157')).toEqual(['Days with an ART 157 event', 'Days without one']);
+  });
+
+  it('never states a difference under 5 days a side or under half a step', () => {
+    const few = analyseTagKinds(days([1, 1, 1, 1, 5, 5, 5, 5, 5, 5]), counts(Array.from({ length: 10 }, (_, i) => ({ tasks: i < 4 ? 1 : 0 }))), 'tag:1', 'p')[0];
+    expect(few.feel!.mood.verdict).toBe('thin');
+    const small = analyseTagKinds(
+      days(Array.from({ length: 40 }, (_, i) => (i < 20 ? (i % 5 ? 3 : 4) : 3))),
+      counts(Array.from({ length: 40 }, (_, i) => ({ tasks: i < 20 ? 1 : 0 }))),
+      'tag:1', 'p',
+    )[0];
+    expect(small.feel!.mood.verdict).toBe('same');
+  });
+
+  it('opens on the first tag with a clear difference', () => {
+    const tags = [{ tag: { key: 'tag:1', name: 'A', color: null }, days: 9 }, { tag: { key: 'tag:2', name: 'B', color: null }, days: 5 }];
+    const clear = { kind: 'tasks', none: false, threshold: 1, moreDays: 5, lessDays: 5, feel: { mood: { verdict: 'clear' }, energy: { verdict: 'same' }, stress: { verdict: 'same' } } };
+    expect(defaultKindTag(tags, key => (key === 'tag:2' ? [clear] : []) as never)).toBe('tag:2');
+    expect(defaultKindTag(tags, () => [])).toBe('tag:1');
+    expect(defaultKindTag([], () => [])).toBeNull();
+  });
+
+  it('lists tags on any kind of activity, on the most days first', () => {
+    const c = new Map([
+      ['2026-02-001', new Map([['tag:1', { tasks: 0, notes: 0, habits: 1, events: 0 }], ['tag:2', { tasks: 0, notes: 0, habits: 0, events: 1 }]])],
+      ['2026-02-002', new Map([['tag:2', { tasks: 1, notes: 0, habits: 0, events: 0 }]])],
+    ]);
+    expect(kindTags(days([3, 3]), c, TAGS).map(t => [t.tag.name, t.days])).toEqual([['Work', 2], ['CS 460', 1]]);
+  });
+});
+
+describe('check-in words', () => {
+  it('reads an average as the word it rounds to', () => {
+    expect(feelingWord('mood', 3.9)).toBe('Good');
+    expect(feelingWord('stress', 2.2)).toBe('Mild');
+    expect(feelingWord('energy', 0.4)).toBe('Drained');
   });
 });

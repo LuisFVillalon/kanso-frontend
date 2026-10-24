@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeTagMood } from './ReportMoodRelations';
+import { describeTagMood } from './ReportCheckinTags';
 
 describe('describeTagMood', () => {
   it('compares the averages as shown, so the numbers add up', () => {

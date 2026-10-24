@@ -23,7 +23,7 @@ import {
 import ReportMoodChart from './ReportMoodChart';
 import ReportMoodRelations from './ReportMoodRelations';
 import ReportPeriodCheckins from './ReportPeriodCheckins';
-import ReportTagFeelings from './ReportTagFeelings';
+import ReportTagsCard from './ReportTagsCard';
 
 /** Which part of the Mood tab shows: the chart and check-ins, or how mood moved with activity and tags. */
 export type MoodView = 'time' | 'patterns';
@@ -107,21 +107,22 @@ interface ReportMoodSectionProps {
   onSelectPeriod: (monthStart: Date) => void;
   /** Opens the Year report holding `date`. */
   onSelectYear: (date: Date) => void;
-  /** The profile's rest days, which "Your task & note tags" compares apart from work days. */
+  /** The profile's rest days, which the Tags card compares apart from work days. */
   restDays: number[];
   view: MoodView;
 }
 
 /**
  * The report's Mood tab: "Over time" shows "Mood over time" and the
- * Check-ins summary, "Patterns" shows "Mood & your activity", "Check-in
- * tags & mood" and "Your task & note tags"; with no check-ins it's an empty card with "Log today" and, while
+ * Check-ins summary, "Patterns" shows "Mood & your activity" beside one
+ * "Tags" card that switches between "Your task & note tags" and "Check-in
+ * tags"; with no check-ins it's an empty card with "Log today" and, while
  * weekly or monthly check-ins are on, the period's weeks or months to log.
  * Any day dot opens its check-in to edit, and a hollow one logs that day;
  * weekly and monthly check-ins open from their spans, ◇ and the Check-ins
  * list, which also logs a past week or month without one. A week is too
- * short for mood patterns, so its Patterns show "Your task & note tags" hatched
- * and point to its Month report.
+ * short for mood patterns, so its Patterns show the Tags card alone, hatched,
+ * pointing to its Month report.
  */
 const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, onSelectYear, restDays, view }) => {
   const showToast = useToast();
@@ -254,34 +255,39 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
             </CheckinsCard>
           </div>
         ) : period.kind === 'week' ? (
-          <ReportTagFeelings
+          <ReportTagsCard
             activity={activity}
             byDay={byDay}
             period={period}
             scopeLabel={scopeName(period)}
             restDays={restDays}
+            average={summary.average}
+            logged={summary.logged}
             widen={{ label: `See ${weekMonth.toLocaleDateString('en-US', { month: 'long' })}`, onClick: () => onSelectPeriod(weekMonth) }}
+            wide
           />
         ) : summary.average != null ? (
-          <div className="flex flex-col gap-3 sm:gap-4">
-            <ReportMoodRelations
-              activity={activity}
-              byDay={byDay}
-              period={period}
-              scopeLabel={scopeName(period)}
-              average={summary.average}
-              logged={summary.logged}
-              byWeek={period.kind === 'year'}
-            />
-            <ReportTagFeelings
-              activity={activity}
-              byDay={byDay}
-              period={period}
-              scopeLabel={scopeName(period)}
-              restDays={restDays}
-              widen={period.kind === 'month' ? { label: `See ${period.start.getFullYear()}`, onClick: () => onSelectYear(period.start) } : undefined}
-            />
-          </div>
+          <ReportMoodRelations
+            activity={activity}
+            byDay={byDay}
+            period={period}
+            scopeLabel={scopeName(period)}
+            byWeek={period.kind === 'year'}
+            renderTags={headerAction => (
+              <ReportTagsCard
+                activity={activity}
+                byDay={byDay}
+                period={period}
+                scopeLabel={scopeName(period)}
+                restDays={restDays}
+                average={summary.average}
+                logged={summary.logged}
+                widen={period.kind === 'month' ? { label: `See ${period.start.getFullYear()}`, onClick: () => onSelectYear(period.start) } : undefined}
+                wide={false}
+                headerAction={headerAction}
+              />
+            )}
+          />
         ) : (
           <div className="card-glass p-6 text-center text-sm text-text-muted">
             Mood & your activity, Check-in tags & mood and Your task & note tags use your daily check-ins — there are none {scopeName(period)}.
