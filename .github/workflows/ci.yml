@@ -13,6 +13,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     env:
+      # Several report tests assume local dev time zone (see PR #105).
+      TZ: America/Los_Angeles
       # Harmless placeholders so `next build` can prerender; never real keys.
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
