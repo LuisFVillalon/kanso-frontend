@@ -6,6 +6,7 @@ import { ToastProvider } from '@/app/context/ToastContext';
 import { NotificationsContext, type NotificationsContextValue } from '@/app/context/NotificationsContextValue';
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { DailyDebriefReport } from '@/app/types/debrief';
+import type { Task } from '@/app/types/task';
 import { DEFAULT_MOOD_SETTINGS, type MoodCheckin } from '@/app/types/mood';
 
 const api = vi.hoisted(() => ({
@@ -244,5 +245,85 @@ describe('TaskDebriefPanel mood chip', () => {
   it('keeps mood out of the AI brief request', async () => {
     await render();
     expect(api.fetchTaskDebrief).toHaveBeenCalledWith();
+  });
+});
+
+describe('TaskDebriefPanel Slipped actions', () => {
+  const slippedTask = {
+    id: 5, title: 'File taxes', description: null, due_date: '2026-10-22', due_time: '17:00:00',
+    priority: null, category: null, completed: false, completed_date: null, tags: [],
+    created_date: '2026-10-01T00:00:00', estimated_time: null, parent_task_id: null, position: null,
+  } as unknown as Task;
+  const slippedDebrief: DailyDebriefReport = {
+    ...debrief,
+    overdue_tasks: [{
+      id: 5, title: 'File taxes', category: null, priority: null,
+      due_date: '2026-10-22', due_time: '17:00:00', estimated_time: null, tags: [],
+    }],
+  };
+  const actions = () => ({
+    onArchiveTask: vi.fn(async () => true),
+    onDeleteTask: vi.fn(async () => true),
+    onUpdateTask: vi.fn(async () => true),
+  });
+  const input = (label: string) => document.body.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement;
+
+  beforeEach(() => { api.fetchTaskDebrief.mockResolvedValue(slippedDebrief); });
+
+  it('archives a slipped task and drops it from the list at once', async () => {
+    const a = actions();
+    await render({ tasks: [slippedTask], ...a });
+    await click(button('Archive “File taxes”'));
+    expect(a.onArchiveTask).toHaveBeenCalledWith(slippedTask, undefined);
+    expect(text()).toContain('Nothing slipped.');
+  });
+
+  it('deletes a slipped task, and puts it back if the delete fails', async () => {
+    const a = { ...actions(), onDeleteTask: vi.fn(async () => false) };
+    await render({ tasks: [slippedTask], ...a });
+    await click(button('Delete “File taxes”'));
+    expect(a.onDeleteTask).toHaveBeenCalledWith(slippedTask, undefined);
+    expect(text()).toContain('File taxes');
+  });
+
+  it('asks about linked tasks before deleting a task that has them', async () => {
+    const a = actions();
+    const child = { ...slippedTask, id: 6, title: 'Find W-2', parent_task_id: 5, due_date: null, due_time: null } as Task;
+    await render({ tasks: [slippedTask, child], ...a });
+    await click(button('Delete “File taxes”'));
+    expect(a.onDeleteTask).not.toHaveBeenCalled();
+    expect(text()).toContain('Find W-2');
+  });
+
+  it('reschedules with a quick pick and leaves Slipped', async () => {
+    const a = actions();
+    await render({ tasks: [slippedTask], ...a });
+    await click(button('Change due date and time for “File taxes”'));
+    await click(button('Tomorrow'));
+    expect(a.onUpdateTask).toHaveBeenCalledWith(5, expect.objectContaining({ due_date: '2026-10-25', due_time: '09:00' }));
+    expect(api.fetchTaskDebrief).toHaveBeenCalledTimes(2);
+    expect(text()).toContain('Nothing slipped.');
+  });
+
+  it('reschedules to a custom date and time', async () => {
+    const a = actions();
+    await render({ tasks: [slippedTask], ...a });
+    await click(button('Change due date and time for “File taxes”'));
+    expect(input('New due date').value).toBe('2026-10-22');
+    expect(input('New due time').value).toBe('17:00');
+    await act(async () => {
+      for (const [label, value] of [['New due date', '2026-10-30'], ['New due time', '08:15']]) {
+        const el = input(label);
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+    await click(button('Save'));
+    expect(a.onUpdateTask).toHaveBeenCalledWith(5, expect.objectContaining({ due_date: '2026-10-30', due_time: '08:15' }));
+  });
+
+  it('shows no actions without the handlers', async () => {
+    await render({ tasks: [slippedTask] });
+    expect(button('Archive “File taxes”')).toBeUndefined();
   });
 });

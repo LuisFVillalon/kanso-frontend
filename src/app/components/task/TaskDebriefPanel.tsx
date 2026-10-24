@@ -19,6 +19,10 @@ import { formatDuration } from '@/app/utils/duration';
 import type { DebriefTag } from '@/app/types/debrief';
 import { DAY_COMPLETE_COPY } from '@/app/components/common/KeyPressMoment';
 import { BriefMoodLine } from '@/app/components/mood/DayMoodCheckin';
+import type { EditTaskForm, LinkedRemoveMode } from '@/app/types/task';
+import { linkedTaskIndex, taskToEditForm } from '@/app/utils/taskUtils';
+import RemoveLinkedTasksDialog, { RemovedBranch } from './RemoveLinkedTasksDialog';
+import { SlippedTaskActionButtons, ReschedulePicker, isStillAhead } from './SlippedTaskActions';
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
 
@@ -48,11 +52,18 @@ interface TaskDebriefPanelProps {
   tasks: Task[];
   habits: Habit[];
   completionSyncToken: number;
+  /** Actions on a Slipped task; each resolves true once the server confirms it. */
+  onArchiveTask?: (task: Task, linked?: LinkedRemoveMode) => Promise<boolean>;
+  onDeleteTask?: (task: Task, linked?: LinkedRemoveMode) => Promise<boolean>;
+  onUpdateTask?: (id: number, form: EditTaskForm) => Promise<boolean>;
 }
 
 const isBoolean = (c: unknown): c is boolean => typeof c === 'boolean';
 
-const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoaded, onSaveProfile, tasks, habits, completionSyncToken }) => {
+const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
+  profile, profileLoaded, onSaveProfile, tasks, habits, completionSyncToken,
+  onArchiveTask, onDeleteTask, onUpdateTask,
+}) => {
   const [status, setStatus] = useState<Status>('idle');
   const [debrief, setDebrief] = useState<DailyDebriefReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +83,13 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
   // snapshot, making a just-completed task vanish from the activity log.
   const requestSeq = useRef(0);
 
+  // Slipped tasks archived, deleted or rescheduled out of Slipped leave the
+  // list at once, before the re-fetch that follows lands.
+  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
+  const [reschedulingId, setReschedulingId] = useState<number | null>(null);
+  const [removing, setRemoving] = useState<{ task: Task; verb: 'delete' | 'archive'; linked: RemovedBranch[] } | null>(null);
+
   const run = async () => {
     const seq = ++requestSeq.current;
     setStatus('loading');
@@ -80,6 +98,9 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
       const result = await fetchTaskDebrief();
       if (seq !== requestSeq.current) return;
       setDebrief(result);
+      // Forget hidden tasks the server has dropped too; keep hiding the rest
+      // so a fetch that started before the action landed can't bring one back.
+      setHiddenIds(prev => new Set(result.overdue_tasks.map(t => t.id).filter(id => prev.has(id))));
       setStatus('done');
     } catch (err) {
       if (seq !== requestSeq.current) return;
@@ -112,6 +133,53 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
   const mood = profileLoaded && dailyMood
     ? <BriefMoodLine profile={profile} tasks={tasks} habits={habits} />
     : null;
+
+  const setPending = (id: number, on: boolean) =>
+    setPendingIds(prev => {
+      const next = new Set(prev);
+      if (on) next.add(id); else next.delete(id);
+      return next;
+    });
+  const hide = (id: number, on: boolean) =>
+    setHiddenIds(prev => {
+      const next = new Set(prev);
+      if (on) next.add(id); else next.delete(id);
+      return next;
+    });
+
+  const remove = async (task: Task, verb: 'delete' | 'archive', linked?: LinkedRemoveMode) => {
+    const action = verb === 'delete' ? onDeleteTask : onArchiveTask;
+    if (!action) return;
+    hide(task.id, true);
+    const ok = await action(task, linked);
+    if (!ok) hide(task.id, false);
+  };
+
+  // Like the task list: a task with linked tasks asks what happens to them first.
+  const requestRemove = (item: DebriefTaskItem, verb: 'delete' | 'archive') => {
+    const task = tasks.find(t => t.id === item.id);
+    if (!task) return;
+    const { childrenOf, descendantsOf } = linkedTaskIndex(tasks);
+    const linked = childrenOf(task.id).map(c => ({ task: c, under: descendantsOf(c.id) }));
+    if (linked.length > 0) setRemoving({ task, verb, linked });
+    else remove(task, verb);
+  };
+
+  const reschedule = async (item: DebriefTaskItem, date: string, time: string | null) => {
+    const task = tasks.find(t => t.id === item.id);
+    if (!task || !onUpdateTask) return;
+    setPending(task.id, true);
+    const ok = await onUpdateTask(task.id, taskToEditForm(task, { due_date: date, due_time: time }));
+    setPending(task.id, false);
+    if (!ok) return;
+    setReschedulingId(null);
+    if (isStillAhead(date, time)) hide(task.id, true);
+    run();
+  };
+
+  const canAct = (item: DebriefTaskItem) =>
+    !!(onArchiveTask && onDeleteTask && onUpdateTask) && tasks.some(t => t.id === item.id);
+  const slipped = debrief?.overdue_tasks.filter(t => !hiddenIds.has(t.id)) ?? [];
 
   const toggle = () => {
     const next = !open;
@@ -180,11 +248,35 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
                   icon={<SlippedDot />}
                   title="Slipped"
                   accentColor="var(--tm-slipped-text)"
-                  isEmpty={debrief.overdue_tasks.length === 0}
+                  isEmpty={slipped.length === 0}
                   emptyText="Nothing slipped."
-                  lead={debrief.overdue_tasks.length > 0 ? slippedLead(debrief.overdue_tasks.length) : undefined}
+                  lead={slipped.length > 0 ? slippedLead(slipped.length) : undefined}
                 >
-                  {debrief.overdue_tasks.map(task => <TaskRow key={task.id} task={task} />)}
+                  {slipped.map(task => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      actions={canAct(task) && (
+                        <SlippedTaskActionButtons
+                          title={task.title}
+                          pending={pendingIds.has(task.id)}
+                          rescheduling={reschedulingId === task.id}
+                          onArchive={() => requestRemove(task, 'archive')}
+                          onDelete={() => requestRemove(task, 'delete')}
+                          onReschedule={() => setReschedulingId(reschedulingId === task.id ? null : task.id)}
+                        />
+                      )}
+                      below={reschedulingId === task.id && (
+                        <ReschedulePicker
+                          initialDate={task.due_date ? toLocalDateStr(task.due_date) : toLocalDateStr(new Date())}
+                          initialTime={task.due_time?.slice(0, 5) ?? ''}
+                          pending={pendingIds.has(task.id)}
+                          onSave={(date, time) => reschedule(task, date, time)}
+                          onCancel={() => setReschedulingId(null)}
+                        />
+                      )}
+                    />
+                  ))}
                 </SectionCard>
 
                 <SectionCard
@@ -208,6 +300,16 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({ profile, profileLoa
             </div>
           )}
         </div>
+      )}
+
+      {removing && (
+        <RemoveLinkedTasksDialog
+          verb={removing.verb}
+          title={removing.task.title}
+          linked={removing.linked}
+          onConfirm={linked => { remove(removing.task, removing.verb, linked); setRemoving(null); }}
+          onClose={() => setRemoving(null)}
+        />
       )}
     </div>
   );
@@ -286,29 +388,39 @@ function SectionCard({
   );
 }
 
-function TaskRow({ task }: { task: DebriefTaskItem }) {
+function TaskRow({ task, actions, below }: {
+  task: DebriefTaskItem;
+  /** Buttons after the priority chip (the Slipped actions). */
+  actions?: React.ReactNode;
+  /** Content on its own line under the row (the reschedule picker). */
+  below?: React.ReactNode;
+}) {
   const style = getPriorityStyle(task.priority);
   const due = formatDueDate(task.due_date, task.due_time);
   return (
     <li
-      className="flex items-start justify-between gap-2 py-1 border-b last:border-b-0"
+      className="group/slipped py-1 border-b last:border-b-0"
       style={{ borderColor: 'var(--tm-border-subtle)' }}
     >
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-text-primary truncate">{task.title}</p>
-        <div className="flex items-center gap-1 mt-0.5 flex-wrap text-[10px] text-text-muted">
-          {task.due_date && <span>{due}</span>}
-          {task.category && <span>· {task.category}</span>}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-text-primary truncate">{task.title}</p>
+          <div className="flex items-center gap-1 mt-0.5 flex-wrap text-[10px] text-text-muted">
+            {task.due_date && <span>{due}</span>}
+            {task.category && <span>· {task.category}</span>}
+          </div>
         </div>
+        {task.priority != null && (
+          <span
+            className="chip flex-shrink-0 font-bold"
+            style={{ backgroundColor: style.bg, color: style.text, padding: '0.1rem 0.4rem', fontSize: '10px' }}
+          >
+            {task.priority}
+          </span>
+        )}
+        {actions}
       </div>
-      {task.priority != null && (
-        <span
-          className="chip flex-shrink-0 font-bold"
-          style={{ backgroundColor: style.bg, color: style.text, padding: '0.1rem 0.4rem', fontSize: '10px' }}
-        >
-          {task.priority}
-        </span>
-      )}
+      {below}
     </li>
   );
 }
