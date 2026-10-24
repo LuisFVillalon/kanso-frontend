@@ -87,7 +87,7 @@ export const summarizeMood = (
   return { average: logged > 0 ? total / logged : null, logged, days: days.length, distribution };
 };
 
-/** Tags on fewer days than this are left off the Check-in tags & mood card. */
+/** Tags on fewer days than this are left off the Moments & mood card. */
 export const TAG_MIN_DAYS = 3;
 
 export interface TagMood {

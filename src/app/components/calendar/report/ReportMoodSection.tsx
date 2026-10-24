@@ -293,7 +293,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
           />
         ) : (
           <div className="card-glass p-6 text-center text-sm text-text-muted">
-            Mood & your activity, Check-in tags & mood and Your task & note tags use your daily check-ins — there are none {scopeName(period)}.
+            Mood & your activity, Moments & mood and Your task & note tags use your daily check-ins — there are none {scopeName(period)}.
           </div>
         )
       )}

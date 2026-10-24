@@ -103,10 +103,20 @@ describe('MoodCheckinModal', () => {
     expect(onSaved).toHaveBeenCalledWith(saved, null);
   });
 
-  it('suggests mood tags from /get-mood-tags, not task tags', async () => {
+  it('suggests moments from /get-mood-tags, not task tags', async () => {
     await render();
     expect(api.fetchMoodTags).toHaveBeenCalled();
     expect(button('Gym')).toBeDefined();
+  });
+
+  it('calls the check-in chips Moments, never tags', async () => {
+    await render();
+    expect(document.body.textContent).toContain('What was part of today?optionalPick your moments');
+    expect(document.body.querySelector('[role="group"][aria-label="Moments"]')!.textContent).toContain('Gym');
+    await click(button('Moment'));
+    const input = document.body.querySelector<HTMLInputElement>('input[aria-label="New moment"]')!;
+    expect(input.placeholder).toBe('New moment');
+    expect(document.body.textContent).not.toMatch(/\btags?\b/i);
   });
 
   it('shows the error and stays open when saving fails', async () => {
