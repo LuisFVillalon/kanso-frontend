@@ -33,15 +33,15 @@ interface ReportTagsCardProps {
 }
 
 /**
- * Mood › Patterns' one "Tags" card: a switch in place swaps "Your
- * task & note tags" (how you felt on days you worked on each of your own tags)
+ * Mood › Patterns' one "Tags & moments" card: a switch in place swaps
+ * "Your task & note tags" (how you felt on days you worked on each of your own tags)
  * and "Moments" (how mood went on days with each moment picked when checking
  * in), so both sit beside "Mood & your activity" without scrolling.
  */
 const ReportTagsCard: React.FC<ReportTagsCardProps> = ({ activity, byDay, period, scopeLabel, restDays, average, logged, widen, wide, headerAction }) => {
   const [source, setSource] = useState<TagSource>('mine');
   return (
-    <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header="Tags" headerAction={headerAction}>
+    <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={<span className="whitespace-nowrap">Tags &amp; moments</span>} headerAction={headerAction}>
       <div className={`flex p-0.5 rounded-lg bg-surface border border-border ${wide ? 'sm:self-start sm:min-w-[26rem]' : ''}`} role="tablist" aria-label="Tags or moments to show">
         {SOURCES.map(s => (
           <button

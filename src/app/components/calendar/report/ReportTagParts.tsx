@@ -4,7 +4,7 @@ import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { useShortWindow } from './ReportMoodRelationChart';
 
-// Pieces the Tags card's charts share.
+// Pieces the Tags & moments card's charts share.
 
 export const Swatch: React.FC<{ style: React.CSSProperties; label: React.ReactNode }> = ({ style, label }) => (
   <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">

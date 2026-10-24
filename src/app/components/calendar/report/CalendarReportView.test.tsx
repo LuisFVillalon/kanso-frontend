@@ -192,7 +192,9 @@ describe('CalendarReportView mood', () => {
     expect(container.querySelector('svg[aria-label^="Typical mood: "]')).toBeNull();
     expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
-    // One Tags card beside it, opening on your own tags; its switch swaps in the Moments in place.
+    // One Tags & moments card beside it, opening on your own tags; its switch swaps in the Moments in place.
+    expect(text()).toContain('Tags & moments');
+    expect([...document.querySelector('[aria-label="Pattern to show"]')!.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Activity', 'Tags & moments']);
     expect(tab('Your task & note tags').getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('How you felt on days you worked on each tag');
     await openTab('Moments');

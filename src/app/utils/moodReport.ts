@@ -99,8 +99,8 @@ export interface TagMood {
 
 /**
  * Average mood on the days over [start, end], up to today, that carry each
- * mood tag — tags used on at least `minDays` days, best average first. Only
- * means and day counts: with this many tags any "significant" claim would
+ * moment — moments picked on at least `minDays` days, best average first.
+ * Only means and day counts: with this many moments any "significant" claim would
  * be noise.
  */
 export const moodByTag = (

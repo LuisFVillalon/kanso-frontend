@@ -34,7 +34,7 @@ export const CardShell: React.FC<CardShellProps> = ({ icon, header, children, he
 
   return (
     <div className="card-glass h-full p-3 sm:p-4 lg:p-5 flex flex-col gap-3">
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
         {icon}
         <span className="text-xs sm:text-sm md:text-base text-text-muted font-medium uppercase tracking-wide">
           {header}

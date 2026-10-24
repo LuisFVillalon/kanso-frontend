@@ -164,6 +164,7 @@ describe('ReportTagsCard', () => {
     act(() => root.render(card({ byDay: tagged })));
     const tabs = [...host.querySelectorAll('[aria-label="Tags or moments to show"] [role="tab"]')];
     expect(tabs.map(t => t.textContent)).toEqual(['Your task & note tags', 'Moments']);
+    expect(text()).toMatch(/^Tags & moments/);
     expect(tabs[0].getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('How you felt on days you worked on each tag');
     expect(host.querySelector('g[role="button"]')).not.toBeNull();

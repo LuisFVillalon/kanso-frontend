@@ -103,7 +103,7 @@ interface ReportTagFeelingsProps {
 export type TagFeelingsView = 'tags' | 'kinds';
 
 /**
- * "Your task & note tags", the Tags card's own-tags side: mood, energy and
+ * "Your task & note tags", the Tags & moments card's own-tags side: mood, energy and
  * stress on days with each of your own tags — a day you finished a task or
  * edited a note carrying it — against your usual. "By tag" draws them per
  * tag; tapping one swaps in its days as a timeline of one feeling. "By kind
