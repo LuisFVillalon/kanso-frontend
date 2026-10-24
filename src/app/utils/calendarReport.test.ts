@@ -6,6 +6,7 @@ import {
   analyseCorrelation,
   buildCalendarReport,
   dailyActivity,
+  describeAnswer,
   describeCorrelation,
   describeLinkBrief,
   describeLinkShort,
@@ -19,6 +20,7 @@ import {
   rhoP,
   shiftPeriod,
   spearman,
+  splitSides,
   type CorrelationResult,
   type MoodMetric,
 } from './calendarReport';
@@ -416,7 +418,7 @@ describe('describeCorrelation', () => {
     );
     // A gap in the split that the ranks don't back up isn't called the same.
     expect(describeSeries('habits', series(30, 'noise'))).toBe(
-      'This month, you sometimes felt better on days you checked off 2 or more habits, but not often enough to count as a pattern.',
+      'This month, your mood was sometimes higher on days you checked off 2 or more habits, but not often enough to count as a pattern.',
     );
   });
 
@@ -444,29 +446,29 @@ describe('describeCorrelation', () => {
 
   it('hedges an early sign', () => {
     expect(describeSeries('habits', series(15, 'up'))).toBe(
-      'This month, you seemed to feel better on days you checked off 2 or more habits. It’s based on only 15 days, so it could be chance — check back in a few weeks.',
+      'This month, your mood seemed higher on days you checked off 2 or more habits. It’s based on only 15 days, so it could be chance — check back in a few weeks.',
     );
   });
 
   it('calls a link under 30 days a hint, and never strong', () => {
     expect(describeSeries('tasks', series(25, 'down'), 'in September 2026')).toBe(
-      'In September 2026, you tended to feel worse on days you completed 2 or more tasks. Worth noticing how those days leave you feeling. This is based on only 25 days, so take it as a hint.',
+      'In September 2026, your mood tended to be lower on days you completed 2 or more tasks. Worth noticing what those days have in common. This is based on only 25 days, so take it as a hint.',
     );
   });
 
   it('says how sure a slight or moderate link over 30 days is', () => {
     expect(describeSeries('tasks', mixed(160, 60), 'in 2026')).toBe(
-      'In 2026, you felt slightly better on days you completed 2 or more tasks. It was a small but steady difference across 160 days. Worth noticing what helps on those days.',
+      'In 2026, your mood was slightly higher on days you completed 2 or more tasks. It was a small but steady difference across 160 days. Worth noticing what those days have in common.',
     );
     expect(describeSeries('habits', mixed(100, 30), 'in 2026')).toBe(
-      'In 2026, you tended to feel better on days you checked off 2 or more habits. It showed up across 100 days. Worth noticing what helps on those days.',
+      'In 2026, your mood tended to be higher on days you checked off 2 or more habits. It showed up across 100 days. Worth noticing what those days have in common.',
     );
   });
 
   it('calls it a clear pattern only for a strong link over 30 days or more', () => {
     const notes = series(30, 'up').map(p => ({ ...p, value: p.value * 20 }));
     expect(describeSeries('notes', notes, 'in 2026')).toBe(
-      'In 2026, you usually felt better on days you spent 40m or more in notes. It was a clear pattern across 30 days. Worth noticing what helps on those days.',
+      'In 2026, your mood was usually higher on days you spent 40m or more in notes. It was a clear pattern across 30 days. Worth noticing what those days have in common.',
     );
   });
 
@@ -488,6 +490,8 @@ describe('describeCorrelation', () => {
           // Everyday words, in one to three short sentences.
           expect(text).not.toMatch(/correlat|significan|median|average|rho|ρ|statistic|link strength/i);
           expect(text.split(/[.!?](?:\s|$)/).filter(Boolean).length).toBeLessThanOrEqual(3);
+          // Says how mood moved, never whether that's good or bad.
+          expect(text).not.toMatch(/\b(better|worse)\b/i);
         }
       }
     }
@@ -497,22 +501,151 @@ describe('describeCorrelation', () => {
 describe('describeLinkBrief', () => {
   it('names the link with its direction', () => {
     expect(describeLinkBrief('tasks', analyseCorrelation(series(30, 'up')), 'this month')).toBe(
-      'Strong link: better mood on days with more tasks completed this month',
+      'Strong link: higher mood on days with more tasks completed this month',
     );
     expect(describeLinkBrief('notes', analyseCorrelation(series(15, 'down')), 'in 2026')).toBe(
-      'Early sign: worse mood on days with more time in notes in 2026',
+      'Early sign: lower mood on days with more time in notes in 2026',
     );
   });
 });
 
 describe('describeLinkShort', () => {
   it('names the activity and direction in a line short enough for the Overview tile', () => {
-    expect(describeLinkShort('tasks', analyseCorrelation(series(30, 'up')))).toBe('More tasks, better mood');
+    expect(describeLinkShort('tasks', analyseCorrelation(series(30, 'up')))).toBe('More tasks, higher mood');
     expect(describeLinkShort('notes', analyseCorrelation(series(15, 'down')))).toBe('More note time, lower mood');
     for (const metric of ['tasks', 'notes', 'habits'] as const) {
       for (const dir of ['up', 'down'] as const) {
         expect(describeLinkShort(metric, analyseCorrelation(series(30, dir))).length).toBeLessThanOrEqual(33);
       }
     }
+  });
+});
+
+describe('describeAnswer', () => {
+  const answerFor = (metric: MoodMetric, points: { value: number; mood: number }[]) =>
+    describeAnswer(metric, analyseCorrelation(points), points.map(p => p.mood));
+
+  it('can’t tell yet under 10 check-in days, and says how many it has', () => {
+    expect(answerFor('tasks', series(6, 'up'))).toEqual({
+      kind: 'wait', sentence: 'Can’t tell yet', short: 'Can’t tell yet', support: '6 of the 10 check-in days it needs so far',
+    });
+  });
+
+  it('can’t tell yet when the activity barely changes', () => {
+    const flat = Array.from({ length: 20 }, (_, i) => ({ value: i % 2, mood: (i % 5) + 1 }));
+    expect(answerFor('notes', flat)).toEqual({
+      kind: 'wait', sentence: 'Can’t tell yet', short: 'Can’t tell yet', support: 'Your time in notes barely changed from day to day',
+    });
+    expect(answerFor('habits', flat).support).toBe('Your habits barely changed from day to day');
+  });
+
+  it('reads “about the same” for every kind of no clear link', () => {
+    const sameMood = Array.from({ length: 24 }, (_, i) => ({ value: i % 5, mood: 4 }));
+    expect(answerFor('tasks', sameMood)).toEqual({
+      kind: 'same',
+      sentence: 'Your mood was about the same either way',
+      short: 'About the same',
+      support: 'Your mood was Good every day you checked in · 24 days',
+    });
+    const unrelated = Array.from({ length: 30 }, (_, i) => ({ value: i % 5, mood: 2 + 2 * (i % 2) }));
+    expect(answerFor('habits', unrelated)).toMatchObject({ kind: 'same', short: 'About the same', support: 'Little change either way · 30 days' });
+    expect(answerFor('habits', series(30, 'noise'))).toMatchObject({
+      kind: 'same', short: 'About the same', support: 'Some ups and downs, but no steady pattern · 30 days',
+    });
+  });
+
+  it('says maybe for an early sign, either way', () => {
+    expect(answerFor('tasks', series(15, 'up'))).toEqual({
+      kind: 'higher',
+      sentence: 'Your mood was maybe higher on busier days',
+      short: 'Maybe higher',
+      support: 'Too early to be sure · only 15 days',
+    });
+    expect(answerFor('notes', series(15, 'down'))).toEqual({
+      kind: 'lower',
+      sentence: 'Your mood was maybe lower on days with more note time',
+      short: 'Maybe lower',
+      support: 'Too early to be sure · only 15 days',
+    });
+  });
+
+  it('says a little for a slight link', () => {
+    expect(answerFor('habits', mixed(160, 60))).toEqual({
+      kind: 'higher',
+      sentence: 'Your mood was a little higher on days with more habits checked off',
+      short: 'A little higher',
+      support: 'Small but steady · 160 days',
+    });
+    const slightDown = mixed(160, 60).map(p => ({ ...p, mood: 6 - p.mood }));
+    expect(answerFor('tasks', slightDown)).toMatchObject({ kind: 'lower', short: 'A little lower', sentence: 'Your mood was a little lower on busier days' });
+  });
+
+  it('says plainly higher or lower for a moderate link, as a hint under 30 days', () => {
+    expect(answerFor('habits', mixed(100, 30))).toEqual({
+      kind: 'higher',
+      sentence: 'Your mood was higher on days with more habits checked off',
+      short: 'Higher',
+      support: 'Showed up often · 100 days',
+    });
+    // A strong match held back to moderate under 30 days.
+    expect(answerFor('tasks', series(25, 'down'))).toEqual({
+      kind: 'lower',
+      sentence: 'Your mood was lower on busier days',
+      short: 'Lower',
+      support: 'Treat it as a hint · only 25 days',
+    });
+  });
+
+  it('says clearly for a strong link over 30 days or more', () => {
+    expect(answerFor('tasks', series(30, 'up'))).toEqual({
+      kind: 'higher',
+      sentence: 'Your mood was clearly higher on busier days',
+      short: 'Clearly higher',
+      support: 'A clear pattern · 30 days',
+    });
+    expect(answerFor('notes', series(30, 'down'))).toMatchObject({ kind: 'lower', short: 'Clearly lower' });
+  });
+
+  it('never calls a mood better or worse, or a link a cause', () => {
+    const sets = [5, 12, 15, 25, 30, 60, 160].flatMap(n => (['up', 'down', 'noise'] as const).map(r => series(n, r)));
+    sets.push(mixed(160, 60), mixed(100, 30), Array.from({ length: 12 }, () => ({ value: 1, mood: 3 })));
+    const kinds = new Set<string>();
+    for (const points of sets) {
+      for (const metric of ['tasks', 'notes', 'habits'] as const) {
+        const answer = answerFor(metric, points);
+        kinds.add(answer.kind);
+        for (const text of [answer.sentence, answer.short, answer.support]) {
+          expect(text).not.toMatch(/\b(better|worse|good for|bad|because|causes?)\b/i);
+        }
+      }
+    }
+    expect(kinds).toEqual(new Set(['higher', 'lower', 'same', 'wait']));
+  });
+});
+
+describe('splitSides', () => {
+  const sidesFor = (metric: MoodMetric, points: { value: number; mood: number }[]) =>
+    splitSides(metric, analyseCorrelation(points), points.map(p => p.value));
+
+  it('names both halves of the split with their day counts', () => {
+    // Values 0–4, split at 2.
+    expect(sidesFor('tasks', series(30, 'up'))).toEqual({ low: '0–1 tasks', high: '2+ tasks', lowDays: 12, highDays: 18 });
+    expect(sidesFor('habits', series(30, 'up'))).toMatchObject({ low: '0–1 habits', high: '2+ habits' });
+  });
+
+  it('says “no tasks” or a single count when the low half is one value', () => {
+    const mostlyZero = Array.from({ length: 12 }, (_, i) => ({ value: i < 8 ? 0 : i - 7, mood: i < 8 ? 2 : 4 }));
+    expect(sidesFor('tasks', mostlyZero)).toEqual({ low: 'no tasks', high: '1+ tasks', lowDays: 8, highDays: 4 });
+    const fromOne = mostlyZero.map(p => ({ ...p, value: p.value + 1 }));
+    expect(sidesFor('habits', fromOne)).toMatchObject({ low: '1 habit', high: '2+ habits' });
+  });
+
+  it('names note time in minutes', () => {
+    const notes = series(30, 'up').map(p => ({ ...p, value: p.value * 20 }));
+    expect(sidesFor('notes', notes)).toMatchObject({ low: 'under 40m', high: '40m+' });
+  });
+
+  it('has nothing to split without enough days', () => {
+    expect(sidesFor('tasks', series(6, 'up'))).toBeNull();
   });
 });
