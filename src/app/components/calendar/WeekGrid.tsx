@@ -663,6 +663,7 @@ function useDragSelect(onDragCreate: WeekGridProps['onDragCreate'], days: Date[]
         return;
       }
       draggedRef.current = true;
+      setTimeout(() => { draggedRef.current = false; });
       const rect = column.getBoundingClientRect();
       const anchor = new DOMRect(rect.left, rect.top + minutesToPx(current.startMin), rect.width, minutesToPx(current.endMin - current.startMin));
       setDrag(null);

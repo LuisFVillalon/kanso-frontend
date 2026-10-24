@@ -522,6 +522,24 @@ describe('WeekView', { timeout: 30_000 }, () => {
       expect(mocks.fetchCalendarActivity.mock.calls.length).toBeGreaterThan(fetchesBefore);
     });
 
+    it('opens the quick-add from a slot after a drag that ended elsewhere', async () => {
+      await render();
+      const slot = button('Add a task or event on Friday, October 23 at 4:00 PM');
+      await act(async () => {
+        slot.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', button: 0, clientY: 16 * 48 + 5 }));
+        window.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientY: 17 * 48 }));
+        window.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'mouse', clientY: 17 * 48 }));
+      });
+      expect(dialog('New event')).toBeTruthy();
+      await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+      expect(dialog('New event')).toBeNull();
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+      // Enter on a focused button fires its click, with no pointerdown first.
+      await act(async () => slot.click());
+      expect(dialog('New task')).toBeTruthy();
+    });
+
     it("switches a click's quick-add to an event", async () => {
       await render();
       await act(async () => button('Add a task or event on Thursday, October 22 at 9:30 AM').click());
