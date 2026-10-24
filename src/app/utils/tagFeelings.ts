@@ -1,5 +1,5 @@
 /**
- * The Mood › Patterns "Tags & feelings" card: how mood, energy and stress
+ * The Mood › Patterns "Your task & note tags" card: how mood, energy and stress
  * went on days carrying each of the user's own tags (the ones on tasks,
  * notes and habits) compared with their other days.
  *

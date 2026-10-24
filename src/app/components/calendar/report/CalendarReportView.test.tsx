@@ -162,7 +162,7 @@ describe('CalendarReportView mood', () => {
     expect(text()).not.toContain('Patterns in your mood show up');
     await openPatterns();
     expect(text()).not.toContain('Mood & your activity');
-    expect(text()).toContain('Tags & feelings');
+    expect(text()).toContain('Your task & note tags');
     expect(text()).toContain('A week is too short to tell anything from chance');
     await click(buttonLabelled(/^See October$/));
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
@@ -180,8 +180,8 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('2 days with a check-in');
     expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
-    expect(text()).toContain('Tags & mood');
-    expect(text()).toContain('Tags & feelings');
+    expect(text()).toContain('Check-in tags & mood');
+    expect(text()).toContain('Your task & note tags');
   });
 
   it('describes how mood moved with habits, and averages mood by tag', async () => {
