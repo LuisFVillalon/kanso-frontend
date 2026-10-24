@@ -81,14 +81,17 @@ const timeByTag = (
   noteTimeTotals: Record<number, number>,
   events: EventOccurrence[],
   dateStr: string,
-): TimeCategory[] => {
+): { buckets: TimeCategory[]; total: number } => {
   const items = [
     ...tasksCompleted.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0 })),
     ...habitsCompleted.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0 })),
     ...notesEdited.map(n => ({ tags: n.tags, value: (noteTimeTotals[n.id] ?? 0) / 3600 })),
     ...events.filter(happened).map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, dateStr) / 60 })),
   ];
-  return bucketByTag(items, i => i.value);
+  return {
+    buckets: bucketByTag(items, i => i.value),
+    total: items.reduce((sum, i) => sum + Math.max(i.value, 0), 0),
+  };
 };
 
 /** An open task due during an event on the same day: "Essay is due at 1:00 PM, during Studio." */
@@ -310,8 +313,8 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
   const doneIds = new Set(habitsCompleted.map(h => h.id));
   const habits = [...allHabits, ...habitsCompleted.filter(h => !allHabits.some(a => a.id === h.id))];
   const noteSeconds = notesEdited.reduce((sum, n) => sum + (noteTimeTotals[n.id] ?? 0), 0);
-  const time = timeByTag(tasksCompleted, habitsCompleted, notesEdited, noteTimeTotals, events, dateStr);
-  const totalHours = time.reduce((sum, c) => sum + c.value, 0);
+  const { buckets: time, total: totalHours } = timeByTag(tasksCompleted, habitsCompleted, notesEdited, noteTimeTotals, events, dateStr);
+  const bucketHours = time.reduce((sum, c) => sum + c.value, 0);
   const clashes = eventClashes(tasksDue, events, dateStr);
 
   // Undefined while the check-in loads, so the sentence doesn't say "No check-in" before it knows.
@@ -373,7 +376,10 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
     window: workDay?.window,
   });
   const eventsPreview = events.length
-    ? events.map(e => `${e.all_day || !e.start_time ? 'All day' : formatClock(e.start_time)} ${e.title}${e.archived ? ' (archived)' : ''}`).join(' · ')
+    ? events.map(e => {
+      const span = occurrenceSpanOn(e, dateStr);
+      return `${span ? minutesToClock(span.start) : e.all_day || !e.start_time ? 'All day' : formatClock(e.start_time)} ${e.title}${e.archived ? ' (archived)' : ''}`;
+    }).join(' · ')
     : 'None';
   const hasTimeline = timeline.some(t => t.kind === 'event');
   const eventsBody = !events.length ? <Empty>No events.</Empty> : (
@@ -562,7 +568,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
         className="flex h-3 rounded-md overflow-hidden gap-0.5"
         style={{ backgroundColor: 'var(--tm-strip)' }}
       >
-        {time.map(c => <span key={c.label} title={`${c.label} ${fmtHours(c.value)}h`} className="block h-full" style={{ width: `${(c.value / totalHours) * 100}%`, backgroundColor: c.color }} />)}
+        {time.map(c => <span key={c.label} title={`${c.label} ${fmtHours(c.value)}h`} className="block h-full" style={{ width: `${(c.value / bucketHours) * 100}%`, backgroundColor: c.color }} />)}
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-text-secondary">
         {time.map(c => (

@@ -150,6 +150,21 @@ describe('DaySummary', () => {
     expect(section('events').textContent).toContain('Shows your finished tasks between events.');
   });
 
+  it('counts an item with more than one tag once in the total', () => {
+    const work = { id: 5, name: 'Work', color: '#3b82f6' };
+    render({ ...data, tasksCompleted: [], habitsCompleted: [], events: [event('Review', '13:00', '15:00', { tags: [art, work] })] });
+    expect(section('time').querySelector('summary')!.textContent).toContain('about 2h');
+    expect(section('time').textContent).toContain('About 2h in all');
+    expect(section('time').textContent).toContain('Art 2h');
+    expect(section('time').textContent).toContain('Work 2h');
+  });
+
+  it('previews an event from the night before at the time it reaches this day', () => {
+    const lateShift = event('Late shift', '22:00', '01:00', { date: '2026-10-22', occurrence_date: '2026-10-22' });
+    render({ ...data, events: [lateShift] });
+    expect(section('events').querySelector('[data-preview]')!.textContent).toBe('12 AM Late shift');
+  });
+
   it('says so when there are no events', () => {
     render({ ...data, events: [] });
     expect(section('events').textContent).toContain('No events.');
