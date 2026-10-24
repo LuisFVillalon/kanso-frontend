@@ -407,25 +407,10 @@ function buildContributorsByTag<T extends { tags: { name: string }[] }>(
 function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: React.ReactNode }) {
   const { workload } = debrief;
 
-  if (workload.is_rest_day) {
-    return (
-      <div
-        className="rounded-md p-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5"
-        style={{ backgroundColor: 'var(--tm-accent-subtle)', border: '1px solid var(--tm-border)' }}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <Moon className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />
-          <span className="text-xs font-semibold text-text-primary">Rest day</span>
-          <span className="text-xs text-text-secondary">— no workload scheduled today.</span>
-        </div>
-        {mood}
-      </div>
-    );
-  }
-
   const completedItems = collectCompletedItems(debrief);
   const totalMinutes = completedItems.reduce((sum, i) => sum + i.minutes, 0);
-  const availableMinutes = workload.available_minutes;
+  // A rest day has no capacity to measure against, so the log just counts.
+  const availableMinutes = workload.is_rest_day ? null : workload.available_minutes;
 
   const tagBuckets = bucketByTag(completedItems, item => item.minutes);
   const tagTotal = tagBuckets.reduce((sum, b) => sum + b.value, 0);
@@ -514,6 +499,12 @@ function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: R
           {availableMinutes != null && ` / ${formatMinutes(availableMinutes)}`}
         </span>
       </div>
+      {workload.is_rest_day && (
+        <p className="flex items-center gap-1.5 text-[11px] text-text-secondary mt-1.5">
+          <Moon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />
+          Today is a rest day. Take it easy; anything you do still shows here.
+        </p>
+      )}
       {pct == null && completedItems.length === 0 && (
         <p className="text-[11px] text-text-muted mt-1.5">
           Nothing completed with tracked time yet today.
