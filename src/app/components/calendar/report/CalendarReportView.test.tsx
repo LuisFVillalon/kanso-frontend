@@ -188,6 +188,8 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('How is your mood on days you finish more tasks?');
     expect(text()).toContain('Can’t tell yet');
     expect(text()).toContain('2 of the 10 check-in days it needs so far');
+    expect(container.querySelector('svg[aria-label="No line yet: not enough to compare"]')).not.toBeNull();
+    expect(container.querySelector('svg[aria-label^="Typical mood: "]')).toBeNull();
     expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
     // One Tags card beside it, opening on your own tags; its switch swaps in the check-in tags in place.
@@ -215,6 +217,7 @@ describe('CalendarReportView mood', () => {
     // Tasks never varied.
     expect(text()).toContain('Can’t tell yet');
     expect(text()).toContain('Your tasks barely changed from day to day');
+    expect(container.querySelector('svg[aria-label="No line yet: not enough to compare"]')).not.toBeNull();
     expect(text()).toContain('Your number of tasks completed was about the same every day');
 
     // The mood metric switch, not the Habits tab.
@@ -225,6 +228,7 @@ describe('CalendarReportView mood', () => {
     // The line from lighter to busier days, then the details.
     expect(container.querySelector('svg[aria-label^="Typical mood: "]')?.getAttribute('aria-label'))
       .toBe('Typical mood: Rough–Low on days with 0–1 habits, Good on days with 2+ habits');
+    expect(container.querySelector('svg[aria-label="No line yet: not enough to compare"]')).toBeNull();
     expect(text()).toContain('This month, your mood tended to be higher on days you checked off');
     expect(text()).toContain('This is based on only 20 days, so take it as a hint.');
     expect(text()).not.toMatch(/\b(better|worse)\b/);
