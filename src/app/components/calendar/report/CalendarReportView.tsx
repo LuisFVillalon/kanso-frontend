@@ -465,7 +465,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     );
   }
 
-  // Tasks shows only completions: its Note time is the Notes tab's chart.
+  // Tasks shows only completions: its Note time is the Notes view's chart.
   const activityCard = (metric?: ActivityMetric) => (
     <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={period.kind === 'year' ? 'Activity by month' : 'Activity by day'}>
       <ReportActivityChart buckets={report.buckets} kind={period.kind} metric={metric} />
