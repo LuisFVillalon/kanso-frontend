@@ -9,6 +9,7 @@ import { describePeriod, periodLength, type ReportPeriod } from '@/app/utils/cal
 import { parseLocalDate } from '@/app/utils/dateUtils';
 import { eventBuckets, type EventBucket } from '@/app/utils/eventReport';
 import { formatEventMinutes } from '@/app/utils/eventOccurrences';
+import { eventColor } from '@/app/utils/events';
 import { LegendDot } from './ReportActivityChart';
 
 const EVENT_COLOR = 'var(--tm-accent)';
@@ -100,7 +101,7 @@ const TagBars: React.FC<{ report: EventReport }> = ({ report }) => {
   return (
     <ul className="flex flex-col gap-2.5">
       {rows.map(r => {
-        const color = r.tag?.color ?? 'var(--tm-text-muted)';
+        const color = eventColor(r.tag ? [r.tag] : []);
         const name = r.tag?.name ?? 'No tag';
         return (
           <li key={r.tag?.id ?? 'none'} className="flex items-center gap-2" title={`${name}: ${formatEventMinutes(r.minutes)} in ${plural(r.count, 'event')}`}>

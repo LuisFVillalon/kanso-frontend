@@ -5,10 +5,8 @@ import {
   formatEventMinutes,
   formatEventTime,
   occurrenceDays,
-  occurrenceMinutes,
   occurrenceMinutesOn,
   occurrenceSpanOn,
-  occurrencesByDay,
   occurrencesStartingOn,
 } from './eventOccurrences';
 
@@ -54,13 +52,12 @@ describe('occurrenceSpanOn', () => {
     expect(occurrenceSpanOn(overnight, '2026-10-23')).toEqual({ start: 1320, end: 1440 });
     expect(occurrenceSpanOn(overnight, '2026-10-24')).toEqual({ start: 0, end: 120 });
     expect(occurrenceMinutesOn(overnight, '2026-10-23')).toBe(120);
-    expect(occurrenceMinutes(overnight)).toBe(240);
   });
 
   it('gives an all-day event no span and no minutes', () => {
     const allDay = occurrence({ all_day: true, start_time: null, end_time: null });
     expect(occurrenceSpanOn(allDay, '2026-10-23')).toBeNull();
-    expect(occurrenceMinutes(allDay)).toBe(0);
+    expect(occurrenceMinutesOn(allDay, '2026-10-23')).toBe(0);
   });
 });
 
@@ -69,12 +66,6 @@ describe('occurrenceDays', () => {
     expect(occurrenceDays(occurrence())).toEqual(['2026-10-23']);
     expect(occurrenceDays(overnight)).toEqual(['2026-10-23', '2026-10-24']);
     expect(occurrenceDays({ ...overnight, end_time: '00:00:00' })).toEqual(['2026-10-23']);
-  });
-
-  it('groups by day', () => {
-    const byDay = occurrencesByDay([occurrence(), overnight]);
-    expect(byDay.get('2026-10-23')!.map(o => o.title)).toEqual(['CS 460 Lecture', 'Night shift']);
-    expect(byDay.get('2026-10-24')!.map(o => o.title)).toEqual(['Night shift']);
   });
 
   it('keeps only the events that start on a day, not the night before past midnight', () => {

@@ -38,10 +38,6 @@ export const occurrenceMinutesOn = (o: EventOccurrence, dateStr: string): number
 export const occurrencesStartingOn = (occurrences: EventOccurrence[] | undefined, dateStr: string): EventOccurrence[] =>
   (occurrences ?? []).filter(o => o.date === dateStr);
 
-/** The occurrence's whole length in minutes; 0 for an all-day event. */
-export const occurrenceMinutes = (o: EventOccurrence): number =>
-  o.all_day ? 0 : Math.max(0, (new Date(o.ends_at).getTime() - new Date(o.starts_at).getTime()) / 60000);
-
 /**
  * The local days an occurrence shows on: its own day, plus the next one for
  * an event that runs past midnight (unless it ends right at midnight).
@@ -49,19 +45,6 @@ export const occurrenceMinutes = (o: EventOccurrence): number =>
 export function occurrenceDays(o: EventOccurrence): string[] {
   if (o.end_date <= o.date || o.all_day) return [o.date];
   return occurrenceSpanOn(o, o.end_date) ? [o.date, o.end_date] : [o.date];
-}
-
-/** Groups occurrences by the local days they show on (see occurrenceDays), each day in start order. */
-export function occurrencesByDay(occurrences: EventOccurrence[]): Map<string, EventOccurrence[]> {
-  const map = new Map<string, EventOccurrence[]>();
-  for (const o of occurrences) {
-    for (const day of occurrenceDays(o)) {
-      const list = map.get(day);
-      if (list) list.push(o);
-      else map.set(day, [o]);
-    }
-  }
-  return map;
 }
 
 /** A stable key for one occurrence. */
