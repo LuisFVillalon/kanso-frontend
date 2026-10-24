@@ -10,22 +10,22 @@ import { blankEventForm, eventFormToCreate, type EventFormValues } from '@/app/u
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { minutesToTimeStr, startOfWeek } from '@/app/utils/weekLayout';
 
+const noop = () => {};
+
 interface NewEventModalProps {
   onClose: () => void;
-  /** Called once the server has the new event, so calendars can refetch. */
-  onCreated: () => void;
 }
 
 /**
  * The New menu's event form: today, from the next full hour, checked for
  * overlaps against this week's events. Opens from any page.
  */
-const NewEventModal: React.FC<NewEventModalProps> = ({ onClose, onCreated }) => {
+const NewEventModal: React.FC<NewEventModalProps> = ({ onClose }) => {
   const [now] = useState(() => new Date());
   const { tags } = useTagsContext();
   const { restDays, windowOn, term } = useWorkWindows(now);
   const { activity } = useWeekActivity(useMemo(() => startOfWeek(now), [now]));
-  const eventActions = useEventActions(onCreated);
+  const eventActions = useEventActions(noop);
 
   const initial = useMemo(() => {
     const start = Math.min(23 * 60, (now.getHours() + 1) * 60);
