@@ -111,6 +111,15 @@ describe('the event form', () => {
     expect(custom).toMatchObject({ repeat_days: [1, 3], repeat_interval: 3, end_date: '2026-12-11', start_time: null, end_time: null, reminder_minutes: 0 });
   });
 
+  it('ends on its own date, not a term that ended before it starts', () => {
+    const f = blankEventForm({ date: '2026-10-23', repeat: true, termEnd: '2026-12-11' });
+    const moved = { ...f, date: '2027-01-12', repeatDays: [2], endDate: '2027-03-01' };
+    expect(eventFormToCreate(moved, 'UTC', '2026-12-11')).toMatchObject({ start_date: '2027-01-12', end_date: '2027-03-01' });
+    expect(eventFormErrors(moved, '2026-12-11')).toEqual([]);
+    expect(eventFormSummary(moved, '2026-12-11')).toBe('Every Tue · 9:00 AM – 10:00 AM · Jan 12 – Mar 1, 7 events');
+    expect(eventFormEdit(f, moved, '2026-12-11').series).toMatchObject({ end_date: '2027-03-01' });
+  });
+
   it("won't save without a title, with the same start and end, or with a repeat ending before it starts", () => {
     expect(eventFormErrors(form(), null)).toEqual([]);
     expect(eventFormErrors(form({ title: ' ' }), null)).toEqual(['Give the event a title.']);
