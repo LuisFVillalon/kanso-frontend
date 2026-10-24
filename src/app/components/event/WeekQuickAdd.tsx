@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { CalendarDays, Clock, Loader2, Square, X } from 'lucide-react';
 import AnchoredPopover from '@/app/components/common/AnchoredPopover';
 import type { Tag } from '@/app/types/task';
-import { parseLocalDate } from '@/app/utils/dateUtils';
+import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import { formatDuration } from '@/app/utils/duration';
-import { timeRangeText, WEEKDAY_LONG } from '@/app/utils/events';
+import { timeRangeText, usableTermEnd, WEEKDAY_LONG } from '@/app/utils/events';
 import { formatMinutes } from '@/app/utils/weekLayout';
 import EventTagPicker, { toggleTag } from './EventTagPicker';
 
@@ -58,8 +58,9 @@ const WeekQuickAdd: React.FC<WeekQuickAddProps> = ({ draft, anchor, tags, termEn
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const values: QuickAddValues = { kind, title, tags: picked, repeat: kind === 'event' && repeat };
-  const termEndLabel = termEnd
-    ? parseLocalDate(termEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const repeatEnd = usableTermEnd(termEnd, toLocalDateStr(draft.day));
+  const termEndLabel = repeatEnd
+    ? parseLocalDate(repeatEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     : null;
 
   const handleSave = async (e: React.FormEvent) => {
