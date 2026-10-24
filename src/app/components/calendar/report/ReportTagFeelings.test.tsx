@@ -51,6 +51,19 @@ afterEach(() => {
 const text = () => host.textContent ?? '';
 
 describe('ReportTagFeelings', () => {
+  it('labels a weekend-only tag with the days its bar averages', async () => {
+    const weekends: CalendarActivity = { ...activity, completed_tasks: [3, 4, 10, 11, 17, 18].map(d => task(d, d)) };
+    act(() => root.render(
+      <ReportTagFeelings activity={weekends} byDay={byDay} period={periodContaining('month', new Date(2026, 9, 21))} scopeLabel="this month" restDays={[]} />,
+    ));
+    const group = host.querySelector('g[role="button"]')!;
+    expect(group.getAttribute('aria-label')).toBe('Work, 6 days: show its days over time');
+    expect(host.querySelector('th[scope="row"]')!.textContent).toBe('Work, 6 days');
+    await act(async () => { group.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+    expect(text()).toContain('Average on Work days');
+    expect(text()).not.toContain('Average on Work days compared');
+  });
+
   it('labels each tag with the days it compares', () => {
     // Work is also on every weekend day, so those days off have nothing to compare with.
     const withWeekends: CalendarActivity = { ...activity, completed_tasks: days.filter(d => d % 2 || [4, 10, 18].includes(d)).map(d => task(d, d)) };

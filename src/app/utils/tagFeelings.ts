@@ -75,6 +75,8 @@ export interface FeelingComparison {
   /** Every tag day / other day with a value. */
   nAll: number;
   nOtherAll: number;
+  /** The tag days behind `avg`: the compared ones, or every one when none can be. */
+  nAvg: number;
   /** Average on the tag's days that are compared (all of them when none can be); null without any. */
   avg: number | null;
   /** "Your usual": the other days' average as if they had the tag days' mix of work days and days off. */
@@ -292,6 +294,7 @@ export const analyseTagFeelings = (days: TagDay[], tags: Map<string, FeelingTag>
         nOther,
         nAll: tv.length,
         nOtherAll: ov.length,
+        nAvg: n || tv.length,
         avg,
         other: usualOf(groups) ?? rawOther,
         gap,

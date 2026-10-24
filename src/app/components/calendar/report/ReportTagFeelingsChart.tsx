@@ -93,7 +93,7 @@ export const TagBarsChart: React.FC<TagBarsChartProps> = ({ tags, hatched, selec
           const start = cx - (bw * 3 + 4) / 2;
           const labelY = top + plotH + 14;
           const isSelected = selected === t.tag.key;
-          const n = t.feel.mood.n;
+          const n = t.feel.mood.nAvg;
           const name = clip(t.tag.name, tilt ? 12 : Math.max(6, Math.floor(groupW / 7)));
           return (
             <g
@@ -187,7 +187,7 @@ export const TagBarsChart: React.FC<TagBarsChartProps> = ({ tags, hatched, selec
           <tbody>
             {tags.map(t => (
               <tr key={t.tag.key}>
-                <th scope="row">{t.tag.name}, {t.feel.mood.n} {t.feel.mood.n === 1 ? 'day' : 'days'}</th>
+                <th scope="row">{t.tag.name}, {t.feel.mood.nAvg} {t.feel.mood.nAvg === 1 ? 'day' : 'days'}</th>
                 {FEELINGS.map(f => <td key={f}>{describeTagFeeling(t.tag.name, f, t.feel[f])}</td>)}
               </tr>
             ))}
