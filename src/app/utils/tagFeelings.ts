@@ -310,7 +310,7 @@ export const chanceOf = (groups: Group[], observed: number, seed: number, shuffl
 };
 
 /** One feeling on `on` days against `off` days; the verdict is "thin" or "same" until `settleVerdicts` runs. */
-const compareFeeling = (on: TagDay[], off: TagDay[], f: Feeling, seed: number): FeelingComparison => {
+export const compareFeeling = (on: TagDay[], off: TagDay[], f: Feeling, seed: number): FeelingComparison => {
   const values = (rows: TagDay[]) => rows.map(d => d[f]).filter((v): v is number => v != null);
   const groups: Group[] = [true, false].map(o => ({ tag: values(on.filter(d => d.off === o)), other: values(off.filter(d => d.off === o)) }));
   const usable = groups.filter(g => g.tag.length && g.other.length);
@@ -344,7 +344,7 @@ const compareFeeling = (on: TagDay[], off: TagDay[], f: Feeling, seed: number): 
 };
 
 /** Calls the comparisons of one feeling clear or not, splitting the chance bar across those with enough days. */
-const settleVerdicts = (comparisons: FeelingComparison[]) => {
+export const settleVerdicts = (comparisons: FeelingComparison[]) => {
   const k = comparisons.filter(c => c.verdict !== 'thin').length || 1;
   for (const c of comparisons) {
     c.k = k;

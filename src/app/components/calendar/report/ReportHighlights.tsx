@@ -6,27 +6,26 @@ import { CardShell } from '@/app/components/stats/CardShell';
 import type { CalendarActivity } from '@/app/types/activity';
 import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
+import type { CalendarReport, ReportPeriod } from '@/app/utils/calendarReport';
+import type { MoodSummary } from '@/app/utils/moodReport';
 import {
-  analyseCorrelation,
-  dailyActivity,
-  describeLinkBrief,
-  describeLinkShort,
-  MOOD_METRICS,
-  moodActivityPoints,
-  type CalendarReport,
-  type CorrelationLevel,
-  type ReportPeriod,
-} from '@/app/utils/calendarReport';
-import { PATTERN_MIN_DAYS, type MoodSummary } from '@/app/utils/moodReport';
+  describePattern,
+  patternFindings,
+  patternSupport,
+  periodPatterns,
+  quietActivities,
+  quietLine,
+  tooFewDays,
+  unanswered,
+  waitingLine,
+  waitsOnCheckIns,
+} from '@/app/utils/patterns';
 import { buildTagBreakdown, collectTagItems, UNTAGGED_KEY } from '@/app/utils/tagReport';
 import { formatTagHours } from './ReportTagBreakdown';
 import type { ReportView } from './CalendarReportView';
 import type { MoodView } from './ReportMoodSection';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** Links strong enough to name, strongest first. */
-const NAMED_LEVELS: CorrelationLevel[] = ['strong', 'moderate', 'slight', 'early'];
 
 interface Highlight {
   view: ReportView;
@@ -48,6 +47,8 @@ interface ReportHighlightsProps {
   mood: MoodSummary | null;
   /** How the period is named in a sentence: "this month", "in 2025". */
   scopeLabel: string;
+  /** The profile's rest days, compared apart from work days as Patterns does. */
+  restDays: number[];
   onOpen: (view: ReportView, moodView?: MoodView) => void;
 }
 
@@ -57,22 +58,35 @@ interface ReportHighlightsProps {
  * year's mood moved with activity, and the tag that took the most time — each
  * opening the tab that explains it.
  */
-const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, activity, byDay, mood, scopeLabel, onOpen }) => {
+const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, activity, byDay, mood, scopeLabel, restDays, onOpen }) => {
   const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
+  const restKey = restDays.join(',');
 
-  // A week is too short for mood patterns (the Mood tab sends it to its month).
-  const moodLink = useMemo(() => {
+  // Mood › Patterns' own answer for the activity rows; a week is too short for patterns (the Mood tab sends it to its month).
+  const moodLink = useMemo((): { text: string; full: string } | null => {
     if (!byDay || period.kind === 'week') return null;
-    const days = dailyActivity(activity, period.start, period.end);
-    const results = MOOD_METRICS.map(metric => ({ metric, result: analyseCorrelation(moodActivityPoints(byDay, days, period.start, period.end, metric)) }));
-    for (const level of NAMED_LEVELS) {
-      const found = results.find(r => r.result.level === level);
-      if (found) return { ...found, n: found.result.n };
+    const analysis = periodPatterns(activity, byDay, period.start, period.end, restDays);
+    const rows = analysis.rows.filter(r => r.source === 'activity');
+    const found = patternFindings(rows)[0];
+    if (found) {
+      const { row, feeling } = found;
+      return { text: `${row.name} · ${row.answer[feeling].short} ${feeling}`, full: `${describePattern(row, feeling)} · ${patternSupport(row, feeling)}` };
     }
-    return { metric: null, result: results[0].result, n: results[0].result.n };
-    // `periodKey` identifies the period; its Date objects change identity every render.
+    if (waitsOnCheckIns(analysis)) {
+      return { text: `Check in more · ${plural(analysis.days.length, 'day')} so far`, full: tooFewDays(analysis.days.length, scopeLabel) };
+    }
+    const quiet = quietActivities(rows);
+    const waiting = waitingLine(rows);
+    if (quiet.length) {
+      return {
+        text: quiet.length === rows.length ? 'About the same' : `${quiet.map(r => r.name).join(', ')} · About the same`,
+        full: [quietLine(quiet), waiting].filter(Boolean).join(' '),
+      };
+    }
+    return { text: 'Can’t tell yet', full: unanswered(rows).join(' ') };
+    // `periodKey` and `restKey` identify the period and rest days; their objects change identity every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activity, byDay, periodKey]);
+  }, [activity, byDay, periodKey, restKey, scopeLabel]);
 
   const topTag = useMemo(() => {
     const { rows, total } = buildTagBreakdown(collectTagItems(activity, period.start, period.end), 'time', { task: true, note: true, habit: true });
@@ -126,22 +140,12 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
     });
   }
   if (moodLink) {
-    const { metric, result, n } = moodLink;
     highlights.push({
       view: 'mood',
       moodView: 'patterns',
       icon: <ChartScatter className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />,
       title: 'Mood & your activity',
-      text: metric
-        ? describeLinkShort(metric, result)
-        : n < PATTERN_MIN_DAYS
-          ? `Check in more: ${n} of ${PATTERN_MIN_DAYS} days`
-          : 'Activity: no clear pattern',
-      full: metric
-        ? describeLinkBrief(metric, result, scopeLabel)
-        : n < PATTERN_MIN_DAYS
-          ? `Check in on a few more days to see a pattern — ${n} of about ${PATTERN_MIN_DAYS} so far`
-          : `No clear link between your mood and your tasks, note time or habits ${scopeLabel}`,
+      ...moodLink,
     });
   }
   if (topTag) {

@@ -14,7 +14,7 @@ import {
   type TagDay,
   type TagFeelings,
 } from '@/app/utils/tagFeelings';
-import { useMeasuredWidth, useShortWindow } from './ReportMoodRelationChart';
+import { useMeasuredWidth, useShortWindow } from './useChartSize';
 
 /** Series colors as on Mood › Over time: mood in ink, energy accent, stress accent-2. */
 export const FEELING_COLOR: Record<Feeling, string> = {
