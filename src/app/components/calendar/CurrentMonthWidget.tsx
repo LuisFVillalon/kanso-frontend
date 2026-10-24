@@ -137,7 +137,6 @@ const CurrentMonthWidget: React.FC<CurrentMonthWidgetProps> = ({ onExpand, dragH
           data={dayData.get(toLocalDateStr(selectedDate))}
           totalHabits={habits.length}
           allHabits={habits}
-          dayData={dayData}
           onClose={() => setSelectedDate(null)}
           showMood={showMood}
         />
@@ -195,7 +194,6 @@ export const CurrentMonthOverlay: React.FC<CurrentMonthOverlayProps> = ({ year, 
           data={dayData.get(toLocalDateStr(selectedDate))}
           totalHabits={habits.length}
           allHabits={habits}
-          dayData={dayData}
           onClose={() => setSelectedDate(null)}
           showMood={showMood}
         />

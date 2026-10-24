@@ -1,17 +1,21 @@
 'use client';
 
-import React from 'react';
-import { Flame, SquareCheck, FileText, Clock, CheckCircle2, Circle, CalendarClock, Repeat, Archive } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Flame, SquareCheck, FileText, Clock, CheckCircle2, Circle, CalendarClock, CalendarDays, Repeat, Archive, ChevronRight, Smile,
+} from 'lucide-react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
+import type { ModalLayer } from '@/app/components/common/Modal';
 import type { Task } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
 import type { Note } from '@/app/types/notes';
 import type { EventOccurrence } from '@/app/types/event';
-import { toLocalDateStr, toLocalTimeStr, formatDurationShort } from '@/app/utils/dateUtils';
+import { ENERGY_LABELS, STRESS_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
+import { parseLocalDate, toLocalDateStr, toLocalTimeStr, formatDurationShort } from '@/app/utils/dateUtils';
 import { formatTime12Hour } from '@/app/utils/taskUtils';
 import { bucketByTag } from '@/app/utils/tagBucketing';
 import {
-  formatEventMinutes,
+  formatClock,
   formatEventTime,
   occurrenceKey,
   occurrenceMinutesOn,
@@ -19,137 +23,73 @@ import {
   timeToMinutes,
 } from '@/app/utils/eventOccurrences';
 import { eventColor, repeatText } from '@/app/utils/events';
-import { useNoteTimeTotalsForRange, useNoteTimeTotalsByDay } from '@/app/hooks/useNoteTimeTotals';
+import {
+  dayTimeline,
+  daySentence,
+  dayWhen,
+  defaultOpenSections,
+  minutesOnDay,
+  minutesToClock,
+  type DayWhen,
+  type ReportSectionKey,
+} from '@/app/utils/dayReport';
+import { useNoteTimeTotalsForRange } from '@/app/hooks/useNoteTimeTotals';
+import { useDayMoodCheckin } from '@/app/hooks/useDayMoodCheckin';
+import { useWorkDay } from '@/app/hooks/useWorkDay';
 import TagChipList from '@/app/components/common/TagChipList';
-import { CategoryDonutChart, WeekTrendLineChart, type ChartCategory, type DayPoint } from './DayCharts';
+import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
+import DayMoodChip from './DayMoodChip';
 
 interface DaySummaryProps {
   date: Date;
   data: DayData | undefined;
   totalHabits: number;
-  /** All habits (regardless of whether they were completed this day) — used for the "Allocated hours by tag" chart. */
+  /** All habits (whether or not they were done this day), listed in the Habits section. */
   allHabits: Habit[];
-  dayData: Map<string, DayData>;
-  /** 'widget' = compact dashboard-card layout (lists | charts side by side, trend graph below); 'page' = full /calendar page layout. */
-  variant?: 'page' | 'widget';
+  /** Shows the day's check-in: its face and words, the Mood section and a chip to log or edit it. */
+  showMood?: boolean;
+  /** The check-in form's z-index tier, when the report sits inside another modal. */
+  moodModalLayer?: ModalLayer;
 }
 
-const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}` : hours.toFixed(1));
+const fmtHours = (hours: number): string => {
+  const rounded = Math.round(hours * 10) / 10;
+  return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
+};
 
 const normalizedTime = (t: Task): string | null =>
   typeof t.due_time === 'string' ? t.due_time : t.due_time instanceof Date ? toLocalTimeStr(t.due_time) : null;
-
-// A day's events as donut items: their hours on that day (an event past
-// midnight counts its part on each day).
-const eventItems = (events: EventOccurrence[], dateStr: string) =>
-  events.map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, dateStr) / 60, name: e.title, kind: 'Event' }));
-
-const eventHoursOn = (events: EventOccurrence[], dateStr: string) =>
-  events.reduce((sum, e) => sum + occurrenceMinutesOn(e, dateStr), 0) / 60;
 
 // Every event the calendar shows is planned time; only the past ones that
 // weren't archived (cancelled) count as time actually spent.
 const happened = (e: EventOccurrence) => e.past && !e.archived;
 
-const hoursByTag = (tasks: Task[], habits: Habit[], events: EventOccurrence[], dateStr: string): ChartCategory[] => {
-  const items = [
-    ...tasks.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0, name: t.title, kind: 'Task' })),
-    ...habits.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0, name: h.title, kind: 'Habit' })),
-    ...eventItems(events, dateStr),
-  ];
-  return bucketByTag(items, i => i.value, i => i.name, i => i.kind);
-};
+interface TimeCategory {
+  label: string;
+  value: number;
+  color: string;
+}
 
-// Actual hours worked, as opposed to `hoursByTag`'s allocated/estimated
-// hours: completed tasks and habits contribute their estimated_time (the
-// closest proxy available for time actually spent), notes contribute
-// their tracked session time for the day (noteTimeTotals, in seconds), and
-// events that took place contribute their length.
-const actualHoursByTag = (
+// Hours spent, by tag: finished tasks and habits contribute their
+// estimated_time (the closest proxy available for time actually spent),
+// notes their tracked writing time for the day (noteTimeTotals, in seconds),
+// and events that took place their length.
+const timeByTag = (
   tasksCompleted: Task[],
   habitsCompleted: Habit[],
   notesEdited: Note[],
   noteTimeTotals: Record<number, number>,
   events: EventOccurrence[],
   dateStr: string,
-): ChartCategory[] => {
+): TimeCategory[] => {
   const items = [
-    ...tasksCompleted.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0, name: t.title, kind: 'Task' })),
-    ...habitsCompleted.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0, name: h.title, kind: 'Habit' })),
-    ...notesEdited.map(n => ({ tags: n.tags, value: (noteTimeTotals[n.id] ?? 0) / 3600, name: n.title || 'Untitled Note', kind: 'Note' })),
-    ...eventItems(events.filter(happened), dateStr),
+    ...tasksCompleted.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0 })),
+    ...habitsCompleted.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0 })),
+    ...notesEdited.map(n => ({ tags: n.tags, value: (noteTimeTotals[n.id] ?? 0) / 3600 })),
+    ...events.filter(happened).map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, dateStr) / 60 })),
   ];
-  return bucketByTag(items, i => i.value, i => i.name, i => i.kind);
+  return bucketByTag(items, i => i.value);
 };
-
-const DESCRIPTION_TRUNCATE_LENGTH = 80;
-// Widget card is narrow, so a "long" description is capped much sooner —
-// the goal is a single line, not a couple of wrapped lines like the page view.
-const COMPACT_DESCRIPTION_TRUNCATE_LENGTH = 40;
-
-function TaskDueItem({ task, compact = false }: { task: Task; compact?: boolean }) {
-  const [expanded, setExpanded] = React.useState(false);
-  const description = task.description?.trim() ?? '';
-  const truncateLength = compact ? COMPACT_DESCRIPTION_TRUNCATE_LENGTH : DESCRIPTION_TRUNCATE_LENGTH;
-  const isLong = description.length > truncateLength;
-  const displayText = expanded || !isLong ? description : `${description.slice(0, truncateLength)}…`;
-
-  return (
-    <div className="p-2 rounded-md border border-border-subtle space-y-1">
-      <div className="flex items-start justify-between gap-2">
-        <span className="flex items-center gap-1.5 min-w-0">
-          {task.completed ? (
-            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-[var(--tm-success)]" />
-          ) : (
-            <Circle className="w-3.5 h-3.5 flex-shrink-0 text-text-muted" />
-          )}
-          <span className={`text-sm font-medium truncate ${task.completed ? 'line-through text-text-muted' : 'text-text-primary'}`}>
-            {task.title}
-          </span>
-        </span>
-        {task.estimated_time != null && (
-          <span className="text-xs font-semibold text-text-muted flex-shrink-0">{fmtHours(task.estimated_time)}h</span>
-        )}
-      </div>
-      {description && compact ? (
-        <div className="space-y-0.5">
-          <p className={`text-xs text-text-muted ${expanded ? 'whitespace-pre-wrap' : 'truncate'}`}>{description}</p>
-          {isLong && (
-            <button
-              type="button"
-              onClick={() => setExpanded(e => !e)}
-              className="text-[11px] font-semibold text-[var(--tm-accent)] hover:underline"
-            >
-              {expanded ? 'See less' : 'See more'}
-            </button>
-          )}
-        </div>
-      ) : description && (
-        <p className="text-xs text-text-muted whitespace-pre-wrap">
-          {displayText}
-          {isLong && (
-            <button
-              type="button"
-              onClick={() => setExpanded(e => !e)}
-              className="ml-1 text-[11px] font-semibold text-[var(--tm-accent)] hover:underline"
-            >
-              {expanded ? 'See less' : 'See more'}
-            </button>
-          )}
-        </p>
-      )}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <TagChipList tags={task.tags} size="xs" />
-        {normalizedTime(task) && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-text-muted flex-shrink-0">
-            <Clock className="w-3 h-3" />
-            {formatTime12Hour(normalizedTime(task))}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /** An open task due during an event on the same day: "Essay is due at 1:00 PM, during Studio." */
 interface EventClash {
@@ -183,24 +123,26 @@ const StatusChip: React.FC<{ children: React.ReactNode; muted?: boolean }> = ({ 
 );
 
 /**
- * One event in the day report: its time, title, tags, how it repeats, a
- * Past or Archived chip, and its description. Past events are faded and
- * archived ones are hatched and struck through, as on the calendars.
+ * One event in the day report: its time, title, tags, how it repeats and its
+ * description. Archived ones are hatched and struck through, as on the
+ * calendars. Only today's report marks the events already over as Past (and
+ * fades them): on a past day every event is.
  */
-function EventItem({ event, compact = false }: { event: EventOccurrence; compact?: boolean }) {
+function EventItem({ event, showPast }: { event: EventOccurrence; showPast: boolean }) {
   const color = eventColor(event.tags);
   const repeat = repeatText(event);
   const description = event.description?.trim() ?? '';
+  const faded = showPast && event.past && !event.archived;
   return (
     <div
       data-event-row
-      className="p-2 rounded-md border border-border-subtle space-y-1"
+      className="w-full p-2 rounded-md border border-border-subtle space-y-1 min-w-0"
       style={{
         borderLeft: `3px solid ${color}`,
         background: event.archived
           ? `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 8%, var(--tm-surface)) 0 5px, var(--tm-surface) 5px 10px)`
-          : undefined,
-        opacity: event.past && !event.archived ? 0.75 : 1,
+          : 'var(--tm-surface)',
+        opacity: faded ? 0.75 : 1,
       }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -212,75 +154,139 @@ function EventItem({ event, compact = false }: { event: EventOccurrence; compact
           {formatEventTime(event)}
         </span>
       </div>
-      {description && (
-        <p className={`text-xs text-text-muted whitespace-pre-wrap ${compact ? 'line-clamp-1' : 'line-clamp-2'}`}>{description}</p>
+      {description && <p className="text-xs text-text-muted whitespace-pre-wrap line-clamp-1">{description}</p>}
+      {(event.tags.length > 0 || repeat || event.archived || faded) && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <TagChipList tags={event.tags} size="xs" />
+          {repeat && (
+            <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none border border-border text-text-muted bg-surface-raised">
+              <Repeat className="w-2.5 h-2.5" aria-hidden />
+              {repeat}
+            </span>
+          )}
+          {event.archived ? (
+            <StatusChip><Archive className="w-2.5 h-2.5" aria-hidden />Archived</StatusChip>
+          ) : faded ? (
+            <StatusChip muted>Past</StatusChip>
+          ) : null}
+        </div>
       )}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <TagChipList tags={event.tags} size="xs" />
-        {repeat && (
-          <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none border border-border text-text-muted bg-surface-raised">
-            <Repeat className="w-2.5 h-2.5" aria-hidden />
-            {repeat}
-          </span>
-        )}
-        {event.archived ? (
-          <StatusChip><Archive className="w-2.5 h-2.5" aria-hidden />Archived</StatusChip>
-        ) : event.past ? (
-          <StatusChip muted>Past</StatusChip>
-        ) : null}
-      </div>
     </div>
   );
 }
 
-// Pins a section's list content to a fixed (not max) height with its own
-// scrollbar, so a day with a lot of habits/tasks/notes can't stretch the
-// widget card taller than the calendar card next to it. Using a fixed height
-// rather than a max-height matters here: the four list sections are laid out
-// two-per-row in a CSS grid, and grid row auto-sizing uses each cell's full
-// (uncapped) content height when computing the row's height — so a `maxHeight`
-// cap on one cell doesn't stop a long list in the *other* cell of the same row
-// from blowing the row out, leaving the capped cell's scrollbar short of the
-// row's actual bottom. Giving every list section the same fixed height sidesteps
-// that entirely: every cell in a row contributes the same height, so the row
-// height and every cell's height are always identical.
-const LIST_BOX_HEIGHT = 168;
+/** A check-in's face in its mood color, or a dashed circle where none was logged. */
+const DayFace: React.FC<{ mood: number | null; className?: string }> = ({ mood, className = 'w-5 h-5' }) =>
+  mood ? (
+    <span className={`${className} flex-shrink-0`} style={{ color: moodColor(mood) }}>
+      <MoodFace mood={mood} filled className="w-full h-full" />
+    </span>
+  ) : (
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--tm-pencil)" strokeWidth={1.6} strokeDasharray="3 3" aria-hidden="true" className={`${className} flex-shrink-0`}>
+      <circle cx="12" cy="12" r="10" />
+    </svg>
+  );
 
-const ScrollBox: React.FC<{ height: number; children: React.ReactNode }> = ({ height, children }) => (
-  <div className="overflow-y-auto scrollbar-custom pr-1" style={{ height }}>{children}</div>
+/** Five dots for a 1–5 answer, filled up to `value`. */
+const Scale: React.FC<{ value: number; color: string }> = ({ value, color }) => (
+  <span className="inline-flex gap-[3px]" aria-hidden="true">
+    {[1, 2, 3, 4, 5].map(i => (
+      <span key={i} className="w-2 h-2 rounded-full" style={{ backgroundColor: i <= value ? color : 'var(--tm-border-strong)' }} />
+    ))}
+  </span>
 );
 
-const SummaryTile: React.FC<{ icon: React.ReactNode; label: string; value: string; color: string; bg: string; detail?: string }> = ({
-  icon, label, value, color, bg, detail,
-}) => (
-  <div className="p-2.5 rounded-lg border border-border-subtle flex flex-col gap-0.5 min-w-0" style={{ backgroundColor: bg }}>
-    <span className="flex items-center gap-1 text-[11px] font-semibold leading-tight" style={{ color }}>{icon}{label}</span>
-    <span className="text-lg font-bold leading-none text-text-primary">{value}</span>
-    {detail && <span className="text-[10px] text-text-muted truncate">{detail}</span>}
-  </div>
+const Moment: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="rounded-full px-2 py-0.5 text-[11px] text-text-secondary" style={{ backgroundColor: 'var(--tm-slipped-subtle)' }}>
+    {children}
+  </span>
 );
 
-interface ListSectionProps {
-  title: string;
-  isEmpty: boolean;
-  emptyText: string;
+const Empty: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="text-xs text-text-muted italic">{children}</p>
+);
+
+const SubHeading: React.FC<{ children: React.ReactNode; first?: boolean }> = ({ children, first }) => (
+  <p className={`text-[11px] text-text-muted ${first ? 'mb-0.5' : 'mt-2 mb-0.5'}`}>{children}</p>
+);
+
+const SECTION_LOOK: Record<ReportSectionKey, { title: string; icon: React.ReactNode; color: string; bg: string }> = {
+  events: { title: 'Events', icon: <CalendarClock className="w-3.5 h-3.5" />, color: 'var(--tm-accent)', bg: 'var(--tm-accent-subtle)' },
+  tasks: { title: 'Tasks', icon: <SquareCheck className="w-3.5 h-3.5" />, color: 'var(--tm-week-completed)', bg: 'var(--tm-success-subtle)' },
+  notes: { title: 'Notes', icon: <FileText className="w-3.5 h-3.5" />, color: 'var(--tm-week-note)', bg: 'color-mix(in srgb, var(--tm-week-note) 14%, transparent)' },
+  habits: { title: 'Habits', icon: <Flame className="w-3.5 h-3.5" />, color: 'var(--tm-week-habit)', bg: 'var(--tm-warning-subtle)' },
+  mood: { title: 'Mood', icon: <Smile className="w-3.5 h-3.5" />, color: 'var(--tm-mood-4)', bg: 'color-mix(in srgb, var(--tm-mood-4) 14%, transparent)' },
+  time: { title: 'Where the time went', icon: <Clock className="w-3.5 h-3.5" />, color: 'var(--tm-text-secondary)', bg: 'var(--tm-strip)' },
+};
+
+interface ReportSectionProps {
+  id: ReportSectionKey;
+  count?: string | number | null;
+  /** One line that stands in for the section while it's closed. */
+  preview: string;
+  open: boolean;
+  onToggle: (open: boolean) => void;
   children: React.ReactNode;
 }
 
-// Shared shape for the four habit/task/note list sections: a heading, an
-// italic empty-state message, or the (optionally scroll-boxed via `wrap`)
-// list itself — kept in one place so the four sections can't drift apart.
-const ListSection: React.FC<ListSectionProps> = ({ title, isEmpty, emptyText, children }) => (
-  <section>
-    <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1.5">{title}</h3>
-    {isEmpty ? <p className="text-xs text-text-muted italic">{emptyText}</p> : children}
-  </section>
-);
+// A section that folds to one line: its name, a count and a preview of what's in it.
+const ReportSection: React.FC<ReportSectionProps> = ({ id, count, preview, open, onToggle, children }) => {
+  const look = SECTION_LOOK[id];
+  return (
+    <details
+      data-section={id}
+      open={open}
+      onToggle={e => onToggle(e.currentTarget.open)}
+      className="group rounded-lg border border-border bg-surface-raised"
+    >
+      <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer flex items-center gap-2.5 px-3 py-2.5 min-w-0">
+        <span className="w-[26px] h-[26px] rounded-md grid place-items-center flex-shrink-0" style={{ backgroundColor: look.bg, color: look.color }}>
+          {look.icon}
+        </span>
+        <span className="text-sm font-bold text-text-primary flex-shrink-0">
+          {look.title}
+          {count != null && <span className="font-medium text-text-muted"> · {count}</span>}
+        </span>
+        <span data-preview className="text-xs text-text-muted truncate flex-1 min-w-0 group-open:invisible">{preview}</span>
+        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 transition-transform group-open:rotate-90" style={{ color: 'var(--tm-pencil)' }} aria-hidden />
+      </summary>
+      <div className="px-3 pb-3">{children}</div>
+    </details>
+  );
+};
 
-// Full day-detail body (summary tiles, habit/task/note lists, charts) shared
-// by the DayDetailModal (dashboard month tile click) and DaySummaryPanel
-// (calendar page) so both surfaces stay in sync when this content changes.
-const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHabits, dayData, variant = 'page' }) => {
+const shortDate = (d: string | Date) => parseLocalDate(toLocalDateStr(d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+// One task as a single line: done or open, its title and tags, and when it was done or is due.
+function TaskRow({ task, dateStr, when, alsoDone = false }: { task: Task; dateStr: string; when: DayWhen; alsoDone?: boolean }) {
+  const time = normalizedTime(task);
+  let meta: string;
+  if (task.completed) {
+    const at = minutesOnDay(task.completed_date, dateStr);
+    meta = at === null ? 'Done' : `Done ${minutesToClock(at)}`;
+    if (alsoDone) meta += task.due_date ? ` · was due ${shortDate(task.due_date)}` : ' · no due date';
+  } else if (when === 'future') {
+    meta = time ? `Due ${formatTime12Hour(time)}` : '';
+  } else {
+    meta = time ? `Due ${formatTime12Hour(time)} · still open` : 'Still open';
+  }
+  return (
+    <div data-task-row className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1 min-w-0">
+      {task.completed
+        ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-week-completed)' }} aria-label="Done" />
+        : <Circle className="w-4 h-4 flex-shrink-0 text-text-muted" aria-label="Open" />}
+      <span className={`text-sm font-medium truncate min-w-0 ${task.completed ? 'text-text-secondary' : 'text-text-primary'}`}>{task.title}</span>
+      <TagChipList tags={task.tags} size="xs" />
+      {meta && <span className="ml-auto text-[11px] text-text-muted">{meta}</span>}
+    </div>
+  );
+}
+
+// The day's report: a face and one plain sentence, count chips, then
+// sections that fold to one line (Events as the day in order, Tasks, Notes,
+// Habits, Mood and Where the time went). Shared by DayDetailModal (a month
+// day clicked on the dashboard) and DaySummaryPanel (the calendar page).
+const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHabits, showMood = false, moodModalLayer }) => {
   const habitsCompleted = data?.habitsCompleted ?? [];
   const tasksDue = data?.tasksDue ?? [];
   const tasksCompleted = data?.tasksCompleted ?? [];
@@ -288,212 +294,308 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
   const events = data?.events ?? [];
 
   const dateStr = toLocalDateStr(date);
+  const when = dayWhen(dateStr, toLocalDateStr(new Date()));
+  const workDay = useWorkDay(date);
   const noteTimeTotals = useNoteTimeTotalsForRange(dateStr, dateStr);
-  const sunday = new Date(date);
-  sunday.setDate(date.getDate() - date.getDay());
-  // Planned hours, not "hours actually logged" — every habit counts toward
-  // every day (habits recur daily and carry no per-day schedule of their
-  // own), same as the "Planned hours by tag" donut above. Only tasks vary
-  // by day, via each day's own due tasks.
-  const allHabitsHours = allHabits.reduce((sum, h) => sum + (h.estimated_time ?? 0), 0);
-  const weekDates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(sunday);
-    d.setDate(sunday.getDate() + i);
-    return d;
-  });
-  const weekDateStrs = weekDates.map(toLocalDateStr);
-  const weekDays: DayPoint[] = weekDates.map((d, i) => {
-    const ds = weekDateStrs[i];
-    const dd = dayData.get(ds);
-    const dueTasksHours = (dd?.tasksDue ?? []).reduce((sum, t) => sum + (t.estimated_time ?? 0), 0);
-    return { date: d, hours: dueTasksHours + allHabitsHours + eventHoursOn(dd?.events ?? [], ds), isSelected: ds === dateStr };
-  });
-  const weekEnd = weekDays[6].date;
-  const rangeLabel = `Week of ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  const moodShown = showMood && when !== 'future';
+  const { checkin } = useDayMoodCheckin(moodShown ? dateStr : null);
+  const [open, setOpen] = useState(() => defaultOpenSections(isPhoneNow()));
+  const toggle = (key: ReportSectionKey) => (next: boolean) => setOpen(o => (o[key] === next ? o : { ...o, [key]: next }));
 
-  const noteTimeTotalsByDay = useNoteTimeTotalsByDay(weekDateStrs);
-  const actualWeekDays: DayPoint[] = weekDates.map((d, i) => {
-    const ds = weekDateStrs[i];
-    const dd = dayData.get(ds);
-    const habitsHours = (dd?.habitsCompleted ?? []).reduce((sum, h) => sum + (h.estimated_time ?? 0), 0);
-    const tasksHours = (dd?.tasksCompleted ?? []).reduce((sum, t) => sum + (t.estimated_time ?? 0), 0);
-    const dayNoteTotals = noteTimeTotalsByDay[ds] ?? {};
-    const notesHours = (dd?.notesEdited ?? []).reduce((sum, n) => sum + (dayNoteTotals[n.id] ?? 0) / 3600, 0);
-    const eventsHours = eventHoursOn((dd?.events ?? []).filter(happened), ds);
-    return { date: d, hours: habitsHours + tasksHours + notesHours + eventsHours, isSelected: ds === dateStr };
-  });
-
-  const donutCategories = hoursByTag(tasksDue, allHabits, events, dateStr);
-  const actualDonutCategories = actualHoursByTag(tasksCompleted, habitsCompleted, notesEdited, noteTimeTotals, events, dateStr);
-
-  const eventMinutes = events.filter(e => !e.archived).reduce((sum, e) => sum + occurrenceMinutesOn(e, dateStr), 0);
-  const archivedEvents = events.filter(e => e.archived).length;
-  const eventsDetail = events.length === 0
-    ? undefined
-    : [eventMinutes > 0 && formatEventMinutes(eventMinutes), archivedEvents > 0 && `${archivedEvents} archived`].filter(Boolean).join(' · ') || undefined;
+  const liveEvents = events.filter(e => !e.archived);
+  const allDayEvents = events.filter(e => e.all_day);
+  const dueIds = new Set(tasksDue.map(t => t.id));
+  const tasksDueDone = tasksDue.filter(t => t.completed);
+  const alsoDone = tasksCompleted.filter(t => !dueIds.has(t.id));
+  const doneIds = new Set(habitsCompleted.map(h => h.id));
+  const habits = [...allHabits, ...habitsCompleted.filter(h => !allHabits.some(a => a.id === h.id))];
+  const noteSeconds = notesEdited.reduce((sum, n) => sum + (noteTimeTotals[n.id] ?? 0), 0);
+  const time = timeByTag(tasksCompleted, habitsCompleted, notesEdited, noteTimeTotals, events, dateStr);
+  const totalHours = time.reduce((sum, c) => sum + c.value, 0);
   const clashes = eventClashes(tasksDue, events, dateStr);
 
-  const compact = variant === 'widget';
-  const wrap = (node: React.ReactNode, height: number): React.ReactNode =>
-    compact ? <ScrollBox height={height}>{node}</ScrollBox> : node;
+  // Undefined while the check-in loads, so the sentence doesn't say "No check-in" before it knows.
+  const mood: MoodCheckin | null | undefined = moodShown ? checkin : undefined;
+  const sentence = daySentence({
+    when,
+    rest: workDay?.rest ?? false,
+    mood: mood === undefined ? undefined : mood?.mood ?? null,
+    energy: mood?.energy,
+    stress: mood?.stress,
+    events: liveEvents.length,
+    tasksDue: tasksDue.length,
+    tasksDueDone: tasksDueDone.length,
+    tasksDone: tasksCompleted.length,
+    habitsDone: habitsCompleted.length,
+    notes: notesEdited.length,
+  });
+  const empty = !events.length && !tasksDue.length && !tasksCompleted.length && !notesEdited.length && !habitsCompleted.length && !mood;
 
-  const habitsList = (
-    <div className="space-y-1.5">
-      {habitsCompleted.map(h => (
-        <div key={h.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-border-subtle">
-          <span className="text-sm font-medium text-text-primary truncate">{h.title}</span>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {h.estimated_time != null && (
-              <span className="text-xs font-semibold text-text-muted">{fmtHours(h.estimated_time)}h</span>
-            )}
-            <TagChipList tags={h.tags} size="xs" />
-          </div>
+  const glance = (
+    <div data-day-glance className="flex flex-wrap items-center gap-3 px-3.5 py-3 rounded-xl" style={{ backgroundColor: 'var(--tm-strip)' }}>
+      {moodShown
+        ? <DayFace mood={mood?.mood ?? null} className="w-10 h-10" />
+        : <CalendarDays className="w-8 h-8 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden />}
+      <div className="min-w-0 flex-1 basis-48">
+        <p data-day-sentence className="text-[15px] font-medium leading-snug text-text-primary">{sentence.main}</p>
+        {sentence.sub && <p className="text-xs text-text-muted mt-0.5">{sentence.sub}</p>}
+      </div>
+      {moodShown && <DayMoodChip date={date} data={data} totalHabits={totalHabits} modalLayer={moodModalLayer} />}
+    </div>
+  );
+
+  if (empty) return <div className="space-y-3">{glance}</div>;
+
+  const tasksCount = tasksDue.length
+    ? when === 'future' ? `${tasksDue.length} due` : `${tasksDueDone.length}/${tasksDue.length}`
+    : `${tasksCompleted.length}`;
+  const chip = (icon: React.ReactNode, color: string, children: React.ReactNode) => (
+    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs border border-border bg-surface-raised text-text-secondary whitespace-nowrap">
+      <span style={{ color }} className="inline-flex">{icon}</span>
+      {children}
+    </span>
+  );
+  const counts = (
+    <div data-day-counts className="flex flex-wrap gap-1.5">
+      {chip(<CalendarClock className="w-3.5 h-3.5" />, 'var(--tm-accent)', <><b className="text-text-primary">{liveEvents.length}</b> {liveEvents.length === 1 ? 'event' : 'events'}</>)}
+      {chip(<SquareCheck className="w-3.5 h-3.5" />, 'var(--tm-week-completed)', <><b className="text-text-primary">{tasksCount}</b> {tasksDue.length === 1 || (!tasksDue.length && tasksCompleted.length === 1) ? 'task' : 'tasks'}</>)}
+      {chip(<FileText className="w-3.5 h-3.5" />, 'var(--tm-week-note)', <><b className="text-text-primary">{notesEdited.length}</b> {notesEdited.length === 1 ? 'note' : 'notes'}</>)}
+      {chip(<Flame className="w-3.5 h-3.5" />, 'var(--tm-week-habit)', <>habits <b className="text-text-primary">{habitsCompleted.length}/{totalHabits}</b></>)}
+    </div>
+  );
+
+  // ── Events: all-day ones on top, then the day in order ──
+  const timeline = dayTimeline({
+    dateStr,
+    events,
+    tasksDone: tasksCompleted,
+    checkinAt: mood?.created_at,
+    window: workDay?.window,
+  });
+  const eventsPreview = events.length
+    ? events.map(e => `${e.all_day || !e.start_time ? 'All day' : formatClock(e.start_time)} ${e.title}${e.archived ? ' (archived)' : ''}`).join(' · ')
+    : 'None';
+  const eventsBody = !events.length ? <Empty>No events.</Empty> : (
+    <div className="space-y-2">
+      {allDayEvents.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {allDayEvents.map(e => <EventItem key={occurrenceKey(e)} event={e} showPast={when === 'today'} />)}
+        </div>
+      )}
+      {timeline.some(t => t.kind === 'event') && (
+        <div data-timeline className="relative pl-[72px]">
+          <span aria-hidden className="absolute left-[61px] top-1 bottom-1 w-0.5 rounded-sm" style={{ backgroundColor: 'var(--tm-border)' }} />
+          {timeline.map(entry => {
+            const node = (style: React.CSSProperties, size = 'w-3 h-3 -left-[16px] top-[7px]') => (
+              <span aria-hidden className={`absolute ${size} rounded-full`} style={style} />
+            );
+            const label = (
+              <span className="absolute -left-[72px] w-[50px] text-right top-[6px] text-[11px] font-medium text-text-muted whitespace-nowrap">
+                {minutesToClock(entry.at)}
+              </span>
+            );
+            if (entry.kind === 'event') {
+              const c = entry.event.archived ? 'var(--tm-pencil)' : eventColor(entry.event.tags);
+              return (
+                <div key={`e-${occurrenceKey(entry.event)}`} data-timeline-entry="event" className="relative flex mb-1.5">
+                  {label}{node({ backgroundColor: c })}
+                  <EventItem event={entry.event} showPast={when === 'today'} />
+                </div>
+              );
+            }
+            if (entry.kind === 'task') {
+              const { task } = entry;
+              return (
+                <div key={`t-${task.id}`} data-timeline-entry="task" className="relative flex flex-wrap items-center gap-x-2 gap-y-0.5 min-h-[26px] mb-1.5 text-[13px] min-w-0">
+                  {label}{node({ backgroundColor: 'var(--tm-week-completed)' })}
+                  <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-week-completed)' }} aria-hidden />
+                  <span className="font-medium text-text-primary truncate min-w-0">{task.title}</span>
+                  {!dueIds.has(task.id) && (
+                    <span className="text-[11px] text-text-muted">{task.due_date ? `was due ${shortDate(task.due_date)}` : 'no due date'}</span>
+                  )}
+                  <span className="ml-auto"><TagChipList tags={task.tags} size="xs" /></span>
+                </div>
+              );
+            }
+            if (entry.kind === 'checkin' && mood) {
+              return (
+                <div key="checkin" data-timeline-entry="checkin" className="relative flex flex-wrap items-center gap-1.5 min-h-[26px] mb-1.5 text-[13px] min-w-0">
+                  {label}{node({ border: `2px solid ${moodColor(mood.mood)}`, backgroundColor: 'var(--tm-surface)' })}
+                  <DayFace mood={mood.mood} />
+                  <span className="font-medium text-text-primary">Checked in: {moodLabel(mood.mood)}</span>
+                  {mood.tags.map(m => <Moment key={m}>{m}</Moment>)}
+                </div>
+              );
+            }
+            if (entry.kind === 'window') {
+              return (
+                <div key={`w-${entry.edge}`} data-timeline-entry="window" className="relative flex items-center min-h-[20px] mb-1.5">
+                  {label}{node({ backgroundColor: 'var(--tm-border-strong)' }, 'w-2 h-2 -left-[14px] top-[6px]')}
+                  <span className="text-[11px] text-text-muted">Work window {entry.edge}</span>
+                </div>
+              );
+            }
+            return null;
+          })}
+        </div>
+      )}
+      {timeline.some(t => t.kind === 'task' || t.kind === 'checkin') && (
+        <p className="text-[11px] text-text-muted">
+          {timeline.some(t => t.kind === 'checkin') ? 'Shows your finished tasks and check-in between events.' : 'Shows your finished tasks between events.'}
+        </p>
+      )}
+      {clashes.map(({ task, event }) => (
+        <p key={`clash-${task.id}`} data-event-clash className="flex items-start gap-1.5 text-xs text-text-secondary">
+          <span aria-hidden className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--tm-warning)' }} />
+          <span>
+            <span className="font-semibold text-text-primary">{task.title}</span> is due at {formatTime12Hour(normalizedTime(task))}, during{' '}
+            <span className="font-semibold text-text-primary">{event.title}</span> ({formatEventTime(event)}).
+          </span>
+        </p>
+      ))}
+    </div>
+  );
+
+  // ── Tasks: due this day (done or still open), then the ones done from other days ──
+  const openCount = tasksDue.length - tasksDueDone.length;
+  const tasksPreview = [
+    tasksDue.length ? (when === 'future' ? `${tasksDue.length} due` : `${tasksDueDone.length} of ${tasksDue.length} done`) : '',
+    when !== 'future' && openCount ? `${openCount} still open` : '',
+    alsoDone.length ? `+${alsoDone.length} from another day` : '',
+  ].filter(Boolean).join(' · ') || 'None';
+  const tasksBody = !tasksDue.length && !alsoDone.length ? <Empty>No tasks for this day.</Empty> : (
+    <div>
+      {tasksDue.length > 0 && (
+        <>
+          <SubHeading first>Due this day</SubHeading>
+          {tasksDue.map(t => <TaskRow key={t.id} task={t} dateStr={dateStr} when={when} />)}
+        </>
+      )}
+      {alsoDone.length > 0 && (
+        <>
+          <SubHeading first={!tasksDue.length}>Also done</SubHeading>
+          {alsoDone.map(t => <TaskRow key={t.id} task={t} dateStr={dateStr} when={when} alsoDone />)}
+        </>
+      )}
+    </div>
+  );
+
+  // ── Notes ──
+  const notesPreview = notesEdited.length
+    ? [noteSeconds > 0 ? `${formatDurationShort(noteSeconds)} writing` : '', notesEdited.map(n => n.title || 'Untitled Note').join(', ')].filter(Boolean).join(' · ')
+    : 'None';
+  const notesBody = !notesEdited.length ? <Empty>No notes edited.</Empty> : (
+    <div>
+      {notesEdited.map(n => (
+        <div key={n.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1 min-w-0">
+          <FileText className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-week-note)' }} aria-hidden />
+          <span className="text-sm font-medium text-text-primary truncate min-w-0">{n.title || 'Untitled Note'}</span>
+          <TagChipList tags={n.tags} size="xs" />
+          {(noteTimeTotals[n.id] ?? 0) > 0 && (
+            <span className="ml-auto text-[11px] text-text-muted">{formatDurationShort(noteTimeTotals[n.id])} writing</span>
+          )}
         </div>
       ))}
     </div>
   );
 
-  // The day's events lead the report, across the full width.
-  const eventsSection = (
-    <ListSection title="Events" isEmpty={events.length === 0} emptyText="No events">
-      <div className="space-y-1.5">
-        {events.map(e => <EventItem key={occurrenceKey(e)} event={e} compact={compact} />)}
-        {clashes.map(({ task, event }) => (
-          <p key={`clash-${task.id}`} data-event-clash className="flex items-start gap-1.5 text-xs text-text-secondary">
-            <span aria-hidden className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--tm-warning)' }} />
-            <span>
-              <span className="font-semibold text-text-primary">{task.title}</span> is due at {formatTime12Hour(normalizedTime(task))}, during{' '}
-              <span className="font-semibold text-text-primary">{event.title}</span> ({formatEventTime(event)}).
-            </span>
-          </p>
+  // ── Habits: each one, done or not ──
+  const habitsPreview = habitsCompleted.length ? habitsCompleted.map(h => h.title).join(', ') : 'None done';
+  const habitsBody = !habits.length ? <Empty>No habits yet.</Empty> : (
+    <div>
+      {habits.map(h => {
+        const done = doneIds.has(h.id);
+        return (
+          <div key={h.id} className="flex items-center gap-2 py-1 min-w-0">
+            {done
+              ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-week-completed)' }} aria-label="Done" />
+              : <Circle className="w-4 h-4 flex-shrink-0 text-text-muted" aria-label="Not done" />}
+            <span className={`text-sm font-medium truncate min-w-0 ${done ? 'text-text-primary' : 'text-text-muted'}`}>{h.title}</span>
+            {!done && when !== 'future' && <span className="ml-auto text-[11px] text-text-muted flex-shrink-0">Not today</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ── Mood: the check-in's answers ──
+  const moodPreview = mood
+    ? [
+      moodLabel(mood.mood),
+      mood.energy ? `energy ${ENERGY_LABELS[mood.energy - 1].toLowerCase()}` : '',
+      mood.stress ? `stress ${STRESS_LABELS[mood.stress - 1].toLowerCase()}` : '',
+      mood.tags.join(', '),
+    ].filter(Boolean).join(' · ')
+    : 'No check-in';
+  const checkedInAt = mood ? minutesOnDay(mood.created_at, dateStr) : null;
+  const moodBody = !mood ? <Empty>No check-in for this day.</Empty> : (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2.5">
+        <DayFace mood={mood.mood} className="w-6 h-6" />
+        <b className="text-[15px] text-text-primary">{moodLabel(mood.mood)}</b>
+        {checkedInAt !== null && <span className="text-[11px] text-text-muted">checked in at {minutesToClock(checkedInAt)}</span>}
+      </div>
+      {(mood.energy || mood.stress) && (
+        <div className="grid grid-cols-[auto_auto_1fr] gap-x-2.5 gap-y-1 items-center text-xs">
+          {mood.energy && <><span className="text-text-muted">Energy</span><Scale value={mood.energy} color="var(--tm-week-completed)" /><span className="text-text-primary">{ENERGY_LABELS[mood.energy - 1]}</span></>}
+          {mood.stress && <><span className="text-text-muted">Stress</span><Scale value={mood.stress} color="var(--tm-week-habit)" /><span className="text-text-primary">{STRESS_LABELS[mood.stress - 1]}</span></>}
+        </div>
+      )}
+      {mood.tags.length > 0 && (
+        <div>
+          <p className="text-[11px] text-text-muted mb-1">Moments</p>
+          <div className="flex flex-wrap gap-1.5">{mood.tags.map(m => <Moment key={m}>{m}</Moment>)}</div>
+        </div>
+      )}
+      {mood.note && <p className="text-xs text-text-secondary italic">“{mood.note}”</p>}
+    </div>
+  );
+
+  // ── Where the time went: one bar by tag ──
+  const timePreview = time.length ? time.slice(0, 3).map(c => `${c.label} ${fmtHours(c.value)}h`).join(' · ') : 'None';
+  const timeBody = !time.length ? <Empty>{when === 'future' ? 'Nothing logged yet.' : 'No time logged.'}</Empty> : (
+    <div>
+      <div
+        role="img"
+        aria-label={time.map(c => `${c.label} ${fmtHours(c.value)} hours`).join(', ')}
+        className="flex h-3 rounded-md overflow-hidden gap-0.5"
+        style={{ backgroundColor: 'var(--tm-strip)' }}
+      >
+        {time.map(c => <span key={c.label} title={`${c.label} ${fmtHours(c.value)}h`} className="block h-full" style={{ width: `${(c.value / totalHours) * 100}%`, backgroundColor: c.color }} />)}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs text-text-secondary">
+        {time.map(c => (
+          <span key={c.label} className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c.color }} />
+            {c.label} <b className="text-text-primary">{fmtHours(c.value)}h</b>
+          </span>
         ))}
       </div>
-    </ListSection>
-  );
-
-  const habitsSection = (
-    <ListSection title="Habits completed" isEmpty={habitsCompleted.length === 0} emptyText="No habits completed">
-      {wrap(habitsList, LIST_BOX_HEIGHT)}
-    </ListSection>
-  );
-
-  const tasksDueSection = (
-    <ListSection title="Tasks due" isEmpty={tasksDue.length === 0} emptyText="No tasks due">
-      {wrap(
-        <div className="space-y-1.5">
-          {tasksDue.map(t => (
-            <TaskDueItem key={t.id} task={t} compact={compact} />
-          ))}
-        </div>,
-        LIST_BOX_HEIGHT
-      )}
-    </ListSection>
-  );
-
-  const notesList = (
-    <div className="space-y-1.5">
-      {notesEdited.map(n => (
-        <div key={n.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-border-subtle">
-          <span className="text-sm font-medium text-text-primary truncate">{n.title || 'Untitled Note'}</span>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <TagChipList tags={n.tags} size="xs" />
-            <span className="text-[11px] text-text-muted">
-              {formatDurationShort(noteTimeTotals[n.id] ?? 0)}
-            </span>
-          </div>
-        </div>
-      ))}
+      <p className="text-[11px] text-text-muted mt-1.5">
+        About {fmtHours(totalHours)}h in all: events that took place, tasks and habits you finished (their estimate) and time writing notes.
+      </p>
     </div>
-  );
-
-  const notesSection = (
-    <ListSection title="Notes edited" isEmpty={notesEdited.length === 0} emptyText="No notes edited">
-      {wrap(notesList, LIST_BOX_HEIGHT)}
-    </ListSection>
-  );
-
-  const tasksCompletedSection = (
-    <ListSection title="Tasks completed" isEmpty={tasksCompleted.length === 0} emptyText="No tasks completed">
-      {wrap(
-        <div className="space-y-1.5">
-          {tasksCompleted.map(t => (
-            <TaskDueItem key={t.id} task={t} compact={compact} />
-          ))}
-        </div>,
-        LIST_BOX_HEIGHT
-      )}
-    </ListSection>
-  );
-
-  const planSection = (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">Plan</h3>
-      {wrap(
-        <CategoryDonutChart categories={donutCategories} size={compact ? 128 : 168} emptyMessage="No estimated hours today" />,
-        196
-      )}
-    </section>
-  );
-
-  const actualSection = (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2">Actual</h3>
-      {wrap(
-        <CategoryDonutChart categories={actualDonutCategories} size={compact ? 128 : 168} emptyMessage="No hours worked today" />,
-        196
-      )}
-    </section>
-  );
-
-  const plannedWeekSection = (
-    <section className="flex flex-col min-h-0">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2 flex-shrink-0">Planned Week</h3>
-      <div className="flex-1 min-h-0">
-        <WeekTrendLineChart days={weekDays} rangeLabel={rangeLabel} svgClassName="w-full flex-1 min-h-0" />
-      </div>
-    </section>
-  );
-
-  const actualWeekSection = (
-    <section className="flex flex-col min-h-0">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-2 flex-shrink-0">Actual Week</h3>
-      <div className="flex-1 min-h-0">
-        <WeekTrendLineChart days={actualWeekDays} rangeLabel={rangeLabel} svgClassName="w-full flex-1 min-h-0" />
-      </div>
-    </section>
   );
 
   return (
-    <div className="space-y-5">
-      <div className={`grid grid-cols-2 ${compact ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-5'} gap-2.5`}>
-        <SummaryTile
-          icon={<CalendarClock className="w-3.5 h-3.5" />}
-          label="Events"
-          value={`${events.length}`}
-          detail={eventsDetail}
-          color="var(--tm-accent)"
-          bg="color-mix(in srgb, var(--tm-accent) 10%, var(--tm-surface))"
-        />
-        <SummaryTile icon={<Flame className="w-3.5 h-3.5" />} label="Habits" value={`${habitsCompleted.length}/${totalHabits}`} color="#F97316" bg="var(--tm-warning-subtle)" />
-        <SummaryTile icon={<SquareCheck className="w-3.5 h-3.5" />} label="Tasks due" value={`${tasksDue.length}`} color="var(--tm-danger)" bg="var(--tm-danger-subtle)" />
-        <SummaryTile icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Tasks completed" value={`${tasksCompleted.length}`} color="var(--tm-success)" bg="var(--tm-success-subtle)" />
-        <SummaryTile icon={<FileText className="w-3.5 h-3.5" />} label="Notes edited" value={`${notesEdited.length}`} color="var(--tm-accent)" bg="var(--tm-accent-subtle)" />
-      </div>
-
-      {eventsSection}
-
-      <div className={`grid grid-cols-1 ${compact ? 'sm:grid-cols-2' : 'xl:grid-cols-2'} gap-5`}>
-        {habitsSection}
-        {tasksDueSection}
-        {notesSection}
-        {tasksCompletedSection}
-        {planSection}
-        {actualSection}
-        {plannedWeekSection}
-        {actualWeekSection}
+    <div className="space-y-3">
+      {glance}
+      {counts}
+      <div className="space-y-2">
+        <ReportSection id="events" count={events.length} preview={eventsPreview} open={open.events} onToggle={toggle('events')}>{eventsBody}</ReportSection>
+        <ReportSection id="tasks" count={tasksDue.length + alsoDone.length} preview={tasksPreview} open={open.tasks} onToggle={toggle('tasks')}>{tasksBody}</ReportSection>
+        <ReportSection id="notes" count={notesEdited.length} preview={notesPreview} open={open.notes} onToggle={toggle('notes')}>{notesBody}</ReportSection>
+        <ReportSection id="habits" count={`${habitsCompleted.length} of ${totalHabits}`} preview={habitsPreview} open={open.habits} onToggle={toggle('habits')}>{habitsBody}</ReportSection>
+        {moodShown && (
+          <ReportSection id="mood" preview={moodPreview} open={open.mood} onToggle={toggle('mood')}>{moodBody}</ReportSection>
+        )}
+        <ReportSection id="time" count={time.length ? `about ${fmtHours(totalHours)}h` : null} preview={timePreview} open={open.time} onToggle={toggle('time')}>{timeBody}</ReportSection>
       </div>
     </div>
   );
 };
+
+/** Phone-width screens, where the report opens with only Events showing. */
+const isPhoneNow = () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches;
 
 export default DaySummary;

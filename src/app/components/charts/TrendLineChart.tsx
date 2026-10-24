@@ -2,15 +2,11 @@
 
 import React from 'react';
 
-// The one chart primitive that was a genuine byte-for-byte duplicate between
-// StatsCard's HoursLineChart and the calendar's WeekTrendLineChart (same W/H/
-// padding constants, same point/tick/path math, same SVG structure) — factored
-// out here. The donut and bar charts in components/stats/charts.tsx and
-// components/calendar/DayCharts.tsx were evaluated for the same treatment and
-// deliberately kept separate: they differ in real, non-cosmetic ways (count
-// vs. hours as the plotted value, legend-inclusion, label-column width,
-// zero-filtering), not just styling, so forcing them into one component would
-// trade a real behavior difference for a cosmetic dedup.
+// The hours-per-day line chart behind StatsCard's HoursLineChart. The donut
+// and bar charts in components/stats/charts.tsx were evaluated for the same
+// treatment and deliberately kept separate: they differ in real,
+// non-cosmetic ways (count vs. hours as the plotted value, legend-inclusion,
+// label-column width, zero-filtering), not just styling.
 
 export interface TrendPoint {
   date: Date;
