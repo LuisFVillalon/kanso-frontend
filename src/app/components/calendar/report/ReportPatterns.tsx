@@ -18,6 +18,7 @@ import {
   patternSupport,
   periodPatterns,
   PLAIN_GAP,
+  SEPARATE_DAY_KINDS,
   SURE_SIDE,
   tagsQuestion,
   type PatternFinding,
@@ -239,7 +240,7 @@ const ActivityCard: React.FC<{
         <div className="mt-2 pl-4 flex flex-col gap-1 leading-relaxed">
           <p>
             {patternNumbers(row, f)} Each day with a daily check-in counts once. Days are split at the middle of how much you did into busier
-            and quieter days — for a tag or moment, days with it and days without — and work days are compared with work days, days off with days off.
+            and quieter days — for a tag or moment, days with it and days without — and {SEPARATE_DAY_KINDS}.
           </p>
           <p>
             Each side needs {TAG_MIN_SIDE} days before anything is said. A gap under half a step on the 1–5 scale, or one that shuffling the same

@@ -7,9 +7,7 @@
 
 import type { CalendarActivity } from '@/app/types/activity';
 import type { Habit } from '@/app/types/habit';
-import type { MoodCheckin } from '@/app/types/mood';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
-import { PATTERN_MIN_DAYS } from '@/app/utils/moodReport';
 
 export type ReportPeriodKind = 'week' | 'month' | 'year';
 
@@ -364,12 +362,7 @@ export const buildCalendarReport = (
 
 // ── Mood & activity ─────────────────────────────────────────────────────────
 //
-// How mood moves with tasks, note time and habits. One point per day with a
-// daily check-in; days without one are left out, never counted as neutral.
-// Correlations use Spearman's ρ (mood is ordinal with many ties, task counts
-// are skewed), and the wording is capped by sample size so a few weeks of
-// data never reads as a firm pattern. Statements describe what moved
-// together and never claim a cause.
+// The activities Mood › Patterns compares with how you felt (utils/patterns.ts).
 
 export type MoodMetric = 'tasks' | 'notes' | 'habits';
 
@@ -382,171 +375,3 @@ export const metricValue = (day: DayActivity | undefined, metric: MoodMetric): n
   if (metric === 'notes') return Math.round(day.noteSeconds / 60);
   return day.habitsCompleted;
 };
-
-export interface MoodPoint {
-  dateStr: string;
-  mood: number;
-  value: number;
-}
-
-/** One point per day from `start` to `end` (up to today) with a daily check-in. */
-export const moodActivityPoints = (
-  byDay: Map<string, MoodCheckin>,
-  days: Map<string, DayActivity>,
-  start: Date,
-  end: Date,
-  metric: MoodMetric,
-  now: Date = new Date(),
-): MoodPoint[] => {
-  const firstDay = toLocalDateStr(start);
-  const todayStr = toLocalDateStr(now);
-  const endStr = toLocalDateStr(end);
-  const lastDay = endStr < todayStr ? endStr : todayStr;
-  return [...byDay.values()]
-    .filter(c => c.period_kind === 'day' && c.period_start >= firstDay && c.period_start <= lastDay)
-    .sort((a, b) => a.period_start.localeCompare(b.period_start))
-    .map(c => ({ dateStr: c.period_start, mood: c.mood, value: metricValue(days.get(c.period_start), metric) }));
-};
-
-/** 1-based ranks, ties sharing the average of the ranks they span. */
-export const ranks = (values: number[]): number[] => {
-  const order = values.map((v, i) => [v, i] as const).sort((a, b) => a[0] - b[0]);
-  const out = new Array<number>(values.length);
-  for (let i = 0; i < order.length;) {
-    let j = i;
-    while (j + 1 < order.length && order[j + 1][0] === order[i][0]) j++;
-    const rank = (i + j) / 2 + 1;
-    for (let k = i; k <= j; k++) out[order[k][1]] = rank;
-    i = j + 1;
-  }
-  return out;
-};
-
-const pearson = (x: number[], y: number[]): number => {
-  const n = x.length;
-  const mx = x.reduce((a, b) => a + b, 0) / n;
-  const my = y.reduce((a, b) => a + b, 0) / n;
-  let sxy = 0;
-  let sx = 0;
-  let sy = 0;
-  for (let i = 0; i < n; i++) {
-    sxy += (x[i] - mx) * (y[i] - my);
-    sx += (x[i] - mx) ** 2;
-    sy += (y[i] - my) ** 2;
-  }
-  return sx && sy ? sxy / Math.sqrt(sx * sy) : 0;
-};
-
-/** Spearman's rank correlation: Pearson's r of the ranks. 0 when either side never changes. */
-export const spearman = (x: number[], y: number[]): number => (x.length < 2 ? 0 : pearson(ranks(x), ranks(y)));
-
-// Standard normal CDF (Abramowitz & Stegun 26.2.17, error < 7.5e-8).
-const normalCdf = (z: number): number => {
-  const t = 1 / (1 + 0.2316419 * Math.abs(z));
-  const d = 0.3989423 * Math.exp((-z * z) / 2);
-  const tail = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-  return z > 0 ? 1 - tail : tail;
-};
-
-/**
- * Two-sided p-value for Spearman's ρ over n points, by the Fisher z
- * approximation with Fieller et al.'s 1.06 variance factor:
- * z = atanh(ρ)·√((n − 3) / 1.06). Needs n > 3.
- */
-export const rhoP = (rho: number, n: number): number => {
-  const clamped = Math.max(-0.999, Math.min(0.999, rho));
-  const z = Math.atanh(clamped) * Math.sqrt((n - 3) / 1.06);
-  return 2 * (1 - normalCdf(Math.abs(z)));
-};
-
-export type CorrelationLevel = 'insufficient' | 'flat' | 'none' | 'early' | 'slight' | 'moderate' | 'strong';
-
-export const CORRELATION_LABELS: Record<CorrelationLevel, string> = {
-  insufficient: 'Not enough data',
-  flat: 'Not enough variety',
-  none: 'No clear link',
-  early: 'Early sign',
-  slight: 'Slight link',
-  moderate: 'Moderate link',
-  strong: 'Strong link',
-};
-
-/**
- * Above this p-value, or under MIN_RHO, a result reads as no clear link — as
- * it does when the median split doesn't differ in the same direction as ρ.
- */
-export const MAX_P = 0.1;
-export const MIN_RHO = 0.15;
-/** Under this many days any link is only an "early sign"… */
-export const EARLY_SIGN_DAYS = 20;
-/** …and under this many nothing is called "strong". */
-export const STRONG_MIN_DAYS = 30;
-
-export interface CorrelationResult {
-  /** Days with a check-in. */
-  n: number;
-  level: CorrelationLevel;
-  /** Spearman's ρ — null under PATTERN_MIN_DAYS days or when the metric barely varies. */
-  rho: number | null;
-  p: number | null;
-  /** The median split behind "on days you …": days at or above it vs below. */
-  threshold: number | null;
-  highAverage: number | null;
-  lowAverage: number | null;
-}
-
-const mean = (values: number[]): number => values.reduce((a, b) => a + b, 0) / values.length;
-
-/** Scores how mood moved with a metric across the points and picks its wording level. */
-export const analyseCorrelation = (points: Pick<MoodPoint, 'mood' | 'value'>[]): CorrelationResult => {
-  const n = points.length;
-  const blank = { n, rho: null, p: null, threshold: null, highAverage: null, lowAverage: null };
-  if (n < PATTERN_MIN_DAYS) return { ...blank, level: 'insufficient' };
-  const xs = points.map(p => p.value);
-  if (new Set(xs).size < 3) return { ...blank, level: 'flat' };
-
-  const rho = spearman(xs, points.map(p => p.mood));
-  const p = rhoP(rho, n);
-
-  // Median split; when the median is also the minimum, the next value up
-  // splits instead, so both sides always have days.
-  const sorted = [...xs].sort((a, b) => a - b);
-  let threshold = sorted[Math.floor(n / 2)];
-  if (threshold === sorted[0]) threshold = sorted.find(v => v > threshold)!;
-  const high = points.filter(q => q.value >= threshold).map(q => q.mood);
-  const low = points.filter(q => q.value < threshold).map(q => q.mood);
-  const highAverage = mean(high);
-  const lowAverage = mean(low);
-  const splitSign = Math.sign(Math.round(highAverage * 10) - Math.round(lowAverage * 10));
-
-  const strength = Math.abs(rho);
-  let level: CorrelationLevel = p > MAX_P || strength < MIN_RHO || splitSign !== Math.sign(rho)
-    ? 'none'
-    : strength < 0.3 ? 'slight' : strength < 0.5 ? 'moderate' : 'strong';
-  if (level !== 'none' && n < EARLY_SIGN_DAYS) level = 'early';
-  else if (level === 'strong' && n < STRONG_MIN_DAYS) level = 'moderate';
-
-  return { n, level, rho, p, threshold, highAverage, lowAverage };
-};
-
-const METRIC_COPY: Record<MoodMetric, {
-  /** "on days with more …" */
-  more: string;
-  /** "More …, higher mood" in the Overview's short line. */
-  short: string;
-}> = {
-  tasks: { more: 'more tasks completed', short: 'tasks' },
-  notes: { more: 'more time in notes', short: 'note time' },
-  habits: { more: 'more habits checked off', short: 'habits' },
-};
-
-/**
- * The full sentence for a named link (early to strong), with its direction:
- * "Strong link: higher mood on days with more tasks completed this month".
- */
-export const describeLinkBrief = (metric: MoodMetric, result: CorrelationResult, scope: string): string =>
-  `${CORRELATION_LABELS[result.level]}: ${result.rho! > 0 ? 'higher' : 'lower'} mood on days with ${METRIC_COPY[metric].more} ${scope}`;
-
-/** The Overview tile's short form of a named link, sized to fit one line: "More tasks, higher mood". */
-export const describeLinkShort = (metric: MoodMetric, result: CorrelationResult): string =>
-  `More ${METRIC_COPY[metric].short}, ${result.rho! > 0 ? 'higher' : 'lower'} mood`;

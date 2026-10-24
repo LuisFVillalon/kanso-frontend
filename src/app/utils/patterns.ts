@@ -263,6 +263,9 @@ const HOW_SURE: Record<AnswerStep, string> = {
   clearly: 'A clear pattern',
 };
 
+/** How the page keeps work days and days off apart. */
+export const SEPARATE_DAY_KINDS = 'work days are compared with work days, days off with days off';
+
 /** One short line under an answer: how sure it is, over how many days, or what it still needs. */
 export const patternSupport = (r: PatternRow, f: Feeling): string => {
   const c = r.feel[f];
@@ -270,6 +273,9 @@ export const patternSupport = (r: PatternRow, f: Feeling): string => {
   if (a.kind === 'wait') {
     if (r.flat) return BARELY_CHANGED[r.metric!];
     if (c.nAll + c.nOtherAll === 0) return `No ${f} logged in your check-ins yet`;
+    if (Math.min(c.nAll, c.nOtherAll) >= TAG_MIN_SIDE && Math.min(c.n, c.nOther) === 0) {
+      return `${capitalize(SEPARATE_DAY_KINDS)} · ${plural(c.nAll, 'day')} vs ${c.nOtherAll} other`;
+    }
     const few = Math.min(c.nAll, c.nOtherAll) < TAG_MIN_SIDE ? Math.min(c.nAll, c.nOtherAll) : Math.min(c.n, c.nOther);
     return `Needs ${TAG_MIN_SIDE} days on each side · only ${few} so far`;
   }
@@ -315,7 +321,7 @@ const answered = (r: PatternRow) => settled(r) || found(r);
 export const waitsOnCheckIns = ({ days }: PatternsAnalysis): boolean => days.length < 2 * TAG_MIN_SIDE;
 
 /** "Your tasks barely changed from day to day.", for each activity with nothing to compare. */
-export const barelyChanged = (rows: PatternRow[]): string[] =>
+const barelyChanged = (rows: PatternRow[]): string[] =>
   rows.filter(r => r.source === 'activity' && r.flat).map(r => `${patternSupport(r, 'mood')}.`);
 
 /** What the page says while nothing has enough days. */
@@ -336,6 +342,12 @@ export const waitingLine = (rows: PatternRow[]): string | null => {
   return waiting.length ? `Too few days to tell yet: ${listNames(waiting.map(r => r.name))}.` : null;
 };
 
+/** Why nothing has an answer: what never changed and what has too few days, else that work days and days off are kept apart. */
+export const unanswered = (rows: PatternRow[]): string[] => {
+  const lines = [...barelyChanged(rows), waitingLine(rows)].filter((line): line is string => !!line);
+  return lines.length ? lines : [`${capitalize(SEPARATE_DAY_KINDS)}.`];
+};
+
 /**
  * The plain lines after the findings: which activities made no clear
  * difference, that everything else was about the same (or that nothing stood
@@ -344,7 +356,7 @@ export const waitingLine = (rows: PatternRow[]): string | null => {
 export const patternsRest = (analysis: PatternsAnalysis, scope: string): string[] => {
   const { days, rows } = analysis;
   if (waitsOnCheckIns(analysis)) return [tooFewDays(days.length, scope)];
-  if (!rows.some(answered)) return [...barelyChanged(rows), waitingLine(rows)].filter((line): line is string => !!line);
+  if (!rows.some(answered)) return unanswered(rows);
   return [
     quietLine(quietActivities(rows)),
     rows.some(found) ? 'Everything else was about the same.' : `Nothing stood out ${scope}: every difference was small enough to be luck.`,

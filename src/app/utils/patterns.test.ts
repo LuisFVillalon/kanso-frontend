@@ -129,10 +129,40 @@ describe('analysePatterns', () => {
       const off = i % 7 >= 5;
       return { ...d, off, tags: new Set<string>(), moments: new Set(off ? [] : ['Lecture']), activity: { tasks: 0, notes: 0, habits: 0 } };
     });
-    expect(patternsRest(analysePatterns(workOnly, new Map(), 'x'), 'this month')).toEqual([
+    const analysis = analysePatterns(workOnly, new Map(), 'x');
+    expect(patternSupport(analysis.rows.find(r => r.key === 'moment:Lecture')!, 'mood'))
+      .toBe('Work days are compared with work days, days off with days off · 19 days vs 6 other');
+    expect(patternsRest(analysis, 'this month')).toEqual([
       'Your tasks barely changed from day to day.',
       'Your time in notes barely changed from day to day.',
       'Your habits barely changed from day to day.',
+    ]);
+  });
+
+  it('says work days and days off are kept apart, not to wait, for a habit done on every work day', () => {
+    // 30 days: 22 work days with the habit checked off, 8 days off without it.
+    const weekdays = month(30).map((d, i) => {
+      const off = i % 7 >= 5;
+      return { ...d, off, tags: new Set<string>(), moments: new Set<string>(), activity: { tasks: 0, notes: 0, habits: off ? 0 : 1 } };
+    });
+    const analysis = analysePatterns(weekdays, new Map(), 'x');
+    const habits = analysis.rows.find(r => r.key === 'activity:habits')!;
+    expect(habits.flat).toBe(false);
+    expect(habits.answer.mood.kind).toBe('wait');
+    expect(patternSupport(habits, 'mood')).toBe('Work days are compared with work days, days off with days off · 22 days vs 8 other');
+    expect(patternsRest(analysis, 'this month')).toEqual([
+      'Your tasks barely changed from day to day.',
+      'Your time in notes barely changed from day to day.',
+    ]);
+  });
+
+  it('never leaves the summary empty when every activity splits along work days and days off', () => {
+    const split = month(30).map((d, i) => {
+      const off = i % 7 >= 5;
+      return { ...d, off, tags: new Set<string>(), moments: new Set<string>(), activity: { tasks: off ? 0 : 2, notes: off ? 0 : 30, habits: off ? 0 : 1 } };
+    });
+    expect(patternsRest(analysePatterns(split, new Map(), 'x'), 'this month')).toEqual([
+      'Work days are compared with work days, days off with days off.',
     ]);
   });
 
