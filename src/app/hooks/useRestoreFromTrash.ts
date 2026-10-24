@@ -6,7 +6,9 @@ import {
   restoreNote as restoreNoteApi,
   restoreTag as restoreTagApi,
   restoreTask as restoreTaskApi,
+  restoreEvent as restoreEventApi,
 } from '@/app/lib/backend-api';
+import { notifyEventsChanged } from '@/app/hooks/useEventsVersion';
 import { useTasksContext } from '@/app/context/TasksContext';
 import { useNotesContext } from '@/app/context/NotesContext';
 import { useTagsContext } from '@/app/context/TagsContext';
@@ -53,9 +55,10 @@ export function useRestoreFromTrash() {
    * `taskIds` lists every task a task restore brings back (its subtasks
    * deleted with it and any trashed parents; see restoredWithTask). Only the
    * task itself comes back in the response, so when there are others the
-   * active list is read to pick them up.
+   * active list is read to pick them up. `occurrenceDate` restores just that
+   * deleted occurrence of the event series `id`.
    */
-  return useCallback(async (kind: TrashKind, id: number, taskIds?: Set<number>): Promise<boolean> => {
+  return useCallback(async (kind: TrashKind, id: number, taskIds?: Set<number>, occurrenceDate?: string | null): Promise<boolean> => {
     switch (kind) {
       case 'task': {
         const task = await restoreTaskApi(id);
@@ -90,6 +93,12 @@ export function useRestoreFromTrash() {
         if (!tag.archived_at) restoreTag(tag);
         await reattachTag(tag);
         return !!tag.archived_at;
+      }
+      case 'event': {
+        // Events have no store; the calendars on screen read them again.
+        const event = await restoreEventApi(id, occurrenceDate);
+        notifyEventsChanged();
+        return !occurrenceDate && !!event.archived_at;
       }
     }
   }, [restoreTasks, restoreNote, restoreHabit, restoreTag, reattachTag]);

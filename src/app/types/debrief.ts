@@ -1,3 +1,5 @@
+import type { EventOccurrence, EventTagMinutes } from './event';
+
 export interface DebriefTag {
   id: number;
   name: string;
@@ -34,8 +36,15 @@ interface DebriefNoteItem {
 
 interface WorkloadCapacity {
   is_rest_day: boolean;
+  /** Today's work window; null without a day start and "Call it a day". Absent from older servers. */
+  window_minutes?: number | null;
+  /** Minutes of the window today's events take, overlaps counted once; archived and all-day events take none. */
+  event_minutes?: number;
+  /** What the window leaves for tasks once events are out: window_minutes - event_minutes. */
   available_minutes: number | null;
   committed_minutes: number;
+  /** available_minutes - committed_minutes, at least 0: free in the window after events and tasks due. */
+  free_minutes?: number | null;
   utilization_pct: number | null;
   is_overcommitted: boolean;
 }
@@ -60,4 +69,11 @@ export interface DailyDebriefReport {
   habit_status: HabitDebriefStatus[];
   workload: WorkloadCapacity;
   focus_next: FocusNextItem[];
+  /** Today's events in start order, as the calendar shows them (past archived ones flagged). Absent from older servers. */
+  events_today?: EventOccurrence[];
+  /** The ones that have ended by now, archived ones left out: today's activity. */
+  passed_events_today?: EventOccurrence[];
+  /** Today's event minutes per tag, archived ones left out, for the time allocation bar. */
+  event_minutes_by_tag?: EventTagMinutes[];
+  passed_event_minutes_by_tag?: EventTagMinutes[];
 }

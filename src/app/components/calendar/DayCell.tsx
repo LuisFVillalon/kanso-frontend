@@ -6,6 +6,9 @@ import type { DayData } from '@/app/hooks/useYearCalendarData';
 import type { TermPeriod } from '@/app/types/calendar';
 import { termColor } from '@/app/lib/termPeriods';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { formatEventTime, occurrenceKey } from '@/app/utils/eventOccurrences';
+import { eventColor } from '@/app/utils/events';
+import type { EventOccurrence } from '@/app/types/event';
 
 interface DayCellProps {
   date: Date;
@@ -25,9 +28,42 @@ interface DayCellProps {
 
 const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}` : hours.toFixed(1));
 
+// Titled event bars shown before the rest fold into "+N".
+const MAX_EVENT_BARS = 2;
+
+const eventTitle = (o: EventOccurrence) =>
+  `${o.title} · ${formatEventTime(o)}${o.archived ? ' · archived' : o.past ? ' · past' : ''}`;
+
+/**
+ * One event as a bar in its tag's color, with its title from sm up; a phone
+ * shows only a thin colored bar. Past events are faded, archived ones are
+ * hatched and struck through.
+ */
+const EventBar: React.FC<{ occurrence: EventOccurrence }> = ({ occurrence: o }) => {
+  const color = eventColor(o.tags);
+  return (
+    <span
+      data-event-bar
+      title={eventTitle(o)}
+      className="block h-1 sm:h-auto rounded-sm sm:rounded-[3px] sm:px-1 sm:py-px text-[0px] sm:text-[9px] font-semibold leading-tight truncate text-text-primary"
+      style={{
+        borderLeft: `2px solid ${color}`,
+        background: o.archived
+          ? `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 22%, var(--tm-surface)) 0 3px, var(--tm-surface) 3px 6px)`
+          : `color-mix(in srgb, ${color} ${o.past ? 14 : 24}%, var(--tm-surface))`,
+        opacity: o.past && !o.archived ? 0.7 : 1,
+        textDecoration: o.archived ? 'line-through' : undefined,
+      }}
+    >
+      {o.title}
+    </span>
+  );
+};
+
 // A single day cell in a month grid — day number plus compact indicators for
-// habits completed (colored dots, tag color), tasks due + estimated hours,
-// and notes edited, with a band along the foot on days inside a term.
+// habits completed (colored dots, tag color), events (tag-colored bars),
+// tasks due + estimated hours, and notes edited, with a band along the foot
+// on days inside a term.
 // Deliberately terse; the day panel beside the calendar
 // page's month (or the dashboard tile's DayDetailModal) carries the full text.
 const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, holidayName, isSelected, tabIndex, term }) => {
@@ -35,7 +71,11 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
   const taskCount = data?.tasksDue.length ?? 0;
   const hours = data?.estimatedHours ?? 0;
   const noteCount = data?.notesEdited.length ?? 0;
-  const hasContent = habitDots.length > 0 || taskCount > 0 || noteCount > 0;
+  const events = data?.events ?? [];
+  const hasContent = habitDots.length > 0 || taskCount > 0 || noteCount > 0 || events.length > 0;
+  const visibleEvents = events.slice(0, MAX_EVENT_BARS);
+  const overflowEvents = events.length - visibleEvents.length;
+  const eventsLabel = events.length > 0 ? ` — ${events.length} event${events.length === 1 ? '' : 's'}` : '';
 
   const visibleDots = habitDots.slice(0, 4);
   const overflowDots = habitDots.length - visibleDots.length;
@@ -48,7 +88,7 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
       aria-pressed={isSelected}
       tabIndex={tabIndex}
       title={[holidayName ?? date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' }), term?.title].filter(Boolean).join(' · ')}
-      aria-label={`${date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}${holidayName ? ` — ${holidayName}` : ''}${term ? ` — ${term.title}` : ''}${hasContent ? ' — has activity' : ''}`}
+      aria-label={`${date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}${holidayName ? ` — ${holidayName}` : ''}${term ? ` — ${term.title}` : ''}${eventsLabel}${hasContent ? ' — has activity' : ''}`}
       className="relative flex flex-col text-left rounded-md p-1 sm:p-1.5 transition-transform duration-150 ease-in-out hover:z-10 hover:-translate-y-px"
       style={{
         minHeight: 60,
@@ -93,6 +133,15 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
           ))}
           {overflowDots > 0 && (
             <span className="text-[8px] leading-none text-text-muted">+{overflowDots}</span>
+          )}
+        </div>
+      )}
+
+      {events.length > 0 && (
+        <div className="flex flex-col gap-0.5 mt-1 min-w-0" aria-hidden>
+          {visibleEvents.map(o => <EventBar key={occurrenceKey(o)} occurrence={o} />)}
+          {overflowEvents > 0 && (
+            <span className="text-[8px] sm:text-[9px] font-semibold leading-none text-text-muted">+{overflowEvents}</span>
           )}
         </div>
       )}

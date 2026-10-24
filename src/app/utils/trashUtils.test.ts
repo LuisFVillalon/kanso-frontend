@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daysLeft, deletedWithTask, restoredWithTask } from './trashUtils';
+import { daysLeft, deletedWithTask, restoredWithTask, trashKey } from './trashUtils';
 import { TrashItem } from '@/app/types/trash';
 
 const T1 = '2026-10-01T10:00:00Z';
@@ -23,6 +23,14 @@ describe('daysLeft', () => {
 
   it('never goes below zero', () => {
     expect(daysLeft('2026-10-18T12:00:00Z', now)).toBe(0);
+  });
+});
+
+describe('trashKey', () => {
+  it('keys a single deleted event occurrence apart from its series and from other kinds', () => {
+    expect(trashKey({ kind: 'task', id: 7 })).toBe('task:7');
+    expect(trashKey({ kind: 'event', id: 7, occurrence_date: null })).toBe('event:7');
+    expect(trashKey({ kind: 'event', id: 7, occurrence_date: '2026-10-21' })).toBe('event:7:2026-10-21');
   });
 });
 

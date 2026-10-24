@@ -20,6 +20,7 @@ vi.mock('@/app/context/HabitsContext', () => ({ useHabitsContext: () => ({ habit
 vi.mock('@/app/context/NotesContext', () => ({ useNotesContext: () => ({ notes: [], isLoading: false }) }));
 
 import { useYearCalendarData } from './useYearCalendarData';
+import { notifyEventsChanged } from './useEventsVersion';
 
 const activity = (start: string, end: string, completions: CalendarActivity['habit_completions']): CalendarActivity => ({
   start_date: start,
@@ -98,5 +99,31 @@ describe('useYearCalendarData', () => {
     expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2028-01-01', '2028-12-31');
     expect(result.yearLoading).toBe(false);
     expect(result.dayData.has('2026-10-21')).toBe(false);
+  });
+
+  it('puts each event on its days, an overnight one on both, even for someone with no habits', async () => {
+    mocks.habits = [];
+    const base = {
+      description: null, tags: [], all_day: false, time_zone: 'America/Los_Angeles', repeat_days: [], repeat_interval: 1,
+      reminder_minutes: null, edited: false, past: false, archived: false,
+    };
+    mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      ...activity(start, end, []),
+      events: [
+        { ...base, event_id: 1, occurrence_date: '2026-10-23', title: 'Lecture', date: '2026-10-23', end_date: '2026-10-23', start_time: '10:00:00', end_time: '10:50:00', starts_at: '', ends_at: '' },
+        { ...base, event_id: 2, occurrence_date: '2026-10-23', title: 'Night shift', date: '2026-10-23', end_date: '2026-10-24', start_time: '22:00:00', end_time: '02:00:00', starts_at: '', ends_at: '' },
+      ],
+    }));
+    await render();
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-01-01', '2026-12-31');
+    expect(result.dayData.get('2026-10-23')!.events.map(e => e.title)).toEqual(['Lecture', 'Night shift']);
+    expect(result.dayData.get('2026-10-24')!.events.map(e => e.title)).toEqual(['Night shift']);
+  });
+
+  it('reloads the year when an event changes', async () => {
+    await render();
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(1);
+    await act(async () => notifyEventsChanged());
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(2);
   });
 });

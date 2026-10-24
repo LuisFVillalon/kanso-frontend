@@ -3,14 +3,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArchiveRestore, Archive, Trash2, Loader2, ListChecks, NotebookText, Tags, Blocks, Inbox,
+  ArchiveRestore, Archive, Trash2, Loader2, ListChecks, NotebookText, Tags, Blocks, Inbox, CalendarClock,
   type LucideIcon,
 } from 'lucide-react';
-import { fetchTrash, purgeFromTrash, describeError } from '@/app/lib/backend-api';
+import { fetchTrash, purgeEvent, purgeFromTrash, describeError } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
 import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
 import { TrashItem, TrashKind } from '@/app/types/trash';
-import { formatUpdatedDate } from '@/app/utils/dateUtils';
+import { formatUpdatedDate, parseLocalDate } from '@/app/utils/dateUtils';
 import { parentChain } from '@/app/utils/taskUtils';
 import { daysLeft, deletedWithTask, restoredWithTask, trashKey } from '@/app/utils/trashUtils';
 import Modal from '@/app/components/common/Modal';
@@ -23,9 +23,10 @@ const KINDS: Record<TrashKind, { label: string; plural: string; icon: LucideIcon
   note: { label: 'Note', plural: 'Notes', icon: NotebookText },
   tag: { label: 'Tag', plural: 'Tags', icon: Tags },
   habit: { label: 'Habit', plural: 'Habits', icon: Blocks },
+  event: { label: 'Event', plural: 'Events', icon: CalendarClock },
 };
 
-const FILTERS: Filter[] = ['all', 'task', 'note', 'tag', 'habit'];
+const FILTERS: Filter[] = ['all', 'task', 'note', 'tag', 'habit', 'event'];
 
 // Few enough days left to call out.
 const SOON_DAYS = 3;
@@ -33,10 +34,20 @@ const SOON_DAYS = 3;
 // Purge requests in flight at once during Delete all forever.
 const PURGE_CONCURRENCY = 4;
 
+/** Deletes an item forever; for one deleted occurrence of an event, just that date. */
+const purge = (item: TrashItem) =>
+  item.kind === 'event' ? purgeEvent(item.id, item.occurrence_date) : purgeFromTrash(item.kind, item.id);
+
 const displayTitle = (item: TrashItem) => item.title || (item.kind === 'note' ? 'Untitled Note' : 'Untitled');
 
+/** "Wed, Oct 21 only" for one deleted occurrence of an event; "All dates" for a deleted series. */
+const eventScopeLabel = (item: TrashItem) =>
+  item.occurrence_date
+    ? `${parseLocalDate(item.occurrence_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} only`
+    : 'All dates';
+
 /**
- * Recently deleted: the user's deleted tasks, notes, tags and habits, newest
+ * Recently deleted: the user's deleted tasks, notes, tags, habits and events, newest
  * first, each restorable until it's permanently deleted 30 days after
  * deletion. Restoring hands the item back to its app-wide store (see
  * useRestoreFromTrash) so it reappears where it was without a reload.
@@ -75,7 +86,7 @@ const TrashView: React.FC = () => {
   };
 
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: items.length, task: 0, note: 0, tag: 0, habit: 0 };
+    const c: Record<Filter, number> = { all: items.length, task: 0, note: 0, tag: 0, habit: 0, event: 0 };
     items.forEach(item => { c[item.kind] += 1; });
     return c;
   }, [items]);
@@ -104,7 +115,9 @@ const TrashView: React.FC = () => {
     const removed = items.filter(i => keys.has(trashKey(i)));
     setItems(prev => prev.filter(i => !keys.has(trashKey(i))));
     try {
-      const toArchive = await restoreFromTrash(item.kind, item.id, item.kind === 'task' ? taskIds : undefined);
+      const toArchive = item.occurrence_date
+        ? await restoreFromTrash(item.kind, item.id, undefined, item.occurrence_date)
+        : await restoreFromTrash(item.kind, item.id, item.kind === 'task' ? taskIds : undefined);
       showToast(`${KINDS[item.kind].label} restored${toArchive ? ' to the Archive' : ''}.`, 'success');
     } catch (err) {
       console.error('Restore failed:', err);
@@ -124,7 +137,7 @@ const TrashView: React.FC = () => {
     const item = pendingPurge;
     setPurging(true);
     try {
-      await purgeFromTrash(item.kind, item.id);
+      await purge(item);
       const taskIds = item.kind === 'task' ? deletedWithTask(items, item.id) : new Set<number>();
       const keys = affectedKeys(item, taskIds);
       // Subtasks deleted on their own stay here, detached from the purged parent.
@@ -159,7 +172,7 @@ const TrashView: React.FC = () => {
       while (next < roots.length) {
         const item = roots[next++];
         try {
-          await purgeFromTrash(item.kind, item.id);
+          await purge(item);
         } catch (err) {
           console.error('Delete forever failed:', err);
           const ids = item.kind === 'task' ? deletedWithTask(items, item.id) : new Set([item.id]);
@@ -279,7 +292,7 @@ const TrashView: React.FC = () => {
               {filter === 'all' ? 'Nothing recently deleted' : `No deleted ${KINDS[filter].plural.toLowerCase()}`}
             </h2>
             <p className="text-sm text-text-secondary">
-              When you delete a task, note, tag or habit, it waits here for 30 days in case you want it back.
+              When you delete a task, note, tag, habit or event, it waits here for 30 days in case you want it back.
             </p>
           </div>
         ) : (
@@ -311,6 +324,7 @@ const TrashView: React.FC = () => {
                         {left === 0 ? 'Deleting soon' : `${left} day${left === 1 ? '' : 's'} left`}
                       </span>
                       {parentTitle && <> · Leads up to {parentTitle}</>}
+                      {item.kind === 'event' && <> · {eventScopeLabel(item)}</>}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -357,6 +371,9 @@ const TrashView: React.FC = () => {
           <p className="text-center text-sm text-text-muted">
             {pendingPurge.kind === 'tag' && 'It comes off every task, note and habit that carried it. '}
             {pendingPurge.kind === 'habit' && 'Its history goes with it. '}
+            {pendingPurge.kind === 'event' && (pendingPurge.occurrence_date
+              ? 'That date stays off your calendar. '
+              : 'Every date it was on goes with it, past ones too. ')}
             {purgeSubtaskCount > 0 &&
               `The ${purgeSubtaskCount} linked task${purgeSubtaskCount === 1 ? '' : 's'} deleted with it go${purgeSubtaskCount === 1 ? 'es' : ''} too. `}
             This can&apos;t be undone.

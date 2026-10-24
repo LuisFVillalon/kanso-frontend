@@ -7,8 +7,13 @@ export function daysLeft(purgeAt: string, now: Date = new Date()): number {
   return Math.max(0, Math.ceil((new Date(purgeAt).getTime() - now.getTime()) / DAY_MS));
 }
 
-/** A trash item's unique key: kind and id, since a task, a note, a tag and a habit can share an id. */
-export const trashKey = (item: Pick<TrashItem, 'kind' | 'id'>) => `${item.kind}:${item.id}`;
+/**
+ * A trash item's unique key: kind and id, since a task, a note, a tag and a
+ * habit can share an id, plus the date of a single deleted event occurrence,
+ * which carries its series' id.
+ */
+export const trashKey = (item: Pick<TrashItem, 'kind' | 'id' | 'occurrence_date'>) =>
+  item.occurrence_date ? `${item.kind}:${item.id}:${item.occurrence_date}` : `${item.kind}:${item.id}`;
 
 const trashedTasks = (trash: TrashItem[]) => trash.filter(item => item.kind === 'task');
 

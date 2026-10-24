@@ -1,6 +1,6 @@
 import type { ParentSummary } from './task';
 
-export type TrashKind = 'task' | 'note' | 'tag' | 'habit';
+export type TrashKind = 'task' | 'note' | 'tag' | 'habit' | 'event';
 
 /** One deleted item in the trash, as listed by GET /get-trash. */
 export interface TrashItem {
@@ -15,4 +15,6 @@ export interface TrashItem {
   parent_task_id?: number | null;
   /** Tasks only: that parent's id and title, when the API sends them. */
   parent?: ParentSummary | null;
+  /** Events only: the one occurrence deleted from the series `id` names; null when the series itself was deleted. */
+  occurrence_date?: string | null;
 }

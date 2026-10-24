@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   fetchMoodTags: vi.fn(),
   saveMoodCheckin: vi.fn(),
   deleteMoodCheckin: vi.fn(),
+  fetchEventReport: vi.fn(),
 }));
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 const auth = vi.hoisted(() => ({ user: { id: 'user-1' } }));
@@ -53,6 +54,12 @@ const checkin = (period_start: string, mood: number): MoodCheckin => ({
 });
 
 
+const emptyEventReport = (start: string, end: string) => ({
+  start_date: start, end_date: end, event_count: 0, archived_count: 0, total_minutes: 0,
+  window_minutes: 5 * 840, event_window_minutes: 0, free_minutes: 5 * 840, free_pct: 100,
+  busiest_day: null, by_tag: [], by_day: [], by_week: [], by_month: [],
+});
+
 beforeEach(() => {
   window.history.replaceState(null, '', '/reports');
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -64,6 +71,7 @@ beforeEach(() => {
   }));
   api.fetchMoodCheckins.mockResolvedValue([checkin('2026-10-20', 4), checkin('2026-10-01', 2)]);
   api.fetchMoodTags.mockResolvedValue({ defaults: [], custom: [] });
+  api.fetchEventReport.mockImplementation(async (start: string, end: string) => emptyEventReport(start, end));
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -769,7 +777,7 @@ describe('CalendarReportView tabs', () => {
   it('opens on Productivity › Overview: tiles, activity, highlights and the time-by-tag bar', async () => {
     withHabits();
     await render();
-    expect(tabs('Report sections')).toEqual(['Productivity', 'Mood', 'Time']);
+    expect(tabs('Report sections')).toEqual(['Productivity', 'Mood', 'Time', 'Events']);
     expect(tabs('Productivity view')).toEqual(['Overview', 'Tasks', 'Notes', 'Habits']);
     expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
     expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
@@ -876,10 +884,78 @@ describe('CalendarReportView tabs', () => {
     await key(tab('Tasks'), 'End');
     expect(window.location.search).toBe('?view=habits');
     await key(tab('Productivity'), 'ArrowLeft');
+    expect(window.location.search).toBe('?view=events');
+    expect(document.activeElement).toBe(tab('Events'));
+    await key(tab('Events'), 'ArrowLeft');
     expect(window.location.search).toBe('?view=time');
-    expect(document.activeElement).toBe(tab('Time'));
     await key(tab('Time'), 'Home');
     expect(window.location.search).toBe('?view=habits');
+  });
+
+  describe('Events', () => {
+    const day = (date: string, minutes: number, window: number, eventWindow: number, count = minutes > 0 ? 1 : 0) => ({
+      date, count, minutes, is_rest_day: window === 0, window_minutes: window,
+      event_window_minutes: eventWindow, free_minutes: window - eventWindow,
+    });
+    const weekReport = (start: string, end: string) => ({
+      ...emptyEventReport(start, end),
+      event_count: 4,
+      archived_count: 1,
+      total_minutes: 310,
+      window_minutes: 4200,
+      event_window_minutes: 1280,
+      free_minutes: 2920,
+      free_pct: 69.5,
+      busiest_day: day('2026-10-21', 170, 840, 170, 2),
+      by_tag: [
+        { tag: { id: 1, name: 'CS 460', color: '#8b5cf6' }, minutes: 200, count: 3 },
+        { tag: null, minutes: 110, count: 1 },
+      ],
+      by_day: [
+        day('2026-10-19', 50, 840, 50), day('2026-10-20', 0, 840, 0), day('2026-10-21', 170, 840, 170, 2),
+        day('2026-10-22', 90, 840, 90), day('2026-10-23', 0, 840, 0), day('2026-10-24', 0, 0, 0), day('2026-10-25', 0, 0, 0),
+      ],
+    });
+
+    it('shows the period’s events, their time by tag and day, and the free time in plain words', async () => {
+      api.fetchEventReport.mockImplementation(async (start: string, end: string) => weekReport(start, end));
+      await render();
+      await openTab('Events');
+      expect(window.location.search).toBe('?view=events');
+      expect(api.fetchEventReport).toHaveBeenLastCalledWith('2026-10-19', '2026-10-25');
+      // Events has one view, so no views switch.
+      expect(document.querySelector('[aria-label="Productivity view"]')).toBeNull();
+      expect(text()).toContain('Events4');
+      expect(text()).toContain('1 of them archived');
+      expect(text()).toContain('Time in events5h 10m');
+      expect(text()).toContain('Busiest dayWed, Oct 212h 50m in 2 events');
+      expect(text()).toContain('Free in work hours48h 40m70% of your work hours left after events');
+      expect(text()).toContain('Free time left in your work hours: 48h 40m, 70% of your work hours.');
+      expect(text()).toContain('CS 460');
+      expect(text()).toContain('No tag');
+      expect(text()).toContain('Event time by day');
+      // The weekend has no work hours.
+      expect(container.querySelectorAll('[title$=": rest"]')).toHaveLength(2);
+      expect(container.querySelector('[title="Mon, Oct 19: 13h 10m free of 14h work hours; events took 50m"]')).not.toBeNull();
+    });
+
+    it('counts events per week in a month', async () => {
+      api.fetchEventReport.mockImplementation(async (start: string, end: string) => weekReport(start, end));
+      window.history.replaceState(null, '', '/reports?view=events');
+      await render();
+      await click(buttonLabelled(/^Month$/));
+      expect(api.fetchEventReport).toHaveBeenLastCalledWith('2026-10-01', '2026-10-31');
+      expect(text()).toContain('Events per week');
+      expect(container.querySelector('[title="Oct 19 – 25: 4 events, 5h 10m"]')).not.toBeNull();
+    });
+
+    it('says when there are no events, without waiting on the other reports', async () => {
+      api.fetchCalendarActivity.mockImplementation(() => new Promise(() => {}));
+      window.history.replaceState(null, '', '/reports?view=events');
+      await render();
+      expect(text()).toContain('No events this week');
+      expect(text()).toContain('Free time left in your work hours: 70h, 100% of your work hours.');
+    });
   });
 
   it('opens an old link to a tab in its new group', async () => {

@@ -7,6 +7,7 @@ import type { TrashItem } from '@/app/types/trash';
 const api = vi.hoisted(() => ({
   fetchTrash: vi.fn(),
   purgeFromTrash: vi.fn(),
+  purgeEvent: vi.fn(),
 }));
 const restoreFromTrash = vi.hoisted(() => vi.fn());
 const showToast = vi.hoisted(() => vi.fn());
@@ -173,5 +174,40 @@ describe('TrashView', () => {
     await renderView([]);
     expect(document.body.textContent).toContain('Nothing recently deleted');
     expect(document.body.textContent).toContain('waits here for 30 days');
+  });
+
+  describe('events', () => {
+    const series = item('event', 4, 'Library shift', 1);
+    const oneDate = { ...item('event', 4, 'Library shift', 0.5), occurrence_date: '2026-10-21' };
+
+    it('lists a deleted series and a single deleted date of it apart, under Events', async () => {
+      await renderView([oneDate, series, ...trash]);
+      await click(button('Events'));
+      expect(titles()).toEqual(['Library shift', 'Library shift']);
+      const rows = [...document.querySelectorAll('li')].map(li => li.textContent);
+      expect(rows[0]).toContain('Wed, Oct 21 only');
+      expect(rows[1]).toContain('All dates');
+    });
+
+    it('restores just the one date', async () => {
+      restoreFromTrash.mockResolvedValue(false);
+      await renderView([oneDate, series]);
+      await click(document.querySelectorAll<HTMLElement>('button[aria-label="Restore Library shift"]')[0]);
+      expect(restoreFromTrash).toHaveBeenCalledWith('event', 4, undefined, '2026-10-21');
+      expect(titles()).toEqual(['Library shift']);
+      expect(showToast).toHaveBeenCalledWith('Event restored.', 'success');
+    });
+
+    it('deletes one date forever without touching the series', async () => {
+      api.purgeEvent.mockResolvedValue(undefined);
+      await renderView([oneDate, series]);
+      await click(document.querySelectorAll<HTMLElement>('button[aria-label="Delete Library shift forever"]')[0]);
+      expect(document.body.textContent).toContain('That date stays off your calendar.');
+      await click([...document.querySelectorAll<HTMLElement>('.modal-panel button')].find(b => b.textContent === 'Delete forever')!);
+      expect(api.purgeEvent).toHaveBeenCalledWith(4, '2026-10-21');
+      expect(api.purgeFromTrash).not.toHaveBeenCalled();
+      expect(titles()).toEqual(['Library shift']);
+      expect(document.body.textContent).toContain('All dates');
+    });
   });
 });
