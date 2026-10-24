@@ -101,6 +101,9 @@ const subscribeShort = (onChange: () => void) => {
 };
 const isShortNow = () => typeof window.matchMedia === 'function' && window.matchMedia(SHORT_QUERY).matches;
 
+/** Whether the window is short (760px or less), where Mood › Patterns' charts shrink to fit one screen. */
+export const useShortWindow = () => useSyncExternalStore(subscribeShort, isShortNow, () => false);
+
 export interface DayItem {
   key: string;
   /** Axis label; empty where a label would crowd. */
@@ -194,7 +197,7 @@ interface ReportMoodRelationChartProps {
  */
 const ReportMoodRelationChart: React.FC<ReportMoodRelationChartProps> = ({ metric, view, points, items, byWeek }) => {
   const [ref, width] = useMeasuredWidth<HTMLDivElement>();
-  const short = useSyncExternalStore(subscribeShort, isShortNow, () => false);
+  const short = useShortWindow();
   const info = METRIC_INFO[metric];
   const lowerLabel = info.label.toLowerCase();
 

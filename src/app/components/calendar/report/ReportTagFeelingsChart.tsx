@@ -14,7 +14,7 @@ import {
   type TagDay,
   type TagFeelings,
 } from '@/app/utils/tagFeelings';
-import { useMeasuredWidth } from './ReportMoodRelationChart';
+import { useMeasuredWidth, useShortWindow } from './ReportMoodRelationChart';
 
 /** Series colors as on Mood › Over time: mood in ink, energy accent, stress accent-2. */
 export const FEELING_COLOR: Record<Feeling, string> = {
@@ -64,10 +64,11 @@ export const TagBarsChart: React.FC<TagBarsChartProps> = ({ tags, hatched, selec
   const [ref, width] = useMeasuredWidth<HTMLDivElement>();
   const hatchId = useId();
   const narrow = width < 520;
+  const short = useShortWindow();
   const padLeft = 44;
   const padRight = 8;
   const top = 18;
-  const plotH = narrow ? 160 : 190;
+  const plotH = short ? 140 : narrow ? 160 : 190;
   const groupW = (width - padLeft - padRight) / Math.max(1, tags.length);
   const tilt = groupW < 64;
   const bottom = tilt ? 74 : 40;

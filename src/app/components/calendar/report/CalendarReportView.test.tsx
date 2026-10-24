@@ -180,8 +180,14 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('2 days with a check-in');
     expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
-    expect(text()).toContain('Check-in tags & mood');
-    expect(text()).toContain('Your task & note tags');
+    // One Tags card beside it, opening on your own tags; its switch swaps in the check-in tags in place.
+    expect(tab('Your task & note tags').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('How you felt on days you worked on each tag');
+    await openTab('Check-in tags');
+    expect(tab('Check-in tags').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('Tags you picked when checking in');
+    expect(text()).not.toContain('How you felt on days you worked on each tag');
+    expect(text()).toContain('Mood & your activity');
   });
 
   it('describes how mood moved with habits, and averages mood by tag', async () => {
@@ -214,6 +220,7 @@ describe('CalendarReportView mood', () => {
     expect(container.querySelector('svg[aria-label="Habits completed per day with mood"]')).not.toBeNull();
 
     // Exercised is on the Good and Great days: 8 of them, against a usual 3.0 over all 20.
+    await openTab('Check-in tags');
     expect(text()).toContain('Exercised');
     expect(text()).toContain('8 days');
     expect(text()).toContain('your usual 3.0 · Okay');
@@ -239,6 +246,7 @@ describe('CalendarReportView mood', () => {
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     await openPatterns();
+    await openTab('Check-in tags');
 
     const exercised = buttonLabelled(/^On the 8 days you tagged “Exercised”/);
     const tired = buttonLabelled(/^On the 8 days you tagged “Tired”/);
