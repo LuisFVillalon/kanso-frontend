@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import type { Habit } from '@/app/types/habit';
 import type { MoodCheckin } from '@/app/types/mood';
@@ -26,8 +26,9 @@ import {
 } from './calendarReport';
 import { toLocalDateStr } from './dateUtils';
 
-beforeAll(() => {
-  // Local-day bucketing depends on the zone; pin one with a DST change.
+// Local-day bucketing depends on the zone; pin one with a DST change.
+// Hoisted so fixtures built at load time and in describe blocks see it too.
+vi.hoisted(() => {
   process.env.TZ = 'America/Los_Angeles';
 });
 
