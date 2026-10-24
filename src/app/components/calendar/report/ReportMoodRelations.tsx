@@ -27,7 +27,7 @@ import {
 import { PATTERN_MIN_DAYS } from '@/app/utils/moodReport';
 import ReportMoodRelationChart, { dayItems, METRIC_INFO, type RelationView } from './ReportMoodRelationChart';
 import { MetricButton } from './ReportActivityChart';
-import { ANSWER_COLOR, AnswerIcon, MoodLine } from './ReportMoodAnswer';
+import { ANSWER_COLOR, AnswerIcon, MoodLine, MoodLinePlaceholder } from './ReportMoodAnswer';
 
 interface ReportMoodRelationsProps {
   /** The report's calendar activity. */
@@ -129,8 +129,10 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
             )}
           </div>
 
-          {sides && result.lowAverage != null && result.highAverage != null && (
-            <MoodLine sides={sides} lowAverage={result.lowAverage} highAverage={result.highAverage} />
+          {answer.kind === 'wait' ? (
+            <MoodLinePlaceholder />
+          ) : sides && result.lowAverage != null && result.highAverage != null && (
+            <MoodLine kind={answer.kind} sides={sides} lowAverage={result.lowAverage} highAverage={result.highAverage} />
           )}
 
           <details className="group/details text-xs text-text-secondary">
