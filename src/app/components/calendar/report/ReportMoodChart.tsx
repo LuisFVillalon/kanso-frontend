@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDownUp, Info, Smile, X } from 'lucide-react';
 import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import { ENERGY_LABELS, MOOD_LABELS, STRESS_LABELS, WORKLOAD_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
 import type { ReportBucket, ReportPeriod } from '@/app/utils/calendarReport';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
+import { aboutRows, analyseMoodInsights, chartMarks, type AboutIcon, type ChartTag } from '@/app/utils/moodInsights';
 import { monthMood, periodRollingAverage, seriesValue, YEAR_FADE_DAYS, type MonthMood, type MoodSeries } from '@/app/utils/moodReport';
-import { LegendDot } from './ReportActivityChart';
 
 const SERIES: { series: MoodSeries; label: string; names: readonly string[] }[] = [
   { series: 'mood', label: 'Mood', names: MOOD_LABELS },
@@ -59,33 +60,73 @@ const LegendDiamond: React.FC<{ label: string }> = ({ label }) => (
   </span>
 );
 
-const LegendDash: React.FC<{ label: string }> = ({ label }) => (
-  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
-    <span className="w-4 border-t-2 border-dashed" style={{ borderColor: moodColor(4) }} />
-    {label}
-  </span>
-);
-
-const LegendHollow: React.FC<{ label: string }> = ({ label }) => (
-  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
-    <span className="w-2.5 h-2.5 rounded-full border-[1.5px] border-dashed" style={{ borderColor: moodColor(4) }} />
-    {label}
-  </span>
-);
-
-const LegendBand: React.FC<{ label: string }> = ({ label }) => (
-  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
-    <span className="w-2 h-3 rounded-full" style={{ backgroundColor: `color-mix(in srgb, ${moodColor(4)} 18%, transparent)` }} />
-    {label}
-  </span>
-);
-
 const LegendFaded: React.FC<{ label: string }> = ({ label }) => (
   <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
     <span className="w-2.5 h-2.5 rounded-full opacity-35" style={{ backgroundColor: moodColor(4) }} />
     {label}
   </span>
 );
+
+/** A note's number, matching it to its mark on the chart. */
+const NoteNumber: React.FC<{ num: number; className?: string }> = ({ num, className = '' }) => (
+  <span
+    className={`inline-flex items-center justify-center w-4 h-4 shrink-0 rounded-full text-[10px] font-bold leading-none ${className}`}
+    style={{ backgroundColor: 'var(--tm-text-primary)', color: 'var(--tm-surface)' }}
+    aria-hidden="true"
+  >
+    {num}
+  </span>
+);
+
+const RING = 'inline-block w-2.5 h-2.5 rounded-full border-2';
+
+/** A shaded best or hardest stretch's colour, at `strength`% over the card. */
+const spanColor = (tone: 'best' | 'worst', strength: number) =>
+  `color-mix(in srgb, ${moodColor(tone === 'best' ? 4 : 2)} ${strength}%, transparent)`;
+
+/**
+ * A labelled mark in a row's strip above its plot: "① Toughest stretch". A
+ * stretch's own label stays in the layout while `keyed`, invisible, so it
+ * can still be measured.
+ */
+const MarkTag: React.FC<{ tag: ChartTag; keyed: boolean }> = ({ tag, keyed }) => (
+  <span
+    className={`absolute top-px items-center gap-1 text-[10px] sm:text-[11px] font-bold whitespace-nowrap leading-[18px] text-text-primary ${
+      tag.spanKey && !keyed ? 'hidden' : 'inline-flex'} ${tag.spanLabel && keyed ? 'invisible' : ''}`}
+    style={tag.alignRight ? { right: `${tag.at}%` } : { left: `${tag.at}%` }}
+    aria-hidden="true"
+    data-span-label={tag.spanLabel ? '' : undefined}
+  >
+    {tag.num != null && <NoteNumber num={tag.num} />}
+    {tag.ringKey ? (
+      <>
+        <i className={RING} style={{ borderColor: 'var(--tm-text-primary)' }} />Best
+        <i className={`${RING} border-dashed ml-1`} style={{ borderColor: 'var(--tm-text-primary)' }} />Hardest
+      </>
+    ) : tag.spanKey ? (
+      tag.spanKey.map(({ tone, label }, k) => (
+        <React.Fragment key={tone}>
+          <i className={`inline-block w-2.5 h-2.5 rounded-sm ${k ? 'ml-1' : ''}`} style={{ backgroundColor: spanColor(tone, 40) }} />
+          {label}
+        </React.Fragment>
+      ))
+    ) : tag.label}
+  </span>
+);
+
+/** The small picture at the start of an "About this chart" row: the chart's own mark. */
+const AboutMark: React.FC<{ icon: AboutIcon }> = ({ icon }) => {
+  switch (icon) {
+    case 'headline': return <Smile className="w-3.5 h-3.5" />;
+    case 'dot': return <span className="block w-[9px] h-[9px] rounded-full" style={{ backgroundColor: moodColor(4) }} />;
+    case 'line': return <span className="block w-3.5 h-0.5 rounded" style={{ backgroundColor: LINE_COLOR }} />;
+    case 'bar': return <span className="block w-[7px] h-3.5 rounded-full" style={{ backgroundColor: `color-mix(in srgb, ${moodColor(4)} 30%, transparent)` }} />;
+    case 'hollow': return <span className="block w-2.5 h-2.5 rounded-full border-[1.5px] border-dashed" style={{ borderColor: 'var(--tm-text-muted)' }} />;
+    case 'dash': return <span className="block w-4" style={{ borderTop: `2.5px dashed ${moodColor(4)}` }} />;
+  }
+};
+
+const NO_CAUSE = 'Shows what happened together, not what caused it.';
 
 const shortDate = (dateStr: string) => parseLocalDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
@@ -116,6 +157,8 @@ interface ReportMoodChartProps {
   onMonth: (monthStart: string) => void;
   /** A monthly check-in's ◇ was clicked: edit it. */
   onMonthCheckin: (month: MoodCheckin) => void;
+  /** "See Patterns" in "About this chart": open Mood › Patterns. */
+  onSeePatterns?: () => void;
 }
 
 interface Row {
@@ -131,8 +174,12 @@ interface Row {
 }
 
 /**
- * "Mood over time": mood, energy and stress as three short charts stacked
- * on one shared time axis, each with its own words on its 1–5 scale. For a
+ * "Mood over time": a one-line headline above mood,
+ * energy and stress as three short charts stacked on one shared time axis,
+ * each with its own words on its 1–5 scale, and up to two numbered notes
+ * under it whose numbers mark the chart where they happened (see
+ * utils/moodInsights). "Explain this chart" opens a panel of short rows for
+ * the marks on the chart right now and a link to Patterns. For a
  * week or month, one dot per daily check-in (a month adds each row's 7-day
  * trend) and, on the mood row, hollow dots for days without one and each
  * weekly check-in as a dashed span across its week; for a year, each
@@ -145,14 +192,21 @@ interface Row {
  * opens the month. Dots and labels are HTML positioned over stretched SVG
  * lines, so nothing distorts at narrow widths.
  */
-const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDay, weeks, months: monthCheckins, onDay, onWeek, onMonth, onMonthCheckin }) => {
+const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDay, weeks, months: monthCheckins, onDay, onWeek, onMonth, onMonthCheckin, onSeePatterns }) => {
   const [active, setActive] = useState<number | null>(null);
   const [touched, setTouched] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const pointerType = useRef<string | null>(null);
   const previewed = useRef<number | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
+  const aboutRef = useRef<HTMLDivElement>(null);
+  const aboutButtonRef = useRef<HTMLButtonElement>(null);
+  const moodStripRef = useRef<HTMLDivElement>(null);
+  const [spansKeyed, setSpansKeyed] = useState(false);
+  const aboutId = useId();
   const isYear = period.kind === 'year';
   const n = buckets.length;
+  const insights = useMemo(() => analyseMoodInsights(period, byDay), [period, byDay]);
 
   // A column chosen by touch stays lit until the next tap lands outside the chart.
   useEffect(() => {
@@ -166,6 +220,23 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
     document.addEventListener('pointerdown', dismiss);
     return () => document.removeEventListener('pointerdown', dismiss);
   }, [touched]);
+
+  // "About this chart" takes focus when it opens, and closes on a tap outside it.
+  useEffect(() => {
+    if (!aboutOpen) return;
+    aboutRef.current?.focus();
+    const dismiss = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (!aboutRef.current?.contains(target) && !aboutButtonRef.current?.contains(target)) setAboutOpen(false);
+    };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, [aboutOpen]);
+
+  const closeAbout = () => {
+    setAboutOpen(false);
+    aboutButtonRef.current?.focus();
+  };
 
   const rows: Row[] = SERIES.map(({ series, label, names }) => {
     const months = isYear ? buckets.map(b => monthMood(byDay, b.key, series)) : [];
@@ -185,9 +256,29 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       })
     : [];
   const hasFaded = isYear && rows.some(r => r.months.some(m => m.n > 0 && m.n < YEAR_FADE_DAYS));
-  const hasBand = isYear && rows.some(r => r.months.some(m => m.n > 0));
   const hasHollow = !isYear && buckets.some(b => !b.isFuture && !byDay.has(b.key));
-  const hasMarks = isYear || period.kind === 'month' || hasHollow || weekSpans.length > 0;
+  const hasLine = rows.some(r => r.line.filter(v => v != null).length >= (period.kind === 'month' ? 1 : 2));
+  const hasBand = isYear && rows.some(r => r.months.some(m => m.q1 != null && m.q3 != null && m.average != null));
+  const hasMonthCheckin = isYear && buckets.some(b => monthCheckins.has(b.key));
+  const marks = chartMarks(insights.notes, buckets.map(b => b.key), period.kind);
+  const about = aboutRows(insights, { line: hasLine, band: hasBand, hollow: hasHollow, weekly: weekSpans.length > 0 });
+  const spanLabels = marks.tags.filter(t => t.spanLabel).map(t => `${t.label}@${t.at}`).join('|');
+
+  // The two stretches' labels give way to one key wherever they would overlap.
+  useLayoutEffect(() => {
+    const strip = moodStripRef.current;
+    if (!strip || !spanLabels) return;
+    const check = () => {
+      const rects = [...strip.querySelectorAll('[data-span-label]')].map(el => el.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+      setSpansKeyed(rects.some((r, i) => i > 0 && r.left < rects[i - 1].right + 6));
+    };
+    check();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(check);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [spanLabels]);
+  const legend = isYear || period.kind === 'month';
 
   const dotSize = period.kind === 'week' ? 'w-3 h-3' : isYear ? 'w-2.5 h-2.5' : 'w-2 h-2';
   const hollowSize = period.kind === 'week' ? 'w-2.5 h-2.5' : 'w-2 h-2';
@@ -291,6 +382,17 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
     const lower = row.label.toLowerCase();
     return (
       <div className="relative h-20 sm:h-24" aria-hidden="true">
+        {isMood && marks.band && (
+          <div
+            className="absolute inset-x-0 rounded"
+            style={{
+              top: `${yOf(marks.band.hi) - 3}%`,
+              height: `${yOf(marks.band.lo) - yOf(marks.band.hi) + 6}%`,
+              backgroundColor: `color-mix(in srgb, ${moodColor(3)} 16%, transparent)`,
+            }}
+            data-mark="band"
+          />
+        )}
         {[1, 3, 5].map(v => (
           <div
             key={v}
@@ -361,6 +463,36 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
           );
         })}
 
+        {isMood && marks.lines.map(line => {
+          const left = (line.from / n) * 100;
+          const width = ((line.to - line.from + 1) / n) * 100;
+          const top = `${yOf(line.value)}%`;
+          return (
+            <React.Fragment key={`line-${line.from}-${line.label}`}>
+              <div
+                className="absolute border-t-2 border-dashed"
+                style={{ left: `${left}%`, width: `${width}%`, top, borderColor: line.muted ? 'var(--tm-text-muted)' : moodColor(Math.round(line.value)), opacity: line.muted ? 0.7 : 0.9 }}
+                data-mark="level"
+              />
+              <span
+                className="absolute inline-flex items-center gap-1 rounded px-0.5 sm:px-[3px] bg-surface text-[10px] sm:text-[11px] font-bold leading-[15px] whitespace-nowrap text-text-primary"
+                style={line.muted ? { right: '2px', top, transform: 'translateY(-120%)' } : { left: `${left + width / 2}%`, top, transform: 'translate(-50%, -125%)' }}
+              >
+                {line.num != null && <NoteNumber num={line.num} />}
+                {line.label}
+              </span>
+            </React.Fragment>
+          );
+        })}
+        {isMood && marks.rings.map(ring => (
+          <span
+            key={`ring-${ring.at}`}
+            className={`absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${ring.hard ? 'border-dashed' : ''}`}
+            style={{ left: `${xOf(ring.at, n)}%`, top: `${yOf(ring.value)}%`, borderColor: 'var(--tm-text-primary)' }}
+            data-mark={ring.hard ? 'hardest' : 'best'}
+          />
+        ))}
+
         {!hasValues && (
           <p className="absolute inset-x-0 top-1/3 text-center text-[11px] sm:text-xs text-text-muted italic px-2">
             {isMood ? 'No daily check-ins in this period' : `No ${lower} recorded — it’s optional in the check-in`}
@@ -375,7 +507,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       {[1, 3, 5].map(v => (
         <span
           key={v}
-          className="absolute left-0 right-0 -translate-y-1/2 flex items-center gap-1 text-[10px] sm:text-[11px] text-text-muted leading-none"
+          className="absolute left-0 right-0 -translate-y-1/2 flex items-center gap-1 text-[10px] sm:text-[11px] text-text-secondary leading-none"
           style={{ top: `${yOf(v)}%` }}
         >
           {row.series === 'mood' && (
@@ -390,32 +522,29 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2">
-        <p className="text-xs text-text-secondary">
-          Mood, energy and stress from your daily check-ins, one line each.
-        </p>
+    <div className="relative flex flex-col gap-3">
+      {insights.sparse ? (
+        <div className="flex flex-col gap-2 rounded-[10px] p-3 bg-surface-raised">
+          <p className="text-[13px] font-bold text-text-primary">{insights.headline}</p>
+          <span className="h-1.5 rounded-full overflow-hidden bg-surface" aria-hidden="true">
+            <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (insights.n / insights.gate) * 100)}%` }} />
+          </span>
+        </div>
+      ) : (
+        <p className="font-display text-[17px] sm:text-[19px] font-semibold leading-tight text-text-primary">{insights.headline}</p>
+      )}
+
+      {legend && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <LegendDot color={moodColor(4)} label="Mood" />
-          <LegendDot color="var(--tm-accent)" label="Energy" />
-          <LegendDot color="var(--tm-accent-2)" label="Stress" />
-          {hasMarks && <span className="w-px h-3 bg-border" aria-hidden="true" />}
           {isYear ? (
             <>
               <LegendLine label="How the month felt" />
-              {hasBand && <LegendBand label="Most days fell here" />}
               {hasFaded && <LegendFaded label={`Fewer than ${YEAR_FADE_DAYS} days`} />}
-              {monthCheckins.size > 0 && <LegendDiamond label="Monthly check-in (click to edit)" />}
+              {hasMonthCheckin && <LegendDiamond label="Monthly check-in (click to edit)" />}
             </>
-          ) : (
-            <>
-              {hasHollow && <LegendHollow label="No check-in yet" />}
-              {period.kind === 'month' && <LegendLine label="7-day trend" />}
-              {weekSpans.length > 0 && <LegendDash label="Weekly check-in" />}
-            </>
-          )}
+          ) : period.kind === 'month' && <LegendLine label="7-day trend" />}
         </div>
-      </div>
+      )}
 
       <div>
         <div className="flex gap-2">
@@ -423,8 +552,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
           <div className="w-14 sm:w-16 shrink-0 flex flex-col gap-2">
             {rows.map(row => (
               <div key={row.series}>
-                <p className="h-5 flex items-center gap-1 text-xs font-bold text-text-primary">
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: seriesColor(row.series, 4) }} aria-hidden="true" />
+                <p className="h-5 flex items-center gap-1 sm:gap-[5px] text-[12.5px] sm:text-[13.5px] font-bold text-text-primary">
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seriesColor(row.series, 4) }} aria-hidden="true" />
                   {row.label}
                 </p>
                 {scaleLabels(row)}
@@ -441,6 +570,20 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
               if (e.pointerType === 'mouse') setActive(null);
             }}
           >
+            {marks.spans.map(span => (
+              <div
+                key={`span-${span.tone}`}
+                className="absolute top-0 bottom-0 rounded-md -z-10"
+                style={{
+                  left: `${(span.from / n) * 100}%`,
+                  width: `${((span.to - span.from + 1) / n) * 100}%`,
+                  backgroundColor: spanColor(span.tone, span.tone === 'best' ? 13 : 15),
+                }}
+                aria-hidden="true"
+                data-mark={`${span.tone}-span`}
+              />
+            ))}
+
             {buckets.map((b, i) =>
               b.isCurrent || active === i ? (
                 <div
@@ -459,7 +602,9 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
             {rows.map(row => (
               <div key={row.series}>
-                <div className="h-5" />
+                <div ref={row.series === 'mood' ? moodStripRef : undefined} className="relative h-5">
+                  {marks.tags.filter(t => t.series === row.series).map(tag => <MarkTag key={`${tag.label}-${tag.at}`} tag={tag} keyed={spansKeyed} />)}
+                </div>
                 {rowPlot(row)}
               </div>
             ))}
@@ -551,14 +696,94 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
         </div>
       </div>
 
+      {insights.notes.length > 0 && (
+        <ol className="flex flex-col gap-1.5">
+          {insights.notes.map(({ num, insight }) => (
+            <li key={num} className="grid grid-cols-[16px_minmax(0,1fr)] gap-2 text-[13px] leading-[1.45] text-text-primary">
+              <NoteNumber num={num} className="mt-0.5" />
+              <span>{insight.text}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+
       <p className="text-[11px] text-text-muted">
-        {isYear
-          ? 'Each dot shows how a month felt overall. Point at a month to compare all three, and click it to open it.'
-          : `${period.kind === 'month' ? 'Each line shows your trend over the past week.' : 'Each line shows how you felt day to day.'} Point at a day to compare all three, and click it to edit or log it. A break in energy or stress means you skipped it that day.`}
+        {insights.sure}{!insights.sparse && ` ${NO_CAUSE}`}{' '}
+        <button
+          ref={aboutButtonRef}
+          type="button"
+          onClick={() => setAboutOpen(o => !o)}
+          aria-expanded={aboutOpen}
+          aria-controls={aboutOpen ? aboutId : undefined}
+          className="text-xs font-medium text-accent underline underline-offset-2 rounded focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          Explain this chart
+        </button>
       </p>
+
+      {aboutOpen && (
+        <div
+          ref={aboutRef}
+          id={aboutId}
+          role="dialog"
+          aria-label="About this chart"
+          tabIndex={-1}
+          onKeyDown={e => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              closeAbout();
+            }
+          }}
+          className="absolute z-40 inset-x-0 bottom-0 max-h-[82%] overflow-y-auto flex flex-col gap-3 p-3.5 rounded-t-2xl border border-b-0 border-border bg-surface-raised outline-none sm:inset-x-auto sm:bottom-auto sm:top-0 sm:right-0 sm:w-[360px] sm:max-w-full sm:max-h-none sm:rounded-xl sm:border-b"
+          style={{ boxShadow: 'var(--tm-shadow-lg)' }}
+        >
+          <span className="sm:hidden w-9 h-1 -mt-1 mx-auto rounded-full" style={{ backgroundColor: 'var(--tm-border-strong)' }} aria-hidden="true" />
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-accent" aria-hidden="true" />
+            <p className="text-sm font-bold text-text-primary">About this chart</p>
+            <button
+              type="button"
+              onClick={closeAbout}
+              aria-label="Close"
+              className="ml-auto w-[26px] h-[26px] inline-flex items-center justify-center rounded-full bg-surface text-text-secondary hover:text-text-primary"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {about.map(row => (
+              <li key={row.icon} className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5 items-center text-[13.5px] leading-snug text-text-secondary">
+                <AboutIcon><AboutMark icon={row.icon} /></AboutIcon>
+                <span><b className="text-text-primary">{row.strong}</b>{row.rest && ` ${row.rest}`}</span>
+              </li>
+            ))}
+            {onSeePatterns && (
+              <li className="grid grid-cols-[24px_minmax(0,1fr)] gap-2.5 items-center text-[13.5px] leading-snug text-text-secondary">
+                <AboutIcon><ArrowDownUp className="w-3.5 h-3.5" /></AboutIcon>
+                <span>
+                  Want to see what might be behind this?{' '}
+                  <button
+                    type="button"
+                    onClick={onSeePatterns}
+                    className="text-xs font-medium text-accent underline underline-offset-2 rounded focus-visible:outline-2 focus-visible:outline-accent"
+                  >
+                    See Patterns
+                  </button>
+                </span>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };
+
+const AboutIcon: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <span className="w-6 h-6 rounded-[7px] border border-border bg-surface inline-flex items-center justify-center text-text-secondary" aria-hidden="true">
+    {children}
+  </span>
+);
 
 const MoodDot: React.FC<{ size: string; color: string | null; lit?: boolean }> = ({ size, color, lit }) =>
   color ? (

@@ -31,15 +31,20 @@ const eachDay = (start: Date, end: Date): string[] => {
 };
 
 /**
- * The check-ins a period's report fetches: a month plus the 6 days before it (so its rolling average is whole from
- * the 1st) and the rest of its last Mon–Sun week (so a weekly check-in
- * running into the next month sees all its days), or just the week or year.
+ * The check-ins a period's report fetches: the period and the whole one
+ * before it (for "A brighter month than September", and so a month's
+ * rolling average is whole from the 1st), and for a month the rest of its
+ * last Mon–Sun week (so a weekly check-in running into the next month sees
+ * all its days). A year asks for each year on its own, since one request
+ * covers at most 366 days.
  */
-export const moodFetchRange = (period: ReportPeriod): { start: Date; end: Date } => {
+export const moodFetchRanges = (period: ReportPeriod): { start: Date; end: Date }[] => {
+  const { start, end } = period;
+  if (period.kind === 'week') return [{ start: addDays(start, -7), end }];
   if (period.kind === 'month') {
-    return { start: addDays(period.start, -(ROLLING_WINDOW - 1)), end: addDays(period.end, (7 - period.end.getDay()) % 7) };
+    return [{ start: new Date(start.getFullYear(), start.getMonth() - 1, 1), end: addDays(end, (7 - end.getDay()) % 7) }];
   }
-  return { start: period.start, end: period.end };
+  return [{ start: new Date(start.getFullYear() - 1, 0, 1), end: new Date(start.getFullYear() - 1, 11, 31) }, { start, end }];
 };
 
 /** Daily check-ins by their local day. */

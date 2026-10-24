@@ -110,6 +110,8 @@ interface ReportMoodSectionProps {
   /** The profile's rest days, which the Tags card compares apart from work days. */
   restDays: number[];
   view: MoodView;
+  /** Opens Mood › Patterns, from "About this chart". */
+  onSeePatterns: () => void;
 }
 
 /**
@@ -124,7 +126,7 @@ interface ReportMoodSectionProps {
  * short for mood patterns, so its Patterns show the Tags card alone, hatched,
  * pointing to its Month report.
  */
-const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, onSelectYear, restDays, view }) => {
+const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, onSelectYear, restDays, view, onSeePatterns }) => {
   const showToast = useToast();
   const { habits } = useHabitsContext();
   const [modal, setModal] = useState<{ kind: MoodPeriodKind; date: string; existing: MoodCheckin | null } | null>(null);
@@ -241,6 +243,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
                   onWeek={week => setModal({ kind: 'week', date: week.period_start, existing: week })}
                   onMonth={monthStart => onSelectPeriod(parseLocalDate(monthStart))}
                   onMonthCheckin={month => setModal({ kind: 'month', date: month.period_start, existing: month })}
+                  onSeePatterns={onSeePatterns}
                 />
               </CardShell>
             </div>

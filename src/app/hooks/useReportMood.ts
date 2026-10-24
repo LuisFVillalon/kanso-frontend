@@ -3,7 +3,7 @@ import { fetchMoodCheckins } from '@/app/lib/backend-api';
 import type { MoodCheckin, MoodPeriodKind } from '@/app/types/mood';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import type { ReportPeriod } from '@/app/utils/calendarReport';
-import { moodFetchRange } from '@/app/utils/moodReport';
+import { moodFetchRanges } from '@/app/utils/moodReport';
 
 interface Fetched {
   key: string;
@@ -12,15 +12,14 @@ interface Fetched {
 
 /**
  * Loads the mood check-ins a report period needs — daily, weekly and
- * monthly — whose first day falls in moodFetchRange (a month also pulls in
- * the week before it). Saving or
+ * monthly — whose first day falls in moodFetchRanges (the period before it
+ * too, which the Mood over time summary compares with). Saving or
  * deleting a check-in from the report patches the loaded list in place.
  */
 export function useReportMood(period: ReportPeriod) {
-  const range = moodFetchRange(period);
-  const startStr = toLocalDateStr(range.start);
-  const endStr = toLocalDateStr(range.end);
-  const key = `${startStr}:${endStr}`;
+  const key = moodFetchRanges(period)
+    .map(r => `${toLocalDateStr(r.start)}:${toLocalDateStr(r.end)}`)
+    .join(',');
 
   const [fetched, setFetched] = useState<Fetched | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
@@ -28,9 +27,12 @@ export function useReportMood(period: ReportPeriod) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchMoodCheckins(startStr, endStr)
-      .then(checkins => {
-        if (!cancelled) setFetched({ key, checkins });
+    Promise.all(key.split(',').map(range => {
+      const [startStr, endStr] = range.split(':');
+      return fetchMoodCheckins(startStr, endStr);
+    }))
+      .then(parts => {
+        if (!cancelled) setFetched({ key, checkins: parts.flat() });
       })
       .catch(err => {
         console.error('[useReportMood] Failed to fetch mood check-ins:', err);
@@ -40,7 +42,7 @@ export function useReportMood(period: ReportPeriod) {
       cancelled = true;
       setError(null);
     };
-  }, [key, startStr, endStr, attempt]);
+  }, [key, attempt]);
 
   const ready = fetched?.key === key ? fetched.checkins : null;
   const failed = !ready && error?.key === key ? error.message : null;
