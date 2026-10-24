@@ -9,7 +9,7 @@ import { formatDurationShort, parseLocalDate, toLocalDateStr } from '@/app/utils
 import type { CalendarReport, ReportPeriod } from '@/app/utils/calendarReport';
 import type { MoodSummary } from '@/app/utils/moodReport';
 import {
-  anySettled,
+  barelyChanged,
   describePattern,
   patternFindings,
   patternSupport,
@@ -18,6 +18,7 @@ import {
   quietLine,
   tooFewDays,
   waitingLine,
+  waitsOnCheckIns,
 } from '@/app/utils/patterns';
 import { buildTagBreakdown, collectTagItems, UNTAGGED_KEY } from '@/app/utils/tagReport';
 import { formatTagHours } from './ReportTagBreakdown';
@@ -71,7 +72,7 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
       const { row, feeling } = found;
       return { text: `${row.name} · ${row.answer[feeling].short} ${feeling}`, full: `${describePattern(row, feeling)} · ${patternSupport(row, feeling)}` };
     }
-    if (!anySettled(analysis.rows)) {
+    if (waitsOnCheckIns(analysis)) {
       return { text: `Check in more · ${plural(analysis.days.length, 'day')} so far`, full: tooFewDays(analysis.days.length, scopeLabel) };
     }
     const quiet = quietActivities(rows);
@@ -82,7 +83,7 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
         full: [quietLine(quiet), waiting].filter(Boolean).join(' '),
       };
     }
-    return { text: 'Can’t tell yet', full: waiting ?? patternSupport(rows[0], 'mood') };
+    return { text: 'Can’t tell yet', full: waiting ?? barelyChanged(rows).join(' ') };
     // `periodKey` and `restKey` identify the period and rest days; their objects change identity every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity, byDay, periodKey, restKey, scopeLabel]);

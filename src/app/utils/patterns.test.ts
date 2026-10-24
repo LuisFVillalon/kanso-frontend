@@ -114,4 +114,13 @@ describe('analysePatterns', () => {
       'Too few days to tell anything yet: each side of a comparison needs 5 days with a check-in, and you have 3 days this month.',
     ]);
   });
+
+  it('says what never changed, not to check in more, when every check-in day was alike', () => {
+    const alike = month(25).map(d => ({ ...d, tags: new Set<string>(), moments: new Set(['Coffee']), activity: { tasks: 0, notes: 0, habits: 0 } }));
+    expect(patternsRest(analysePatterns(alike, new Map(), 'x'), 'this month')).toEqual([
+      'Your tasks barely changed from day to day.',
+      'Your time in notes barely changed from day to day.',
+      'Your habits barely changed from day to day.',
+    ]);
+  });
 });

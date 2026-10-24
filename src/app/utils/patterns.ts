@@ -309,8 +309,20 @@ const listNames = (names: string[]) =>
 const settled = (r: PatternRow) => FEELINGS.some(f => r.answer[f].kind === 'same');
 const found = (r: PatternRow) => FEELINGS.some(f => r.answer[f].step);
 
-/** Whether any row has enough days to say even "about the same"; until then the page only asks for more check-ins. */
-export const anySettled = (rows: PatternRow[]): boolean => rows.some(settled);
+const answered = (r: PatternRow) => settled(r) || found(r);
+
+/**
+ * Whether nothing has an answer yet for want of check-ins: too few days to
+ * fill both sides of anything, or a row that changed with a side still under
+ * TAG_MIN_SIDE. Rows that never changed, or are on every day, wait on that instead.
+ */
+export const waitsOnCheckIns = ({ days, rows }: PatternsAnalysis): boolean =>
+  !rows.some(answered)
+  && (days.length < 2 * TAG_MIN_SIDE || rows.some(r => !r.flat && r.days > 0 && r.otherDays > 0));
+
+/** "Your tasks barely changed from day to day.", for each activity with nothing to compare. */
+export const barelyChanged = (rows: PatternRow[]): string[] =>
+  rows.filter(r => r.source === 'activity' && r.flat).map(r => `${patternSupport(r, 'mood')}.`);
 
 /** What the page says while nothing has enough days. */
 export const tooFewDays = (days: number, scope: string): string =>
@@ -335,8 +347,10 @@ export const waitingLine = (rows: PatternRow[]): string | null => {
  * difference, that everything else was about the same (or that nothing stood
  * out), and what has too few days to tell yet.
  */
-export const patternsRest = ({ days, rows }: PatternsAnalysis, scope: string): string[] => {
-  if (!anySettled(rows)) return [tooFewDays(days.length, scope)];
+export const patternsRest = (analysis: PatternsAnalysis, scope: string): string[] => {
+  const { days, rows } = analysis;
+  if (waitsOnCheckIns(analysis)) return [tooFewDays(days.length, scope)];
+  if (!rows.some(answered)) return barelyChanged(rows);
   return [
     quietLine(quietActivities(rows)),
     rows.some(found) ? 'Everything else was about the same.' : `Nothing stood out ${scope}: every difference was small enough to be luck.`,
