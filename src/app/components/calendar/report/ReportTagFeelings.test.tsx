@@ -85,7 +85,7 @@ describe('ReportTagFeelings', () => {
     act(() => root.render(
       <ReportTagFeelings activity={activity} byDay={byDay} period={periodContaining('month', new Date(2026, 9, 21))} scopeLabel="this month" restDays={[]} widen={{ label: 'See 2026', onClick: onWiden }} />,
     ));
-    expect(text()).toContain('Tags & feelings');
+    expect(text()).toContain('Your task & note tags');
     expect(text()).toContain('Mood, energy and stress on days with each tag');
     expect(text()).toContain('Average, 1 (low) to 5 (high)');
     expect(text()).toContain('10 days');

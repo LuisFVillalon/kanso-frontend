@@ -68,7 +68,7 @@ export const describeTagMood = (tag: string, days: number, tagAverage: number, u
 };
 
 /**
- * "Tags & mood", as days with each tag compared with your usual: a bar from
+ * "Check-in tags & mood", as days with each tag compared with your usual: a bar from
  * a labeled center (your average mood over the period) toward lower or
  * higher mood, the tag's own mood as a face, and the signed difference.
  */
@@ -79,7 +79,8 @@ const TagsCard: React.FC<{ byDay: Map<string, MoodCheckin>; period: ReportPeriod
   const usual = toTenth(average);
   const [openTag, setOpenTag] = useState<string | null>(null);
   return (
-    <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Tags & mood" headerAction={headerAction}>
+    <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Check-in tags & mood" headerAction={headerAction}>
+      <p className="-mt-2 text-xs text-text-muted">Tags you picked when checking in</p>
       {rows.length === 0 ? (
         <p className="text-xs sm:text-sm text-text-muted italic py-2">
           Tag your check-ins and the tags you use on at least {TAG_MIN_DAYS} days show up here, compared with your usual mood.
@@ -163,7 +164,7 @@ interface ReportMoodRelationsProps {
 /**
  * "Mood & your activity" — how mood moved with tasks, note time and habits
  * on days with a check-in, as a chart, a plain-language statement capped by
- * sample size, and a mini card per metric — beside "Tags & mood". Below the
+ * sample size, and a mini card per metric — beside "Check-in tags & mood". Below the
  * lg breakpoint the two cards take turns behind an Activity / Tags switch,
  * and the mini cards are left out on phones, so Patterns fits one screen.
  * Nothing here says what causes what.

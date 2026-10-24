@@ -60,7 +60,7 @@ interface ReportTagFeelingsProps {
 }
 
 /**
- * "Tags & feelings": mood, energy and stress on days with each of your own
+ * "Your task & note tags": mood, energy and stress on days with each of your own
  * tags — a day you finished a task or edited a note carrying it — against
  * your usual, as grouped bars. Tapping a tag opens its days as a timeline
  * of one feeling. A week is drawn hatched with a note that it's too short.
@@ -87,7 +87,8 @@ const ReportTagFeelings: React.FC<ReportTagFeelingsProps> = ({ activity, byDay, 
   const select = (key: string) => setPicked(p => (p?.key === key ? null : { key, feeling: null }));
 
   return (
-    <CardShell icon={<Tag className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header="Tags & feelings">
+    <CardShell icon={<Tag className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header="Your task & note tags">
+      <p className="-mt-2 text-xs text-text-muted">How you felt on days you worked on each tag</p>
       {week ? (
         <Notice action={widen}>
           A week is too short to tell anything from chance, so every bar is hatched. Comparisons need {TAG_MIN_SIDE} days with a tag and {TAG_MIN_SIDE} without.

@@ -107,20 +107,20 @@ interface ReportMoodSectionProps {
   onSelectPeriod: (monthStart: Date) => void;
   /** Opens the Year report holding `date`. */
   onSelectYear: (date: Date) => void;
-  /** The profile's rest days, which "Tags & feelings" compares apart from work days. */
+  /** The profile's rest days, which "Your task & note tags" compares apart from work days. */
   restDays: number[];
   view: MoodView;
 }
 
 /**
  * The report's Mood tab: "Over time" shows "Mood over time" and the
- * Check-ins summary, "Patterns" shows "Mood & your activity", "Tags &
- * mood" and "Tags & feelings"; with no check-ins it's an empty card with "Log today" and, while
+ * Check-ins summary, "Patterns" shows "Mood & your activity", "Check-in
+ * tags & mood" and "Your task & note tags"; with no check-ins it's an empty card with "Log today" and, while
  * weekly or monthly check-ins are on, the period's weeks or months to log.
  * Any day dot opens its check-in to edit, and a hollow one logs that day;
  * weekly and monthly check-ins open from their spans, ◇ and the Check-ins
  * list, which also logs a past week or month without one. A week is too
- * short for mood patterns, so its Patterns show "Tags & feelings" hatched
+ * short for mood patterns, so its Patterns show "Your task & note tags" hatched
  * and point to its Month report.
  */
 const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, onSelectYear, restDays, view }) => {
@@ -284,7 +284,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
           </div>
         ) : (
           <div className="card-glass p-6 text-center text-sm text-text-muted">
-            Mood & your activity, Tags & mood and Tags & feelings use your daily check-ins — there are none {scopeName(period)}.
+            Mood & your activity, Check-in tags & mood and Your task & note tags use your daily check-ins — there are none {scopeName(period)}.
           </div>
         )
       )}

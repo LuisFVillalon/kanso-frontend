@@ -412,7 +412,7 @@ interface ReportBodyProps {
   report: CalendarReport;
   activity: CalendarActivity;
   mood: ReportMood;
-  /** The profile's rest days, which "Tags & feelings" compares apart from work days. */
+  /** The profile's rest days, which "Your task & note tags" compares apart from work days. */
   restDays: number[];
   view: ReportView;
   moodView: MoodView;
