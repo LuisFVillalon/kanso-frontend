@@ -415,6 +415,19 @@ describe('CalendarReportView mood', () => {
       expect(text()).toContain('Edit check-in · Tue, Oct 20');
     });
 
+    it('loads a year as two requests, one per year, and compares this year with the last', async () => {
+      const lastYear = Array.from({ length: 12 }, (_, i) => full(`2025-${String(i + 1).padStart(2, '0')}-10`, 2, 2, 4));
+      const thisYear = Array.from({ length: 12 }, (_, i) => full(`2026-${String((i % 9) + 1).padStart(2, '0')}-${10 + Math.floor(i / 9)}`, 5, 4, 1));
+      api.fetchMoodCheckins.mockImplementation(async (start: string) => (start.startsWith('2025') ? lastYear : thisYear));
+      await render();
+      await openTab('Mood');
+      await click(buttonLabelled(/^Year$/));
+      const calls = api.fetchMoodCheckins.mock.calls.slice(-2);
+      expect(calls).toEqual([['2025-01-01', '2025-12-31'], ['2026-01-01', '2026-12-31']]);
+      expect(text()).toContain('A brighter year than 2025.');
+      expect(dots('mood').length).toBeGreaterThan(0);
+    });
+
     it('draws each row’s 7-day trend on a month', async () => {
       const days = Array.from({ length: 10 }, (_, i) => `2026-10-${String(i + 5).padStart(2, '0')}`);
       api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => full(d, 3, 4, i % 2 ? 2 : null)));
@@ -557,7 +570,8 @@ describe('CalendarReportView mood', () => {
       await render();
       await openTab('Mood');
       await click(buttonLabelled(/^Year$/));
-      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2025-01-01', '2026-12-31');
+      expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2025-01-01', '2025-12-31');
+      expect(api.fetchMoodCheckins).toHaveBeenLastCalledWith('2026-01-01', '2026-12-31');
 
       expect(text()).toContain('Monthly check-in');
       expect(buttonLabelled(/^September: typical mood 3\.0 across 1 day\. Monthly check-in: Low · “Grind”\. Open September$/)).toBeDefined();
