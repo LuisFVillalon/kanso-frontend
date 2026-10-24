@@ -124,6 +124,18 @@ describe('analysePatterns', () => {
     ]);
   });
 
+  it('names no row as too few days when it is on every work day and no day off', () => {
+    const workOnly = month(25).map((d, i) => {
+      const off = i % 7 >= 5;
+      return { ...d, off, tags: new Set<string>(), moments: new Set(off ? [] : ['Lecture']), activity: { tasks: 0, notes: 0, habits: 0 } };
+    });
+    expect(patternsRest(analysePatterns(workOnly, new Map(), 'x'), 'this month')).toEqual([
+      'Your tasks barely changed from day to day.',
+      'Your time in notes barely changed from day to day.',
+      'Your habits barely changed from day to day.',
+    ]);
+  });
+
   it('names a rare tag as too few days, not the check-ins, when every day was checked in', () => {
     const rare = month(25).map((d, i) => ({ ...d, tags: new Set(i < 2 ? [study.key] : []), moments: new Set<string>(), activity: { tasks: 0, notes: 0, habits: 0 } }));
     expect(patternsRest(analysePatterns(rare, new Map([[study.key, study]]), 'x'), 'this month')).toEqual([

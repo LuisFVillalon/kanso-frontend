@@ -332,7 +332,7 @@ export const quietLine = (quiet: PatternRow[]): string | null =>
 
 /** "Too few days to tell yet: Habits.", for the rows that changed but have too few days for any feeling. */
 export const waitingLine = (rows: PatternRow[]): string | null => {
-  const waiting = rows.filter(r => !r.flat && r.days > 0 && r.otherDays > 0 && FEELINGS.every(f => r.answer[f].kind === 'wait'));
+  const waiting = rows.filter(r => FEELINGS.some(f => r.feel[f].n > 0 && r.feel[f].nOther > 0) && FEELINGS.every(f => r.answer[f].kind === 'wait'));
   return waiting.length ? `Too few days to tell yet: ${listNames(waiting.map(r => r.name))}.` : null;
 };
 
