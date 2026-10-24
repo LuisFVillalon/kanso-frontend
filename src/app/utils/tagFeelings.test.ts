@@ -252,6 +252,18 @@ describe('analyseTagFeelings', () => {
     expect(formatAverage(cmp.other)).toBe('3.0');
   });
 
+  it('shows the tag days it compares, so the bar sits above the usual on a clear better mood', () => {
+    // Every day off has the tag, so its days off are left out of the bar too.
+    const days = [...repeat(5, () => row(4, { tags: ['tag:1'] })), ...repeat(10, () => row(1, { tags: ['tag:1'], off: true })), ...repeat(10, () => row(3))];
+    const a = analyseTagFeelings(days, TAGS, 'p');
+    const cmp = tagOf(a, 'CS 460').feel.mood;
+    expect(cmp).toMatchObject({ verdict: 'clear', good: true, avg: 4, other: 3, n: 5, nOther: 10 });
+    expect(describeTagFeeling('CS 460', 'mood', cmp)).toBe(
+      'Mood averaged 4.0 (Good) on your 5 days with “CS 460”; your usual on 10 other days was 3.0. That’s a clear difference: better mood.',
+    );
+    expect(summarizeTagFeelings(a, 'in October')).toContain('on “CS 460” days (5), better mood than usual (4.0 vs 3.0)');
+  });
+
   it('splits the chance bar across the tags compared for a feeling', () => {
     const days = [
       ...repeat(6, () => row(4, { tags: ['tag:1', 'tag:2'] })),

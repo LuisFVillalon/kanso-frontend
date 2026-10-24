@@ -75,13 +75,14 @@ export interface FeelingComparison {
   /** Every tag day / other day with a value. */
   nAll: number;
   nOtherAll: number;
-  /** Average on the tag's days; null without any. */
+  /** Average on the tag's days that are compared (all of them when none can be); null without any. */
   avg: number | null;
   /** "Your usual": the other days' average as if they had the tag days' mix of work days and days off. */
   other: number | null;
   /** Tag days minus usual, work days and days off kept apart; null when no group has both sides. */
   gap: number | null;
-  /** The plain average of the other days, and the gap mixing the two kinds of day would show. */
+  /** The plain averages of every tag day and every other day, and the gap mixing the two kinds of day would show. */
+  rawAvg: number | null;
   rawOther: number | null;
   rawGap: number | null;
   /** How often reshuffled days gave a gap at least this big; null when too few days. */
@@ -279,7 +280,8 @@ export const analyseTagFeelings = (days: TagDay[], tags: Map<string, FeelingTag>
       const usable = groups.filter(g => g.tag.length && g.other.length);
       const tv = values(on);
       const ov = values(off);
-      const avg = mean(tv);
+      const rawAvg = mean(tv);
+      const avg = mean(usable.flatMap(g => g.tag)) ?? rawAvg;
       const rawOther = mean(ov);
       const gap = gapOf(groups);
       const n = usable.reduce((s, g) => s + g.tag.length, 0);
@@ -293,8 +295,9 @@ export const analyseTagFeelings = (days: TagDay[], tags: Map<string, FeelingTag>
         avg,
         other: usualOf(groups) ?? rawOther,
         gap,
+        rawAvg,
         rawOther,
-        rawGap: avg != null && rawOther != null ? avg - rawOther : null,
+        rawGap: rawAvg != null && rawOther != null ? rawAvg - rawOther : null,
         p: thin || gap == null ? null : chanceOf(groups, gap, hash(`${key}|${f}|${seedKey}`)),
         k: 1,
         verdict: thin ? 'thin' : 'same',
@@ -338,8 +341,8 @@ export const describeTagFeeling = (name: string, f: Feeling, c: FeelingCompariso
     return `“${name}” ${why}. Too few days to tell: it needs ${TAG_MIN_SIDE} on each side.`;
   }
   const word = FEELING_WORDS[f][Math.round(c.avg!) - 1];
-  const base = `${FEELING_NAME[f]} averaged ${formatAverage(c.avg)} (${word}) on your ${dayWord(c.nAll)} with “${name}”; your usual on ${c.nOther} other days was ${formatAverage(c.other)}.`;
-  const mix = c.mixWarn ? ` (Mixing work days and days off would have made it look like ${formatAverage(c.avg)} vs ${formatAverage(c.rawOther)}.)` : '';
+  const base = `${FEELING_NAME[f]} averaged ${formatAverage(c.avg)} (${word}) on your ${dayWord(c.n)} with “${name}”; your usual on ${c.nOther} other days was ${formatAverage(c.other)}.`;
+  const mix = c.mixWarn ? ` (Mixing work days and days off would have made it look like ${formatAverage(c.rawAvg)} vs ${formatAverage(c.rawOther)}.)` : '';
   if (c.verdict === 'clear') return `${base} That’s a clear difference: ${differenceWords(f, c.gap!)}.`;
   if (Math.abs(c.gap!) >= 0.3) return `${base} A little ${c.gap! > 0 ? 'higher' : 'lower'}, but not by enough to tell from chance.${mix}`;
   return `${base} About the same.${mix}`;
@@ -356,7 +359,7 @@ export const summarizeTagFeelings = (analysis: TagFeelingsAnalysis, scope: strin
   found.sort((a, b) => Math.abs(b.c.gap!) - Math.abs(a.c.gap!));
   return `Clearest ${scope}: ${found
     .slice(0, 2)
-    .map(({ t, f, c }) => `on “${t.tag.name}” days (${t.days}), ${differenceWords(f, c.gap!)} than usual (${formatAverage(c.avg)} vs ${formatAverage(c.other)})`)
+    .map(({ t, f, c }) => `on “${t.tag.name}” days (${c.n}), ${differenceWords(f, c.gap!)} than usual (${formatAverage(c.avg)} vs ${formatAverage(c.other)})`)
     .join('; ')}.`;
 };
 
