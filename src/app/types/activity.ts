@@ -1,3 +1,4 @@
+import type { EventOccurrence } from './event';
 import { Tag } from './task';
 
 // Types matching the backend's CalendarActivity response
@@ -66,4 +67,9 @@ export interface CalendarActivity {
   notes?: ActivityNote[];
   /** The habits behind `habit_completions`. Older backends leave it out, and their habits count as untagged. */
   habits?: ActivityHabit[];
+  /**
+   * Event occurrences in the range, by start: past ones always (archived ones
+   * flagged), upcoming ones unless archived. Older backends leave it out.
+   */
+  events?: EventOccurrence[];
 }

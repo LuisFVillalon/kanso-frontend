@@ -5,7 +5,8 @@ vi.mock('./supabase', () => ({
 }));
 
 import {
-  ApiError, archiveTask, CanvasTaskExistsError, completeTaskWithLinked, connectCanvasFeed, createTask, fetchCalendarActivity,
+  ApiError, archiveTask, CanvasTaskExistsError, completeTaskWithLinked, connectCanvasFeed, createTask, deleteEvent,
+  fetchCalendarActivity, fetchEventReport, fetchEvents, fetchTaskDebrief, purgeEvent, restoreEvent, setEventArchived, updateEvent,
   fetchCanvasCourses, fetchCanvasModules, fetchCanvasOverview, fetchCanvasPanelCourses, onDelete, syncCanvasLinkedTasks,
 } from './backend-api';
 
@@ -35,6 +36,64 @@ describe('fetchCalendarActivity', () => {
     expect(params.get('include_archived')).toBe('true');
     expect(params.get('start_date')).toBe('2026-10-01');
     expect(params.get('end_date')).toBe('2026-10-31');
+  });
+});
+
+describe('events', () => {
+  // A fresh body for each call, as several calls share one test.
+  beforeEach(() => { fetchMock.mockImplementation(async () => new Response('{}', { status: 200 })); });
+
+  it('sends the scope, and the occurrence date for this or following', async () => {
+    await updateEvent(30, { title: 'CS 460 Midterm' }, 'this', '2026-10-21');
+    expect(requestedUrl().pathname).toMatch(/\/update-event\/30$/);
+    expect(Object.fromEntries(requestedParams())).toEqual({ scope: 'this', occurrence_date: '2026-10-21' });
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ title: 'CS 460 Midterm' }) });
+
+    fetchMock.mockClear();
+    await setEventArchived(30, true, 'following', '2026-10-21');
+    expect(requestedUrl().pathname).toMatch(/\/archive-event\/30$/);
+    expect(Object.fromEntries(requestedParams())).toEqual({ scope: 'following', occurrence_date: '2026-10-21' });
+  });
+
+  it('leaves the occurrence date out for all', async () => {
+    await deleteEvent(30, 'all', '2026-10-21');
+    expect(requestedUrl().pathname).toMatch(/\/del-event\/30$/);
+    expect(Object.fromEntries(requestedParams())).toEqual({ scope: 'all' });
+
+    fetchMock.mockClear();
+    await setEventArchived(30, false);
+    expect(requestedUrl().pathname).toMatch(/\/unarchive-event\/30$/);
+    expect(Object.fromEntries(requestedParams())).toEqual({ scope: 'all' });
+  });
+
+  it('restores or purges a series, or one deleted occurrence of it', async () => {
+    await restoreEvent(30);
+    expect(requestedUrl().pathname).toMatch(/\/restore-event\/30$/);
+    expect(requestedParams().has('occurrence_date')).toBe(false);
+
+    fetchMock.mockClear();
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await purgeEvent(30, '2026-10-21');
+    expect(requestedUrl().pathname).toMatch(/\/purge-event\/30$/);
+    expect(requestedParams().get('occurrence_date')).toBe('2026-10-21');
+  });
+
+  it('lists archived series with ?archived=true, and asks for the report in our zone', async () => {
+    fetchMock.mockImplementation(async () => new Response('[]', { status: 200 }));
+    await fetchEvents(true);
+    expect(requestedUrl().pathname).toMatch(/\/get-events$/);
+    expect(requestedParams().get('archived')).toBe('true');
+
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async () => new Response('{}', { status: 200 }));
+    await fetchEventReport('2026-10-18', '2026-10-24');
+    expect(requestedUrl().pathname).toMatch(/\/get-event-report$/);
+    expect(requestedParams().get('tz')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  });
+
+  it("sends the brief our time zone, so today's events land on our day", async () => {
+    await fetchTaskDebrief();
+    expect(requestedParams().get('tz')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
   });
 });
 

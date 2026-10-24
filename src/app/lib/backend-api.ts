@@ -12,6 +12,7 @@ import { Note, NoteSession } from "../types/notes";
 import { LinkedRemoveMode, LinkedTaskRef, Tag, Task } from "../types/task";
 import { ArchivedTerm, CalendarSettings, TermDates, TermRollover } from "../types/calendar";
 import { CalendarActivity } from "../types/activity";
+import { CalendarEvent, CalendarEventCreate, CalendarEventUpdate, EditScope, EventOccurrence, EventReport } from "../types/event";
 import { Habit, HabitHistoryEntry } from "../types/habit";
 import { DayWindows, Profile } from "../types/profile";
 import { MoodCheckin, MoodCheckinSave, MoodCheckinSettings, MoodPeriodKind, MoodTags } from "../types/mood";
@@ -680,6 +681,158 @@ export async function fetchCalendarActivity(
   return res.json();
 }
 
+// ── Events ────────────────────────────────────────────────────────────────────
+//
+// Occurrences reach the calendars through fetchCalendarActivity's `events`;
+// these calls manage the series behind them. Changes to a repeating event
+// take a scope: this occurrence, this and following, or all of them, keyed by
+// the occurrence's `occurrence_date`.
+
+/** `?scope=&occurrence_date=` for an event change; a one-off event ignores both. */
+const eventScopeQuery = (scope: EditScope, occurrenceDate?: string) => {
+  const params = new URLSearchParams({ scope });
+  if (occurrenceDate && scope !== "all") params.set("occurrence_date", occurrenceDate);
+  return `?${params}`;
+};
+
+/** Fetches the user's active event series, or only the archived ones when `archived` is set. */
+export async function fetchEvents(archived = false): Promise<CalendarEvent[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-events${archivedQuery(archived)}`, { headers });
+  await assertOk(res, "fetchEvents");
+  return res.json();
+}
+
+/** Fetches one event series. */
+export async function fetchEvent(id: number): Promise<CalendarEvent> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-event/${id}`, { headers });
+  await assertOk(res, "fetchEvent");
+  return res.json();
+}
+
+/**
+ * Occurrences archived on their own (not with their whole series), placed in
+ * the browser's zone, for Archive → Events. Archived series come from
+ * fetchEvents(true).
+ */
+export async function fetchArchivedEventOccurrences(): Promise<EventOccurrence[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/get-archived-event-occurrences${timeZoneQuery()}`, { headers });
+  await assertOk(res, "fetchArchivedEventOccurrences");
+  return res.json();
+}
+
+/** Creates an event series (or a one-off event, with no repeat_days) and returns it. */
+export async function createEvent(event: CalendarEventCreate): Promise<CalendarEvent> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/create-event`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(event),
+  });
+  await assertOk(res, "createEvent");
+  return res.json();
+}
+
+/**
+ * Changes the fields given on the occurrences in `scope`. Returns the series
+ * holding them: for "following", the new series split off.
+ */
+export async function updateEvent(
+  id: number,
+  changes: CalendarEventUpdate,
+  scope: EditScope = "all",
+  occurrenceDate?: string,
+): Promise<CalendarEvent> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/update-event/${id}${eventScopeQuery(scope, occurrenceDate)}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(changes),
+  });
+  await assertOk(res, "updateEvent");
+  return res.json();
+}
+
+/**
+ * Archives (`archived`) or unarchives the occurrences in `scope`. Past ones
+ * stay on the calendars, flagged; upcoming ones leave them. Unarchiving with
+ * "this" clears only that occurrence's own archive, not its series'.
+ */
+export async function setEventArchived(
+  id: number,
+  archived: boolean,
+  scope: EditScope = "all",
+  occurrenceDate?: string,
+): Promise<CalendarEvent> {
+  const headers = await getAuthHeaders();
+  const action = archived ? "archive" : "unarchive";
+  const res = await fetch(`${API_BASE_URL}/${action}-event/${id}${eventScopeQuery(scope, occurrenceDate)}`, {
+    method: "PATCH",
+    headers,
+  });
+  await assertOk(res, `${action}-event`);
+  return res.json();
+}
+
+/**
+ * Moves the occurrences in `scope` to the trash, restorable for 30 days.
+ * Returns the series holding them: for "following", the part split off.
+ */
+export async function deleteEvent(id: number, scope: EditScope = "all", occurrenceDate?: string): Promise<CalendarEvent> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/del-event/${id}${eventScopeQuery(scope, occurrenceDate)}`, {
+    method: "DELETE",
+    headers,
+  });
+  await assertOk(res, "deleteEvent");
+  return res.json();
+}
+
+/** `?occurrence_date=` for a trashed event: one deleted occurrence, or the series when left out. */
+const trashedOccurrenceQuery = (occurrenceDate?: string | null) =>
+  occurrenceDate ? `?${new URLSearchParams({ occurrence_date: occurrenceDate })}` : "";
+
+/** Brings a deleted event series, or one deleted occurrence of it, back from the trash. */
+export async function restoreEvent(id: number, occurrenceDate?: string | null): Promise<CalendarEvent> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/restore-event/${id}${trashedOccurrenceQuery(occurrenceDate)}`, {
+    method: "PATCH",
+    headers,
+  });
+  await assertOk(res, "restore-event");
+  return res.json();
+}
+
+/** Permanently deletes a trashed event series, or one trashed occurrence of it. */
+export async function purgeEvent(id: number, occurrenceDate?: string | null): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/purge-event/${id}${trashedOccurrenceQuery(occurrenceDate)}`, {
+    method: "DELETE",
+    headers,
+  });
+  await assertOk(res, "purge-event");
+}
+
+/**
+ * Events over [startDate, endDate] (inclusive local days, at most 366) for
+ * Reports: counts and minutes by tag, day, week and month, and the free time
+ * left in the work windows. Past archived occurrences count; upcoming
+ * archived ones don't.
+ */
+export async function fetchEventReport(startDate: string, endDate: string): Promise<EventReport> {
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams({
+    start_date: startDate,
+    end_date: endDate,
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+  const res = await fetch(`${API_BASE_URL}/get-event-report?${params}`, { headers });
+  await assertOk(res, "fetchEventReport");
+  return res.json();
+}
+
 // ── Habits ────────────────────────────────────────────────────────────────────
 
 /**
@@ -1308,7 +1461,8 @@ export async function fetchLearningResources(noteContent: StructuredNoteContent)
  * Sends our own local date/time rather than letting the server infer "today"
  * from its own clock — the backend may run in a different timezone (e.g.
  * UTC), and using its date would roll "today" over before our local day
- * ends, silently reclassifying today's tasks as overdue.
+ * ends, silently reclassifying today's tasks as overdue. The time zone
+ * places today's events on our own calendar.
  */
 export async function fetchTaskDebrief(): Promise<DailyDebriefReport> {
   const headers = await getAuthHeaders();
@@ -1316,6 +1470,7 @@ export async function fetchTaskDebrief(): Promise<DailyDebriefReport> {
   const params = new URLSearchParams({
     local_date: toLocalDateStr(now),
     local_time: toLocalTimeStr(now),
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
   const res = await fetch(`${API_BASE_URL}/daily-debrief?${params.toString()}`, { headers });
   await assertOk(res, "fetchTaskDebrief");

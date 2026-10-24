@@ -8,12 +8,15 @@
  * for the viewer's own time zone.
  */
 import type { ActivityHabitCompletion, ActivityNoteSession, ActivityTask } from '@/app/types/activity';
+import type { EventOccurrence } from '@/app/types/event';
 import type { Task } from '@/app/types/task';
-import { toLocalDateStr, toLocalTimeStr } from './dateUtils';
+import { parseLocalDate, toLocalDateStr, toLocalTimeStr } from './dateUtils';
 
 export const MINUTES_PER_DAY = 24 * 60;
 /** Granularity of the click-to-create slots. */
 export const SLOT_MINUTES = 30;
+/** Granularity of a dragged event's start and end. */
+export const DRAG_SNAP_MINUTES = 15;
 /** Height given to a timed task that has no estimate. */
 export const DEFAULT_TASK_MINUTES = 30;
 /** Height given to a completion marker, which is a single instant. */
@@ -23,8 +26,20 @@ export const MIN_BLOCK_MINUTES = 20;
 /** Sessions of one note on one day closer together than this merge into one block. */
 export const NOTE_MERGE_GAP_MINUTES = 30;
 
-export type TimedEventKind = 'task' | 'completed' | 'note';
-export type AllDayItemKind = 'task' | 'habit';
+export type TimedEventKind = 'task' | 'completed' | 'note' | 'event';
+export type AllDayItemKind = 'task' | 'habit' | 'event';
+
+/** How an event's block or chip on one day relates to the occurrence behind it. */
+export interface EventPlacement {
+  occurrence: EventOccurrence;
+  /** It ended before now. */
+  past: boolean;
+  archived: boolean;
+  /** The block carries on from the day before (it ran past midnight). */
+  fromPreviousDay: boolean;
+  /** The block carries on into the next day. */
+  intoNextDay: boolean;
+}
 
 export interface TimedEvent {
   key: string;
@@ -44,6 +59,10 @@ export interface TimedEvent {
   completed?: boolean;
   /** Notes only: minutes actually spent editing within the block's range. */
   workedMin?: number;
+  /** Events only. */
+  event?: EventPlacement;
+  /** Open planned tasks only: the title of a live event the block falls during. */
+  clashWith?: string;
 }
 
 export interface AllDayItem {
@@ -54,6 +73,8 @@ export interface AllDayItem {
   taskId?: number;
   habitId?: number;
   completed?: boolean;
+  /** Events only. */
+  event?: EventPlacement;
 }
 
 export interface PositionedEvent extends TimedEvent {
@@ -121,6 +142,10 @@ interface BuildWeekEventsInput {
   completedTasks: Pick<ActivityTask, 'id' | 'title' | 'completed_date'>[];
   noteSessions: ActivityNoteSession[];
   habitCompletions: ActivityHabitCompletion[];
+  /** Event occurrences, as GET /get-calendar-activity places them on our calendar. */
+  events?: EventOccurrence[];
+  /** Occurrences that ended before this count as past, even if they hadn't when fetched. */
+  now?: Date;
 }
 
 /**
@@ -131,7 +156,11 @@ interface BuildWeekEventsInput {
  * - note sessions as blocks from start to end, split at midnight when a
  *   session runs into the next day, with each note's sessions on a day
  *   merged when they are close together (see buildNoteBlocks);
- * - habit completions in the all-day row, since they carry no time.
+ * - habit completions in the all-day row, since they carry no time;
+ * - events from start to end, split at midnight when one runs into the next
+ *   day, or in the all-day row (first) when they're all-day;
+ * and marks each open planned task whose block falls during a live (not
+ * archived) event that day as a clash.
  */
 export function buildWeekEvents({
   weekStart,
@@ -139,11 +168,17 @@ export function buildWeekEvents({
   completedTasks,
   noteSessions,
   habitCompletions,
+  events = [],
+  now = new Date(),
 }: BuildWeekEventsInput): { timed: TimedEvent[]; allDay: AllDayItem[] } {
   const days = weekDays(weekStart);
   const dayIndexByDate = new Map(days.map((d, i) => [toLocalDateStr(d), i]));
   const timed: TimedEvent[] = [];
   const allDay: AllDayItem[] = [];
+
+  const eventBlocks = buildEventBlocks(events, days, now);
+  timed.push(...eventBlocks.timed);
+  allDay.push(...eventBlocks.allDay);
 
   for (const task of scheduledTasks) {
     if (!task.due_date) continue;
@@ -187,7 +222,71 @@ export function buildWeekEvents({
     });
   }
 
+  markClashes(timed);
   return { timed, allDay };
+}
+
+/**
+ * One block per day an event spans: a timed event from its start to its end,
+ * cut at midnight when it runs into the next day (an end at midnight sits at
+ * the bottom of its first day), and an all-day event as a chip on each of its
+ * days. Days outside `days` are skipped.
+ */
+export function buildEventBlocks(events: EventOccurrence[], days: Date[], now: Date): { timed: TimedEvent[]; allDay: AllDayItem[] } {
+  const dayIndexByDate = new Map(days.map((d, i) => [toLocalDateStr(d), i]));
+  const timed: TimedEvent[] = [];
+  const allDay: AllDayItem[] = [];
+  for (const occurrence of events) {
+    const endsAt = new Date(occurrence.ends_at).getTime();
+    const past = occurrence.past || (!isNaN(endsAt) && endsAt <= now.getTime());
+    const startMin = occurrence.start_time ? parseTimeToMinutes(occurrence.start_time) : null;
+    const endMin = occurrence.end_time ? parseTimeToMinutes(occurrence.end_time) : null;
+    const timedEvent = !occurrence.all_day && startMin !== null && endMin !== null;
+    const lastDate = occurrence.end_date && occurrence.end_date > occurrence.date ? occurrence.end_date : occurrence.date;
+    const keyBase = `event-${occurrence.event_id}-${occurrence.occurrence_date}`;
+
+    for (let day = parseLocalDate(occurrence.date); toLocalDateStr(day) <= lastDate; day = addDays(day, 1)) {
+      const dateStr = toLocalDateStr(day);
+      const first = dateStr === occurrence.date;
+      const last = dateStr === lastDate;
+      const dayIndex = dayIndexByDate.get(dateStr);
+      if (!timedEvent) {
+        if (dayIndex === undefined) continue;
+        allDay.push({
+          key: `${keyBase}-${dayIndex}`, kind: 'event', title: occurrence.title, dayIndex,
+          event: { occurrence, past, archived: occurrence.archived, fromPreviousDay: !first, intoNextDay: !last },
+        });
+        continue;
+      }
+      const segStart = first ? startMin : 0;
+      const segEnd = last ? endMin : MINUTES_PER_DAY;
+      // Ended at midnight: nothing is left for this day.
+      if (!first && segEnd === 0) continue;
+      if (dayIndex === undefined) continue;
+      timed.push({
+        key: `${keyBase}-${dayIndex}`, kind: 'event', title: occurrence.title, dayIndex,
+        startMin: segStart, endMin: segEnd, ...drawExtent(segStart, segEnd),
+        event: {
+          occurrence, past, archived: occurrence.archived,
+          fromPreviousDay: !first,
+          intoNextDay: !last && !(toLocalDateStr(addDays(day, 1)) === lastDate && endMin === 0),
+        },
+      });
+    }
+  }
+  return { timed, allDay };
+}
+
+/** Marks each open planned task's block that meets a live event's block on its day with the event's title. */
+function markClashes(timed: TimedEvent[]) {
+  const live = timed.filter(e => e.kind === 'event' && !e.event?.archived);
+  if (live.length === 0) return;
+  for (const block of timed) {
+    if (block.kind !== 'task' || block.completed) continue;
+    const hit = live.find(e => e.dayIndex === block.dayIndex
+      && e.drawStartMin < block.drawEndMin && block.drawStartMin < e.drawEndMin);
+    if (hit) block.clashWith = hit.title;
+  }
 }
 
 interface NoteSegment {

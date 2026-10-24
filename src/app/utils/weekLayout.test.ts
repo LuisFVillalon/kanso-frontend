@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  buildEventBlocks,
   buildNoteBlocks,
   buildWeekEvents,
   layoutDayEvents,
@@ -15,6 +16,7 @@ import {
   workDayMarks,
   type WindowMinutes,
 } from './weekLayout';
+import type { EventOccurrence } from '@/app/types/event';
 
 // Mon 19 Oct 2026, local midnight.
 const weekStart = new Date(2026, 9, 19);
@@ -339,5 +341,79 @@ describe('workDayMarks', () => {
 
   it('marks every day a work day when there are no rest days', () => {
     expect(workDayMarks(sunday, [], every(540, 1020)).rest).toBe(false);
+  });
+});
+
+describe('events on the week', () => {
+  const days = weekDays(weekStart);
+  // Thu 22 Oct, 9 AM: before Wednesday's events end, after Monday's.
+  const now = new Date(2026, 9, 22, 9, 0);
+  const event = (overrides: Partial<EventOccurrence>): EventOccurrence => ({
+    event_id: 1, occurrence_date: '2026-10-21', title: 'Lecture', description: null, tags: [],
+    all_day: false, date: '2026-10-21', end_date: '2026-10-21', start_time: '13:00:00', end_time: '15:50:00',
+    starts_at: new Date(2026, 9, 21, 13).toISOString(), ends_at: new Date(2026, 9, 21, 15, 50).toISOString(),
+    time_zone: 'America/Los_Angeles', repeat_days: [], repeat_interval: 1, reminder_minutes: null,
+    edited: false, past: false, archived: false, ...overrides,
+  });
+
+  it('places a timed event from start to end on its day, past once it has ended', () => {
+    const { timed, allDay } = buildEventBlocks([event({})], days, now);
+    expect(allDay).toEqual([]);
+    expect(timed).toEqual([expect.objectContaining({
+      key: 'event-1-2026-10-21-2', kind: 'event', dayIndex: 2, startMin: 13 * 60, endMin: 15 * 60 + 50,
+      event: expect.objectContaining({ past: true, archived: false, fromPreviousDay: false, intoNextDay: false }),
+    })]);
+  });
+
+  it('splits an event that runs past midnight into a piece on each day', () => {
+    const overnight = event({
+      date: '2026-10-22', end_date: '2026-10-23', start_time: '22:00:00', end_time: '02:00:00',
+      ends_at: new Date(2026, 9, 23, 2).toISOString(),
+    });
+    const { timed } = buildEventBlocks([overnight], days, now);
+    expect(timed.map(e => [e.dayIndex, e.startMin, e.endMin, e.event!.fromPreviousDay, e.event!.intoNextDay])).toEqual([
+      [3, 22 * 60, 24 * 60, false, true],
+      [4, 0, 2 * 60, true, false],
+    ]);
+    expect(timed[0].event!.past).toBe(false);
+  });
+
+  it('leaves nothing on the next day for an event ending at midnight', () => {
+    const toMidnight = event({ date: '2026-10-22', end_date: '2026-10-23', start_time: '22:00:00', end_time: '00:00:00' });
+    const { timed } = buildEventBlocks([toMidnight], days, now);
+    expect(timed.map(e => [e.dayIndex, e.startMin, e.endMin, e.event!.intoNextDay])).toEqual([[3, 22 * 60, 24 * 60, false]]);
+  });
+
+  it('keeps the piece of an overnight event inside the week when the other day is outside it', () => {
+    const fromLastWeek = event({ date: '2026-10-18', end_date: '2026-10-19', start_time: '23:00:00', end_time: '01:00:00' });
+    const { timed } = buildEventBlocks([fromLastWeek], days, now);
+    expect(timed.map(e => [e.dayIndex, e.startMin, e.endMin])).toEqual([[0, 0, 60]]);
+  });
+
+  it('puts an all-day event in the all-day row, first, with archived ones flagged', () => {
+    const allDayEvent = event({ all_day: true, start_time: null, end_time: null, date: '2026-10-23', end_date: '2026-10-23', archived: true, past: true });
+    const { allDay } = buildWeekEvents({
+      weekStart, scheduledTasks: [{ id: 5, title: 'Read', due_date: '2026-10-23', due_time: null, estimated_time: null, completed: false }],
+      completedTasks: [], noteSessions: [], habitCompletions: [], events: [allDayEvent], now,
+    });
+    expect(allDay.map(i => [i.kind, i.dayIndex, i.event?.archived])).toEqual([['event', 4, true], ['task', 4, undefined]]);
+  });
+
+  it('marks an open planned task during a live event as a clash, but not during an archived one', () => {
+    const tasks = [
+      { id: 1, title: 'Pick up prescription', due_date: '2026-10-21', due_time: '13:00', estimated_time: 0.5, completed: false },
+      { id: 2, title: 'Done already', due_date: '2026-10-21', due_time: '14:00', estimated_time: 0.5, completed: true },
+      { id: 3, title: 'Later', due_date: '2026-10-21', due_time: '16:00', estimated_time: 0.5, completed: false },
+      { id: 4, title: 'During archived', due_date: '2026-10-20', due_time: '13:00', estimated_time: 0.5, completed: false },
+    ];
+    const { timed } = buildWeekEvents({
+      weekStart, scheduledTasks: tasks, completedTasks: [], noteSessions: [], habitCompletions: [], now,
+      events: [
+        event({ title: 'ART 157 Studio' }),
+        event({ event_id: 2, title: 'Yoga', date: '2026-10-20', end_date: '2026-10-20', occurrence_date: '2026-10-20', archived: true }),
+      ],
+    });
+    const clash = (id: number) => timed.find(e => e.kind === 'task' && e.taskId === id)!.clashWith;
+    expect([clash(1), clash(2), clash(3), clash(4)]).toEqual(['ART 157 Studio', undefined, undefined, undefined]);
   });
 });
