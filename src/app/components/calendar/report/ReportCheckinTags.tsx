@@ -22,7 +22,7 @@ export const describeTagMood = (tag: string, days: number, tagAverage: number, u
   const usual = toTenth(usualAverage);
   const d = average - usual;
   const cmp = Math.abs(d) < 0.05 ? 'the same as' : `${Math.abs(d).toFixed(1)} ${d > 0 ? 'higher' : 'lower'} than`;
-  return `On the ${days} ${days === 1 ? 'day' : 'days'} you tagged “${tag}”, your mood averaged ${average.toFixed(1)} (${moodLabel(Math.round(average))}) — ${cmp} your usual ${usual.toFixed(1)}.`;
+  return `On the ${days} ${days === 1 ? 'day' : 'days'} you picked “${tag}”, your mood averaged ${average.toFixed(1)} (${moodLabel(Math.round(average))}) — ${cmp} your usual ${usual.toFixed(1)}.`;
 };
 
 interface ReportCheckinTagsProps {
@@ -36,10 +36,10 @@ interface ReportCheckinTagsProps {
 }
 
 /**
- * "Check-in tags & mood", the Tags card's check-in side: days with each tag
+ * "Moments & mood", the Tags card's check-in side: days with each moment
  * picked when checking in compared with your usual, as a bar from a labeled
  * center (your average mood over the period) toward lower or higher mood,
- * the tag's own mood as a face, and the signed difference.
+ * the moment's own mood as a face, and the signed difference.
  */
 const ReportCheckinTags: React.FC<ReportCheckinTagsProps> = ({ byDay, period, average, logged, scopeLabel }) => {
   const rows = average == null ? [] : moodByTag(byDay, period.start, period.end);
@@ -48,7 +48,7 @@ const ReportCheckinTags: React.FC<ReportCheckinTagsProps> = ({ byDay, period, av
   if (rows.length === 0) {
     return (
       <p className="text-xs sm:text-sm text-text-muted italic py-2">
-        Tag your check-ins and the tags you use on at least {TAG_MIN_DAYS} days show up here, compared with your usual mood.
+        Pick moments when you check in, and the ones you pick on at least {TAG_MIN_DAYS} days show up here, compared with your usual mood.
       </p>
     );
   }
@@ -104,7 +104,7 @@ const ReportCheckinTags: React.FC<ReportCheckinTagsProps> = ({ byDay, period, av
         })}
       </ul>
       <p className="text-[11px] text-text-muted mt-auto">
-        Your usual is your typical mood across all {logged} {logged === 1 ? 'check-in' : 'check-ins'} {scopeLabel}. Each bar is how days with that tag compared. Tags on fewer than {TAG_MIN_DAYS} days are hidden.
+        Your usual is your typical mood across all {logged} {logged === 1 ? 'check-in' : 'check-ins'} {scopeLabel}. Each bar is how days with that moment compared. Moments on fewer than {TAG_MIN_DAYS} days are hidden.
       </p>
     </>
   );
