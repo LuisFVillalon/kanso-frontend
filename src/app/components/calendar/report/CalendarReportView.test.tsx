@@ -178,15 +178,18 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Mood & your activity');
   });
 
-  it('shows "Not enough data" for mood and activity below 10 check-ins', async () => {
+  it('answers “Can’t tell yet” for mood and activity below 10 check-ins', async () => {
     await render();
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     expect(text()).toContain('Patterns in your mood show up after about 10 days with a check-in — 2 so far this month.');
     await openPatterns();
     expect(text()).toContain('Mood & your activity');
-    expect(text()).toContain('Not enough data');
-    expect(text()).toContain('2 days with a check-in');
+    expect(text()).toContain('How is your mood on days you finish more tasks?');
+    expect(text()).toContain('Can’t tell yet');
+    expect(text()).toContain('2 of the 10 check-in days it needs so far');
+    expect(container.querySelector('svg[aria-label="No line yet: not enough to compare"]')).not.toBeNull();
+    expect(container.querySelector('svg[aria-label^="Typical mood: "]')).toBeNull();
     expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
     // One Tags card beside it, opening on your own tags; its switch swaps in the check-in tags in place.
@@ -211,16 +214,24 @@ describe('CalendarReportView mood', () => {
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     await openPatterns();
-    expect(text()).toContain('20 days with a check-in');
     // Tasks never varied.
+    expect(text()).toContain('Can’t tell yet');
+    expect(text()).toContain('Your tasks barely changed from day to day');
+    expect(container.querySelector('svg[aria-label="No line yet: not enough to compare"]')).not.toBeNull();
     expect(text()).toContain('Your number of tasks completed was about the same every day');
 
     // The mood metric switch, not the Habits tab.
     await click([...document.querySelectorAll('[aria-label="Compare mood with"] button')].find(b => b.textContent === 'Habits')!);
-    expect(text()).toContain('This month, you tended to feel better on days you checked off');
+    expect(text()).toContain('How is your mood on days you check off more habits?');
+    expect(text()).toContain('Your mood was higher on days with more habits checked off');
+    expect(text()).toContain('Treat it as a hint · only 20 days');
+    // The line from lighter to busier days, then the details.
+    expect(container.querySelector('svg[aria-label^="Typical mood: "]')?.getAttribute('aria-label'))
+      .toBe('Typical mood: Rough–Low on days with 0–1 habits, Good on days with 2+ habits');
+    expect(container.querySelector('svg[aria-label="No line yet: not enough to compare"]')).toBeNull();
+    expect(text()).toContain('This month, your mood tended to be higher on days you checked off');
     expect(text()).toContain('This is based on only 20 days, so take it as a hint.');
-    expect(text()).toContain('Moderate link');
-    expect(text()).toContain('↑ together');
+    expect(text()).not.toMatch(/\b(better|worse)\b/);
     expect(text()).toContain('Shows what tends to move together — not what causes what.');
     expect(text()).toContain('the more they match, the stronger the link');
     expect(text()).not.toMatch(/ρ|Spearman/);
@@ -240,10 +251,10 @@ describe('CalendarReportView mood', () => {
 
     // The Overview names the link with its direction, short enough for one line, with the whole sentence on hover.
     await openTab('Productivity');
-    expect(text()).toContain('More habits, better mood');
+    expect(text()).toContain('More habits, higher mood');
     const link = buttonLabelled(/^Mood & your activity/);
-    expect(link.getAttribute('aria-label')).toBe('Mood & your activity: Moderate link: better mood on days with more habits checked off this month');
-    expect(link.querySelector('[title]')?.getAttribute('title')).toBe('Moderate link: better mood on days with more habits checked off this month');
+    expect(link.getAttribute('aria-label')).toBe('Mood & your activity: Moderate link: higher mood on days with more habits checked off this month');
+    expect(link.querySelector('[title]')?.getAttribute('title')).toBe('Moderate link: higher mood on days with more habits checked off this month');
   });
 
   it('shows a tag row’s sentence under it on tap, one row at a time', async () => {

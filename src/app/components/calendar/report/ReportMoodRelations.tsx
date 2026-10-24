@@ -8,44 +8,26 @@ import type { MoodCheckin } from '@/app/types/mood';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import {
   analyseCorrelation,
-  CORRELATION_LABELS,
   dailyActivity,
+  describeAnswer,
   describeCorrelation,
   EARLY_SIGN_DAYS,
   MAX_P,
   MOOD_METRICS,
+  MOOD_QUESTIONS,
   moodActivityPoints,
+  splitSides,
   STRONG_MIN_DAYS,
-  type CorrelationLevel,
+  type CorrelationResult,
+  type MoodAnswer,
   type MoodMetric,
+  type MoodPoint,
   type ReportPeriod,
 } from '@/app/utils/calendarReport';
 import { PATTERN_MIN_DAYS } from '@/app/utils/moodReport';
 import ReportMoodRelationChart, { dayItems, METRIC_INFO, type RelationView } from './ReportMoodRelationChart';
 import { MetricButton } from './ReportActivityChart';
-
-const METER_BARS: Record<CorrelationLevel, number> = {
-  insufficient: 0, flat: 0, none: 0, early: 1, slight: 1, moderate: 2, strong: 3,
-};
-
-/** Three rising bars, lit by how strong the link is. The level's text label carries the meaning. */
-const StrengthMeter: React.FC<{ level: CorrelationLevel }> = ({ level }) => (
-  <span className="inline-flex items-end gap-0.5 shrink-0" aria-hidden="true">
-    {[6, 9, 12].map((h, i) => (
-      <span
-        key={h}
-        className="w-1 rounded-sm"
-        style={{ height: h, backgroundColor: i < METER_BARS[level] ? 'var(--tm-accent)' : 'var(--tm-border)' }}
-      />
-    ))}
-  </span>
-);
-
-const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium bg-surface text-text-secondary">
-    {children}
-  </span>
-);
+import { ANSWER_COLOR, AnswerIcon, MoodLine, MoodLinePlaceholder } from './ReportMoodAnswer';
 
 interface ReportMoodRelationsProps {
   /** The report's calendar activity. */
@@ -61,14 +43,24 @@ interface ReportMoodRelationsProps {
   renderTags: (headerAction: React.ReactNode) => React.ReactNode;
 }
 
+interface MetricAnalysis {
+  points: MoodPoint[];
+  result: CorrelationResult;
+  answer: MoodAnswer;
+}
+
 /**
  * "Mood & your activity" — how mood moved with tasks, note time and habits
- * on days with a check-in, as a chart, a plain-language statement capped by
- * sample size, and a mini card per metric — beside the Tags card. Below the
- * lg breakpoint the two cards take turns behind an Activity / Tags switch,
- * and the mini cards are left out on phones and short windows, so Patterns
- * fits one screen.
- * Nothing here says what causes what.
+ * on days with a check-in, as a question and its answer: a neutral icon (sun,
+ * cloud, sun behind a cloud, hourglass), one sentence worded by how sure it
+ * is, one short line, and a line from lighter to busier days. The chart, the
+ * full statement and how it's worked out wait behind "See details", and a
+ * tile per metric gives the same answer for each activity — beside the Tags
+ * card. Below the lg breakpoint the two cards take turns behind an Activity /
+ * Tags switch, and the tiles are left out on phones and short windows, so
+ * Patterns fits one screen.
+ * Nothing here says what causes what, or that a higher or lower mood is good
+ * or bad.
  */
 const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byDay, period, scopeLabel, byWeek, renderTags }) => {
   const [metric, setMetric] = useState<MoodMetric>('tasks');
@@ -80,14 +72,18 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
   // `period` is rebuilt every render; its days identify it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const days = useMemo(() => dailyActivity(activity, period.start, period.end), [activity, startStr, endStr]);
-  const results = useMemo(
-    () => Object.fromEntries(MOOD_METRICS.map(m => [m, analyseCorrelation(moodActivityPoints(byDay, days, period.start, period.end, m))])) as Record<MoodMetric, ReturnType<typeof analyseCorrelation>>,
+  const analyses = useMemo(
+    () => Object.fromEntries(MOOD_METRICS.map(m => {
+      const points = moodActivityPoints(byDay, days, period.start, period.end, m);
+      const result = analyseCorrelation(points);
+      return [m, { points, result, answer: describeAnswer(m, result, points.map(p => p.mood)) }];
+    })) as Record<MoodMetric, MetricAnalysis>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [byDay, days, startStr, endStr],
   );
 
-  const result = results[metric];
-  const points = moodActivityPoints(byDay, days, period.start, period.end, metric);
+  const { points, result, answer } = analyses[metric];
+  const sides = splitSides(metric, result, points.map(p => p.value));
   const items = view === 'days' ? dayItems(byDay, days, period.start, period.end, metric, byWeek) : [];
   const info = METRIC_INFO[metric];
   const panelSwitch = (
@@ -101,67 +97,85 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
       <div className={`lg:col-span-2 min-w-0 ${panel === 'tags' ? 'max-lg:hidden' : ''}`}>
         <CardShell icon={<ChartScatter className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header="Mood & your activity" headerAction={panelSwitch}>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Compare mood with">
-              {MOOD_METRICS.map(m => (
-                <MetricButton key={m} active={metric === m} onClick={() => setMetric(m)}>{METRIC_INFO[m].button}</MetricButton>
-              ))}
-            </div>
-            <div className="ml-auto flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart type">
-              <MetricButton active={view === 'scatter'} onClick={() => setView('scatter')}>Scatter</MetricButton>
-              <MetricButton active={view === 'days'} onClick={() => setView('days')}>Day by day</MetricButton>
-            </div>
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border self-start" role="group" aria-label="Compare mood with">
+            {MOOD_METRICS.map(m => (
+              <MetricButton key={m} active={metric === m} onClick={() => setMetric(m)}>{METRIC_INFO[m].button}</MetricButton>
+            ))}
           </div>
 
-          <ReportMoodRelationChart metric={metric} view={view} points={points} items={items} byWeek={byWeek} />
-
-          <div className="rounded-lg p-3 flex flex-col gap-2 bg-surface-raised">
-            <div className="flex flex-wrap items-center gap-2">
-              <StrengthMeter level={result.level} />
-              <span className="text-sm font-semibold text-text-primary">{CORRELATION_LABELS[result.level]}</span>
-              <Chip>{result.n} {result.n === 1 ? 'day' : 'days'} with a check-in</Chip>
-              {result.level === 'insufficient' && (
-                <span
-                  className="flex-1 min-w-24 h-1.5 rounded-full overflow-hidden bg-surface"
-                  role="progressbar"
-                  aria-label="Days with a check-in so far"
-                  aria-valuemin={0}
-                  aria-valuemax={PATTERN_MIN_DAYS}
-                  aria-valuenow={result.n}
-                >
-                  <span className="block h-full rounded-full bg-accent" style={{ width: `${(result.n / PATTERN_MIN_DAYS) * 100}%` }} />
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-text-primary leading-relaxed">{describeCorrelation(metric, result, scopeLabel)}</p>
-            <p className="text-[11px] text-text-muted">
-              Shows what tends to move together — not what causes what. A busy week, sleep or the season can drive both.
+          <div className="flex flex-col gap-2">
+            <h3 className="text-base sm:text-lg font-bold leading-snug text-text-primary">{MOOD_QUESTIONS[metric]}</h3>
+            <p className="flex items-center gap-3">
+              <span
+                className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full grid place-items-center"
+                style={{ backgroundColor: `color-mix(in srgb, ${ANSWER_COLOR[answer.kind]} 15%, transparent)` }}
+              >
+                <AnswerIcon kind={answer.kind} className="w-5 h-5 sm:w-6 sm:h-6" />
+              </span>
+              <span className="font-display font-medium text-[22px] sm:text-[28px] leading-tight text-text-primary">{answer.sentence}</span>
             </p>
-            <details className="group text-xs text-text-secondary">
-              <summary className="inline-flex items-center gap-1 font-medium text-accent cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-                <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
-                How this is worked out
-              </summary>
-              <div className="mt-2 pl-4 flex flex-col gap-1 leading-relaxed">
-                <p>
-                  Each day with a daily check-in is one data point: its mood (1–5) and that day’s {info.label.toLowerCase()}.
-                  Days without a check-in are left out. Your days are put in order twice — from lowest to highest mood, and from
-                  least to most {info.label.toLowerCase()} — and the two orders are compared: the more they match, the stronger the link.
-                </p>
-                <p>
-                  Under {PATTERN_MIN_DAYS} days nothing is said. If the orders barely match, or the match could easily be luck
-                  (more than a 1-in-{Math.round(1 / MAX_P)} chance), it reads “no clear link” — as it does when days with more{' '}
-                  {info.label.toLowerCase()} didn’t really have a different mood in that direction. Otherwise a loose match is “slight”, a
-                  closer one “moderate” and a close one “strong” — but under {EARLY_SIGN_DAYS} days anything is only an
-                  “early sign”, and under {STRONG_MIN_DAYS} days nothing is called “strong”.
-                </p>
-              </div>
-            </details>
+            <p className="text-sm text-text-secondary">{answer.support}</p>
+            {result.level === 'insufficient' && (
+              <span
+                className="block max-w-72 h-1.5 rounded-full overflow-hidden bg-surface-raised"
+                role="progressbar"
+                aria-label="Days with a check-in so far"
+                aria-valuemin={0}
+                aria-valuemax={PATTERN_MIN_DAYS}
+                aria-valuenow={result.n}
+              >
+                <span className="block h-full rounded-full bg-accent" style={{ width: `${(result.n / PATTERN_MIN_DAYS) * 100}%` }} />
+              </span>
+            )}
           </div>
+
+          {answer.kind === 'wait' ? (
+            <MoodLinePlaceholder />
+          ) : sides && result.lowAverage != null && result.highAverage != null && (
+            <MoodLine kind={answer.kind} sides={sides} lowAverage={result.lowAverage} highAverage={result.highAverage} />
+          )}
+
+          <details className="group/details text-xs text-text-secondary">
+            <summary className="inline-flex items-center gap-1 text-[13px] font-medium text-accent cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="w-3.5 h-3.5 transition-transform group-open/details:rotate-90" aria-hidden="true" />
+              See details
+            </summary>
+            <div className="mt-3 flex flex-col gap-2">
+              <div className="self-end flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart type">
+                <MetricButton active={view === 'scatter'} onClick={() => setView('scatter')}>Scatter</MetricButton>
+                <MetricButton active={view === 'days'} onClick={() => setView('days')}>Day by day</MetricButton>
+              </div>
+              <ReportMoodRelationChart metric={metric} view={view} points={points} items={items} byWeek={byWeek} />
+              <p className="text-sm text-text-primary leading-relaxed">{describeCorrelation(metric, result, scopeLabel)}</p>
+              <p className="text-[11px] text-text-muted">
+                Shows what tends to move together — not what causes what. A busy week, sleep or the season can drive both.
+              </p>
+              <details className="group/how">
+                <summary className="inline-flex items-center gap-1 font-medium text-accent cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="w-3.5 h-3.5 transition-transform group-open/how:rotate-90" aria-hidden="true" />
+                  How this is worked out
+                </summary>
+                <div className="mt-2 pl-4 flex flex-col gap-1 leading-relaxed">
+                  <p>
+                    Each day with a daily check-in is one data point: its mood (1–5) and that day’s {info.label.toLowerCase()}.
+                    Days without a check-in are left out. Your days are put in order twice — from lowest to highest mood, and from
+                    least to most {info.label.toLowerCase()} — and the two orders are compared: the more they match, the stronger the link.
+                  </p>
+                  <p>
+                    Under {PATTERN_MIN_DAYS} days nothing is said. If the orders barely match, or the match could easily be luck
+                    (more than a 1-in-{Math.round(1 / MAX_P)} chance), it reads “about the same” — as it does when days with more{' '}
+                    {info.label.toLowerCase()} didn’t really have a different mood in that direction. Otherwise a loose match is “a little”
+                    higher or lower, a closer one plainly “higher” or “lower” and a close one “clearly” — but under {EARLY_SIGN_DAYS} days
+                    anything is only “maybe”, and under {STRONG_MIN_DAYS} days nothing is called “clearly”.
+                  </p>
+                </div>
+              </details>
+            </div>
+          </details>
 
           <div className="hidden sm:grid grid-cols-3 gap-2 [@media(max-height:760px)]:hidden">
             {MOOD_METRICS.map(m => {
-              const r = results[m];
+              const a = analyses[m].answer;
               const active = metric === m;
               return (
                 <button
@@ -169,17 +183,14 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
                   type="button"
                   onClick={() => setMetric(m)}
                   aria-pressed={active}
-                  className={`text-left rounded-lg px-3 py-2 border transition-colors ${
+                  className={`text-left rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 border transition-colors ${
                     active ? 'border-transparent bg-accent-subtle' : 'border-border-subtle hover:bg-surface-raised'
                   }`}
                 >
-                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-text-muted">{METRIC_INFO[m].label}</span>
-                  <span className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-text-primary">
-                    <StrengthMeter level={r.level} />
-                    {CORRELATION_LABELS[r.level]}
-                    {r.rho != null && METER_BARS[r.level] > 0 && (
-                      <span className="text-xs font-normal text-text-muted">{r.rho > 0 ? '↑ together' : '↓ opposite'}</span>
-                    )}
+                  <span className="block text-[11px] font-semibold uppercase tracking-wide text-text-muted">{METRIC_INFO[m].button}</span>
+                  <span className="flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-semibold text-text-primary">
+                    <AnswerIcon kind={a.kind} className="w-4 h-4 shrink-0" />
+                    {a.short}
                   </span>
                 </button>
               );
