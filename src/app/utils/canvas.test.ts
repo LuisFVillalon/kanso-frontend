@@ -153,6 +153,12 @@ describe('itemStatus', () => {
     expect(itemStatus(at({ submission: submission({ excused: true, missing: true }) }), NOW)).toEqual({ kind: 'excused', label: 'Excused' });
   });
 
+  it('says "Done in Canvas" for work checked off in Canvas, even while Canvas calls it missing', () => {
+    expect(itemStatus(at({ done_reason: 'marked_complete' }), NOW)).toEqual({ kind: 'done', label: 'Done in Canvas' });
+    expect(itemStatus(at({ done_reason: 'marked_complete', submission: submission({ missing: true }) }), NOW))
+      .toEqual({ kind: 'done', label: 'Done in Canvas' });
+  });
+
   it('counts open work down like a task', () => {
     expect(itemStatus(at({ due_at: new Date(2026, 9, 21, 23, 0).toISOString() }), NOW)).toEqual({ kind: 'due', label: 'Due today' });
     expect(itemStatus(at({ due_at: new Date(2026, 9, 22, 9, 0).toISOString() }), NOW)).toEqual({ kind: 'due', label: 'Due tomorrow' });

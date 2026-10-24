@@ -32,11 +32,11 @@ import { canvasView } from '@/app/components/settings/CanvasIntegrationSection';
 import {
   canvasCan, canvasClasses, canvasConnectionType, courseColor, formatShortDate, formatTime, syncedLabel, type CanvasClass,
 } from '@/app/utils/canvas';
-import { canvasClassTag, rememberCanvasCourseLabels, rememberedCourseLabel } from '@/app/utils/canvasTasks';
+import { canvasClassTag, isCanvasItemDone, rememberCanvasCourseLabels, rememberedCourseLabel } from '@/app/utils/canvasTasks';
 import type { CanvasCapability, CanvasItem, CanvasRange } from '@/app/types/canvas';
 import type { Tag } from '@/app/types/task';
 import type { CanvasRowAdd, CourseLookup } from './CanvasItemRow';
-import CanvasUpcoming from './CanvasUpcoming';
+import CanvasUpcoming, { type CanvasHideDone } from './CanvasUpcoming';
 import CanvasClasses from './CanvasClasses';
 import CanvasCourseDetail from './CanvasCourseDetail';
 import CanvasAnnouncements from './CanvasAnnouncements';
@@ -52,6 +52,8 @@ const TABS: { key: Tab; label: string; icon: LucideIcon; needs: CanvasCapability
 
 const RANGE_KEY = 'tm-canvas-range';
 const isRange = (v: unknown): v is CanvasRange => v === 'week' || v === 'all';
+const HIDE_DONE_KEY = 'tm-canvas-hide-done';
+const isBoolean = (v: unknown): v is boolean => typeof v === 'boolean';
 
 /** The tag picker's job: adding an item to tasks, or choosing a class's tags. */
 type Sheet =
@@ -141,6 +143,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   const [selectedTab, setTab] = useState<Tab>('upcoming');
   const [openCourseId, setOpenCourseId] = useState<number | null>(null);
   const [range, setRange] = usePersistedPref<CanvasRange>(RANGE_KEY, 'all', isRange);
+  const [hideDoneOn, setHideDone] = usePersistedPref<boolean>(HIDE_DONE_KEY, false, isBoolean);
   const [classFilter, setClassFilter] = useState<number | null>(null);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -159,6 +162,8 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
   // A tab the connection lost (a token swapped for the feed) falls back to Upcoming.
   const tab = tabs.some(t => t.key === selectedTab) ? selectedTab : 'upcoming';
   const adding = can('link_tasks') ? addToTasks : undefined;
+  // Only Canvas's own status counts: a calendar feed can't say what's done, so it offers no Hide done.
+  const hideDone: CanvasHideDone | undefined = can('done_status') ? { on: hideDoneOn, onChange: setHideDone } : undefined;
   const courseTags = useCanvasCourseTags(!!adding && status === 'ready');
 
   // Task cards added from Canvas name their course from these; the feed has
@@ -373,6 +378,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
           classFilter={filter}
           onClassFilterChange={setClassFilter}
           onShowHiddenClasses={classes.length > 0 && shownClasses.length === 0 ? () => openTab('classes') : undefined}
+          hideDone={hideDone}
         />
       );
     } else if (tab === 'classes') {
@@ -388,6 +394,7 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
           onFail={canvas.fail}
           onBack={() => setOpenCourseId(null)}
           addToTasks={rowAdd}
+          hideDone={hideDone}
         />
       ) : (
         <CanvasClasses
@@ -499,7 +506,9 @@ const CanvasPanel: React.FC<CanvasPanelProps> = ({ heightPx, onOpenSettings, syn
         <div role="tablist" aria-label="Canvas" className="flex gap-1 px-3.5 py-2 border-b border-border-subtle overflow-x-auto overscroll-x-contain scrollbar-custom">
           {tabs.map(({ key, label, icon: Icon }) => {
             const selected = tab === key;
-            const count = key === 'upcoming' ? overview?.missing.length ?? 0 : key === 'announcements' ? unread : 0;
+            const count = key === 'upcoming'
+              ? overview?.missing.filter(i => !isCanvasItemDone(i)).length ?? 0
+              : key === 'announcements' ? unread : 0;
             return (
               <button
                 key={key}

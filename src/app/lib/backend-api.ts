@@ -1033,6 +1033,18 @@ export async function updateCanvasHiddenCourses(hiddenCourseIds: number[]): Prom
   return res.json();
 }
 
+/** Turns on or off the linked-task sync completing tasks once Canvas shows their assignment done. */
+export async function updateCanvasAutoComplete(autoComplete: boolean): Promise<CanvasConnection> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/canvas/connection`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ auto_complete: autoComplete }),
+  });
+  await assertOk(res, "updateCanvasAutoComplete");
+  return res.json();
+}
+
 /** Permanently deletes the connection and its token or feed link. There is no trash for it. */
 export async function removeCanvasConnection(): Promise<void> {
   const headers = await getAuthHeaders();

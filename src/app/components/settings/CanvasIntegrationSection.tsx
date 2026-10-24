@@ -23,7 +23,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, Award, CalendarSync, Check, CircleAlert, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Link2,
+  AlertTriangle, Award, CalendarSync, Check, CircleAlert, CircleCheck, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Link2,
   Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2,
 } from 'lucide-react';
 import {
@@ -36,6 +36,7 @@ import {
   fetchCanvasCourses,
   removeCanvasConnection,
   testCanvasConnection,
+  updateCanvasAutoComplete,
   updateCanvasHiddenCourses,
 } from '@/app/lib/backend-api';
 import type {
@@ -146,7 +147,7 @@ export function canvasStatusLine(connection: CanvasConnection, now: Date): strin
 
 const NO_CAPABILITIES: CanvasCapabilities = {
   upcoming: false, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
-  announcements: false, link_tasks: false, submission_status: false,
+  announcements: false, link_tasks: false, submission_status: false, done_status: false,
 };
 
 const NOT_CONNECTED: CanvasConnection = {
@@ -229,6 +230,48 @@ const TokenExtrasNote = () => (
       Connecting with an access token instead, if your school allows it, also shows your grades, modules,
       announcements and whether you&apos;ve handed work in. Use Replace to switch.
     </p>
+  </div>
+);
+
+/**
+ * "Complete linked tasks when they're done in Canvas" (a token), or, for a
+ * calendar feed, why kanso can't: the feed doesn't say what's done.
+ */
+const AutoCompleteSetting: React.FC<{ feed: boolean; on: boolean; disabled: boolean; onChange: (on: boolean) => void }> = ({
+  feed, on, disabled, onChange,
+}) => feed ? (
+  <p className="flex gap-2 items-start text-xs text-text-muted" data-testid="canvas-done-feed-note">
+    <CircleCheck className="w-3.5 h-3.5 mt-px shrink-0" aria-hidden />
+    A calendar feed doesn&apos;t say when work is handed in or done, so tasks added from Canvas stay open until you
+    check them off.
+  </p>
+) : (
+  <div className="flex items-center justify-between gap-4">
+    <div>
+      <p id="canvas-auto-complete-label" className="text-sm font-medium text-text-primary">
+        Complete linked tasks when they&apos;re done in Canvas
+      </p>
+      <p className="text-xs text-text-muted">
+        Once Canvas shows an assignment handed in, graded, excused or checked off, its task is checked off too. Off,
+        kanso asks first.
+      </p>
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-labelledby="canvas-auto-complete-label"
+      onClick={() => onChange(!on)}
+      disabled={disabled}
+      className="relative shrink-0 w-10 h-6 rounded-full transition-colors disabled:opacity-40"
+      style={{ backgroundColor: on ? 'var(--tm-accent)' : 'var(--tm-border)' }}
+    >
+      <span
+        aria-hidden="true"
+        className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform"
+        style={{ transform: on ? 'translateX(1rem)' : 'none', boxShadow: 'var(--tm-shadow-sm)' }}
+      />
+    </button>
   </div>
 );
 
@@ -809,7 +852,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
   const [loadError, setLoadError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('view');
-  const [busy, setBusy] = useState<'test' | 'remove' | 'courses' | null>(null);
+  const [busy, setBusy] = useState<'test' | 'remove' | 'courses' | 'auto-complete' | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [courses, setCourses] = useState<{ key: string; list: CanvasCourse[] } | null>(null);
 
@@ -917,6 +960,22 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
     } catch (err) {
       setConnection(canvasErrorCode(err) === 'canvas_not_connected' ? NOT_CONNECTED : previous);
       setNotice({ tone: 'error', text: canvasErrorMessage(err, "Couldn't save your course choices. Please try again.") });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleAutoComplete = async (on: boolean) => {
+    if (!connection) return;
+    const previous = connection;
+    setConnection({ ...previous, auto_complete: on });
+    setBusy('auto-complete');
+    setNotice(null);
+    try {
+      setConnection(await updateCanvasAutoComplete(on));
+    } catch (err) {
+      setConnection(canvasErrorCode(err) === 'canvas_not_connected' ? NOT_CONNECTED : previous);
+      setNotice({ tone: 'error', text: canvasErrorMessage(err, "Couldn't save that. Please try again.") });
     } finally {
       setBusy(null);
     }
@@ -1133,6 +1192,14 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
           disabled={busy !== null}
           fromFeed={feed}
           onToggle={courseId => void handleToggleCourse(courseId)}
+        />
+      )}
+      {(feed || canvasCan(connection, 'done_status')) && (
+        <AutoCompleteSetting
+          feed={feed}
+          on={connection.auto_complete ?? true}
+          disabled={busy !== null}
+          onChange={on => void handleAutoComplete(on)}
         />
       )}
       {feed && <TokenExtrasNote />}

@@ -308,7 +308,7 @@ const TaskManager: React.FC = () => {
           compact={widthPct < 40}
           heightPx={panelHeightPx}
           pendingTaskIds={pendingTaskIds}
-          canvasSubmitted={{ shows: canvasTaskSync.showsSubmitted, onNotYet: canvasTaskSync.dismiss }}
+          canvasSubmitted={{ shows: canvasTaskSync.showsSubmitted, doneAs: canvasTaskSync.doneAs, onNotYet: canvasTaskSync.dismiss }}
           view={taskView}
           onViewChange={setTaskView}
           selectedTags={selectedTags}

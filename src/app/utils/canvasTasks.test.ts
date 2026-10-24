@@ -89,6 +89,11 @@ describe('isCanvasItemDone', () => {
     expect(isCanvasItemDone(item({ submission: sub({ missing: true, graded: true, score: 0 }) }))).toBe(false);
     expect(isCanvasItemDone(item({ submission: sub({ missing: true, excused: true }) }))).toBe(true);
   });
+
+  it("goes by the backend's done flag when it sends one, which counts work checked off in Canvas", () => {
+    expect(isCanvasItemDone(item({ done: true, done_reason: 'marked_complete', marked_complete: true }))).toBe(true);
+    expect(isCanvasItemDone(item({ done: false, submission: sub({ submitted: true }) }))).toBe(false);
+  });
 });
 
 describe('canvasTaskForm', () => {

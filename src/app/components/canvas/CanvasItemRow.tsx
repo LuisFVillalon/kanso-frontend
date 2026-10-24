@@ -1,12 +1,13 @@
 import React from 'react';
 import {
-  BookOpen, CalendarDays, Check, Clock, File, FileText, ListChecks, ListPlus, MessagesSquare, Minus, StickyNote,
+  BookOpen, CalendarDays, Check, CircleCheck, Clock, File, FileText, ListChecks, ListPlus, MessagesSquare, Minus, StickyNote,
   type LucideIcon,
 } from 'lucide-react';
 import TaskStatusChip from '@/app/components/task/TaskStatusChip';
 import type { CanvasAddState } from '@/app/hooks/useCanvasAddToTasks';
 import type { CanvasItem, CanvasItemKind } from '@/app/types/canvas';
 import { dueLabel, formatNumber, itemStatus, type CanvasItemStatus } from '@/app/utils/canvas';
+import { isCanvasItemDone } from '@/app/utils/canvasTasks';
 
 const KIND_ICONS: Record<CanvasItemKind, LucideIcon> = {
   assignment: FileText,
@@ -99,10 +100,14 @@ interface CanvasItemRowProps {
   now: Date;
   /** Offers "Add to tasks" on assignments with work left; left out, the row offers nothing. */
   addToTasks?: CanvasRowAdd;
+  /** False where every row is done anyway (Recently graded), so none is faded. */
+  fadeDone?: boolean;
 }
 
-const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, addToTasks }) => {
-  const Icon = KIND_ICONS[item.kind] ?? File;
+const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, addToTasks, fadeDone = true }) => {
+  // Done in Canvas's own terms only, never because a task added from it was completed in kanso.
+  const done = fadeDone && isCanvasItemDone(item);
+  const Icon = done ? CircleCheck : KIND_ICONS[item.kind] ?? File;
   const status = itemStatus(item, now);
   const { label: courseLabel, color } = course(item.course_id);
   const addState = addToTasks?.stateOf(item) ?? null;
@@ -110,18 +115,26 @@ const CanvasItemRow: React.FC<CanvasItemRowProps> = ({ item, course, now, addToT
     <AddToTasks item={item} state={addState} onAdd={() => addToTasks!.open(item, courseLabel ?? item.course_name)} />
   );
   return (
-    <div className="flex gap-2.5 items-start p-2.5 rounded-[10px] border border-border bg-surface">
+    <div
+      className={`flex gap-2.5 items-start p-2.5 rounded-[10px] border border-border bg-surface ${done ? 'opacity-70' : ''}`}
+      data-done={done || undefined}
+    >
       <span
         className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-        style={item.kind === 'quiz'
-          ? { backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)' }
-          : { backgroundColor: 'var(--tm-surface-raised)', color: 'var(--tm-text-secondary)' }}
-        title={item.kind}
+        style={done
+          ? { backgroundColor: 'var(--tm-success-subtle)', color: 'var(--tm-success-text)' }
+          : item.kind === 'quiz'
+            ? { backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)' }
+            : { backgroundColor: 'var(--tm-surface-raised)', color: 'var(--tm-text-secondary)' }}
+        title={done ? 'Done in Canvas' : item.kind}
       >
-        <Icon className="w-3.5 h-3.5" />
+        <Icon className="w-3.5 h-3.5" aria-label={done ? 'Done in Canvas' : undefined} />
       </span>
       <div className="flex-1 min-w-0">
-        <CanvasLink href={item.html_url} className="block text-[13px] font-semibold leading-snug text-text-primary break-words">
+        <CanvasLink
+          href={item.html_url}
+          className={`block text-[13px] font-semibold leading-snug break-words ${done ? 'line-through text-text-muted' : 'text-text-primary'}`}
+        >
           {item.title}
         </CanvasLink>
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1 text-xs text-text-muted">

@@ -40,12 +40,15 @@ export function canvasAssignmentId(item: CanvasItem): number | null {
 }
 
 /**
- * Work excused, or handed in or graded and not missing, has nothing left to
- * do; missing work stays open even with a grade (a 0 for work never handed
- * in), as the panel shows it "Slipped".
+ * Whether Canvas counts an item done, as the backend says: excused, handed
+ * in or graded and not missing, or checked off with "Mark as done" in
+ * Canvas's planner. A backend from before that flag leaves it to the
+ * submission, where missing work stays open even with a grade (a 0 for work
+ * never handed in), as the panel shows it "Slipped". A calendar feed's items
+ * are never done: the feed doesn't say.
  */
-export const isCanvasItemDone = ({ submission: sub }: CanvasItem) =>
-  !!(sub?.excused || (!sub?.missing && (sub?.submitted || sub?.graded)));
+export const isCanvasItemDone = ({ done, submission: sub }: CanvasItem) =>
+  done ?? !!(sub?.excused || (!sub?.missing && (sub?.submitted || sub?.graded)));
 
 /**
  * The tag named after a class, which Add to tasks starts with: the user's own

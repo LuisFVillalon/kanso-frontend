@@ -85,7 +85,9 @@ export const useTasks = (enabled: boolean) => {
               ...t,
               completed: newCompleted,
               completed_date: newCompletedDate,
-              priority: newCompleted ? null : t.priority
+              priority: newCompleted ? null : t.priority,
+              // Completed or reopened by hand: no longer "Done in Canvas" (the backend clears it too).
+              completed_by_canvas: false,
             }
           : t
       )

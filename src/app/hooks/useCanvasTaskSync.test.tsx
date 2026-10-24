@@ -115,6 +115,28 @@ describe('useCanvasTaskSync', () => {
     expect(refreshTasks).toHaveBeenCalledWith([1]);
   });
 
+  it('reloads the tasks the sync completed, with no banner for them', async () => {
+    syncCanvasLinkedTasks.mockResolvedValue([
+      result(1, { submitted: true, done: true, done_reason: 'submitted', completed: true }), result(2),
+    ]);
+    await render(linked);
+    expect(refreshTasks).toHaveBeenCalledWith([1]);
+    expect(hook.showsSubmitted(linked[0])).toBe(false);
+  });
+
+  it('offers to complete work done in Canvas when the sync leaves it open, in the words that fit', async () => {
+    syncCanvasLinkedTasks.mockResolvedValue([
+      result(1, { done: true, done_reason: 'marked_complete' }),
+      result(2, { submitted: true, done: true, done_reason: 'graded' }),
+    ]);
+    await render(linked);
+    expect(refreshTasks).not.toHaveBeenCalled();
+    expect(hook.showsSubmitted(linked[0])).toBe(true);
+    expect(hook.doneAs(linked[0])).toBe('done');
+    expect(hook.showsSubmitted(linked[1])).toBe(true);
+    expect(hook.doneAs(linked[1])).toBe('submitted');
+  });
+
   it('changes nothing when the sync fails, e.g. before the backend has the route', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     syncCanvasLinkedTasks.mockRejectedValue(new Error('404 Not Found'));

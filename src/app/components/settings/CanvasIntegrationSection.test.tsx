@@ -21,6 +21,7 @@ const api = vi.hoisted(() => {
     connectCanvasFeed: vi.fn(),
     testCanvasConnection: vi.fn(),
     updateCanvasHiddenCourses: vi.fn(),
+    updateCanvasAutoComplete: vi.fn(),
     removeCanvasConnection: vi.fn(),
     fetchCanvasCourses: vi.fn(),
     fetchCanvasClasses: vi.fn(),
@@ -515,6 +516,39 @@ describe('CanvasIntegrationSection', () => {
     api.fetchCanvasConnection.mockResolvedValue(connected());
     await render();
     expect(container.querySelector('[data-testid="canvas-token-extras-note"]')).toBeNull();
+  });
+
+  it('completes linked tasks done in Canvas by default, and saves turning it off', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(connected({ auto_complete: true }));
+    api.updateCanvasAutoComplete.mockResolvedValue(connected({ auto_complete: false }));
+    await render();
+    const toggle = () => container.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="canvas-auto-complete-label"]')!;
+    expect(text()).toContain("Complete linked tasks when they're done in Canvas");
+    expect(toggle().getAttribute('aria-checked')).toBe('true');
+    await click(toggle());
+    expect(api.updateCanvasAutoComplete).toHaveBeenCalledWith(false);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+    expect(container.querySelector('[data-testid="canvas-done-feed-note"]')).toBeNull();
+  });
+
+  it('puts the switch back and says so when saving it fails', async () => {
+    api.fetchCanvasConnection.mockResolvedValue(connected());
+    api.updateCanvasAutoComplete.mockRejectedValue(apiError(502, 'canvas_unavailable'));
+    await render();
+    const toggle = container.querySelector<HTMLButtonElement>('[role="switch"]')!;
+    // A backend from before the setting leaves it out: on.
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    await click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it("tells a feed connection it can't read what's done, with no switch", async () => {
+    api.fetchCanvasConnection.mockResolvedValue(feedConnected());
+    await render();
+    expect(container.querySelector('[data-testid="canvas-done-feed-note"]')?.textContent)
+      .toContain("A calendar feed doesn't say when work is handed in or done");
+    expect(container.querySelector('[role="switch"]')).toBeNull();
   });
 
   it("lists a feed's classes under Courses to show and saves the hidden ones", async () => {

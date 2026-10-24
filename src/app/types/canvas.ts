@@ -36,6 +36,11 @@ export interface CanvasCapabilities {
   link_tasks: boolean;
   /** The linked-task sync reports whether an assignment was submitted. */
   submission_status: boolean;
+  /**
+   * Items carry done and done_reason, and the linked-task sync can complete
+   * tasks: a token only. Left out by a backend from before it.
+   */
+  done_status?: boolean;
 }
 
 export type CanvasCapability = keyof CanvasCapabilities;
@@ -63,6 +68,11 @@ export interface CanvasConnection {
   /** ISO timestamps from here on, null when unknown or never. */
   token_expires_at: string | null;
   hidden_course_ids: number[];
+  /**
+   * The linked-task sync completes a task once Canvas shows its assignment
+   * done; off, it only offers to. Left out by a backend from before it (on).
+   */
+  auto_complete?: boolean;
   created_at: string | null;
   updated_at: string | null;
   last_synced_at: string | null;
@@ -128,6 +138,13 @@ export interface CanvasSubmission {
   graded_at: string | null;
 }
 
+/**
+ * Why Canvas counts an item done, the first that applies: excused, graded
+ * (not graded missing with nothing turned in), submitted, or checked off
+ * with "Mark as done" in Canvas's planner.
+ */
+export type CanvasDoneReason = 'excused' | 'graded' | 'submitted' | 'marked_complete';
+
 /** Something with a due date: an assignment, quiz, discussion, page, event or planner note. */
 export interface CanvasItem {
   id: number;
@@ -145,6 +162,15 @@ export interface CanvasItem {
   linkable?: boolean;
   /** A feed item due all day: its date ("2026-10-23"), which a task added from it keeps as canvas_due_date. */
   day?: string | null;
+  /**
+   * Canvas counts it done (see CanvasDoneReason). Always false for a
+   * calendar feed, which carries no completion; left out by a backend from
+   * before it.
+   */
+  done?: boolean;
+  done_reason?: CanvasDoneReason | null;
+  /** Checked off with "Mark as done" in Canvas's planner (a token only). */
+  marked_complete?: boolean;
 }
 
 /** A course's assignment; quizzes are assignments too, with kind "quiz". */
@@ -283,9 +309,14 @@ export interface CanvasLinkedTaskSync {
   task_id: number;
   /** False when Canvas couldn't be read for it, so the task was left alone. */
   synced: boolean;
-  /** Canvas shows the assignment submitted: offer to complete the task. */
+  /** Canvas shows the assignment submitted. */
   submitted: boolean;
+  /** Canvas counts the assignment done; left out by a backend from before it, where submitted says so. */
+  done?: boolean;
+  done_reason?: CanvasDoneReason | null;
   due_at: string | null;
   /** The backend moved the task's due date and time to due_at. */
   due_changed: boolean;
+  /** This sync completed the task (its assignment is done and auto_complete is on): reload it. */
+  completed?: boolean;
 }
