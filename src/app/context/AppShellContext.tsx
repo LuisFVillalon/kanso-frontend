@@ -20,6 +20,10 @@ export interface AppShellValue {
   /** Creates a draft note and opens it: in Home's Notes panel on Home, on the Notes page elsewhere. */
   createNote: () => void;
   openNewHabit: () => void;
+  /** Opens the new-event form for today. */
+  openNewEvent: () => void;
+  /** Bumped each time the New menu adds an event, so calendars refetch. */
+  eventsSyncToken: number;
   openEditTask: (task: Task) => void;
   openSettings: (section?: SettingsSection) => void;
   openManageTags: () => void;

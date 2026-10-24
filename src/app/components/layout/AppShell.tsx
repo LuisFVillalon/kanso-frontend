@@ -21,6 +21,7 @@ import type { SettingsSection } from '@/app/components/settings/SettingsModal';
 import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import AppNav, { NAV_ITEMS } from '@/app/components/layout/AppNav';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
+import NewEventModal from '@/app/components/event/NewEventModal';
 import type { Note } from '@/app/types/notes';
 import type { Tag, Task } from '@/app/types/task';
 
@@ -65,6 +66,8 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settingsSection, setSettingsSection] = useState<SettingsSection | undefined>(undefined);
   const [settingsClosedToken, setSettingsClosedToken] = useState(0);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const [showNewEvent, setShowNewEvent] = useState(false);
+  const [eventsSyncToken, setEventsSyncToken] = useState(0);
   const noteOpener = useRef<((note: Note) => void) | null>(null);
 
   const { tasks, addTask, updateTask, saveLinkedTasks, setTasks } = useTasksContext();
@@ -193,6 +196,8 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     openNewTask: () => state.setShowNewTaskModal(true),
     createNote,
     openNewHabit: () => state.setShowCreateHabitModal(true),
+    openNewEvent: () => setShowNewEvent(true),
+    eventsSyncToken,
     openEditTask: task => state.setShowEditTaskModal({ status: true, task }),
     openSettings,
     openManageTags,
@@ -252,6 +257,8 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           onNewTask={value.openNewTask}
           onNewNote={createNote}
           onNewHabit={value.openNewHabit}
+          onNewEvent={value.openNewEvent}
+          onNewTag={() => state.setShowCreateTagModal(true)}
           onSettings={() => openSettings()}
           onManageTags={openManageTags}
           onManageHabits={value.openManageHabits}
@@ -265,6 +272,10 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       >
         {children}
       </div>
+
+      {signedIn && showNewEvent && (
+        <NewEventModal onClose={() => setShowNewEvent(false)} onCreated={() => setEventsSyncToken(t => t + 1)} />
+      )}
 
       {signedIn && (
         <TaskManagerModals

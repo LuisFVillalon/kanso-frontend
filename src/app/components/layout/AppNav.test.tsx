@@ -22,6 +22,8 @@ const makeActions = () => ({
   onNewTask: vi.fn(),
   onNewNote: vi.fn(),
   onNewHabit: vi.fn(),
+  onNewEvent: vi.fn(),
+  onNewTag: vi.fn(),
   onSettings: vi.fn(),
   onManageTags: vi.fn(),
   onManageHabits: vi.fn(),
@@ -129,9 +131,15 @@ describe('AppNav', () => {
     click(newButton);
     click(menuItem('New note'));
     click(newButton);
+    click(menuItem('New event'));
+    click(newButton);
     click(menuItem('New habit'));
+    click(newButton);
+    click(menuItem('New tag'));
     expect(actions.onNewNote).toHaveBeenCalledTimes(1);
+    expect(actions.onNewEvent).toHaveBeenCalledTimes(1);
     expect(actions.onNewHabit).toHaveBeenCalledTimes(1);
+    expect(actions.onNewTag).toHaveBeenCalledTimes(1);
   });
 
   it('runs each account menu action, and Escape closes it', () => {
@@ -175,6 +183,12 @@ describe('AppNav', () => {
     click(within(sheet()!, 'New habit'));
     expect(actions.onNewHabit).toHaveBeenCalledTimes(1);
     expect(sheet()).toBeNull();
+    click(within(tabbar(), 'New'));
+    click(within(sheet()!, 'New event'));
+    expect(actions.onNewEvent).toHaveBeenCalledTimes(1);
+    click(within(tabbar(), 'New'));
+    click(within(sheet()!, 'New tag'));
+    expect(actions.onNewTag).toHaveBeenCalledTimes(1);
 
     click(within(tabbar(), 'More'));
     expect([...sheet()!.querySelectorAll('a, button')].map(el => el.textContent?.trim()))

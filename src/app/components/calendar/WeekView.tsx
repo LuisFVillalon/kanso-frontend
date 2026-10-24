@@ -2,13 +2,13 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarPlus, ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
 import { useTasksContext } from '@/app/context/TasksContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useToast } from '@/app/context/ToastContext';
-import { useAppShell } from '@/app/context/AppShellContext';
 import { useWeekActivity } from '@/app/hooks/useWeekActivity';
+import { browserTimeZone, useWorkWindows } from '@/app/hooks/useWorkWindows';
 import { occurrenceDayLabel, useEventActions } from '@/app/hooks/useEventActions';
 import { fetchEvent } from '@/app/lib/backend-api';
 import type { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
@@ -23,7 +23,6 @@ import EventScopeDialog, { type EventAction } from '@/app/components/event/Event
 import WeekQuickAdd, { type QuickAddDraft, type QuickAddValues } from '@/app/components/event/WeekQuickAdd';
 import DragHandle from '@/app/components/common/DragHandle';
 import { useResizableSplit } from '@/app/hooks/useResizableSplit';
-import { DEFAULT_DAY_END, DEFAULT_DAY_START } from '@/app/lib/restDays';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
 import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import {
@@ -41,11 +40,9 @@ import {
   buildWeekEvents,
   type EventPlacement,
   minutesToTimeStr,
-  parseTimeToMinutes,
   startOfWeek,
   weekDays,
   workDayMarks,
-  type WindowMinutes,
 } from '@/app/utils/weekLayout';
 import WeekGrid, { WEEK_LEGEND } from './WeekGrid';
 
@@ -79,9 +76,6 @@ const emptyTaskForm = (): BaseTaskForm => ({
   created_date: '',
 });
 
-const toMinutesOr = (time: string, fallback: string): number =>
-  parseTimeToMinutes(time) ?? parseTimeToMinutes(fallback)!;
-
 /** The current time, refreshed every minute for the now-line. */
 const useMinuteClock = (): Date => {
   const [now, setNow] = useState(() => new Date());
@@ -101,8 +95,6 @@ const weekLabel = (start: Date, end: Date): string => {
 
 const toggleById = (tags: Tag[], tag: Tag): Tag[] =>
   tags.some(t => t.id === tag.id) ? tags.filter(t => t.id !== tag.id) : [...tags, tag];
-
-const browserTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** The event modal: a new event from a preset form, or an edit of one occurrence of a series. */
 type EventFormState =
@@ -179,25 +171,10 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     onResizingChange: handleResizingChange,
   });
 
-  const shell = useAppShell();
-  const { dayStartTime, shutoffTime, restDays, dayWindows } = shell.profileState.profile;
-  const dayStartMinutes = toMinutesOr(dayStartTime, DEFAULT_DAY_START);
-  const dayEndMinutes = toMinutesOr(shutoffTime, DEFAULT_DAY_END);
-
+  const { restDays, windowOn, dayStartMinutes, term } = useWorkWindows(now);
   const days = useMemo(() => weekDays(weekStart), [weekStart]);
-  const windowOn = useCallback((weekday: number): WindowMinutes => {
-    const own = dayWindows?.[String(weekday)];
-    return own
-      ? [toMinutesOr(own.start, DEFAULT_DAY_START), toMinutesOr(own.end, DEFAULT_DAY_END)]
-      : [dayStartMinutes, dayEndMinutes];
-  }, [dayWindows, dayStartMinutes, dayEndMinutes]);
   const workDays = useMemo(() => days.map(day => workDayMarks(day, restDays, windowOn)), [days, restDays, windowOn]);
   const todayStr = toLocalDateStr(now);
-  // The current term, for "repeat until the end of term"; the placeholder (id 0) doesn't count.
-  const settings = shell.calendarSettingsState?.calendarSettings;
-  const term = settings?.id && settings.end_date && settings.end_date >= todayStr
-    ? { title: settings.title, endDate: settings.end_date }
-    : null;
   const todayIndex = days.findIndex(d => toLocalDateStr(d) === todayStr);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   // Open near the current time on this week, at the user's day start otherwise.
@@ -258,13 +235,6 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     repeat: values?.repeat ?? false,
     termEnd: term?.endDate ?? null,
   });
-
-  const openNewEvent = () => {
-    // Today on this week, else the week's first day; at the next full hour from now or the day's start.
-    const day = todayIndex >= 0 ? days[todayIndex] : days[0];
-    const start = todayIndex >= 0 ? Math.min(23 * 60, (now.getHours() + 1) * 60) : dayStartMinutes;
-    setEventForm({ mode: 'new', initial: newEventForm(day, start, Math.min(24 * 60 - 1, start + 60)) });
-  };
 
   const handleQuickAddSave = async (values: QuickAddValues): Promise<boolean> => {
     if (!quickAdd) return false;
@@ -415,9 +385,6 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
           {weekLabel(days[0], days[6])}
         </h2>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-text-muted" aria-label="Loading week activity" />}
-        <button type="button" onClick={openNewEvent} className="btn btn-primary ml-auto px-3 py-1.5 text-sm gap-1.5">
-          <CalendarPlus className="w-4 h-4" /> New event
-        </button>
 
         <ul className="basis-full flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legend">
           {WEEK_LEGEND.map(({ label, swatch }) => (

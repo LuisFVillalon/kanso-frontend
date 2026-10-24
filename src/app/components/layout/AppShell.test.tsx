@@ -58,6 +58,11 @@ vi.mock('@/app/components/layout/TaskManagerModals', () => ({
     </output>
   ),
 }));
+vi.mock('@/app/components/event/NewEventModal', () => ({
+  default: ({ onClose }: { onClose: () => void }) => (
+    <div role="dialog" aria-label="New event"><button type="button" onClick={onClose}>Close event</button></div>
+  ),
+}));
 
 import AppShell from './AppShell';
 
@@ -103,6 +108,20 @@ describe('AppShell', () => {
     // No tags yet: Manage tags starts by creating one.
     click(button('Manage tags'));
     expect(open()).toContain('showCreateTagModal');
+  });
+
+  it("opens today's new-event form and the create-tag form from the New menu", () => {
+    render();
+    const newEvent = () => document.querySelector('[role="dialog"][aria-label="New event"]');
+    click(button('New'));
+    click(button('New event'));
+    expect(newEvent()).toBeTruthy();
+    click(button('Close event'));
+    expect(newEvent()).toBeNull();
+
+    click(button('New'));
+    click(button('New tag'));
+    expect(open()).toBe('showCreateTagModal');
   });
 
   it('ignores shortcuts while typing', () => {
