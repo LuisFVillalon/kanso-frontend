@@ -1,7 +1,7 @@
 /** Alert types the backend computes (kanso-backend app/schemas/notification_schema.py). */
 export type NotificationType =
   | 'due_today' | 'task_reminder' | 'overdue' | 'habit_reminder'
-  | 'mood_reminder' | 'mood_missed';
+  | 'mood_reminder' | 'mood_missed' | 'event_reminder';
 
 /** One in-app notification, as GET /get-notifications returns it. */
 export interface AppNotification {
@@ -15,10 +15,13 @@ export interface AppNotification {
   fire_at: string;
   task_ids: number[];
   habit_ids: number[];
+  /** The event an `event_reminder` is about. Absent on other types and from older servers. */
+  event_ids?: number[];
   /**
    * The local days ("YYYY-MM-DD") a mood notification is about: the day to
    * check in for a `mood_reminder`, the days without a check-in for a
-   * `mood_missed`. Absent on other types and from older servers.
+   * `mood_missed`, the occurrence's day for an `event_reminder`. Absent on
+   * other types and from older servers.
    */
   dates?: string[];
   read: boolean;

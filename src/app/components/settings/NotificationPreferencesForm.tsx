@@ -11,10 +11,11 @@ import { MOOD_REMINDER_MINUTES_MAX, MOOD_REMINDER_PRESETS } from '@/app/utils/no
 /** Switch labels, in the order the day runs within each group. Other types the server lists aren't offered. */
 const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
   task_reminder:  { label: 'Reminder before a task is due', hint: "At each task's reminder time." },
+  event_reminder: { label: 'Reminder before an event starts', hint: "At each event's reminder time, for events that set one." },
   mood_reminder:  { label: 'Mood check-in reminder', hint: "Log your mood each day; reminds you before you call it a day if it isn't logged yet." },
   mood_missed:    { label: 'Missed mood check-ins', hint: 'When days go by without a mood check-in.' },
 };
-const REMINDER_TYPES = ['task_reminder'];
+const REMINDER_TYPES = ['task_reminder', 'event_reminder'];
 const MOOD_TYPES = ['mood_reminder', 'mood_missed'];
 
 /** The fields of `draft` that differ from `saved`, as a PATCH body. */
@@ -195,7 +196,7 @@ const NotificationPreferencesForm: React.FC<Props> = ({
 
   return (
     <div className="space-y-8">
-      <SettingsGroup id="notif-group-reminders" title="Reminders" description="For tasks with a due time.">
+      <SettingsGroup id="notif-group-reminders" title="Reminders" description="For tasks with a due time, and events with a reminder.">
         {reminderTypes.map(typeSwitch)}
         {/* The default lead still applies to new tasks when the server lists no reminder switch. */}
         {!reminderTypes.includes('task_reminder') && defaultReminderChoice}
