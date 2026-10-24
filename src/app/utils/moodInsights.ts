@@ -555,6 +555,10 @@ export interface ChartTag {
   label: string;
   /** Draws the Best / Hardest ring key instead of plain words. */
   ringKey?: boolean;
+  /** A shaded stretch's own label, which gives way to `spanKey` when the two labels would overlap. */
+  spanLabel?: boolean;
+  /** One key for both shaded stretches, earliest first, shown only in place of their labels. */
+  spanKey?: { tone: 'best' | 'worst'; label: string }[];
 }
 
 export interface ChartMarks {
@@ -572,8 +576,9 @@ export interface ChartMarks {
 /**
  * Where the numbered notes sit on the chart. `keys` are the chart's bucket
  * keys: days for a week or month, "YYYY-MM" for a year. Each note's number
- * appears exactly once — a best/hardest stretch is one note over two spans,
- * so only the earlier span carries it.
+ * appears exactly once — a best/hardest stretch is one note over two
+ * spans, so only the earlier span's label carries it, or the key that
+ * replaces both labels where they would overlap.
  */
 export const chartMarks = (notes: NumberedNote[], keys: string[], kind: ReportPeriodKind): ChartMarks => {
   const n = keys.length;
@@ -591,19 +596,21 @@ export const chartMarks = (notes: NumberedNote[], keys: string[], kind: ReportPe
       );
       out.tags.push({ series: 'mood', at: (idx(m.late.from) / n) * 100, num, label: m.lateAvg > m.earlyAvg ? 'Climbing' : 'Dipping' });
     } else if (m.type === 'spans') {
-      const first = idx(m.best.from) < idx(m.worst.from) ? 'best' : 'worst';
-      for (const [tone, sp, label] of [
-        ['best', m.best, 'Best stretch'],
-        ['worst', m.worst, m.worstAvg >= 2.5 ? 'Dip' : 'Toughest stretch'],
-      ] as const) {
+      const both = [
+        { tone: 'best' as const, sp: m.best, label: 'Best stretch' },
+        { tone: 'worst' as const, sp: m.worst, label: m.worstAvg >= 2.5 ? 'Dip' : 'Toughest stretch' },
+      ].sort((x, y) => idx(x.sp.from) - idx(y.sp.from));
+      both.forEach(({ tone, sp, label }, k) => {
         const a = idx(sp.from);
         const b = idx(sp.to);
         out.spans.push({ from: a, to: b, tone });
         const left = (a / n) * 100;
+        const first = k === 0 ? num : undefined;
         out.tags.push(left > 62
-          ? { series: 'mood', at: 100 - ((b + 1) / n) * 100, alignRight: true, num: tone === first ? num : undefined, label }
-          : { series: 'mood', at: left, num: tone === first ? num : undefined, label });
-      }
+          ? { series: 'mood', at: 100 - ((b + 1) / n) * 100, alignRight: true, num: first, label, spanLabel: true }
+          : { series: 'mood', at: left, num: first, label, spanLabel: true });
+      });
+      out.tags.push({ series: 'mood', at: 0, num, label: both.map(x => x.label).join(' '), spanKey: both.map(({ tone, label }) => ({ tone, label })) });
     } else if (m.type === 'days' || m.type === 'months') {
       for (const key of m.best) out.rings.push({ at: idx(key), value: m.bestValue, hard: false });
       for (const key of m.worst) out.rings.push({ at: idx(key), value: m.worstValue, hard: true });

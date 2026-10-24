@@ -289,8 +289,12 @@ describe('numbered notes', () => {
     expect(r.notes.map(n => n.num)).toEqual(r.notes.map((_, i) => i + 1));
     for (const n of r.notes) expect(n.insight.mark).toBeDefined();
     const marks = chartMarks(r.notes, keysFor(r, anchor), r.kind);
-    const onChart = [...marks.tags, ...marks.lines].flatMap(m => (m.num ? [m.num] : []));
-    expect(onChart.sort()).toEqual(r.notes.map(n => n.num));
+    // Shaded stretches show either their own labels or one key, whichever fits.
+    for (const keyed of [false, true]) {
+      const tags = marks.tags.filter(t => (keyed ? !t.spanLabel : !t.spanKey));
+      const onChart = [...tags, ...marks.lines].flatMap(m => (m.num ? [m.num] : []));
+      expect(onChart.sort()).toEqual(r.notes.map(n => n.num));
+    }
     // Every mark lands on the chart.
     for (const s of [...marks.spans, ...marks.lines]) expect(s.from).toBeGreaterThanOrEqual(0);
     for (const ring of marks.rings) expect(ring.at).toBeGreaterThanOrEqual(0);
@@ -299,8 +303,12 @@ describe('numbered notes', () => {
   it('numbers a best/hardest stretch once, on its earlier span', () => {
     const r = analyse(SCENARIOS.stress, 'month');
     const marks = chartMarks(r.notes, keysFor(r, TODAY), 'month');
-    expect(marks.spans.map(s => s.tone)).toEqual(['best', 'worst']);
-    expect(marks.tags.filter(t => t.series === 'mood').map(t => [t.label, t.num])).toEqual([['Best stretch', undefined], ['Toughest stretch', 1]]);
+    expect(marks.spans.map(s => s.tone)).toEqual(['worst', 'best']);
+    // Each stretch has its own label, and one key for both stands in where they would overlap.
+    expect(marks.tags.filter(t => t.series === 'mood').map(t => [t.label, t.num, !!t.spanLabel])).toEqual([
+      ['Toughest stretch', 1, true], ['Best stretch', undefined, true], ['Toughest stretch Best stretch', 1, false],
+    ]);
+    expect(marks.tags.find(t => t.spanKey)?.spanKey).toEqual([{ tone: 'worst', label: 'Toughest stretch' }, { tone: 'best', label: 'Best stretch' }]);
     expect(marks.tags.find(t => t.series === 'stress')).toMatchObject({ num: 2, label: 'Moved opposite to mood' });
   });
 

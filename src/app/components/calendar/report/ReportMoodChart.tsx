@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, Info, Smile, X } from 'lucide-react';
 import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import { ENERGY_LABELS, MOOD_LABELS, STRESS_LABELS, WORKLOAD_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
@@ -80,12 +80,22 @@ const NoteNumber: React.FC<{ num: number; className?: string }> = ({ num, classN
 
 const RING = 'inline-block w-2.5 h-2.5 rounded-full border-2';
 
-/** A labelled mark in a row's strip above its plot: "① Toughest stretch". */
-const MarkTag: React.FC<{ tag: ChartTag }> = ({ tag }) => (
+/** A shaded best or hardest stretch's colour, at `strength`% over the card. */
+const spanColor = (tone: 'best' | 'worst', strength: number) =>
+  `color-mix(in srgb, ${moodColor(tone === 'best' ? 4 : 2)} ${strength}%, transparent)`;
+
+/**
+ * A labelled mark in a row's strip above its plot: "① Toughest stretch". A
+ * stretch's own label stays in the layout while `keyed`, invisible, so it
+ * can still be measured.
+ */
+const MarkTag: React.FC<{ tag: ChartTag; keyed: boolean }> = ({ tag, keyed }) => (
   <span
-    className="absolute top-px inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold whitespace-nowrap leading-[18px] text-text-primary"
+    className={`absolute top-px items-center gap-1 text-[10px] sm:text-[11px] font-bold whitespace-nowrap leading-[18px] text-text-primary ${
+      tag.spanKey && !keyed ? 'hidden' : 'inline-flex'} ${tag.spanLabel && keyed ? 'invisible' : ''}`}
     style={tag.alignRight ? { right: `${tag.at}%` } : { left: `${tag.at}%` }}
     aria-hidden="true"
+    data-span-label={tag.spanLabel ? '' : undefined}
   >
     {tag.num != null && <NoteNumber num={tag.num} />}
     {tag.ringKey ? (
@@ -93,6 +103,13 @@ const MarkTag: React.FC<{ tag: ChartTag }> = ({ tag }) => (
         <i className={RING} style={{ borderColor: 'var(--tm-text-primary)' }} />Best
         <i className={`${RING} border-dashed ml-1`} style={{ borderColor: 'var(--tm-text-primary)' }} />Hardest
       </>
+    ) : tag.spanKey ? (
+      tag.spanKey.map(({ tone, label }, k) => (
+        <React.Fragment key={tone}>
+          <i className={`inline-block w-2.5 h-2.5 rounded-sm ${k ? 'ml-1' : ''}`} style={{ backgroundColor: spanColor(tone, 40) }} />
+          {label}
+        </React.Fragment>
+      ))
     ) : tag.label}
   </span>
 );
@@ -184,6 +201,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
   const chartRef = useRef<HTMLDivElement>(null);
   const aboutRef = useRef<HTMLDivElement>(null);
   const aboutButtonRef = useRef<HTMLButtonElement>(null);
+  const moodStripRef = useRef<HTMLDivElement>(null);
+  const [spansKeyed, setSpansKeyed] = useState(false);
   const aboutId = useId();
   const isYear = period.kind === 'year';
   const n = buckets.length;
@@ -241,6 +260,22 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
   const hasLine = rows.some(r => r.line.filter(v => v != null).length >= (period.kind === 'month' ? 1 : 2));
   const marks = chartMarks(insights.notes, buckets.map(b => b.key), period.kind);
   const about = aboutRows(insights, { line: hasLine, hollow: hasHollow, weekly: weekSpans.length > 0 });
+  const spanLabels = marks.tags.filter(t => t.spanLabel).map(t => `${t.label}@${t.at}`).join('|');
+
+  // The two stretches' labels give way to one key wherever they would overlap.
+  useLayoutEffect(() => {
+    const strip = moodStripRef.current;
+    if (!strip || !spanLabels) return;
+    const check = () => {
+      const rects = [...strip.querySelectorAll('[data-span-label]')].map(el => el.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+      setSpansKeyed(rects.some((r, i) => i > 0 && r.left < rects[i - 1].right + 6));
+    };
+    check();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(check);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, [spanLabels]);
   const legend = isYear || period.kind === 'month' || monthCheckins.size > 0;
 
   const dotSize = period.kind === 'week' ? 'w-3 h-3' : isYear ? 'w-2.5 h-2.5' : 'w-2 h-2';
@@ -544,9 +579,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
                 style={{
                   left: `${(span.from / n) * 100}%`,
                   width: `${((span.to - span.from + 1) / n) * 100}%`,
-                  backgroundColor: span.tone === 'best'
-                    ? `color-mix(in srgb, ${moodColor(4)} 13%, transparent)`
-                    : `color-mix(in srgb, ${moodColor(2)} 15%, transparent)`,
+                  backgroundColor: spanColor(span.tone, span.tone === 'best' ? 13 : 15),
                 }}
                 aria-hidden="true"
                 data-mark={`${span.tone}-span`}
@@ -571,8 +604,8 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
 
             {rows.map(row => (
               <div key={row.series}>
-                <div className="relative h-5">
-                  {marks.tags.filter(t => t.series === row.series).map(tag => <MarkTag key={`${tag.label}-${tag.at}`} tag={tag} />)}
+                <div ref={row.series === 'mood' ? moodStripRef : undefined} className="relative h-5">
+                  {marks.tags.filter(t => t.series === row.series).map(tag => <MarkTag key={`${tag.label}-${tag.at}`} tag={tag} keyed={spansKeyed} />)}
                 </div>
                 {rowPlot(row)}
               </div>
