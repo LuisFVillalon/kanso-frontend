@@ -132,6 +132,24 @@ describe('DaySummary', () => {
     expect(section('time').textContent).toContain('No time logged.');
   });
 
+  it('marks a habit not done for the day it is about', () => {
+    render(data);
+    const habitRows = () => [...section('habits').querySelectorAll('.py-1')].map(r => r.textContent);
+    expect(habitRows()).toEqual(['Walk', 'ReadNot done']);
+    act(() => root.render(
+      <DaySummary date={new Date(2026, 9, 24)} data={{ ...data, dateStr: '2026-10-24' }} totalHabits={2} allHabits={[walk, read]} showMood={false} />,
+    ));
+    expect(habitRows()).toEqual(['Walk', 'ReadNot today']);
+  });
+
+  it('leaves out the timeline hint when there is no timeline', () => {
+    render({ ...data, events: [event('Holiday', '00:00', '00:00', { all_day: true, start_time: null, end_time: null })] });
+    expect(container.querySelector('[data-timeline]')).toBeNull();
+    expect(section('events').textContent).not.toContain('Shows your finished tasks');
+    render(data);
+    expect(section('events').textContent).toContain('Shows your finished tasks between events.');
+  });
+
   it('says so when there are no events', () => {
     render({ ...data, events: [] });
     expect(section('events').textContent).toContain('No events.');

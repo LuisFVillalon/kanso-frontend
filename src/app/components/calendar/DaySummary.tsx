@@ -375,6 +375,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
   const eventsPreview = events.length
     ? events.map(e => `${e.all_day || !e.start_time ? 'All day' : formatClock(e.start_time)} ${e.title}${e.archived ? ' (archived)' : ''}`).join(' · ')
     : 'None';
+  const hasTimeline = timeline.some(t => t.kind === 'event');
   const eventsBody = !events.length ? <Empty>No events.</Empty> : (
     <div className="space-y-2">
       {allDayEvents.length > 0 && (
@@ -382,7 +383,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
           {allDayEvents.map(e => <EventItem key={occurrenceKey(e)} event={e} showPast={when === 'today'} />)}
         </div>
       )}
-      {timeline.some(t => t.kind === 'event') && (
+      {hasTimeline && (
         <div data-timeline className="relative pl-[72px]">
           <span aria-hidden className="absolute left-[61px] top-1 bottom-1 w-0.5 rounded-sm" style={{ backgroundColor: 'var(--tm-border)' }} />
           {timeline.map(entry => {
@@ -439,7 +440,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
           })}
         </div>
       )}
-      {timeline.some(t => t.kind === 'task' || t.kind === 'checkin') && (
+      {hasTimeline && timeline.some(t => t.kind === 'task' || t.kind === 'checkin') && (
         <p className="text-[11px] text-text-muted">
           {timeline.some(t => t.kind === 'checkin') ? 'Shows your finished tasks and check-in between events.' : 'Shows your finished tasks between events.'}
         </p>
@@ -511,7 +512,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
               ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-week-completed)' }} aria-label="Done" />
               : <Circle className="w-4 h-4 flex-shrink-0 text-text-muted" aria-label="Not done" />}
             <span className={`text-sm font-medium truncate min-w-0 ${done ? 'text-text-primary' : 'text-text-muted'}`}>{h.title}</span>
-            {!done && when !== 'future' && <span className="ml-auto text-[11px] text-text-muted flex-shrink-0">Not today</span>}
+            {!done && when !== 'future' && <span className="ml-auto text-[11px] text-text-muted flex-shrink-0">{when === 'today' ? 'Not today' : 'Not done'}</span>}
           </div>
         );
       })}
