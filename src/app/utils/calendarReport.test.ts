@@ -7,6 +7,8 @@ import {
   buildCalendarReport,
   dailyActivity,
   describeCorrelation,
+  describeLinkBrief,
+  describeLinkShort,
   describePeriod,
   elapsedDays,
   formatPeriodLabel,
@@ -397,24 +399,31 @@ describe('describeCorrelation', () => {
 
   it('asks for more days below 10 check-ins', () => {
     expect(describeSeries('tasks', series(5, 'up'))).toBe(
-      'Patterns between mood and tasks show up after about 10 days with a check-in — 5 so far this month. Keep logging and this fills in.',
+      'Check in on a few more days to see how your tasks and your mood connect. You have 5 days with a check-in this month, and about 10 are needed.',
     );
   });
 
   it('says when the metric barely varied', () => {
     const flat = Array.from({ length: 12 }, (_, i) => ({ value: 0, mood: (i % 5) + 1 }));
-    expect(describeSeries('notes', flat)).toBe('Your time in notes barely changed from day to day this month, so there’s nothing to compare yet.');
+    expect(describeSeries('notes', flat)).toBe('Your time in notes was about the same every day this month, so there’s nothing to compare with your mood yet.');
   });
 
   it('compares the two halves when there is no clear link', () => {
     // Every metric value gets moods 2 and 4 equally often.
     const unrelated = Array.from({ length: 30 }, (_, i) => ({ value: i % 5, mood: 2 + 2 * (i % 2) }));
     expect(describeSeries('habits', unrelated)).toBe(
-      'No clear link this month: on days you checked off 2 or more habits your mood averaged 3.0, about the same as the 3.0 on other days.',
+      'This month, your mood was about the same on days you checked off 2 or more habits as on other days.',
     );
     // A gap in the split that the ranks don't back up isn't called the same.
     expect(describeSeries('habits', series(30, 'noise'))).toBe(
-      'No clear link this month: on days you checked off 2 or more habits your mood averaged 3.3, vs 2.5 on other days, but not steadily enough to call it a pattern.',
+      'This month, you sometimes felt better on days you checked off 2 or more habits, but not often enough to count as a pattern.',
+    );
+  });
+
+  it('says it is too soon to tell when there is no clear link under 30 days', () => {
+    const unrelated = Array.from({ length: 20 }, (_, i) => ({ value: i % 5, mood: 2 + 2 * (i % 2) }));
+    expect(describeSeries('habits', unrelated)).toBe(
+      'This month, your mood was about the same on days you checked off 2 or more habits as on other days. Not enough days yet to tell.',
     );
   });
 
@@ -429,31 +438,40 @@ describe('describeCorrelation', () => {
     expect(result.p!).toBeLessThanOrEqual(0.1);
     expect(result.level).toBe('none');
     expect(describeCorrelation('tasks', result, 'this year')).toBe(
-      'No clear link this year: on days you completed 2 or more tasks your mood averaged 3.0, about the same as the 3.3 on other days.',
+      'This year, your mood was about the same on days you completed 2 or more tasks as on other days.',
     );
   });
 
   it('hedges an early sign', () => {
     expect(describeSeries('habits', series(15, 'up'))).toBe(
-      'Early sign this month: your mood seemed higher on days with more habits checked off. On days you checked off 2 or more habits it averaged 4.0, vs 1.5 on days with fewer. With only 15 days this could easily be chance — check back in a few weeks.',
+      'This month, you seemed to feel better on days you checked off 2 or more habits. It’s based on only 15 days, so it could be chance — check back in a few weeks.',
     );
   });
 
   it('calls a link under 30 days a hint, and never strong', () => {
     expect(describeSeries('tasks', series(25, 'down'), 'in September 2026')).toBe(
-      'In September 2026, your mood tended to be lower on days with more tasks completed. On days you completed 2 or more tasks it averaged 2.0, vs 4.5 on days with fewer. Based on 25 days, so treat it as a hint.',
+      'In September 2026, you tended to feel worse on days you completed 2 or more tasks. Worth noticing how those days leave you feeling. This is based on only 25 days, so take it as a hint.',
     );
   });
 
-  it('says "consistently" only for a strong link over 30 days or more', () => {
+  it('says how sure a slight or moderate link over 30 days is', () => {
+    expect(describeSeries('tasks', mixed(160, 60), 'in 2026')).toBe(
+      'In 2026, you felt slightly better on days you completed 2 or more tasks. It was a small but steady difference across 160 days. Worth noticing what helps on those days.',
+    );
+    expect(describeSeries('habits', mixed(100, 30), 'in 2026')).toBe(
+      'In 2026, you tended to feel better on days you checked off 2 or more habits. It showed up across 100 days. Worth noticing what helps on those days.',
+    );
+  });
+
+  it('calls it a clear pattern only for a strong link over 30 days or more', () => {
     const notes = series(30, 'up').map(p => ({ ...p, value: p.value * 20 }));
     expect(describeSeries('notes', notes, 'in 2026')).toBe(
-      'In 2026, your mood consistently tended to be higher on days with more time in notes. On days you spent 40m or more in notes it averaged 4.0, vs 1.5 on days with less.',
+      'In 2026, you usually felt better on days you spent 40m or more in notes. It was a clear pattern across 30 days. Worth noticing what helps on those days.',
     );
   });
 
   it('never claims a cause', () => {
-    const banned = /\b(because|causes?|caused|makes you|made you|boosts?|you should)\b/i;
+    const banned = /\b(because|causes?|caused|makes you|made you|boosts?|you should|affects?|good for)\b/i;
     const results: CorrelationResult[] = [];
     for (const n of [5, 12, 15, 25, 30, 60, 160]) {
       for (const relation of ['up', 'down', 'noise'] as const) results.push(analyseCorrelation(series(n, relation)));
@@ -465,8 +483,35 @@ describe('describeCorrelation', () => {
     for (const result of results) {
       for (const metric of ['tasks', 'notes', 'habits'] as const) {
         for (const scope of ['this week', 'in 2026', 'in October 2026']) {
-          expect(describeCorrelation(metric, result, scope)).not.toMatch(banned);
+          const text = describeCorrelation(metric, result, scope);
+          expect(text).not.toMatch(banned);
+          // Everyday words, in one to three short sentences.
+          expect(text).not.toMatch(/correlat|significan|median|average|rho|ρ|statistic|link strength/i);
+          expect(text.split(/[.!?](?:\s|$)/).filter(Boolean).length).toBeLessThanOrEqual(3);
         }
+      }
+    }
+  });
+});
+
+describe('describeLinkBrief', () => {
+  it('names the link with its direction', () => {
+    expect(describeLinkBrief('tasks', analyseCorrelation(series(30, 'up')), 'this month')).toBe(
+      'Strong link: better mood on days with more tasks completed this month',
+    );
+    expect(describeLinkBrief('notes', analyseCorrelation(series(15, 'down')), 'in 2026')).toBe(
+      'Early sign: worse mood on days with more time in notes in 2026',
+    );
+  });
+});
+
+describe('describeLinkShort', () => {
+  it('names the activity and direction in a line short enough for the Overview tile', () => {
+    expect(describeLinkShort('tasks', analyseCorrelation(series(30, 'up')))).toBe('More tasks, better mood');
+    expect(describeLinkShort('notes', analyseCorrelation(series(15, 'down')))).toBe('More note time, lower mood');
+    for (const metric of ['tasks', 'notes', 'habits'] as const) {
+      for (const dir of ['up', 'down'] as const) {
+        expect(describeLinkShort(metric, analyseCorrelation(series(30, dir))).length).toBeLessThanOrEqual(33);
       }
     }
   });

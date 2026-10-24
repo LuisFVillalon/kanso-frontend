@@ -532,80 +532,106 @@ export const analyseCorrelation = (points: Pick<MoodPoint, 'mood' | 'value'>[]):
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 const METRIC_COPY: Record<MoodMetric, {
-  /** "Patterns between mood and …" */
+  /** "… and your mood connect" */
   noun: string;
-  /** "Your … barely changed" */
+  /** "Your … was about the same every day" */
   amount: string;
   /** "on days with more …" */
   more: string;
-  /** "on days with …" — the low side of the split. */
-  less: string;
+  /** "More …, better mood" in the Overview's short line. */
+  short: string;
   /** "On days you …" at or above the split. */
   atLeast: (threshold: number) => string;
 }> = {
   tasks: {
-    noun: 'tasks',
+    noun: 'your tasks',
     amount: 'number of tasks completed',
     more: 'more tasks completed',
-    less: 'fewer',
+    short: 'tasks',
     atLeast: t => (t === 1 ? 'completed at least one task' : `completed ${t} or more tasks`),
   },
   notes: {
-    noun: 'note time',
+    noun: 'your note time',
     amount: 'time in notes',
     more: 'more time in notes',
-    less: 'less',
+    short: 'note time',
     atLeast: t => `spent ${formatDurationShort(t * 60)} or more in notes`,
   },
   habits: {
-    noun: 'habits',
+    noun: 'your habits',
     amount: 'number of habit check-ins',
     more: 'more habits checked off',
-    less: 'fewer',
+    short: 'habits',
     atLeast: t => (t === 1 ? 'checked off at least one habit' : `checked off ${t} or more habits`),
   },
 };
 
+const capitalize = (text: string) => `${text[0].toUpperCase()}${text.slice(1)}`;
+
 /** Gaps in average mood smaller than this read as "about the same". */
 const SAME_MOOD_GAP = 0.3;
 
-const TENDED: Record<'slight' | 'moderate' | 'strong', string> = {
-  slight: 'slightly tended',
-  moderate: 'tended',
-  strong: 'consistently tended',
+/** How the first sentence says how your mood differed, by level. */
+const FELT: Record<'early' | 'slight' | 'moderate' | 'strong', string> = {
+  early: 'seemed to feel',
+  slight: 'felt slightly',
+  moderate: 'tended to feel',
+  strong: 'usually felt',
 };
 
 /**
- * The plain-language statement under the chart. `scope` names the days it
- * covers ("this month", "in October 2026"). The wording only ever says
- * what moved together, in the past tense — it never names a cause.
+ * The plain-language statement under the chart, in one to three short
+ * sentences: what was noticed, what it may mean for you, and how sure it is.
+ * `scope` names the days it covers ("this month", "in October 2026"). No
+ * stats terms, and it never names a cause — only what went together.
  */
 export const describeCorrelation = (metric: MoodMetric, result: CorrelationResult, scope: string): string => {
   const copy = METRIC_COPY[metric];
+  const { n } = result;
   if (result.level === 'insufficient') {
-    return `Patterns between mood and ${copy.noun} show up after about ${PATTERN_MIN_DAYS} days with a check-in — ${result.n} so far ${scope}. Keep logging and this fills in.`;
+    return `Check in on a few more days to see how ${copy.noun} and your mood connect. You have ${plural(n, 'day')} with a check-in ${scope}, and about ${PATTERN_MIN_DAYS} are needed.`;
   }
   if (result.level === 'flat') {
-    return `Your ${copy.amount} barely changed from day to day ${scope}, so there’s nothing to compare yet.`;
+    return `Your ${copy.amount} was about the same every day ${scope}, so there’s nothing to compare with your mood yet.`;
   }
 
-  const { rho, threshold, highAverage, lowAverage, n } = result;
-  const high = highAverage!.toFixed(1);
-  const low = lowAverage!.toFixed(1);
+  const Scope = capitalize(scope);
+  const { rho, threshold, highAverage, lowAverage } = result;
   const atLeast = copy.atLeast(threshold!);
   if (result.level === 'none') {
-    const gap = Math.abs(highAverage! - lowAverage!);
-    return gap < SAME_MOOD_GAP
-      ? `No clear link ${scope}: on days you ${atLeast} your mood averaged ${high}, about the same as the ${low} on other days.`
-      : `No clear link ${scope}: on days you ${atLeast} your mood averaged ${high}, vs ${low} on other days, but not steadily enough to call it a pattern.`;
+    const gap = highAverage! - lowAverage!;
+    const seen = Math.abs(gap) < SAME_MOOD_GAP
+      ? `${Scope}, your mood was about the same on days you ${atLeast} as on other days.`
+      : `${Scope}, you sometimes felt ${gap > 0 ? 'better' : 'worse'} on days you ${atLeast}, but not often enough to count as a pattern.`;
+    return n < STRONG_MIN_DAYS ? `${seen} Not enough days yet to tell.` : seen;
   }
 
-  const direction = rho! > 0 ? 'higher' : 'lower';
-  const detail = ` On days you ${atLeast} it averaged ${high}, vs ${low} on days with ${copy.less}.`;
+  const better = rho! > 0;
+  const noticed = `${Scope}, you ${FELT[result.level]} ${better ? 'better' : 'worse'} on days you ${atLeast}.`;
   if (result.level === 'early') {
-    return `Early sign ${scope}: your mood seemed ${direction} on days with ${copy.more}.${detail} With only ${plural(n, 'day')} this could easily be chance — check back in a few weeks.`;
+    return `${noticed} It’s based on only ${plural(n, 'day')}, so it could be chance — check back in a few weeks.`;
   }
-  const lead = `${scope[0].toUpperCase()}${scope.slice(1)}, your mood ${TENDED[result.level]} to be ${direction} on days with ${copy.more}.`;
-  const caveat = n < STRONG_MIN_DAYS ? ` Based on ${plural(n, 'day')}, so treat it as a hint.` : '';
-  return lead + detail + caveat;
+  const meaning = better
+    ? 'Worth noticing what helps on those days.'
+    : 'Worth noticing how those days leave you feeling.';
+  if (n < STRONG_MIN_DAYS) {
+    return `${noticed} ${meaning} This is based on only ${plural(n, 'day')}, so take it as a hint.`;
+  }
+  const sure = result.level === 'strong'
+    ? `It was a clear pattern across ${plural(n, 'day')}.`
+    : result.level === 'moderate'
+      ? `It showed up across ${plural(n, 'day')}.`
+      : `It was a small but steady difference across ${plural(n, 'day')}.`;
+  return `${noticed} ${sure} ${meaning}`;
 };
+
+/**
+ * The full sentence for a named link (early to strong), with its direction:
+ * "Strong link: better mood on days with more tasks completed this month".
+ */
+export const describeLinkBrief = (metric: MoodMetric, result: CorrelationResult, scope: string): string =>
+  `${CORRELATION_LABELS[result.level]}: ${result.rho! > 0 ? 'better' : 'worse'} mood on days with ${METRIC_COPY[metric].more} ${scope}`;
+
+/** The Overview tile's short form of a named link, sized to fit one line: "More tasks, better mood". */
+export const describeLinkShort = (metric: MoodMetric, result: CorrelationResult): string =>
+  `More ${METRIC_COPY[metric].short}, ${result.rho! > 0 ? 'better' : 'lower'} mood`;
