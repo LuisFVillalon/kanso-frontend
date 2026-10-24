@@ -423,7 +423,11 @@ const TaskManager: React.FC = () => {
 
                 <DayClosedMoodReminder profile={profile} profileLoaded={profileLoaded} tasks={tasks} habits={habits} />
 
-                <TaskDebriefPanel profile={profile} profileLoaded={profileLoaded} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken} />
+                <TaskDebriefPanel profile={profile} profileLoaded={profileLoaded} onSaveProfile={saveProfile} tasks={tasks} habits={habits} completionSyncToken={completionSyncToken + noteArchiveSyncToken + habitSyncToken}
+                  onArchiveTask={archiveTask}
+                  onDeleteTask={deleteTask}
+                  onUpdateTask={updateTask}
+                />
 
                 <WidgetsArea
                   widgets={
