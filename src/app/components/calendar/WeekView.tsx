@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
+import { CalendarPlus, ChevronLeft, ChevronRight, Loader2, RotateCw } from 'lucide-react';
 import { useTasksContext } from '@/app/context/TasksContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
@@ -60,6 +60,8 @@ interface WeekViewProps {
   onResize?: (heightPx: number) => void;
   /** Called when a drag ends. */
   onResizeEnd?: () => void;
+  /** Shows the New event button in the toolbar; the home page leaves it to the sidebar's New menu. */
+  newEventButton?: boolean;
 }
 
 const emptyTaskForm = (): BaseTaskForm => ({
@@ -136,7 +138,7 @@ interface ScopeQuestion {
  * whatever room the toolbar leaves. With `onResize`, a handle under the grid
  * drags the view taller; the parent keeps the height (`heightPx`).
  */
-const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onResize, onResizeEnd }) => {
+const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onResize, onResizeEnd, newEventButton = true }) => {
   const router = useRouter();
   const showToast = useToast();
   const now = useMinuteClock();
@@ -235,6 +237,13 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     repeat: values?.repeat ?? false,
     termEnd: term?.endDate ?? null,
   });
+
+  const openNewEvent = () => {
+    // Today on this week, else the week's first day; at the next full hour from now or the day's start.
+    const day = todayIndex >= 0 ? days[todayIndex] : days[0];
+    const start = todayIndex >= 0 ? Math.min(23 * 60, (now.getHours() + 1) * 60) : dayStartMinutes;
+    setEventForm({ mode: 'new', initial: newEventForm(day, start, Math.min(24 * 60 - 1, start + 60)) });
+  };
 
   const handleQuickAddSave = async (values: QuickAddValues): Promise<boolean> => {
     if (!quickAdd) return false;
@@ -385,6 +394,11 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
           {weekLabel(days[0], days[6])}
         </h2>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-text-muted" aria-label="Loading week activity" />}
+        {newEventButton && (
+          <button type="button" onClick={openNewEvent} className="btn btn-primary ml-auto px-3 py-1.5 text-sm gap-1.5">
+            <CalendarPlus className="w-4 h-4" /> New event
+          </button>
+        )}
 
         <ul className="basis-full flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Legend">
           {WEEK_LEGEND.map(({ label, swatch }) => (

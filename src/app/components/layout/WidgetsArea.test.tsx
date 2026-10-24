@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => ({ dataUserId: 'u1' }) }));
 vi.mock('@/app/components/calendar/WeekView', () => ({
-  default: ({ fill, heightPx, onResize }: { fill?: boolean; heightPx?: number | null; onResize?: (px: number) => void }) => (
-    <button type="button" data-testid="week-view" data-fill={String(!!fill)} data-height={String(heightPx)} onClick={() => onResize?.(900)} />
+  default: ({ fill, heightPx, onResize, newEventButton = true }: { fill?: boolean; heightPx?: number | null; onResize?: (px: number) => void; newEventButton?: boolean }) => (
+    <button type="button" data-testid="week-view" data-fill={String(!!fill)} data-height={String(heightPx)} data-new-event={String(newEventButton)} onClick={() => onResize?.(900)} />
   ),
 }));
 
@@ -73,6 +73,8 @@ describe('WidgetsArea', () => {
     // The week calendar is laid out over that box rather than sizing it.
     const week = container.querySelector<HTMLElement>('[data-testid="week-view"]')!;
     expect(week.dataset.fill).toBe('true');
+    // New event lives in the sidebar's New menu on the home page.
+    expect(week.dataset.newEvent).toBe('false');
     expect(week.parentElement!.classList.contains('absolute')).toBe(true);
     expect(week.parentElement!.classList.contains('inset-0')).toBe(true);
     expect(week.parentElement!.parentElement!.parentElement).toBe(widgetsCell.parentElement);
