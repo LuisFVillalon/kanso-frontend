@@ -221,7 +221,7 @@ describe('CalendarReportView mood', () => {
     expect(text()).not.toContain('overall');
 
     // The Overview names the link with its direction, short enough for one line, with the whole sentence on hover.
-    await openTab('Overview');
+    await openTab('Productivity');
     expect(text()).toContain('More habits, better mood');
     const link = buttonLabelled(/^Mood & your activity/);
     expect(link.getAttribute('aria-label')).toBe('Mood & your activity: Moderate link: better mood on days with more habits checked off this month');
