@@ -121,6 +121,17 @@ describe('analysePatterns', () => {
       'Your tasks barely changed from day to day.',
       'Your time in notes barely changed from day to day.',
       'Your habits barely changed from day to day.',
+      'Too few days to tell yet: Coffee.',
+    ]);
+  });
+
+  it('names a rare tag as too few days, not the check-ins, when every day was checked in', () => {
+    const rare = month(25).map((d, i) => ({ ...d, tags: new Set(i < 2 ? [study.key] : []), moments: new Set<string>(), activity: { tasks: 0, notes: 0, habits: 0 } }));
+    expect(patternsRest(analysePatterns(rare, new Map([[study.key, study]]), 'x'), 'this month')).toEqual([
+      'Your tasks barely changed from day to day.',
+      'Your time in notes barely changed from day to day.',
+      'Your habits barely changed from day to day.',
+      'Too few days to tell yet: Study.',
     ]);
   });
 });

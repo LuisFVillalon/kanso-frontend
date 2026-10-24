@@ -265,9 +265,9 @@ describe('CalendarReportView mood', () => {
   });
 
   it('asks for more check-ins only when they are what’s missing', async () => {
-    // 20 check-ins with nothing done and no tags or moments: there is nothing to compare, however many days.
+    // 20 check-ins with nothing done and one moment on only 2 days: the moment is rare and the activities never changed, however many days.
     const days = Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 2).padStart(2, '0')}`);
-    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, (i % 5) + 1), id: i + 1, tags: [] })));
+    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, (i % 5) + 1), id: i + 1, tags: i < 2 ? ['Exam'] : [] })));
     api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
       start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [], habit_completions: [],
     }));
@@ -276,7 +276,7 @@ describe('CalendarReportView mood', () => {
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     await openPatterns();
-    expect(text()).toContain(still);
+    expect(text()).toContain(`${still} Too few days to tell yet: Exam.`);
     expect(text()).not.toContain('Too few days to tell anything yet');
     await openTab('Productivity');
     expect(buttonLabelled(/^Mood & your activity/).getAttribute('aria-label')).toBe(`Mood & your activity: ${still}`);

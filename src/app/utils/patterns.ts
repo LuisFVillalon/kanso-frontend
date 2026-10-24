@@ -311,14 +311,8 @@ const found = (r: PatternRow) => FEELINGS.some(f => r.answer[f].step);
 
 const answered = (r: PatternRow) => settled(r) || found(r);
 
-/**
- * Whether nothing has an answer yet for want of check-ins: too few days to
- * fill both sides of anything, or a row that changed with a side still under
- * TAG_MIN_SIDE. Rows that never changed, or are on every day, wait on that instead.
- */
-export const waitsOnCheckIns = ({ days, rows }: PatternsAnalysis): boolean =>
-  !rows.some(answered)
-  && (days.length < 2 * TAG_MIN_SIDE || rows.some(r => !r.flat && r.days > 0 && r.otherDays > 0));
+/** Whether there are too few check-in days to fill both sides of anything, so more check-ins are what's missing. */
+export const waitsOnCheckIns = ({ days }: PatternsAnalysis): boolean => days.length < 2 * TAG_MIN_SIDE;
 
 /** "Your tasks barely changed from day to day.", for each activity with nothing to compare. */
 export const barelyChanged = (rows: PatternRow[]): string[] =>
@@ -350,7 +344,7 @@ export const waitingLine = (rows: PatternRow[]): string | null => {
 export const patternsRest = (analysis: PatternsAnalysis, scope: string): string[] => {
   const { days, rows } = analysis;
   if (waitsOnCheckIns(analysis)) return [tooFewDays(days.length, scope)];
-  if (!rows.some(answered)) return barelyChanged(rows);
+  if (!rows.some(answered)) return [...barelyChanged(rows), waitingLine(rows)].filter((line): line is string => !!line);
   return [
     quietLine(quietActivities(rows)),
     rows.some(found) ? 'Everything else was about the same.' : `Nothing stood out ${scope}: every difference was small enough to be luck.`,

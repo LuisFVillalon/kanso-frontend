@@ -83,7 +83,7 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
         full: [quietLine(quiet), waiting].filter(Boolean).join(' '),
       };
     }
-    return { text: 'Can’t tell yet', full: waiting ?? barelyChanged(rows).join(' ') };
+    return { text: 'Can’t tell yet', full: [...barelyChanged(rows), waiting].filter(Boolean).join(' ') };
     // `periodKey` and `restKey` identify the period and rest days; their objects change identity every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity, byDay, periodKey, restKey, scopeLabel]);
