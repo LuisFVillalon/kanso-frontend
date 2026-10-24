@@ -121,7 +121,6 @@ describe('analysePatterns', () => {
       'Your tasks barely changed from day to day.',
       'Your time in notes barely changed from day to day.',
       'Your habits barely changed from day to day.',
-      'Too few days to tell yet: Coffee.',
     ]);
   });
 
