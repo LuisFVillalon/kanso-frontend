@@ -3,6 +3,7 @@ import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import { periodContaining } from './calendarReport';
 import {
   buildTagBreakdown,
+  buildTagSeries,
   collectTagItems,
   MAX_TAG_ROWS,
   OTHER_KEY,
@@ -177,5 +178,59 @@ describe('buildTagBreakdown', () => {
     expect(other.total).toBe(4 + 2 + 2);
     expect(other.shares.map(s => s.item.title)).toEqual(['Task 8', 'Both small ones', 'Task 9']);
     expect(other.counts.task).toBe(3);
+  });
+});
+
+describe('buildTagSeries', () => {
+  const data = activity({
+    completed_tasks: [
+      task({ id: 1, completed_date: at(20), tags: [cs, math] }),
+      task({ id: 2, completed_date: at(20), tags: [cs] }),
+      task({ id: 3, completed_date: at(21) }),
+      task({ id: 4, completed_date: at(12), tags: [cs] }),
+    ],
+    note_sessions: [
+      // Runs past midnight: each day keeps its own part.
+      { id: 1, note_id: 7, note_title: 'Lecture notes', started_at: at(21, 23, 30), ended_at: at(22, 0, 30), duration_seconds: 3600 },
+    ],
+    habit_completions: [
+      { habit_id: 4, habit_title: 'Run', date: '2026-10-20', estimated_time: 0.5 },
+      { habit_id: 5, habit_title: 'Read', date: '2026-10-20', estimated_time: null },
+    ],
+    notes: [{ id: 7, title: 'Lecture notes', tags: [math] }],
+    habits: [{ id: 4, title: 'Run', estimated_time: 0.5, tags: [health] }, { id: 5, title: 'Read', estimated_time: null, tags: [] }],
+  });
+
+  it('counts only tasks per day, splitting a task with several tags evenly', () => {
+    const { rows, byBucket } = buildTagSeries(data, week.start, week.end, 'task', false);
+    expect(rows.map(r => [r.name, r.total])).toEqual([['CS 460', 1.5], ['MATH 254', 0.5], ['Untagged', 1]]);
+    expect(Object.fromEntries(byBucket.get('2026-10-20')!)).toEqual({ 'tag:1': 1.5, 'tag:2': 0.5 });
+    expect(Object.fromEntries(byBucket.get('2026-10-21')!)).toEqual({ [UNTAGGED_KEY]: 1 });
+    expect([...byBucket.keys()].sort()).toEqual(['2026-10-20', '2026-10-21']);
+  });
+
+  it('puts note time on the local days it fell on, under the note’s tags', () => {
+    const { rows, byBucket } = buildTagSeries(data, week.start, week.end, 'note', false);
+    expect(rows.map(r => r.name)).toEqual(['MATH 254']);
+    expect(byBucket.get('2026-10-21')!.get('tag:2')).toBeCloseTo(1800);
+    expect(byBucket.get('2026-10-22')!.get('tag:2')).toBeCloseTo(1800);
+  });
+
+  it('counts habit check-ins, estimate or not, and groups by month for a year', () => {
+    const year = periodContaining('year', new Date(2026, 9, 21));
+    const { rows, byBucket } = buildTagSeries(data, year.start, year.end, 'habit', true);
+    expect(rows.map(r => [r.name, r.total])).toEqual([['Health', 1], ['Untagged', 1]]);
+    expect(Object.fromEntries(byBucket.get('2026-10')!)).toEqual({ 'tag:3': 1, [UNTAGGED_KEY]: 1 });
+  });
+
+  it('folds the smaller tags into Other tags, as the breakdown does', () => {
+    const tags = Array.from({ length: MAX_TAG_ROWS + 2 }, (_, i) => ({ id: 100 + i, name: `T${i}`, color: '#123456' }));
+    const many = activity({
+      completed_tasks: tags.map((t, i) => task({ id: i, completed_date: at(20), tags: [t] })),
+    });
+    const { rows, byBucket } = buildTagSeries(many, week.start, week.end, 'task', false);
+    expect(rows).toHaveLength(MAX_TAG_ROWS + 1);
+    expect(rows[MAX_TAG_ROWS].key).toBe(OTHER_KEY);
+    expect(byBucket.get('2026-10-20')!.get(OTHER_KEY)).toBe(2);
   });
 });

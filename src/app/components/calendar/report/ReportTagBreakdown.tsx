@@ -29,7 +29,7 @@ const KIND_ICON: Record<TagItemKind, React.FC<{ className?: string; 'aria-hidden
 const KIND_TINT: Record<TagItemKind, number> = { task: 100, note: 62, habit: 34 };
 const ITEMS_SHOWN = 6;
 
-const rowColor = (row: TagRow): string =>
+export const rowColor = (row: TagRow): string =>
   row.key === UNTAGGED_KEY ? 'var(--tm-border-strong)' : row.color ?? (row.foldedKeys ? 'var(--tm-pencil)' : 'var(--tm-accent)');
 const tint = (color: string, amount: number) => `color-mix(in srgb, ${color} ${amount}%, var(--tm-surface))`;
 
