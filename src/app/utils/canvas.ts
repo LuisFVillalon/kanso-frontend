@@ -248,12 +248,18 @@ const SUBMITTABLE = new Set<CanvasItem['kind']>(['assignment', 'quiz', 'discussi
 
 /**
  * The chip an item shows, in the brand's status language: work Canvas
- * marks missing is "Slipped" (never red), handed-in work is done, and open
+ * marks missing is "Slipped" (never red), handed-in work or work checked
+ * off in Canvas ("Done in Canvas") is done, and open
  * work counts down like a task ("Due today", "In 3 days"). Null when there's
  * nothing to say, including past-due work Canvas doesn't call missing.
  */
-export function itemStatus(item: Pick<CanvasItem, 'kind' | 'due_at' | 'points_possible' | 'submission'>, now: Date): CanvasItemStatus | null {
+export function itemStatus(
+  item: Pick<CanvasItem, 'kind' | 'due_at' | 'points_possible' | 'submission' | 'done_reason'>,
+  now: Date,
+): CanvasItemStatus | null {
   const sub = item.submission;
+  // Checked off in Canvas's planner with nothing handed in: Canvas still calls it missing, the student doesn't.
+  if (item.done_reason === 'marked_complete') return { kind: 'done', label: 'Done in Canvas' };
   if (sub?.excused) return { kind: 'excused', label: 'Excused' };
   if (sub?.missing) return { kind: 'slipped', label: 'Slipped' };
   if (sub?.graded) return { kind: 'done', label: scoreLabel(item) ?? 'Graded' };

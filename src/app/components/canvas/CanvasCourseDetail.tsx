@@ -6,7 +6,9 @@ import {
 import type { CanvasAssignment, CanvasCourseSummary, CanvasModule, CanvasModuleItem } from '@/app/types/canvas';
 import { useCanvasCourse, type CanvasCourseView } from '@/app/hooks/useCanvas';
 import { formatNumber, formatShortDate, scoreLabel } from '@/app/utils/canvas';
+import { isCanvasItemDone } from '@/app/utils/canvasTasks';
 import CanvasItemRow, { CanvasLink, CanvasStatusChip, type CanvasRowAdd, type CourseLookup } from './CanvasItemRow';
+import { HideDoneToggle, type CanvasHideDone } from './CanvasUpcoming';
 import { CourseGrade, GradeBar } from './CanvasClasses';
 
 type CourseTab = CanvasCourseView | 'grades';
@@ -95,15 +97,26 @@ const Assignments: React.FC<{
   course: CourseLookup;
   now: Date;
   addToTasks?: CanvasRowAdd;
-}> = ({ assignments, course, now, addToTasks }) => {
+  hideDone?: CanvasHideDone;
+}> = ({ assignments, course, now, addToTasks, hideDone }) => {
   const isPast = (a: CanvasAssignment) => !!a.due_at && new Date(a.due_at) < now;
+  const shown = hideDone?.on ? assignments.filter(a => !isCanvasItemDone(a)) : assignments;
   const groups = [
-    { label: 'Upcoming', items: assignments.filter(a => !isPast(a)) },
-    { label: 'Past', items: assignments.filter(isPast).reverse() },
+    { label: 'Upcoming', items: shown.filter(a => !isPast(a)) },
+    { label: 'Past', items: shown.filter(isPast).reverse() },
   ].filter(group => group.items.length > 0);
-  if (groups.length === 0) return <p className="text-sm text-text-secondary">No assignments or quizzes in this course.</p>;
+  if (assignments.length === 0) return <p className="text-sm text-text-secondary">No assignments or quizzes in this course.</p>;
   return (
     <>
+      {hideDone && <div className="flex"><HideDoneToggle {...hideDone} /></div>}
+      {groups.length === 0 && (
+        <p className="mt-3 text-sm text-text-secondary">
+          Canvas counts every assignment and quiz here done.{' '}
+          <button type="button" onClick={() => hideDone!.onChange(false)} className="font-medium text-accent hover:underline">
+            Show done
+          </button>
+        </p>
+      )}
       {groups.map(group => (
         <div key={group.label}>
           <div className="mt-3 mb-1.5 text-xs font-semibold text-text-primary">{group.label}</div>
@@ -157,11 +170,13 @@ interface CanvasCourseDetailProps {
   onFail: (err: unknown) => void;
   onBack: () => void;
   addToTasks?: CanvasRowAdd;
+  /** "Hide done" on Assignments & quizzes; left out when the connection can't tell what's done. */
+  hideDone?: CanvasHideDone;
 }
 
 /** One course opened from the Courses tab: grade, then Modules, Assignments & quizzes, and Grades. */
 const CanvasCourseDetail: React.FC<CanvasCourseDetailProps> = ({
-  course, color, lookup, now, refreshNonce, onFail, onBack, addToTasks,
+  course, color, lookup, now, refreshNonce, onFail, onBack, addToTasks, hideDone,
 }) => {
   const [tab, setTab] = useState<CourseTab>('modules');
   const { modules, assignments, error } = useCanvasCourse(course.id, tab === 'modules' ? 'modules' : 'assignments', {
@@ -225,7 +240,7 @@ const CanvasCourseDetail: React.FC<CanvasCourseDetailProps> = ({
           ? <p className="text-sm text-text-secondary">This course has no modules.</p>
           : <div className="space-y-1.5">{modules!.modules.map(m => <ModuleRow key={m.id} module={m} />)}</div>
       ) : tab === 'assignments' ? (
-        <Assignments assignments={assignments!.assignments} course={lookup} now={now} addToTasks={addToTasks} />
+        <Assignments assignments={assignments!.assignments} course={lookup} now={now} addToTasks={addToTasks} hideDone={hideDone} />
       ) : (
         <Grades assignments={assignments!.assignments} color={color} />
       )}

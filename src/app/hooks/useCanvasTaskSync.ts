@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { syncCanvasLinkedTasks } from '@/app/lib/backend-api';
+import type { CanvasLinkedTaskSync } from '@/app/types/canvas';
 import type { Task } from '@/app/types/task';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 
@@ -10,6 +11,12 @@ export const CANVAS_TASK_SYNC_GAP_MS = 30 * 1000;
 
 // Task id → the local day "Not yet" was pressed on; tm- keys are cleared on sign-out.
 const NOT_YET_KEY = 'tm-canvas-not-yet';
+
+/** Handed in (or graded), or only done: excused, or checked off in Canvas with nothing handed in. */
+export type CanvasDoneAs = 'submitted' | 'done';
+
+const doneAs = (r: CanvasLinkedTaskSync): CanvasDoneAs =>
+  r.done_reason === 'excused' || r.done_reason === 'marked_complete' ? 'done' : 'submitted';
 
 const readNotYet = (): Record<number, string> => {
   try {
@@ -24,23 +31,27 @@ interface UseCanvasTaskSyncOptions {
   /** False until the task list has loaded. */
   enabled: boolean;
   tasks: Task[];
-  /** Reloads the tasks whose due dates the backend moved. */
+  /** Reloads the tasks whose due dates the backend moved, or that it completed. */
   refreshTasks: (ids: number[]) => Promise<void>;
 }
 
 /**
  * Keeps tasks added from Canvas in step with their assignments through
  * POST /canvas/linked-tasks/sync: once when the home page loads, and again
- * when the Canvas panel refreshes, at most once every 30 seconds. Tasks the
- * sync finds submitted get a banner offering to mark them complete; "Not
- * yet" hides it until the next day. Tasks whose due date the backend moved
- * are reloaded.
+ * when the Canvas panel refreshes, at most once every 30 seconds. The
+ * backend completes a task once Canvas counts its assignment done (handed
+ * in, graded, excused or checked off in Canvas), unless the user turned that
+ * off in Settings; then, or with a backend from before it, the task gets a
+ * banner offering to mark it complete, and "Not yet" hides it until the next
+ * day. Tasks whose due date the backend moved, or that it completed, are
+ * reloaded.
  *
  * A failed sync changes nothing: Canvas not connected or rejecting the
  * token, Canvas down, or a backend without the route yet.
  */
 export function useCanvasTaskSync({ enabled, tasks, refreshTasks }: UseCanvasTaskSyncOptions) {
-  const [submitted, setSubmitted] = useState<Set<number>>(new Set());
+  // Task id → how Canvas counts its assignment done, for the banner's words.
+  const [done, setDone] = useState<Map<number, CanvasDoneAs>>(new Map());
   const [notYet, setNotYet] = useState<Record<number, string>>({});
   const lastSyncAt = useRef<number | null>(null);
   const homeSynced = useRef(false);
@@ -71,13 +82,15 @@ export function useCanvasTaskSync({ enabled, tasks, refreshTasks }: UseCanvasTas
       return;
     }
     const unread = new Set(results.filter(r => !r.synced).map(r => r.task_id));
-    // A task Canvas couldn't be read for keeps what the last sync said.
-    setSubmitted(prev => new Set([
-      ...[...prev].filter(id => unread.has(id)),
-      ...results.filter(r => r.synced && r.submitted).map(r => r.task_id),
+    // A task Canvas couldn't be read for keeps what the last sync said; one the sync completed needs no banner.
+    setDone(prev => new Map([
+      ...[...prev].filter(([id]) => unread.has(id)),
+      ...results
+        .filter(r => r.synced && !r.completed && (r.done ?? r.submitted))
+        .map(r => [r.task_id, doneAs(r)] as const),
     ]));
-    const moved = results.filter(r => r.due_changed).map(r => r.task_id);
-    if (moved.length > 0) await refreshTasksRef.current(moved);
+    const changed = results.filter(r => r.due_changed || r.completed).map(r => r.task_id);
+    if (changed.length > 0) await refreshTasksRef.current(changed);
   }, [enabled]);
 
   useEffect(() => {
@@ -89,7 +102,10 @@ export function useCanvasTaskSync({ enabled, tasks, refreshTasks }: UseCanvasTas
   const today = toLocalDateStr(new Date());
 
   /** Whether the task's card asks to mark it complete. */
-  const showsSubmitted = (task: Task) => !task.completed && submitted.has(task.id) && notYet[task.id] !== today;
+  const showsSubmitted = (task: Task) => !task.completed && done.has(task.id) && notYet[task.id] !== today;
+
+  /** How Canvas counts the task's assignment done, while its card asks to mark it complete. */
+  const doneAsOf = (task: Task): CanvasDoneAs => done.get(task.id) ?? 'submitted';
 
   /** "Not yet": hides the task's banner until tomorrow. */
   const dismiss = (taskId: number) => {
@@ -103,5 +119,5 @@ export function useCanvasTaskSync({ enabled, tasks, refreshTasks }: UseCanvasTas
     }
   };
 
-  return { sync, showsSubmitted, dismiss };
+  return { sync, showsSubmitted, doneAs: doneAsOf, dismiss };
 }

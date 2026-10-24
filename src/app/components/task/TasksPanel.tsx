@@ -11,6 +11,7 @@ import TasksToolbar from './TasksToolbar';
 import { TaskFormData } from './TaskFormFields';
 import { TrailItem } from './ParentTrail';
 import { LinkedRemoveMode, Tag, Task, TaskView } from '@/app/types/task';
+import type { CanvasDoneAs } from '@/app/hooks/useCanvasTaskSync';
 import { linkedTaskIndex, parentChain } from '@/app/utils/taskUtils';
 import { ToastAction, useToast } from '@/app/context/ToastContext';
 
@@ -38,9 +39,11 @@ interface TasksPanelProps {
   /** User-adjustable scroll-area height in px (overrides the default responsive height). */
   heightPx?: number | null;
   pendingTaskIds?: Set<number>;
-  /** Tasks added from Canvas whose assignment Canvas shows submitted (see useCanvasTaskSync). */
+  /** Tasks added from Canvas whose assignment Canvas shows submitted or done (see useCanvasTaskSync). */
   canvasSubmitted?: {
     shows: (task: Task) => boolean;
+    /** Left out, the banner says "submitted". */
+    doneAs?: (task: Task) => CanvasDoneAs;
     onNotYet: (id: number) => void;
   };
   /** Which tasks show and how they're sorted (the toolbar's Show and Sort). */
@@ -212,6 +215,7 @@ const TasksPanel: React.FC<TasksPanelProps> = ({
       return (
         <CanvasSubmittedBanner
           title={task.title}
+          doneAs={canvasSubmitted.doneAs?.(task)}
           onComplete={() => handleToggleComplete(task.id)}
           onNotYet={() => canvasSubmitted.onNotYet(task.id)}
         />

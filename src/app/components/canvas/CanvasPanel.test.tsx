@@ -591,6 +591,138 @@ describe('CanvasPanel', () => {
     });
   });
 
+  describe('done in Canvas', () => {
+    const sub = (overrides: Partial<NonNullable<CanvasItem['submission']>> = {}) => ({
+      submitted: false, missing: false, late: false, graded: false, excused: false, score: null, grade: null,
+      submitted_at: null, graded_at: null, ...overrides,
+    });
+    const rowOf = (title: string) =>
+      [...container.querySelectorAll<HTMLElement>('.rounded-\\[10px\\]')].find(r => r.textContent?.includes(title))!;
+    const doneOverview = () => overview({
+      upcoming: [
+        item({ title: 'Homework 5', done: false, done_reason: null }),
+        item({ id: 2, title: 'Lab report', submission: sub({ submitted: true }), done: true, done_reason: 'submitted' }),
+        item({ id: 4, title: 'Reading', done: true, done_reason: 'marked_complete', marked_complete: true }),
+      ],
+      missing: [item({
+        id: 3, title: 'Lab 2', due_at: inDays(-2), submission: sub({ missing: true }), done: true,
+        done_reason: 'marked_complete', marked_complete: true,
+      })],
+    });
+
+    beforeEach(() => { api.fetchCanvasOverview.mockResolvedValue(doneOverview()); });
+
+    it('shows what Canvas counts done checked and faded, with its reason', async () => {
+      await render();
+      expect(rowOf('Lab report').dataset.done).toBe('true');
+      expect(rowOf('Lab report').textContent).toContain('Submitted');
+      expect(rowOf('Reading').dataset.done).toBe('true');
+      expect(rowOf('Reading').textContent).toContain('Done in Canvas');
+      expect(rowOf('Homework 5').dataset.done).toBeUndefined();
+      // Checked off in Canvas but still missing there: listed, not counted as slipped.
+      expect(rowOf('Lab 2').textContent).toContain('Done in Canvas');
+      expect(text()).toContain('Canvas still lists them as missing');
+      expect(container.querySelector('[aria-label$="slipped"]')).toBeNull();
+    });
+
+    it('lists slipped work before what is checked off in Canvas, so Start with this one is open work', async () => {
+      api.fetchCanvasOverview.mockResolvedValue(overview({
+        missing: [
+          item({
+            id: 3, title: 'Lab 2', due_at: inDays(-3), submission: sub({ missing: true }), done: true,
+            done_reason: 'marked_complete', marked_complete: true,
+          }),
+          item({ id: 5, title: 'Lab 3', due_at: inDays(-2), submission: sub({ missing: true }), done: false, done_reason: null }),
+        ],
+      }));
+      await render();
+      expect(text()).toContain('One thing slipped. Start with this one.');
+      const slipped = [...rowOf('Lab 3').parentElement!.querySelectorAll<HTMLElement>('[class*="rounded-[10px]"]')];
+      expect(slipped.map(r => r.dataset.done ?? 'open')).toEqual(['open', 'true']);
+      expect(slipped[0].textContent).toContain('Lab 3');
+    });
+
+    it('hides done work with Hide done, and remembers it', async () => {
+      await render();
+      expect(button('Hide done').getAttribute('aria-pressed')).toBe('false');
+      await click(button('Hide done'));
+      expect(button('Hide done').getAttribute('aria-pressed')).toBe('true');
+      expect(text()).toContain('Homework 5');
+      expect(text()).not.toContain('Lab report');
+      expect(text()).not.toContain('Reading');
+      expect(text()).not.toContain('Lab 2');
+      expect(localStorage.getItem('tm-canvas-hide-done')).toBe('true');
+
+      act(() => root.unmount());
+      root = createRoot(container);
+      await render();
+      expect(button('Hide done').getAttribute('aria-pressed')).toBe('true');
+      expect(text()).not.toContain('Lab report');
+    });
+
+    it('says everything is done, not that nothing is due, when Hide done hides it all', async () => {
+      localStorage.setItem('tm-canvas-hide-done', 'true');
+      api.fetchCanvasOverview.mockResolvedValue(overview({
+        upcoming: [item({ title: 'Lab report', done: true, done_reason: 'graded' })], missing: [],
+      }));
+      await render();
+      expect(text()).toContain('Everything due ahead is done');
+      await click(button('Show done'));
+      expect(text()).toContain('Lab report');
+    });
+
+    it('fades graded work only outside Recently graded', async () => {
+      api.fetchCanvasOverview.mockResolvedValue(overview({
+        missing: [],
+        recently_graded: [item({
+          id: 9, title: 'Essay', due_at: inDays(-3), submission: sub({ submitted: true, graded: true, score: 18 }),
+          points_possible: 20, done: true, done_reason: 'graded',
+        })],
+      }));
+      await render();
+      expect(rowOf('Essay').dataset.done).toBeUndefined();
+      expect(rowOf('Essay').textContent).toContain('18/20');
+    });
+
+    it('hides done course assignments too', async () => {
+      localStorage.setItem('tm-canvas-hide-done', 'true');
+      api.fetchCanvasAssignments.mockResolvedValue({
+        ...meta, course_id: 460, assignments: [
+          { ...item({ id: 11, title: 'Project 1' }), unlock_at: null, lock_at: null, quiz_id: null, submission_types: [] },
+          {
+            ...item({ id: 12, title: 'Worksheet', done: true, done_reason: 'excused', submission: sub({ excused: true }) }),
+            unlock_at: null, lock_at: null, quiz_id: null, submission_types: [],
+          },
+        ],
+      });
+      api.fetchCanvasModules.mockResolvedValue({ ...meta, course_id: 460, modules: [] });
+      await render();
+      await click(button('Classes'));
+      await click(button('Modules & assignments'));
+      await click(button('Assignments & quizzes'));
+      expect(text()).toContain('Project 1');
+      expect(text()).not.toContain('Worksheet');
+      await click(button('Hide done'));
+      expect(text()).toContain('Worksheet');
+      expect(rowOf('Worksheet').textContent).toContain('Excused');
+    });
+
+    it('offers no Hide done when the connection can\'t tell what is done', async () => {
+      api.fetchCanvasConnection.mockResolvedValue(connected({
+        connection_type: 'feed',
+        capabilities: {
+          upcoming: true, missing: false, recently_graded: false, courses: false, modules: false, assignments: false,
+          announcements: false, link_tasks: true, submission_status: false, done_status: false,
+        },
+      }));
+      api.fetchCanvasOverview.mockResolvedValue(overview({ missing: [] }));
+      localStorage.setItem('tm-canvas-hide-done', 'true');
+      await render();
+      expect(text()).toContain('Homework 5');
+      expect(button('Hide done')).toBeUndefined();
+    });
+  });
+
   describe('demo sandbox', () => {
     beforeEach(() => { auth.isDemo = true; });
 

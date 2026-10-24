@@ -1,9 +1,10 @@
 import React from 'react';
-import { Award, CalendarDays, CalendarRange } from 'lucide-react';
+import { Award, CalendarCheck, CalendarDays, CalendarRange, EyeOff } from 'lucide-react';
 import type { CanvasItem, CanvasOverview, CanvasRange } from '@/app/types/canvas';
 import {
   dueWithin, formatShortDate, groupByDay, groupByWeek, type CanvasClass, type CanvasDayGroup,
 } from '@/app/utils/canvas';
+import { isCanvasItemDone } from '@/app/utils/canvasTasks';
 import { addDays } from '@/app/utils/weekLayout';
 import CanvasItemRow, { type CanvasRowAdd, type CourseLookup } from './CanvasItemRow';
 
@@ -27,6 +28,28 @@ const RANGES: { value: CanvasRange; label: string }[] = [
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+/** "Hide done": leaves out what Canvas counts done, for a connection that can tell (a token). */
+export interface CanvasHideDone {
+  on: boolean;
+  onChange: (on: boolean) => void;
+}
+
+export const HideDoneToggle: React.FC<CanvasHideDone> = ({ on, onChange }) => (
+  <button
+    type="button"
+    aria-pressed={on}
+    onClick={() => onChange(!on)}
+    title={on ? 'Show work Canvas counts done' : 'Hide work Canvas counts done'}
+    className="inline-flex items-center gap-1 px-2 py-1 rounded-[7px] border text-xs whitespace-nowrap transition-colors"
+    style={on
+      ? { borderColor: 'var(--tm-accent)', backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)', fontWeight: 600 }
+      : { borderColor: 'var(--tm-border)', backgroundColor: 'var(--tm-surface-raised)', color: 'var(--tm-text-secondary)', fontWeight: 500 }}
+  >
+    <EyeOff className="w-3 h-3" aria-hidden />
+    Hide done
+  </button>
+);
+
 interface CanvasUpcomingProps {
   overview: CanvasOverview;
   course: CourseLookup;
@@ -41,6 +64,8 @@ interface CanvasUpcomingProps {
   onClassFilterChange: (courseId: number | null) => void;
   /** Set when every class is hidden: opens the Classes tab to show them again. */
   onShowHiddenClasses?: () => void;
+  /** Left out when the connection can't tell what's done (a calendar feed): nothing is hidden. */
+  hideDone?: CanvasHideDone;
 }
 
 /**
@@ -49,12 +74,19 @@ interface CanvasUpcomingProps {
  */
 const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
   overview, course, now, addToTasks, range, onRangeChange, classes, classFilter, onClassFilterChange, onShowHiddenClasses,
+  hideDone,
 }) => {
+  const hiding = !!hideDone?.on;
+  const notDone = (items: CanvasItem[]) => (hiding ? items.filter(i => !isCanvasItemDone(i)) : items);
   const inClass = (items: CanvasItem[]) => (classFilter == null ? items : items.filter(i => i.course_id === classFilter));
-  const ahead = overview.upcoming;
+  const ahead = notDone(overview.upcoming);
   const inRange = (items: CanvasItem[]) => (range === 'week' ? dueWithin(items, now, 7) : items);
   const shown = inClass(inRange(ahead));
-  const missing = inClass(overview.missing);
+  // Everything here is done and hidden: say so rather than "Nothing due".
+  const allDone = hiding && shown.length === 0 && inClass(inRange(overview.upcoming)).length > 0;
+  const missing = [...inClass(notDone(overview.missing))].sort((a, b) => Number(isCanvasItemDone(a)) - Number(isCanvasItemDone(b)));
+  // Checked off in Canvas but still missing there: listed (faded) after open work, not counted as slipped.
+  const slipped = missing.filter(i => !isCanvasItemDone(i)).length;
   const graded = inClass(overview.recently_graded);
   const filtered = classFilter != null ? classes.find(c => c.id === classFilter) ?? null : null;
   const forClass = filtered ? ` for ${filtered.label}` : '';
@@ -100,6 +132,7 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
               </button>
             ))}
           </div>
+          {hideDone && <HideDoneToggle {...hideDone} />}
           <span className="ml-auto text-xs text-text-muted whitespace-nowrap">
             {range === 'week'
               ? `${formatShortDate(now.toISOString())} – ${formatShortDate(addDays(now, 6).toISOString())}`
@@ -133,9 +166,11 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
             style={{ backgroundColor: 'var(--tm-slipped-subtle)' }}
           >
             <p className="text-xs text-text-secondary px-0.5 pb-0.5">
-              {missing.length === 1
-                ? 'One thing slipped. Start with this one.'
-                : `${missing.length} things slipped. Start with this one.`}
+              {slipped === 0
+                ? "You've checked these off in Canvas. Canvas still lists them as missing."
+                : slipped === 1
+                  ? 'One thing slipped. Start with this one.'
+                  : `${slipped} things slipped. Start with this one.`}
             </p>
             {missing.map(item => row(item))}
           </div>
@@ -147,22 +182,28 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
         {shown.length === 0 ? (
           <div className="flex flex-col items-center text-center gap-2.5 px-5 py-7">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'var(--tm-surface-raised)', color: 'var(--tm-text-muted)' }}>
-              <CalendarDays className="w-6 h-6" />
+              {allDone ? <CalendarCheck className="w-6 h-6" /> : <CalendarDays className="w-6 h-6" />}
             </div>
             <h3 className="text-base font-semibold text-text-primary">
               {onShowHiddenClasses
                 ? 'Every class is hidden'
-                : range === 'week' ? `Nothing${forClass} due in the next 7 days` : `Nothing${forClass} due ahead`}
+                : allDone
+                  ? range === 'week' ? `Everything${forClass} due in the next 7 days is done` : `Everything${forClass} due ahead is done`
+                  : range === 'week' ? `Nothing${forClass} due in the next 7 days` : `Nothing${forClass} due ahead`}
             </h3>
             <p className="text-[13px] text-text-secondary max-w-[340px]">
               {onShowHiddenClasses
                 ? "Their due dates are left out of Upcoming. Show a class again from the Classes tab."
-                : range === 'week'
-                  ? 'Try All upcoming to look further ahead.'
-                  : "Canvas has nothing coming up on your calendar. New due dates show up here as soon as they're posted."}
+                : allDone
+                  ? 'Canvas counts it all handed in, graded, excused or checked off. Hide done is on.'
+                  : range === 'week'
+                    ? 'Try All upcoming to look further ahead.'
+                    : "Canvas has nothing coming up on your calendar. New due dates show up here as soon as they're posted."}
             </p>
             {onShowHiddenClasses ? (
               <button type="button" onClick={onShowHiddenClasses} className="btn btn-outline">Show classes</button>
+            ) : allDone ? (
+              <button type="button" onClick={() => hideDone!.onChange(false)} className="btn btn-outline">Show done</button>
             ) : nextLater?.due_at && (
               <button type="button" onClick={() => onRangeChange('all')} className="btn btn-outline">
                 Next up: {nextLater.title} · {formatShortDate(nextLater.due_at)}
@@ -201,7 +242,7 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
           <SectionLabel icon={Award}>Recently graded</SectionLabel>
           <div className="space-y-1.5">
             {graded.map(item => (
-              <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} />
+              <CanvasItemRow key={`${item.kind}-${item.id}`} item={item} course={course} now={now} fadeDone={false} />
             ))}
           </div>
         </section>

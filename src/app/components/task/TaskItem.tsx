@@ -36,6 +36,17 @@ const FromCanvasLink: React.FC<{ url: string; className?: string }> = ({ url, cl
   );
 };
 
+/** On a task the Canvas sync completed because Canvas shows its assignment done; never on one completed by hand. */
+const DoneInCanvasBadge: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <span
+    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-success-subtle text-success-text ${className}`}
+    title="Completed for you because Canvas shows this assignment done"
+  >
+    <Check className="w-3 h-3 flex-shrink-0" strokeWidth={3} aria-hidden />
+    Done in Canvas
+  </span>
+);
+
 interface TaskItemProps {
   task: Task;
   index: number;
@@ -127,6 +138,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
 
   // The backend only stores https links; anything else isn't rendered as a link.
   const canvasUrl = task.canvas_html_url?.startsWith('https://') ? task.canvas_html_url : null;
+  const doneInCanvas = task.completed && !!task.completed_by_canvas;
 
   const dueStatus = getDueStatus(task);
   const actualDueDateText = normalizedDueDate ? formatDueDateShort(normalizedDueDate) : null;
@@ -223,7 +235,12 @@ const TaskItem: React.FC<TaskItemProps> = ({
           </div>
         )}
         <TaskTags tags={task.tags} allTags={tags} className="mt-1.5 pl-6" />
-        {canvasUrl && <FromCanvasLink url={canvasUrl} className="mt-1.5 ml-6" />}
+        {(canvasUrl || doneInCanvas) && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 ml-6 min-w-0">
+            {canvasUrl && <FromCanvasLink url={canvasUrl} />}
+            {doneInCanvas && <DoneInCanvasBadge />}
+          </div>
+        )}
         {banner}
       </div>
     );
@@ -393,6 +410,7 @@ const TaskItem: React.FC<TaskItemProps> = ({
             )}
 
             {canvasUrl && <FromCanvasLink url={canvasUrl} />}
+            {doneInCanvas && <DoneInCanvasBadge />}
 
             {onAddLinked && !task.completed && (
               <button

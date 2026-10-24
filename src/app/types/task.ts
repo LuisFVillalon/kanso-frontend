@@ -80,6 +80,10 @@ export interface Task {
   canvas_due_at?: string | null;
   /** The day an all-day Canvas calendar feed item falls on, which the feed sync compares by date alone. */
   canvas_due_date?: string | null;
+  /** When the linked-task sync completed it because Canvas showed its assignment done; kept if the user reopens it. */
+  canvas_completed_at?: string | null;
+  /** Completed by that sync and not reopened or completed again by hand since: the card says "Done in Canvas". */
+  completed_by_canvas?: boolean;
 }
 
 /** A task above another one, as a parent trail shows it. */
