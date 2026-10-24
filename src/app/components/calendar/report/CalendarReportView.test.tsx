@@ -221,7 +221,7 @@ describe('CalendarReportView mood', () => {
     expect(text()).not.toContain('overall');
 
     // The Overview names the link with its direction, short enough for one line, with the whole sentence on hover.
-    await openTab('Overview');
+    await openTab('Productivity');
     expect(text()).toContain('More habits, better mood');
     const link = buttonLabelled(/^Mood & your activity/);
     expect(link.getAttribute('aria-label')).toBe('Mood & your activity: Moderate link: better mood on days with more habits checked off this month');
@@ -673,10 +673,17 @@ describe('CalendarReportView tabs', () => {
     habit_completions: ['2026-10-19', '2026-10-20'].map(date => ({ habit_id: 1, habit_title: 'Meditate', date, estimated_time: 0.5 })),
   }));
 
-  it('opens on Overview: tiles, activity, highlights and the time-by-tag bar', async () => {
+  const tabs = (list: string) => [...document.querySelectorAll(`[role="tablist"][aria-label="${list}"] [role="tab"]`)].map(t => t.textContent);
+
+  it('opens on Productivity › Overview: tiles, activity, highlights and the time-by-tag bar', async () => {
     withHabits();
     await render();
+    expect(tabs('Report sections')).toEqual(['Productivity', 'Mood', 'Time']);
+    expect(tabs('Productivity view')).toEqual(['Overview', 'Tasks', 'Notes', 'Habits']);
+    expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
     expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
+    const panel = document.getElementById('report-views-tabpanel')!;
+    expect(panel.getAttribute('aria-labelledby')).toBe(`${tab('Productivity').id} ${tab('Overview').id}`);
     expect(container.querySelector('.lg\\:grid-cols-6')).not.toBeNull();
     expect(text()).toContain('Activity by day');
     expect(text()).toContain('Highlights');
@@ -695,6 +702,7 @@ describe('CalendarReportView tabs', () => {
     await render();
     await click(buttonLabelled(/^Habits22 check-ins$/));
     expect(window.location.search).toBe('?view=habits');
+    expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
     expect(tab('Habits').getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('Each square is a day.');
     // Mon and Tue are done, Wed isn't, and Thu–Sun are still to come.
@@ -744,6 +752,51 @@ describe('CalendarReportView tabs', () => {
     await click(buttonLabelled(/^Where your time went: /));
     expect(tab('Time').getAttribute('aria-selected')).toBe('true');
     expect(document.querySelector('[aria-label="Measure"]')).not.toBeNull();
+    // Time has one view, so no views switch; the panel is named by its tab alone.
+    expect(document.querySelector('[aria-label="Productivity view"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Mood view"]')).toBeNull();
+    expect(document.getElementById('report-views-tabpanel')!.getAttribute('aria-labelledby')).toBe(tab('Time').id);
+  });
+
+  it('reopens each tab on the view it was left on', async () => {
+    await render();
+    await openTab('Notes');
+    await openTab('Mood');
+    expect(window.location.search).toBe('?view=mood');
+    expect(tabs('Mood view')).toEqual(['Over time', 'Patterns']);
+    await openPatterns();
+    await openTab('Time');
+    expect(window.location.search).toBe('?view=time');
+    await openTab('Productivity');
+    expect(window.location.search).toBe('?view=notes');
+    expect(tab('Notes').getAttribute('aria-selected')).toBe('true');
+    await openTab('Mood');
+    expect(window.location.search).toBe('?view=mood&mood=patterns');
+  });
+
+  it('moves between the tabs and between the views with the arrow keys', async () => {
+    await render();
+    const key = (el: Element, k: string) => act(async () => {
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+    });
+    await key(tab('Overview'), 'ArrowRight');
+    expect(window.location.search).toBe('?view=tasks');
+    expect(document.activeElement).toBe(tab('Tasks'));
+    await key(tab('Tasks'), 'End');
+    expect(window.location.search).toBe('?view=habits');
+    await key(tab('Productivity'), 'ArrowLeft');
+    expect(window.location.search).toBe('?view=time');
+    expect(document.activeElement).toBe(tab('Time'));
+    await key(tab('Time'), 'Home');
+    expect(window.location.search).toBe('?view=habits');
+  });
+
+  it('opens an old link to a tab in its new group', async () => {
+    window.history.replaceState(null, '', '/reports?view=tasks');
+    await render();
+    expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
+    expect(tab('Tasks').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('Planned vs done');
   });
 
   it('opens Mood Patterns from a month’s Mood & your activity highlight, and Over time from the week’s Mood', async () => {
@@ -751,7 +804,8 @@ describe('CalendarReportView tabs', () => {
     await click(buttonLabelled(/^MoodGood 4\.0 · 1 of 3 days logged$/));
     expect(window.location.search).toBe('?view=mood');
 
-    await openTab('Overview');
+    await openTab('Productivity');
+    expect(window.location.search).toBe('');
     await click(buttonLabelled(/^Month$/));
     await click(buttonLabelled(/^Mood & your activity/));
     expect(window.location.search).toBe('?view=mood&mood=patterns');
@@ -772,9 +826,10 @@ describe('CalendarReportView tabs', () => {
     expect(window.history.length).toBe(length + 1);
   });
 
-  it('falls back to Overview for an unknown view', async () => {
+  it('falls back to Productivity › Overview for an unknown view', async () => {
     window.history.replaceState(null, '', '/reports?view=bogus');
     await render();
+    expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
     expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
   });
 });
