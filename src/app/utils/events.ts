@@ -104,6 +104,9 @@ export interface EventFormValues {
 
 export const isRepeating = (form: Pick<EventFormValues, 'repeat'>) => form.repeat !== 'none';
 
+/** The day the form's series first repeats on, which its end is judged against. */
+export const formSeriesStart = (form: Pick<EventFormValues, 'date' | 'seriesStart'>) => form.seriesStart ?? form.date;
+
 /** Weeks between repeats for the form's choice. */
 export const formInterval = (form: Pick<EventFormValues, 'repeat' | 'repeatInterval'>): number =>
   form.repeat === 'biweekly' ? 2 : form.repeat === 'custom' ? Math.min(REPEAT_INTERVAL_MAX, Math.max(1, Math.round(form.repeatInterval) || 1)) : 1;
@@ -167,7 +170,7 @@ export function eventFormFromOccurrence(occurrence: EventOccurrence, series: Cal
 /** The last day the form's series can repeat on, or null for no end (and for a one-off event). */
 export function formEndDate(form: EventFormValues, termEnd: string | null): string | null {
   if (!isRepeating(form) || form.endMode === 'never') return null;
-  const term = usableTermEnd(termEnd, form.date);
+  const term = usableTermEnd(termEnd, formSeriesStart(form));
   if (form.endMode === 'term' && term) return term;
   return form.endDate || null;
 }
@@ -204,7 +207,7 @@ export function eventFormErrors(form: EventFormValues, termEnd: string | null): 
     if (form.repeatDays.length === 0) errors.push('Pick at least one day to repeat on.');
     const end = formEndDate(form, termEnd);
     if (form.endMode === 'on' && !form.endDate) errors.push('Pick the day it ends.');
-    else if (end && form.date && end < form.date) errors.push('The repeat ends before it starts.');
+    else if (end && form.date && end < formSeriesStart(form)) errors.push('The repeat ends before it starts.');
   }
   return errors;
 }
@@ -229,7 +232,7 @@ export function eventFormSummary(form: EventFormValues, termEnd: string | null):
   const which = daysText(days);
   const rule = interval > 1 ? `Every ${interval} weeks on ${which}` : which === 'every day' ? 'Every day' : `Every ${which}`;
   const endDate = formEndDate(form, termEnd);
-  const first = form.seriesStart ?? form.date;
+  const first = formSeriesStart(form);
   let span: string;
   if (endDate && endDate >= first) {
     const count = repeatDates({ start: first, end: endDate, days, interval }).length;

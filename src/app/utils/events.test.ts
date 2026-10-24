@@ -184,6 +184,16 @@ describe('saving an edit', () => {
     expect(allowedEditScopes(both)).toEqual([]);
   });
 
+  it('moves the last occurrence past the series end as "this" alone', () => {
+    const last = eventFormFromOccurrence(occurrence({ date: '2026-12-11' }), series(), termEnd);
+    const onDate = { ...last, endMode: 'on' as const, endDate: termEnd };
+    for (const start of [last, onDate]) {
+      const moved = { ...start, date: '2026-12-12' };
+      expect(eventFormErrors(moved, termEnd)).toEqual([]);
+      expect(allowedEditScopes(eventFormEdit(start, moved, termEnd))).toEqual(['this']);
+    }
+  });
+
   it('moves a one-off with date, and starts a repeat from the form day', () => {
     const oneOff = eventFormFromOccurrence(occurrence({ repeat_days: [] }), series({ repeat_days: [], end_date: null }));
     const moved = eventFormEdit(oneOff, { ...oneOff, date: '2026-10-30' }, null);
