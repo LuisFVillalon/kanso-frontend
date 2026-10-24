@@ -3,7 +3,7 @@ import type { MoodCheckin } from '@/app/types/mood';
 import { periodContaining, type ReportPeriodKind } from './calendarReport';
 import { parseLocalDate, toLocalDateStr } from './dateUtils';
 import { indexDayCheckins } from './moodReport';
-import { aboutRows, analyseMoodInsights, chartMarks, compareGroups, GATE, headlineBasis, WHY, type MoodInsights } from './moodInsights';
+import { aboutRows, analyseMoodInsights, chartMarks, compareGroups, GATE, headlineBasis, type MoodInsights } from './moodInsights';
 
 beforeAll(() => {
   // Local-day math depends on the zone; pin one with a DST change.
@@ -94,14 +94,12 @@ describe('analyseMoodInsights on the demo and invented scenarios', () => {
     expect(headline('demo', 'month', new Date(2026, 8, 10))).toBe('Mostly Okay, with a dip around Sep 24–30.');
     const last = analyse(DEMO, 'week', new Date(2026, 9, 14));
     expect(last.headline).toBe('A week of ups and downs.');
-    expect(last.why).toBe(WHY.days);
     expect(last.notes.map(n => n.insight.text)).toEqual(['Best days: Tuesday and Saturday (Good). Hardest: Monday and Sunday (Low, with stress High or more).']);
   });
 
   it('finds the improving month’s climb, though its average is about the same as September’s', () => {
     const r = analyse(SCENARIOS.improving, 'month');
     expect(r.headline).toBe('Your mood has been climbing through the month.');
-    expect(r.why).toBe(WHY.better);
     expect(r.notes.map(n => n.insight.text)).toEqual(['Your mood climbed: 2.8 early on (Oct 1–11), 3.8 lately (Oct 12–22).']);
     expect(headlineBasis(r)).toBe('Compares your first 10 check-ins with your last 10.');
     const week = analyse(SCENARIOS.improving, 'week');
@@ -113,7 +111,6 @@ describe('analyseMoodInsights on the demo and invented scenarios', () => {
   it('names the stressful stretch and how stress moved with mood', () => {
     const r = analyse(SCENARIOS.stress, 'month');
     expect(r.headline).toBe('Mostly Okay, with one harder stretch around Oct 7–12.');
-    expect(r.why).toBe(WHY.stress);
     expect(r.notes.map(n => [n.num, n.insight.text])).toEqual([
       [1, 'Your best stretch was Oct 15–21 (mostly Good). The toughest stretch was Oct 7–12 (mostly Low, and stress ran high then too).'],
       [2, 'Stressful days were your low days. On higher-stress days your mood averaged 2.0 (6 days); on calmer days, 3.6 (8 days).'],
@@ -124,7 +121,6 @@ describe('analyseMoodInsights on the demo and invented scenarios', () => {
   it('keeps a steady month steady and shows where its trend stayed', () => {
     const r = analyse(SCENARIOS.steady, 'month');
     expect(r.headline).toBe('A steady month, between Okay and Good.');
-    expect(r.why).toBe(WHY.steady);
     expect(r.notes.map(n => n.insight.text)).toEqual(['No stretch stood out: your 7-day trend stayed between 3.2 and 3.8.']);
   });
 
@@ -133,14 +129,13 @@ describe('analyseMoodInsights on the demo and invented scenarios', () => {
     expect(headline('sparse', 'month')).toBe('Check in a few more days to see a pattern — 2 of 5 so far.');
     const year = analyse(SCENARIOS.sparse, 'year');
     expect(year.headline).toBe('Check in a few more days to see a pattern — 2 of 10 so far.');
-    expect(year).toMatchObject({ sparse: true, why: WHY.sparse, notes: [], head: null });
+    expect(year).toMatchObject({ sparse: true, notes: [], head: null });
     expect(headlineBasis(year)).toBe('Patterns show after 10 check-ins; you have 2.');
     expect(headline('sparse', 'month', new Date(2026, 8, 10))).toBe('No check-ins for September yet.');
   });
 
   it('notes the energy link on the demo year', () => {
     const r = analyse(DEMO, 'year');
-    expect(r.why).toBe(WHY.energy);
     expect(r.sure).toBe('Based on 76 check-ins since Jul 25.');
     expect(r.notes.map(n => n.insight.text)).toEqual([
       'Low-energy days were your low days. On low-energy days your mood averaged 2.9 (35 days); on high-energy days, 3.8 (21 days).',
@@ -190,11 +185,9 @@ describe('the rules', () => {
     expect(analyse([...run('2026-09-01', [3, 3, 3, 3]), ...october], 'month').head?.kind).not.toBe('change');
     const brighter = analyse([...run('2026-09-01', Array(10).fill(3)), ...october], 'month');
     expect(brighter.headline).toBe('A brighter month than September.');
-    expect(brighter.why).toBe(WHY.better);
     expect(brighter.notes[0]).toMatchObject({ num: 1, insight: { text: 'A brighter month than September: mood averaged 4.0, up from 3.0.' } });
     const harder = analyse([...run('2026-09-01', Array(10).fill(5)), ...october], 'month');
     expect(harder.headline).toBe('A harder month than September.');
-    expect(harder.why).toBe(WHY.harder);
     const same = analyse([...run('2026-09-01', Array(10).fill(4)), ...october], 'month');
     expect(same.headline).toBe('A steady month, mostly Good days.');
     expect(same.notes.map(n => n.insight.kind)).not.toContain('change');
@@ -209,17 +202,15 @@ describe('the rules', () => {
     expect(analyse(run('2026-10-01', [2, 2, 2, 4, 4, 4]), 'month').head?.kind).not.toBe('direction');
     const dip = analyse(run('2026-10-01', [4, 4, 4, 4, 5, 4, 4, 4, 2, 2, 2, 1, 2, 2, 2, 2]), 'month');
     expect(dip.headline).toBe('Your mood has dipped lately this month.');
-    expect(dip.why).toBe(WHY.harder);
     // A clear dip already says where the harder days were, so the stretch isn't a note.
     expect(dip.notes.map(n => n.insight.kind)).toEqual(['direction']);
   });
 
   it('names a week’s best and hardest days only when they are 2 steps apart', () => {
-    expect(analyse(run('2026-10-19', [3, 4, 3]), 'week')).toMatchObject({ headline: 'A steady week, mostly Okay days.', why: WHY.steady, notes: [] });
+    expect(analyse(run('2026-10-19', [3, 4, 3]), 'week')).toMatchObject({ headline: 'A steady week, mostly Okay days.', notes: [] });
     expect(analyse(run('2026-10-19', [3, 3, 3]), 'week').headline).toBe('A steady week, mostly Okay days.');
     const r = analyse(run('2026-10-19', [2, 4, 4, 3], i => (i === 0 ? 5 : 2)), 'week');
     expect(r.notes[0].insight.text).toBe('Best days: Tuesday and Wednesday (Good). Hardest: Monday (Low, with stress Maxed).');
-    expect(r.why).toBe(WHY.days);
     const ties = analyse(run('2026-10-12', [2, 2, 2, 4]), 'week', new Date(2026, 9, 14));
     expect(ties.notes[0].insight.text).toBe('Best day: Thursday (Good). Hardest: 3 days (Low).');
   });
@@ -229,14 +220,7 @@ describe('the rules', () => {
     const moods = [4, 4, 4, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 2, 2];
     const r = analyse(run('2026-10-01', moods, i => (i >= 15 ? 5 : 2)), 'month');
     expect(r.headline).toBe('The last few days have felt harder.');
-    expect(r.why).toBe(WHY.now);
     expect(r.notes[0].insight.text).toBe('Your best stretch was Oct 7–13 (mostly Good). Things have felt harder since about Oct 16, and stress has run high too. Go easy on yourself.');
-  });
-
-  it('adds no "why" line it hasn’t measured or that would contradict the headline', () => {
-    const ups = analyse(run('2026-10-01', Array.from({ length: 14 }, (_, i) => (i % 2 ? 5 : 1))), 'month');
-    expect(ups).toMatchObject({ headline: 'A month of ups and downs.', why: null });
-    expect(analyse(run('2026-03-01', Array(10).fill(3)), 'year').why).toBeNull();
   });
 
   it('says where a month’s trend stayed when no stretch stood out', () => {
@@ -257,14 +241,12 @@ describe('the rules', () => {
     ], 'year');
     expect(r.notes[0].insight.text).toBe('Best month: June (4.0). Hardest: August (2.0).');
     expect(r.notes[0].insight.mark).toMatchObject({ type: 'months', best: ['2026-06'], worst: ['2026-08'] });
-    expect(r.why).toBe(WHY.stretch);
   });
 
   it('never calls a year with clearly different months even', () => {
     // No year before to compare, too few check-ins to split, and a Good March and an Okay July.
     const r = analyse([...run('2026-03-01', Array(8).fill(4)), ...run('2026-07-01', Array(8).fill(3))], 'year');
     expect(r.notes.map(n => n.insight.text)).toEqual(['Best month: March (4.0). Hardest: July (3.0).']);
-    expect(r.why).toBe(WHY.stretch);
   });
 
   it('says mood moved with stress only with 10 check-ins and 5 days on each side', () => {
@@ -281,8 +263,6 @@ describe('the rules', () => {
     // Here the higher-stress, lower-energy days were the happier ones.
     const r = analyse(run('2026-10-01', moods, i => (i < 5 ? 5 : 1), i => (i < 5 ? 1 : 5)), 'month');
     expect(r.notes.map(n => n.insight.kind)).not.toContain('together');
-    expect(r.why).not.toBe(WHY.stress);
-    expect(r.why).not.toBe(WHY.energy);
     expect(chartMarks(r.notes, Array.from({ length: 31 }, (_, i) => addDays('2026-10-01', i)), 'month').tags.filter(t => t.series !== 'mood')).toEqual([]);
   });
 

@@ -174,7 +174,7 @@ interface Row {
 }
 
 /**
- * "Mood over time": a one-line headline and "Why it matters" above mood,
+ * "Mood over time": a one-line headline above mood,
  * energy and stress as three short charts stacked on one shared time axis,
  * each with its own words on its 1–5 scale, and up to two numbered notes
  * under it whose numbers mark the chart where they happened (see
@@ -529,13 +529,9 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
           <span className="h-1.5 rounded-full overflow-hidden bg-surface" aria-hidden="true">
             <span className="block h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (insights.n / insights.gate) * 100)}%` }} />
           </span>
-          <p className="text-xs text-text-muted">{insights.why}</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-1">
-          <p className="font-display text-[17px] sm:text-[19px] font-semibold leading-tight text-text-primary">{insights.headline}</p>
-          {insights.why && <p className="text-[13px] text-text-secondary"><b className="font-bold">Why it matters:</b> {insights.why}</p>}
-        </div>
+        <p className="font-display text-[17px] sm:text-[19px] font-semibold leading-tight text-text-primary">{insights.headline}</p>
       )}
 
       {legend && (

@@ -311,7 +311,6 @@ describe('CalendarReportView mood', () => {
       await render();
       await openTab('Mood');
       expect(text()).toContain('A week of ups and downs.');
-      expect(text()).toContain('Why it matters: Your best and hardest days stand out. What was different about them?');
       const notes = [...container.querySelectorAll('ol li')].map(li => li.textContent);
       expect(notes).toEqual(['1Best day: Wednesday (Great). Hardest: Monday (Low, with stress Maxed).']);
       expect(container.querySelector('[data-mark="best"]')).not.toBeNull();
@@ -328,7 +327,6 @@ describe('CalendarReportView mood', () => {
       await render();
       await openTab('Mood');
       expect(text()).toContain('A brighter week than the week before.');
-      expect(text()).toContain('Why it matters: Something is going right. Notice what’s different and keep it up.');
       expect([...container.querySelectorAll('ol li')].map(li => li.textContent)).toEqual(['1A brighter week than the week before: mood averaged 5.0, up from 2.0.']);
       expect(text()).toContain('Last week avg 2.0');
       // The week before only feeds the comparison: its days aren't on this week's chart.
@@ -363,7 +361,6 @@ describe('CalendarReportView mood', () => {
       await render();
       await openTab('Mood');
       expect(text()).toContain('Check in a few more days to see a pattern — 1 of 3 so far.');
-      expect(text()).toContain('A few more check-ins and this chart will show your patterns.');
       expect(text()).not.toContain('Why it matters');
       expect(text()).not.toContain('not what caused it');
       expect(container.querySelector('ol')).toBeNull();

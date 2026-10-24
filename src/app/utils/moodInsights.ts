@@ -1,7 +1,6 @@
 /**
- * The "Mood over time" summary: a headline, a "Why it matters" line and up
- * to two numbered notes drawn on the chart, all from fixed rules over the
- * period's daily check-ins.
+ * The "Mood over time" summary: a headline and up to two numbered notes
+ * drawn on the chart, all from fixed rules over the period's daily check-ins.
  *
  * The honesty rules:
  * - Nothing is said until a week has GATE.week check-ins, a month GATE.month
@@ -91,8 +90,6 @@ export interface MoodInsights {
   sparse: boolean;
   gate: number;
   headline: string;
-  /** Only when it says something measured that fits the headline. */
-  why: string | null;
   /** "Based on 18 check-ins over 23 days so far." */
   sure: string;
   /** The insight the headline says; null while sparse. */
@@ -184,18 +181,6 @@ const rowsIn = (byDay: Map<string, MoodCheckin>, p: ReportPeriod, today: string)
   return out;
 };
 
-export const WHY = {
-  better: 'Something is going right. Notice what’s different and keep it up.',
-  harder: 'Harder stretches happen. Plan some lighter days if you can.',
-  now: 'Go easy on yourself. Plan some lighter days if you can.',
-  stress: 'Stressful days were also your low days.',
-  energy: 'Low-energy days were also your low days.',
-  stretch: 'Think about what was going on then. It can help you plan ahead.',
-  days: 'Your best and hardest days stand out. What was different about them?',
-  steady: 'Things have been even. That makes changes easy to spot later.',
-  sparse: 'A few more check-ins and this chart will show your patterns.',
-} as const;
-
 /**
  * Everything the summary says about `period`. `byDay` must hold the period
  * before too, for "A brighter month than September"; without it that
@@ -224,7 +209,6 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
     return {
       kind, n, sparse: true, gate, sure, head: null, notes: [],
       headline: n === 0 ? `No check-ins for ${periodName(period)} yet.` : `Check in a few more days to see a pattern — ${n} of ${gate} so far.`,
-      why: WHY.sparse,
     };
   }
 
@@ -423,16 +407,6 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
     headline = levelText;
   }
 
-  let why: string | null;
-  if ((head === direction || head === change) && head.c!.gap > 0) why = WHY.better;
-  else if (head === direction || head === change) why = WHY.harder;
-  else if (head === stretch && stretch.recent) why = WHY.now;
-  else if (together) why = WHY[together.series!];
-  // A month's or year's best and hardest stretch is never "even", even when the headline is the plain level.
-  else if (isStretch && kind !== 'week') why = WHY.stretch;
-  else if (kind === 'week' && isStretch) why = WHY.days;
-  else why = steady && shape !== 'mix' ? WHY.steady : null;
-
   // The notes: the headline's own first, then the others. Only notes with a
   // place on the chart are numbered; every number has exactly one note.
   const notes = [head, direction, change, stretch, together]
@@ -442,7 +416,7 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
     .slice(0, 2)
     .map((insight, k) => ({ num: k + 1, insight }));
 
-  return { kind, n, sparse: false, gate, headline, why, sure, head, notes };
+  return { kind, n, sparse: false, gate, headline, sure, head, notes };
 };
 
 /** What the headline is based on, in one line, for "About this chart". */
