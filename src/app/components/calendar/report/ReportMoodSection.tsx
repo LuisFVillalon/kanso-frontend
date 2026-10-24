@@ -107,7 +107,7 @@ interface ReportMoodSectionProps {
   onSelectPeriod: (monthStart: Date) => void;
   /** Opens the Year report holding `date`. */
   onSelectYear: (date: Date) => void;
-  /** The profile's rest days, which the Tags card compares apart from work days. */
+  /** The profile's rest days, which the Tags & moments card compares apart from work days. */
   restDays: number[];
   view: MoodView;
   /** Opens Mood › Patterns, from "About this chart". */
@@ -117,13 +117,13 @@ interface ReportMoodSectionProps {
 /**
  * The report's Mood tab: "Over time" shows "Mood over time" and the
  * Check-ins summary, "Patterns" shows "Mood & your activity" beside one
- * "Tags" card that switches between "Your task & note tags" and "Check-in
- * tags"; with no check-ins it's an empty card with "Log today" and, while
+ * "Tags & moments" card that switches between "Your task & note tags" and
+ * "Moments"; with no check-ins it's an empty card with "Log today" and, while
  * weekly or monthly check-ins are on, the period's weeks or months to log.
  * Any day dot opens its check-in to edit, and a hollow one logs that day;
  * weekly and monthly check-ins open from their spans, ◇ and the Check-ins
  * list, which also logs a past week or month without one. A week is too
- * short for mood patterns, so its Patterns show the Tags card alone, hatched,
+ * short for mood patterns, so its Patterns show the Tags & moments card alone, hatched,
  * pointing to its Month report.
  */
 const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, onSelectYear, restDays, view, onSeePatterns }) => {
@@ -293,7 +293,7 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
           />
         ) : (
           <div className="card-glass p-6 text-center text-sm text-text-muted">
-            Mood & your activity, Check-in tags & mood and Your task & note tags use your daily check-ins — there are none {scopeName(period)}.
+            Mood & your activity, Moments & mood and Your task & note tags use your daily check-ins — there are none {scopeName(period)}.
           </div>
         )
       )}

@@ -192,12 +192,14 @@ describe('CalendarReportView mood', () => {
     expect(container.querySelector('svg[aria-label^="Typical mood: "]')).toBeNull();
     expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
-    // One Tags card beside it, opening on your own tags; its switch swaps in the check-in tags in place.
+    // One Tags & moments card beside it, opening on your own tags; its switch swaps in the Moments in place.
+    expect(text()).toContain('Tags & moments');
+    expect([...document.querySelector('[aria-label="Pattern to show"]')!.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Activity', 'Tags & moments']);
     expect(tab('Your task & note tags').getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('How you felt on days you worked on each tag');
-    await openTab('Check-in tags');
-    expect(tab('Check-in tags').getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('Tags you picked when checking in');
+    await openTab('Moments');
+    expect(tab('Moments').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('Moments you picked when checking in');
     expect(text()).not.toContain('How you felt on days you worked on each tag');
     expect(text()).toContain('Mood & your activity');
   });
@@ -240,12 +242,12 @@ describe('CalendarReportView mood', () => {
     expect(container.querySelector('svg[aria-label="Habits completed per day with mood"]')).not.toBeNull();
 
     // Exercised is on the Good and Great days: 8 of them, against a usual 3.0 over all 20.
-    await openTab('Check-in tags');
+    await openTab('Moments');
     expect(text()).toContain('Exercised');
     expect(text()).toContain('8 days');
     expect(text()).toContain('your usual 3.0 · Okay');
     expect(text()).toContain('+1.5');
-    expect(text()).toContain('On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
+    expect(text()).toContain('On the 8 days you picked “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
     expect(text()).toContain('Your usual is your typical mood across all 20 check-ins this month.');
     expect(text()).not.toContain('overall');
 
@@ -266,22 +268,22 @@ describe('CalendarReportView mood', () => {
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     await openPatterns();
-    await openTab('Check-in tags');
+    await openTab('Moments');
 
-    const exercised = buttonLabelled(/^On the 8 days you tagged “Exercised”/);
-    const tired = buttonLabelled(/^On the 8 days you tagged “Tired”/);
+    const exercised = buttonLabelled(/^On the 8 days you picked “Exercised”/);
+    const tired = buttonLabelled(/^On the 8 days you picked “Tired”/);
     const captions = () => [...container.querySelectorAll('li > p')].map(p => p.textContent);
-    expect(exercised.getAttribute('title')).toBe('On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
+    expect(exercised.getAttribute('title')).toBe('On the 8 days you picked “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.');
     expect(captions()).toEqual([]);
 
     await click(exercised);
     expect(exercised.getAttribute('aria-expanded')).toBe('true');
-    expect(captions()).toEqual(['On the 8 days you tagged “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.']);
+    expect(captions()).toEqual(['On the 8 days you picked “Exercised”, your mood averaged 4.5 (Great) — 1.5 higher than your usual 3.0.']);
 
     await click(tired);
     expect(exercised.getAttribute('aria-expanded')).toBe('false');
     expect(tired.getAttribute('aria-expanded')).toBe('true');
-    expect(captions()).toEqual(['On the 8 days you tagged “Tired”, your mood averaged 1.5 (Low) — 1.5 lower than your usual 3.0.']);
+    expect(captions()).toEqual(['On the 8 days you picked “Tired”, your mood averaged 1.5 (Low) — 1.5 lower than your usual 3.0.']);
 
     await click(tired);
     expect(captions()).toEqual([]);

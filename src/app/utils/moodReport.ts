@@ -87,7 +87,7 @@ export const summarizeMood = (
   return { average: logged > 0 ? total / logged : null, logged, days: days.length, distribution };
 };
 
-/** Tags on fewer days than this are left off the Check-in tags & mood card. */
+/** Moments on fewer days than this are left off the Moments & mood card. */
 export const TAG_MIN_DAYS = 3;
 
 export interface TagMood {
@@ -99,8 +99,8 @@ export interface TagMood {
 
 /**
  * Average mood on the days over [start, end], up to today, that carry each
- * mood tag — tags used on at least `minDays` days, best average first. Only
- * means and day counts: with this many tags any "significant" claim would
+ * moment — moments picked on at least `minDays` days, best average first.
+ * Only means and day counts: with this many moments any "significant" claim would
  * be noise.
  */
 export const moodByTag = (

@@ -159,20 +159,21 @@ describe('ReportTagsCard', () => {
     expect(text()).toContain('Tag your tasks and notes and, once a tag is on 5 days with a check-in, this shows how you felt on those days.');
   });
 
-  it('swaps your tags and the check-in tags in place with its switch', async () => {
+  it('swaps your tags and the Moments in place with its switch', async () => {
     const tagged = new Map([...byDay].map(([k, c], i) => [k, { ...c, tags: i % 2 ? [] : ['Tired'] }]));
     act(() => root.render(card({ byDay: tagged })));
-    const tabs = [...host.querySelectorAll('[aria-label="Tags to show"] [role="tab"]')];
-    expect(tabs.map(t => t.textContent)).toEqual(['Your task & note tags', 'Check-in tags']);
+    const tabs = [...host.querySelectorAll('[aria-label="Tags or moments to show"] [role="tab"]')];
+    expect(tabs.map(t => t.textContent)).toEqual(['Your task & note tags', 'Moments']);
+    expect(text()).toMatch(/^Tags & moments/);
     expect(tabs[0].getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('How you felt on days you worked on each tag');
     expect(host.querySelector('g[role="button"]')).not.toBeNull();
 
     await click(tabs[1]);
     expect(tabs[1].getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('Tags you picked when checking in');
+    expect(text()).toContain('Moments you picked when checking in');
     expect(text()).toContain('your usual 3.0 · Okay');
-    expect(text()).toContain('On the 10 days you tagged “Tired”');
+    expect(text()).toContain('On the 10 days you picked “Tired”');
     expect(host.querySelector('g[role="button"]')).toBeNull();
     expect(host.querySelector('[aria-label="Break your tags down"]')).toBeNull();
 

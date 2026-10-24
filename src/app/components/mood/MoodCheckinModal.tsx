@@ -101,9 +101,9 @@ const FieldLabel: React.FC<{ children: React.ReactNode; htmlFor?: string }> = ({
 /**
  * A mood check-in: a mood from five faces (the only required field), then
  * optional fields by kind —
- * - day: energy, stress, mood tags (their own list, suggested by
+ * - day: energy, stress, moments (mood tags in the API: their own list, suggested by
  *   GET /get-mood-tags) and a note;
- * - week: workload felt, the best part of the week and tags;
+ * - week: workload felt, the best part of the week and moments;
  * - month: progress on what matters, the month in one word and a note.
  * A week or month opens with how its days went and a suggested mood, which
  * is never picked for the user. Saving replaces the period's whole check-in,
@@ -359,8 +359,9 @@ const MoodCheckinModal: React.FC<Props> = ({
 
           {showsTags && (
             <div>
-              <FieldLabel>{kind === 'day' ? 'What was part of today?' : 'Tags'}</FieldLabel>
-              <div className="flex flex-wrap gap-1.5">
+              <FieldLabel>{kind === 'day' ? 'What was part of today?' : 'What was part of this week?'}</FieldLabel>
+              <p className="text-[11px] text-text-muted -mt-1 mb-1.5">Pick your moments</p>
+              <div role="group" aria-label="Moments" className="flex flex-wrap gap-1.5">
                 {tagOptions.map(tag => {
                   const selected = tags.some(t => sameTag(t, tag));
                   return (
@@ -386,14 +387,14 @@ const MoodCheckinModal: React.FC<Props> = ({
                     onKeyDown={e => {
                       if (e.key === 'Enter') { e.preventDefault(); commitNewTag(); }
                       if (e.key === 'Escape') {
-                        // Cancel just the new tag: Modal closes on a document-level Escape.
+                        // Cancel just the new moment: Modal closes on a document-level Escape.
                         e.nativeEvent.stopImmediatePropagation();
                         setNewTag('');
                         setAddingTag(false);
                       }
                     }}
-                    aria-label="New mood tag"
-                    placeholder="New tag"
+                    aria-label="New moment"
+                    placeholder="New moment"
                     className="input-field text-xs py-1 px-3 w-32 rounded-full"
                   />
                 ) : (
@@ -404,7 +405,7 @@ const MoodCheckinModal: React.FC<Props> = ({
                     className="chip mood-tag border-dashed disabled:opacity-50"
                   >
                     <Plus className="w-3 h-3" aria-hidden="true" />
-                    Tag
+                    Moment
                   </button>
                 )}
               </div>

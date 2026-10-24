@@ -28,7 +28,7 @@ export interface MoodCheckin {
   /** Month only: the month in one word. */
   word: string | null;
   note: string | null;
-  /** Mood tags — their own list, not task tags. */
+  /** Moments ("What was part of today?") — their own list, not task tags. The API calls them tags. */
   tags: string[];
   created_at: string;
   updated_at: string;
