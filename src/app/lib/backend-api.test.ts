@@ -190,6 +190,18 @@ describe('syncCanvasLinkedTasks', () => {
     ]);
   });
 
+  it('keeps whether Canvas counts it done, why, and whether this sync completed it', async () => {
+    const done = [
+      { task_id: 3, synced: true, submitted: true, done: true, done_reason: 'submitted', due_at: null, due_changed: false, completed: true },
+      { task_id: 4, synced: true, submitted: false, done: true, done_reason: 'marked_complete', due_at: null, due_changed: false, completed: false },
+    ];
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ results: done }), { status: 200 }));
+    expect(await syncCanvasLinkedTasks()).toEqual([
+      { task_id: 3, synced: true, submitted: true, done: true, done_reason: 'submitted', due_at: null, due_changed: false, completed: true },
+      { task_id: 4, synced: true, submitted: false, done: true, done_reason: 'marked_complete', due_at: null, due_changed: false },
+    ]);
+  });
+
   it('also reads a bare list', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify(results.slice(0, 1)), { status: 200 }));
     expect(await syncCanvasLinkedTasks()).toHaveLength(1);

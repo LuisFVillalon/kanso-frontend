@@ -1154,9 +1154,9 @@ export async function saveCanvasCourseTags(courseId: number, tagIds: number[]): 
 
 /**
  * Checks the user's open tasks added from Canvas against their assignments:
- * which ones Canvas shows submitted, and which had their due date moved to
- * the assignment's (the backend saves that move itself; it never completes a
- * task). Reads `{ results }` or a bare list, so a response with or without
+ * which ones Canvas shows submitted or counts done, which had their due date
+ * moved to the assignment's, and which this sync completed (the backend saves
+ * both itself; it completes a task only when auto_complete is on). Reads `{ results }` or a bare list, so a response with or without
  * the read routes' freshness fields both work.
  */
 export async function syncCanvasLinkedTasks(refresh = false): Promise<CanvasLinkedTaskSync[]> {
@@ -1175,8 +1175,11 @@ export async function syncCanvasLinkedTasks(refresh = false): Promise<CanvasLink
       task_id: r.task_id,
       synced: r.synced !== false,
       submitted: r.submitted === true,
+      ...(typeof r.done === "boolean" ? { done: r.done } : {}),
+      ...(typeof r.done_reason === "string" ? { done_reason: r.done_reason } : {}),
       due_at: typeof r.due_at === "string" ? r.due_at : null,
       due_changed: r.due_changed === true,
+      ...(r.completed === true ? { completed: true } : {}),
     }));
 }
 
