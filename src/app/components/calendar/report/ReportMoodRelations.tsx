@@ -56,7 +56,7 @@ interface MetricAnalysis {
  * is, one short line, and a line from lighter to busier days. The chart, the
  * full statement and how it's worked out wait behind "See details", and a
  * tile per metric gives the same answer for each activity — beside the Tags
- * card. Below the lg breakpoint the two cards take turns behind an Activity /
+ * & moments card. Below the lg breakpoint the two cards take turns behind an Activity /
  * Tags switch, and the tiles are left out on phones and short windows, so
  * Patterns fits one screen.
  * Nothing here says what causes what, or that a higher or lower mood is good
@@ -89,7 +89,7 @@ const ReportMoodRelations: React.FC<ReportMoodRelationsProps> = ({ activity, byD
   const panelSwitch = (
     <div className="lg:hidden flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Pattern to show">
       <MetricButton active={panel === 'activity'} onClick={() => setPanel('activity')}>Activity</MetricButton>
-      <MetricButton active={panel === 'tags'} onClick={() => setPanel('tags')}>Tags</MetricButton>
+      <MetricButton active={panel === 'tags'} onClick={() => setPanel('tags')}><span className="whitespace-nowrap">Tags &amp; moments</span></MetricButton>
     </div>
   );
 

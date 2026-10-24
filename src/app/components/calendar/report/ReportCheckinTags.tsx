@@ -36,7 +36,7 @@ interface ReportCheckinTagsProps {
 }
 
 /**
- * "Moments & mood", the Tags card's check-in side: days with each moment
+ * "Moments & mood", the Tags & moments card's check-in side: days with each moment
  * picked when checking in compared with your usual, as a bar from a labeled
  * center (your average mood over the period) toward lower or higher mood,
  * the moment's own mood as a face, and the signed difference.
