@@ -145,11 +145,12 @@ const ReportTagFeelings: React.FC<ReportTagFeelingsProps> = ({ activity, byDay, 
                 <Swatch style={{ backgroundColor: tagColor(selected), opacity: 0.5 }} label={`Days with ${selected.tag.name}`} />
                 <Swatch style={{ width: 9, height: 9, borderRadius: 9, border: '1.2px solid var(--tm-pencil)', backgroundColor: 'var(--tm-surface)' }} label="Other days" />
                 <Swatch style={{ height: 0, borderTop: `2px dashed ${tagColor(selected)}` }} label={`Average on ${selected.tag.name} days${selected.feel[feeling].n ? ' compared' : ''}`} />
-                <Swatch style={{ height: 0, borderTop: '2px dotted var(--tm-text-primary)' }} label="Your usual" />
+                {selected.feel[feeling].other != null && <Swatch style={{ height: 0, borderTop: '2px dotted var(--tm-text-primary)' }} label="Your usual" />}
               </div>
               <TagTimelineChart days={analysis.days} tag={selected} feeling={feeling} kind={period.kind} periodStart={period.start} periodEnd={period.end} />
               <p className="text-sm text-text-primary leading-relaxed">
-                Colored columns are days with {selected.tag.name}; the two dashed lines compare their average with your usual.{' '}
+                Colored columns are days with {selected.tag.name};{' '}
+                {selected.feel[feeling].other != null ? 'the two dashed lines compare their average with your usual.' : 'the dashed line is their average.'}{' '}
                 {describeTagFeeling(selected.tag.name, feeling, selected.feel[feeling])}
               </p>
             </div>

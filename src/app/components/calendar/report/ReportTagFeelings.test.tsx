@@ -65,6 +65,8 @@ describe('ReportTagFeelings', () => {
     expect(text()).toContain('Average on Work days');
     expect(text()).not.toContain('Average on Work days compared');
     expect([...host.querySelectorAll('svg text')].some(t => t.textContent?.startsWith('usual '))).toBe(false);
+    expect([...host.querySelectorAll('span')].filter(s => s.textContent === 'Your usual')).toHaveLength(1);
+    expect(text()).toContain('Colored columns are days with Work; the dashed line is their average. “Work” is on 6 days');
   });
 
   it('labels each tag with the days it compares', () => {
@@ -98,6 +100,8 @@ describe('ReportTagFeelings', () => {
     await act(async () => { group.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(text()).toContain('Your mood, day by day, with Work days highlighted');
     expect(text()).toContain('Average on Work days compared');
+    expect([...host.querySelectorAll('span')].filter(s => s.textContent === 'Your usual')).toHaveLength(2);
+    expect(text()).toContain('Colored columns are days with Work; the two dashed lines compare their average with your usual.');
     expect(text()).toContain('That’s a clear difference: lower mood.');
     expect(host.querySelector('svg[aria-label="Your mood day by day, with Work days highlighted"]')).not.toBeNull();
 
