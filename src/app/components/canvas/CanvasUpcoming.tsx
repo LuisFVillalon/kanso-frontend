@@ -84,8 +84,8 @@ const CanvasUpcoming: React.FC<CanvasUpcomingProps> = ({
   const shown = inClass(inRange(ahead));
   // Everything here is done and hidden: say so rather than "Nothing due".
   const allDone = hiding && shown.length === 0 && inClass(inRange(overview.upcoming)).length > 0;
-  const missing = inClass(notDone(overview.missing));
-  // Checked off in Canvas but still missing there: listed (faded) but not counted as slipped.
+  const missing = [...inClass(notDone(overview.missing))].sort((a, b) => Number(isCanvasItemDone(a)) - Number(isCanvasItemDone(b)));
+  // Checked off in Canvas but still missing there: listed (faded) after open work, not counted as slipped.
   const slipped = missing.filter(i => !isCanvasItemDone(i)).length;
   const graded = inClass(overview.recently_graded);
   const filtered = classFilter != null ? classes.find(c => c.id === classFilter) ?? null : null;

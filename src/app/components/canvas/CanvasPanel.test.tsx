@@ -625,6 +625,23 @@ describe('CanvasPanel', () => {
       expect(container.querySelector('[aria-label$="slipped"]')).toBeNull();
     });
 
+    it('lists slipped work before what is checked off in Canvas, so Start with this one is open work', async () => {
+      api.fetchCanvasOverview.mockResolvedValue(overview({
+        missing: [
+          item({
+            id: 3, title: 'Lab 2', due_at: inDays(-3), submission: sub({ missing: true }), done: true,
+            done_reason: 'marked_complete', marked_complete: true,
+          }),
+          item({ id: 5, title: 'Lab 3', due_at: inDays(-2), submission: sub({ missing: true }), done: false, done_reason: null }),
+        ],
+      }));
+      await render();
+      expect(text()).toContain('One thing slipped. Start with this one.');
+      const slipped = [...rowOf('Lab 3').parentElement!.querySelectorAll<HTMLElement>('[class*="rounded-[10px]"]')];
+      expect(slipped.map(r => r.dataset.done ?? 'open')).toEqual(['open', 'true']);
+      expect(slipped[0].textContent).toContain('Lab 3');
+    });
+
     it('hides done work with Hide done, and remembers it', async () => {
       await render();
       expect(button('Hide done').getAttribute('aria-pressed')).toBe('false');
