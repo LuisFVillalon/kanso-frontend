@@ -138,7 +138,6 @@ const CalendarView: React.FC = () => {
                   data={selectedDate ? dayData.get(toLocalDateStr(selectedDate)) : undefined}
                   totalHabits={habits.length}
                   allHabits={habits}
-                  dayData={dayData}
                   showMood={showMood}
                 />
               </div>
