@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import { periodContaining } from './calendarReport';
 import {
@@ -11,7 +11,9 @@ import {
   type TagItemKind,
 } from './tagReport';
 
-beforeAll(() => {
+// Local-day math depends on the zone; pin one with a DST change.
+// Hoisted so fixtures built at load time and in describe blocks see it too.
+vi.hoisted(() => {
   process.env.TZ = 'America/Los_Angeles';
 });
 
