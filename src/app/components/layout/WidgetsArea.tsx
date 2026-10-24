@@ -83,7 +83,7 @@ const WidgetsArea: React.FC<{ widgets: React.ReactNode }> = ({ widgets }) => {
           </div>
           {view === 'week' && (
             <div className="[grid-area:1/1] relative mb-4 sm:mb-6" style={weekHeightPx === null ? undefined : { minHeight: weekHeightPx }}>
-              <div className="absolute inset-0"><WeekView fill heightPx={weekHeightPx} onResize={setWeekHeightPx} /></div>
+              <div className="absolute inset-0"><WeekView fill heightPx={weekHeightPx} onResize={setWeekHeightPx} newEventButton={false} /></div>
             </div>
           )}
         </div>
