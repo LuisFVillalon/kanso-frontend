@@ -59,9 +59,12 @@ describe('ReportTagFeelings', () => {
     const group = host.querySelector('g[role="button"]')!;
     expect(group.getAttribute('aria-label')).toBe('Work, 6 days: show its days over time');
     expect(host.querySelector('th[scope="row"]')!.textContent).toBe('Work, 6 days');
+    expect(group.querySelectorAll('line[stroke="var(--tm-text-primary)"]')).toHaveLength(0);
+    expect(host.querySelector('td')!.textContent).toContain('Too few days to tell');
     await act(async () => { group.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(text()).toContain('Average on Work days');
     expect(text()).not.toContain('Average on Work days compared');
+    expect([...host.querySelectorAll('svg text')].some(t => t.textContent?.startsWith('usual '))).toBe(false);
   });
 
   it('labels each tag with the days it compares', () => {
