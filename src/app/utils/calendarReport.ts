@@ -7,7 +7,7 @@
 
 import type { CalendarActivity } from '@/app/types/activity';
 import type { Habit } from '@/app/types/habit';
-import type { MoodCheckin } from '@/app/types/mood';
+import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
 import { PATTERN_MIN_DAYS } from '@/app/utils/moodReport';
 
@@ -538,7 +538,7 @@ const METRIC_COPY: Record<MoodMetric, {
   amount: string;
   /** "on days with more …" */
   more: string;
-  /** "More …, better mood" in the Overview's short line. */
+  /** "More …, higher mood" in the Overview's short line. */
   short: string;
   /** "On days you …" at or above the split. */
   atLeast: (threshold: number) => string;
@@ -571,12 +571,14 @@ const capitalize = (text: string) => `${text[0].toUpperCase()}${text.slice(1)}`;
 /** Gaps in average mood smaller than this read as "about the same". */
 const SAME_MOOD_GAP = 0.3;
 
-/** How the first sentence says how your mood differed, by level. */
-const FELT: Record<'early' | 'slight' | 'moderate' | 'strong', string> = {
-  early: 'seemed to feel',
-  slight: 'felt slightly',
-  moderate: 'tended to feel',
-  strong: 'usually felt',
+type LinkLevel = 'early' | 'slight' | 'moderate' | 'strong';
+
+/** How the first sentence says how your mood differed, by level: higher or lower, never better or worse. */
+const MOOD_WAS: Record<LinkLevel, string> = {
+  early: 'seemed',
+  slight: 'was slightly',
+  moderate: 'tended to be',
+  strong: 'was usually',
 };
 
 /**
@@ -602,18 +604,15 @@ export const describeCorrelation = (metric: MoodMetric, result: CorrelationResul
     const gap = highAverage! - lowAverage!;
     const seen = Math.abs(gap) < SAME_MOOD_GAP
       ? `${Scope}, your mood was about the same on days you ${atLeast} as on other days.`
-      : `${Scope}, you sometimes felt ${gap > 0 ? 'better' : 'worse'} on days you ${atLeast}, but not often enough to count as a pattern.`;
+      : `${Scope}, your mood was sometimes ${gap > 0 ? 'higher' : 'lower'} on days you ${atLeast}, but not often enough to count as a pattern.`;
     return n < STRONG_MIN_DAYS ? `${seen} Not enough days yet to tell.` : seen;
   }
 
-  const better = rho! > 0;
-  const noticed = `${Scope}, you ${FELT[result.level]} ${better ? 'better' : 'worse'} on days you ${atLeast}.`;
+  const noticed = `${Scope}, your mood ${MOOD_WAS[result.level]} ${rho! > 0 ? 'higher' : 'lower'} on days you ${atLeast}.`;
   if (result.level === 'early') {
     return `${noticed} It’s based on only ${plural(n, 'day')}, so it could be chance — check back in a few weeks.`;
   }
-  const meaning = better
-    ? 'Worth noticing what helps on those days.'
-    : 'Worth noticing how those days leave you feeling.';
+  const meaning = 'Worth noticing what those days have in common.';
   if (n < STRONG_MIN_DAYS) {
     return `${noticed} ${meaning} This is based on only ${plural(n, 'day')}, so take it as a hint.`;
   }
@@ -627,11 +626,122 @@ export const describeCorrelation = (metric: MoodMetric, result: CorrelationResul
 
 /**
  * The full sentence for a named link (early to strong), with its direction:
- * "Strong link: better mood on days with more tasks completed this month".
+ * "Strong link: higher mood on days with more tasks completed this month".
  */
 export const describeLinkBrief = (metric: MoodMetric, result: CorrelationResult, scope: string): string =>
-  `${CORRELATION_LABELS[result.level]}: ${result.rho! > 0 ? 'better' : 'worse'} mood on days with ${METRIC_COPY[metric].more} ${scope}`;
+  `${CORRELATION_LABELS[result.level]}: ${result.rho! > 0 ? 'higher' : 'lower'} mood on days with ${METRIC_COPY[metric].more} ${scope}`;
 
-/** The Overview tile's short form of a named link, sized to fit one line: "More tasks, better mood". */
+/** The Overview tile's short form of a named link, sized to fit one line: "More tasks, higher mood". */
 export const describeLinkShort = (metric: MoodMetric, result: CorrelationResult): string =>
-  `More ${METRIC_COPY[metric].short}, ${result.rho! > 0 ? 'better' : 'lower'} mood`;
+  `More ${METRIC_COPY[metric].short}, ${result.rho! > 0 ? 'higher' : 'lower'} mood`;
+
+/** The question "Mood & your activity" answers for each activity. */
+export const MOOD_QUESTIONS: Record<MoodMetric, string> = {
+  tasks: 'How is your mood on days you finish more tasks?',
+  notes: 'How is your mood on days you spend more time in notes?',
+  habits: 'How is your mood on days you check off more habits?',
+};
+
+/** Which way mood went: higher, lower, about the same, or can't tell yet. Never good or bad. */
+export type AnswerKind = 'higher' | 'lower' | 'same' | 'wait';
+
+export interface MoodAnswer {
+  kind: AnswerKind;
+  /** The answer as a full sentence: "Your mood was maybe higher on busier days". */
+  sentence: string;
+  /** The same answer in a few words, for the per-activity tiles: "Maybe higher". */
+  short: string;
+  /** One short line under the answer: how sure it is and over how many days. */
+  support: string;
+}
+
+/** How sure a named link is, in one word before "higher" or "lower". */
+const HOW_SURE: Record<LinkLevel, string> = {
+  early: 'maybe',
+  slight: 'a little',
+  moderate: '',
+  strong: 'clearly',
+};
+
+/** "on busier days", per activity, to end the sentence. */
+const ON_DAYS: Record<MoodMetric, string> = {
+  tasks: 'on busier days',
+  notes: 'on days with more note time',
+  habits: 'on days with more habits checked off',
+};
+
+const BARELY_CHANGED: Record<MoodMetric, string> = {
+  tasks: 'Your tasks barely changed from day to day',
+  notes: 'Your time in notes barely changed from day to day',
+  habits: 'Your habits barely changed from day to day',
+};
+
+/**
+ * The card's answer to its question, from the same verdict as
+ * describeCorrelation: "can't tell yet" under PATTERN_MIN_DAYS days or when
+ * the activity barely varies, "about the same" for no clear link, and
+ * otherwise higher or lower, worded by how sure it is. `moods` are the days'
+ * moods behind the result, so a mood that never changed can say so.
+ */
+export const describeAnswer = (metric: MoodMetric, result: CorrelationResult, moods: number[]): MoodAnswer => {
+  const { n } = result;
+  const days = plural(n, 'day');
+  const wait = 'Can’t tell yet';
+  if (result.level === 'insufficient') {
+    return { kind: 'wait', sentence: wait, short: wait, support: `${n} of the ${PATTERN_MIN_DAYS} check-in days it needs so far` };
+  }
+  if (result.level === 'flat') return { kind: 'wait', sentence: wait, short: wait, support: BARELY_CHANGED[metric] };
+  if (result.level === 'none') {
+    const distinct = new Set(moods);
+    const seen = distinct.size === 1
+      ? `Your mood was ${moodLabel([...distinct][0])} every day you checked in`
+      : Math.abs(result.highAverage! - result.lowAverage!) < SAME_MOOD_GAP
+        ? 'Little change either way'
+        : 'Some ups and downs, but no steady pattern';
+    return { kind: 'same', sentence: 'Your mood was about the same either way', short: 'About the same', support: `${seen} · ${days}` };
+  }
+
+  const word = result.rho! > 0 ? 'higher' : 'lower';
+  const sure = HOW_SURE[result.level];
+  const support = result.level === 'early'
+    ? `Too early to be sure · only ${days}`
+    : n < STRONG_MIN_DAYS
+      ? `Treat it as a hint · only ${days}`
+      : result.level === 'strong'
+        ? `A clear pattern · ${days}`
+        : result.level === 'moderate'
+          ? `Showed up often · ${days}`
+          : `Small but steady · ${days}`;
+  return {
+    kind: word,
+    sentence: `Your mood was ${sure ? `${sure} ` : ''}${word} ${ON_DAYS[metric]}`,
+    short: capitalize(sure ? `${sure} ${word}` : word),
+    support,
+  };
+};
+
+export interface SplitSides {
+  /** The days below the split, as people read them: "0–1 tasks", "no habits", "under 30m". */
+  low: string;
+  high: string;
+  lowDays: number;
+  highDays: number;
+}
+
+/** The two halves of the median split behind the answer, for the line's two ends. Null without a split. */
+export const splitSides = (metric: MoodMetric, result: CorrelationResult, values: number[]): SplitSides | null => {
+  const t = result.threshold;
+  if (t == null || values.length === 0) return null;
+  const highDays = values.filter(v => v >= t).length;
+  const lowDays = values.length - highDays;
+  if (metric === 'notes') {
+    const time = formatDurationShort(t * 60);
+    return { low: `under ${time}`, high: `${time}+`, lowDays, highDays };
+  }
+  const unit = metric === 'tasks' ? 'task' : 'habit';
+  const min = Math.min(...values);
+  const low = t - 1 === min
+    ? (min === 0 ? `no ${unit}s` : plural(min, unit))
+    : `${min}–${t - 1} ${unit}s`;
+  return { low, high: `${t}+ ${unit}s`, lowDays, highDays };
+};
