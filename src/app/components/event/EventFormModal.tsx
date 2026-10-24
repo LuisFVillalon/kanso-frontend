@@ -12,6 +12,7 @@ import {
   eventFormWarnings,
   isRepeating,
   REPEAT_INTERVAL_MAX,
+  usableTermEnd,
   WEEKDAY_LETTER,
   WEEKDAY_LONG,
   type EventFormValues,
@@ -85,7 +86,7 @@ const EventFormModal: React.FC<EventFormModalProps> = ({ mode, initial, tags, co
   const notifications = useOptionalNotifications();
   const showReminder = !!notifications && notifications.status !== 'unavailable';
 
-  const termEnd = context.term && context.term.endDate >= form.date ? context.term.endDate : null;
+  const termEnd = usableTermEnd(context.term?.endDate ?? null, form.date);
   const errors = eventFormErrors(form, termEnd);
   const warnings = eventFormWarnings(form, context);
   const summary = eventFormSummary(form, termEnd);

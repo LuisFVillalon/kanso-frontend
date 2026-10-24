@@ -119,6 +119,10 @@ const monthAfter = (date: string) => {
   return toLocalDateStr(new Date(d.getFullYear(), d.getMonth() + 1, d.getDate()));
 };
 
+/** The term end when the event can still end with it (it's on or after `date`), else null. */
+export const usableTermEnd = (termEnd: string | null, date: string): string | null =>
+  termEnd && termEnd >= date ? termEnd : null;
+
 /** A new event's form: an hour from `startTime` on `date` unless given, repeating weekly on that day if `repeat`. */
 export function blankEventForm(
   { date, startTime = '09:00', endTime, title = '', tags = [], repeat = false, termEnd = null }:
@@ -126,11 +130,11 @@ export function blankEventForm(
 ): EventFormValues {
   const start = parseTimeToMinutes(startTime) ?? 9 * 60;
   const end = endTime ?? minutesToTimeStr(Math.min(MINUTES_PER_DAY - 1, start + 60));
-  const usableTermEnd = termEnd && termEnd >= date ? termEnd : null;
+  const termEndDate = usableTermEnd(termEnd, date);
   return {
     title, description: '', tags, allDay: false, date, startTime: minutesToTimeStr(start), endTime: end,
     repeat: repeat ? 'weekly' : 'none', repeatDays: [parseLocalDate(date).getDay()], repeatInterval: 3,
-    endMode: usableTermEnd ? 'term' : 'never', endDate: usableTermEnd ?? monthAfter(date),
+    endMode: termEndDate ? 'term' : 'never', endDate: termEndDate ?? monthAfter(date),
     reminderMinutes: null,
   };
 }
@@ -163,7 +167,8 @@ export function eventFormFromOccurrence(occurrence: EventOccurrence, series: Cal
 /** The last day the form's series can repeat on, or null for no end (and for a one-off event). */
 export function formEndDate(form: EventFormValues, termEnd: string | null): string | null {
   if (!isRepeating(form) || form.endMode === 'never') return null;
-  if (form.endMode === 'term' && termEnd) return termEnd;
+  const term = usableTermEnd(termEnd, form.date);
+  if (form.endMode === 'term' && term) return term;
   return form.endDate || null;
 }
 
