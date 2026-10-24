@@ -239,7 +239,6 @@ const TaskItem: React.FC<TaskItemProps> = ({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 ml-6 min-w-0">
             {canvasUrl && <FromCanvasLink url={canvasUrl} />}
             {doneInCanvas && <DoneInCanvasBadge />}
-            {doneInCanvas && <DoneInCanvasBadge />}
           </div>
         )}
         {banner}

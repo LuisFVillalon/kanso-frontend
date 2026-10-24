@@ -163,7 +163,7 @@ describe('TaskItem added from Canvas', () => {
   it.each([false, true])('says "Done in Canvas" on a task the Canvas sync completed (compact: %s)', compact => {
     const done = { canvas_html_url: url, completed: true, completed_by_canvas: true };
     render({ task: task(7, 'Problem Set 6', done), compact });
-    expect(container.textContent).toContain('Done in Canvas');
+    expect(container.textContent?.split('Done in Canvas')).toHaveLength(2);
     // Completed by hand, or reopened since: no badge.
     render({ task: task(7, 'Problem Set 6', { ...done, completed_by_canvas: false }), compact });
     expect(container.textContent).not.toContain('Done in Canvas');
