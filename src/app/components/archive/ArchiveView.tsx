@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  ArchiveRestore, Trash2, Loader2, Archive, Filter, ListChecks, NotebookText, Tags, Blocks, Flame,
+  ArchiveRestore, Trash2, Loader2, Archive, Filter, ListChecks, NotebookText, Tags, Blocks, Flame, CalendarClock,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -11,6 +11,10 @@ import {
   fetchNotes,
   fetchTags,
   fetchHabits,
+  fetchEvents,
+  fetchArchivedEventOccurrences,
+  setEventArchived,
+  deleteEvent as deleteEventApi,
   unarchiveTask,
   unarchiveNote,
   unarchiveTag,
@@ -27,25 +31,29 @@ import { useNotesContext } from '@/app/context/NotesContext';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
+import { notifyEventsChanged } from '@/app/hooks/useEventsVersion';
 import { Tag, Task } from '@/app/types/task';
 import { Note } from '@/app/types/notes';
 import { Habit } from '@/app/types/habit';
+import type { CalendarEvent, EventOccurrence } from '@/app/types/event';
 import { parentChain, subtaskTreeIds } from '@/app/utils/taskUtils';
 import { stripHtml } from '@/app/utils/textUtils';
-import { formatUpdatedDate } from '@/app/utils/dateUtils';
+import { formatUpdatedDate, parseLocalDate } from '@/app/utils/dateUtils';
+import { describeRepeat, formatEventTime, occurrenceKey } from '@/app/utils/eventOccurrences';
 import { collectItemTags, filterByAnyTag } from '@/app/utils/tagFilter';
 import TagChipList from '@/app/components/common/TagChipList';
 import Modal from '@/app/components/common/Modal';
 import PageSpinner from '@/app/components/common/PageSpinner';
 import ArchiveTagFilter from './ArchiveTagFilter';
 
-type TabKey = 'tasks' | 'notes' | 'tags' | 'habits';
+type TabKey = 'tasks' | 'notes' | 'tags' | 'habits' | 'events';
 
 const TABS: { key: TabKey; label: string; icon: LucideIcon; empty: string }[] = [
   { key: 'tasks', label: 'Tasks', icon: ListChecks, empty: 'Archive a task from the dashboard to tuck it away without deleting it.' },
   { key: 'notes', label: 'Notes', icon: NotebookText, empty: 'Archive a note from its card to tuck it away without deleting it.' },
   { key: 'tags', label: 'Tags', icon: Tags, empty: 'Archive a tag from Manage tags to hide it from pickers, filters and folders.' },
   { key: 'habits', label: 'Habits', icon: Blocks, empty: 'Archive a habit from Manage habits to set it aside with its history.' },
+  { key: 'events', label: 'Events', icon: CalendarClock, empty: 'Archive an event from the calendar. Its past dates keep showing there; its upcoming ones wait here.' },
 ];
 
 type Archived = { id: number; archived_at?: string | null };
@@ -54,20 +62,61 @@ type Archived = { id: number; archived_at?: string | null };
 const byArchivedDesc = (a: Archived, b: Archived) =>
   new Date(b.archived_at ?? 0).getTime() - new Date(a.archived_at ?? 0).getTime();
 
+/**
+ * An archived event: a whole series, or one date archived on its own (its
+ * series id plus the date). Either one restores or deletes on its own.
+ */
+interface ArchivedEvent {
+  key: string;
+  id: number;
+  title: string;
+  occurrenceDate: string | null;
+  series?: CalendarEvent;
+  occurrence?: EventOccurrence;
+}
+
+const seriesRow = (series: CalendarEvent): ArchivedEvent =>
+  ({ key: `series:${series.id}`, id: series.id, title: series.title, occurrenceDate: null, series });
+
+const occurrenceRow = (occurrence: EventOccurrence): ArchivedEvent => ({
+  key: `occurrence:${occurrenceKey(occurrence)}`,
+  id: occurrence.event_id,
+  title: occurrence.title,
+  occurrenceDate: occurrence.occurrence_date,
+  occurrence,
+});
+
+/** Series first, most recently archived first; then single dates, soonest first. */
+const sortArchivedEvents = (rows: ArchivedEvent[]): ArchivedEvent[] => [
+  ...rows.filter(r => r.series).sort((a, b) => byArchivedDesc(a.series!, b.series!)),
+  ...rows.filter(r => r.occurrence).sort((a, b) => a.occurrence!.starts_at.localeCompare(b.occurrence!.starts_at)),
+];
+
+const shortDate = (dateStr: string) =>
+  parseLocalDate(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+/** "Aug 24, 2026 – Dec 11, 2026", or "From Aug 24, 2026" for one that repeats forever. */
+const seriesRange = (series: CalendarEvent) => {
+  const fmt = (d: string) => parseLocalDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return series.end_date ? `${fmt(series.start_date)} – ${fmt(series.end_date)}` : `From ${fmt(series.start_date)}`;
+};
+
 type PendingDelete =
   | { kind: 'task'; item: Task }
   | { kind: 'note'; item: Note }
   | { kind: 'tag'; item: Tag }
-  | { kind: 'habit'; item: Habit };
+  | { kind: 'habit'; item: Habit }
+  | { kind: 'event'; item: ArchivedEvent };
 
-const KIND_LABEL: Record<PendingDelete['kind'], string> = { task: 'Task', note: 'Note', tag: 'Tag', habit: 'Habit' };
+const KIND_LABEL: Record<PendingDelete['kind'], string> = { task: 'Task', note: 'Note', tag: 'Tag', habit: 'Habit', event: 'Event' };
 
 /**
- * Lists the user's archived tasks, notes, tags and habits (fetched fresh
- * with `?archived=true` on every visit — the app-wide stores only ever hold
- * active rows) and lets each be restored or deleted (moved to Recently
+ * Lists the user's archived tasks, notes, tags, habits and events (fetched
+ * fresh with `?archived=true` on every visit — the app-wide stores only ever
+ * hold active rows) and lets each be restored or deleted (moved to Recently
  * deleted). Restoring hands the record back to the matching store so the
- * dashboard, calendar and stats pick it up again without a refetch.
+ * dashboard, calendar and stats pick it up again without a refetch; a
+ * restored event's upcoming dates go back on the calendars.
  */
 const ArchiveView: React.FC = () => {
   const showToast = useToast();
@@ -84,6 +133,7 @@ const ArchiveView: React.FC = () => {
   const [notes, setArchivedNotes] = useState<Note[]>([]);
   const [tags, setArchivedTags] = useState<Tag[]>([]);
   const [habits, setArchivedHabits] = useState<Habit[]>([]);
+  const [events, setArchivedEvents] = useState<ArchivedEvent[]>([]);
   const [restoringKeys, setRestoringKeys] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -124,13 +174,14 @@ const ArchiveView: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchTasks(true), fetchNotes(true), fetchTags(true), fetchHabits(true)])
-      .then(([t, n, g, h]) => {
+    Promise.all([fetchTasks(true), fetchNotes(true), fetchTags(true), fetchHabits(true), fetchEvents(true), fetchArchivedEventOccurrences()])
+      .then(([t, n, g, h, series, occurrences]) => {
         if (cancelled) return;
         setArchivedTasks([...t].sort(byArchivedDesc));
         setArchivedNotes([...n].sort(byArchivedDesc));
         setArchivedTags([...g].sort(byArchivedDesc));
         setArchivedHabits([...h].sort(byArchivedDesc));
+        setArchivedEvents(sortArchivedEvents([...series.map(seriesRow), ...occurrences.map(occurrenceRow)]));
         setStatus('ready');
       })
       .catch(err => {
@@ -217,11 +268,26 @@ const ArchiveView: React.FC = () => {
     }
   });
 
+  // A series comes back whole; a single date only loses its own archive.
+  const handleRestoreEvent = (row: ArchivedEvent) => withRestoring(`event:${row.key}`, async () => {
+    setArchivedEvents(prev => prev.filter(r => r.key !== row.key));
+    try {
+      await setEventArchived(row.id, false, row.occurrenceDate ? 'this' : 'all', row.occurrenceDate ?? undefined);
+      notifyEventsChanged();
+      showToast(row.occurrenceDate ? 'Event restored for that date.' : 'Event restored. Its upcoming dates are back on your calendars.', 'success');
+    } catch (err) {
+      console.error('Restore failed:', err);
+      setArchivedEvents(prev => sortArchivedEvents([...prev, row]));
+      showToast(describeError(err, "Couldn't restore the event. Please try again."));
+    }
+  });
+
   // Undo brings the deleted item back from the trash into the archive, and
   // puts back here what the delete took off this page.
   const undoDelete = async (deleted: PendingDelete, removedTasks: Task[], tagCarriers: { tasks: Set<number>; notes: Set<number> }) => {
     try {
-      await restoreFromTrash(deleted.kind, deleted.item.id);
+      if (deleted.kind === 'event') await restoreFromTrash('event', deleted.item.id, undefined, deleted.item.occurrenceDate);
+      else await restoreFromTrash(deleted.kind, deleted.item.id);
       if (deleted.kind === 'task') {
         const ids = new Set(removedTasks.map(t => t.id));
         setArchivedTasks(prev => [...prev.filter(t => !ids.has(t.id)), ...removedTasks].sort(byArchivedDesc));
@@ -231,6 +297,9 @@ const ArchiveView: React.FC = () => {
       } else if (deleted.kind === 'habit') {
         const habit = deleted.item;
         setArchivedHabits(prev => [...prev.filter(h => h.id !== habit.id), habit].sort(byArchivedDesc));
+      } else if (deleted.kind === 'event') {
+        const row = deleted.item;
+        setArchivedEvents(prev => sortArchivedEvents([...prev.filter(r => r.key !== row.key), row]));
       } else {
         const tag = deleted.item;
         setArchivedTags(prev => [...prev.filter(t => t.id !== tag.id), tag].sort(byArchivedDesc));
@@ -265,6 +334,12 @@ const ArchiveView: React.FC = () => {
       } else if (deleted.kind === 'habit') {
         await deleteHabitApi(deleted.item.id);
         setArchivedHabits(prev => prev.filter(h => h.id !== deleted.item.id));
+      } else if (deleted.kind === 'event') {
+        const row = deleted.item;
+        await deleteEventApi(row.id, row.occurrenceDate ? 'this' : 'all', row.occurrenceDate ?? undefined);
+        setArchivedEvents(prev => prev.filter(r => r.key !== row.key));
+        // A deleted series takes its past dates off the calendars too.
+        notifyEventsChanged();
       } else {
         const tagId = deleted.item.id;
         await deleteTagApi(tagId);
@@ -296,7 +371,7 @@ const ArchiveView: React.FC = () => {
 
   if (status === 'loading') return <PageSpinner />;
 
-  const counts: Record<TabKey, number> = { tasks: tasks.length, notes: notes.length, tags: tags.length, habits: habits.length };
+  const counts: Record<TabKey, number> = { tasks: tasks.length, notes: notes.length, tags: tags.length, habits: habits.length, events: events.length };
   const activeTab = TABS.find(t => t.key === tab)!;
   const visibleCount = tab === 'tasks' ? visibleTasks.length : tab === 'notes' ? visibleNotes.length : counts[tab];
   // "A › B": the archived tasks above this one, or the API's summary of an active parent.
@@ -503,6 +578,54 @@ const ArchiveView: React.FC = () => {
                   )}
                 </li>
               ))}
+              {tab === 'events' && events.map((row, i) => {
+                const { series, occurrence } = row;
+                // A heading over the series and over the single dates, when there are any.
+                const heading = i === 0 || !!events[i - 1].series !== !!series
+                  ? (series ? 'Series' : 'Single dates')
+                  : null;
+                const tags = series?.tags ?? occurrence?.tags ?? [];
+                return (
+                  <React.Fragment key={row.key}>
+                    {heading && (
+                      <li className={`text-xs font-semibold uppercase tracking-wide text-text-muted ${i === 0 ? '' : 'mt-3'}`} aria-hidden>
+                        {heading}
+                      </li>
+                    )}
+                    <li className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm sm:text-base font-semibold text-text-primary truncate">{row.title}</h3>
+                        {series ? (
+                          <>
+                            <p className="text-xs text-text-secondary mt-0.5">
+                              {describeRepeat(series)} · {formatEventTime(series)}
+                              {series.repeat_days.length > 0 && <> · {seriesRange(series)}</>}
+                            </p>
+                            <p className="text-xs text-text-muted mt-0.5">
+                              {archivedLabel(series)} · Its past dates still show on your calendars
+                            </p>
+                          </>
+                        ) : occurrence && (
+                          <>
+                            <p className="text-xs text-text-secondary mt-0.5">
+                              {shortDate(occurrence.date)} only · {formatEventTime(occurrence)}
+                            </p>
+                            {occurrence.description && (
+                              <p className="text-xs text-text-muted line-clamp-2 mt-0.5">{occurrence.description}</p>
+                            )}
+                          </>
+                        )}
+                        <TagChipList tags={tags} size="xs" className="mt-2" />
+                      </div>
+                      {rowActions(
+                        `event:${row.key}`,
+                        () => handleRestoreEvent(row),
+                        () => setPendingDelete({ kind: 'event', item: row }),
+                      )}
+                    </li>
+                  </React.Fragment>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -530,7 +653,9 @@ const ArchiveView: React.FC = () => {
           <p className="text-center text-sm text-text-muted">
             {pendingDelete.kind === 'tag'
               ? 'It moves to Recently deleted and is hidden from every task, note and habit carrying it. Restore it within 30 days to bring it back on all of them.'
-              : 'It moves to Recently deleted, where you can restore it for 30 days.'}
+              : pendingDelete.kind === 'event' && !pendingDelete.item.occurrenceDate
+                ? 'It moves to Recently deleted with every date it was on, past ones too, and leaves your calendars and reports. You can restore it for 30 days.'
+                : 'It moves to Recently deleted, where you can restore it for 30 days.'}
           </p>
           <div className="flex gap-3 pt-1">
             <button

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
+  CalendarClock,
   CalendarRange,
   ChartColumn,
   ChevronLeft,
@@ -50,6 +51,7 @@ import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
 import ReportTagActivityChart from './ReportTagActivityChart';
 import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
+import ReportEventsSection from './ReportEventsSection';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
   { kind: 'week', label: 'Week' },
@@ -60,15 +62,16 @@ const KINDS: { kind: ReportPeriodKind; label: string }[] = [
 const iconClass = 'w-3.5 h-3.5 sm:w-4 sm:h-4';
 
 /** The report's views; the open one is the URL's `view` (none for Overview). */
-export type ReportView = 'overview' | 'tasks' | 'notes' | 'habits' | 'mood' | 'time';
+export type ReportView = 'overview' | 'tasks' | 'notes' | 'habits' | 'mood' | 'time' | 'events';
 
-/** The report's three tabs, each holding one or more views. */
-type ReportGroup = 'productivity' | 'mood' | 'time';
+/** The report's four tabs, each holding one or more views. */
+type ReportGroup = 'productivity' | 'mood' | 'time' | 'events';
 
 const GROUPS: readonly SegmentedTab<ReportGroup>[] = [
   { value: 'productivity', label: 'Productivity', icon: LayoutDashboard },
   { value: 'mood', label: 'Mood', icon: Smile },
   { value: 'time', label: 'Time', icon: Tag },
+  { value: 'events', label: 'Events', icon: CalendarClock },
 ];
 
 const PRODUCTIVITY_VIEWS: readonly SegmentedTab<ReportView>[] = [
@@ -87,11 +90,12 @@ const GROUPS_ID = 'report-groups';
 const VIEWS_ID = 'report-views';
 const VIEW_PANEL_ID = 'report-views-tabpanel';
 
-const VIEW_VALUES: readonly ReportView[] = ['overview', 'tasks', 'notes', 'habits', 'mood', 'time'];
+const VIEW_VALUES: readonly ReportView[] = ['overview', 'tasks', 'notes', 'habits', 'mood', 'time', 'events'];
 
 const parseView = (value: string | null): ReportView => VIEW_VALUES.find(v => v === value) ?? 'overview';
 const parseMoodView = (value: string | null): MoodView => (value === 'patterns' ? 'patterns' : 'time');
-const groupOf = (view: ReportView): ReportGroup => (view === 'mood' || view === 'time' ? view : 'productivity');
+const groupOf = (view: ReportView): ReportGroup =>
+  (view === 'mood' || view === 'time' || view === 'events' ? view : 'productivity');
 
 // ── Stat tiles ──────────────────────────────────────────────────────────────
 
@@ -581,10 +585,10 @@ const ReportSkeleton: React.FC = () => (
 // ── View ────────────────────────────────────────────────────────────────────
 
 /**
- * Weekly / monthly / yearly report on the /reports page, in three tabs whose
+ * Weekly / monthly / yearly report on the /reports page, in four tabs whose
  * views each fit one screen: Productivity (Overview — the stat tiles, the
  * activity chart, highlights and how the time split by tag — then Tasks, Notes
- * and Habits), Mood (Over time or Patterns) and Time. The open view lives in
+ * and Habits), Mood (Over time or Patterns), Time and Events. The open view lives in
  * the URL (`?view=tasks`, `?view=mood&mood=patterns`), so Back, reloads and
  * links keep it, and switching the period keeps the view.
  */
@@ -625,7 +629,7 @@ const CalendarReportView: React.FC = () => {
   const openGroup = (next: ReportGroup) => {
     if (next === 'productivity') navigate(lastViews.productivity);
     else if (next === 'mood') navigate('mood', lastViews.mood);
-    else navigate('time');
+    else navigate(next);
   };
 
   const subTab = group === 'productivity' ? view : group === 'mood' ? moodView : null;
@@ -731,7 +735,10 @@ const CalendarReportView: React.FC = () => {
         aria-labelledby={[segmentedTabId(GROUPS_ID, group), subTab && segmentedTabId(VIEWS_ID, subTab)].filter(Boolean).join(' ')}
         className="flex flex-col gap-3 sm:gap-4"
       >
-        {error ? (
+        {/* Events loads its own report, so it never waits on the activity and mood ones. */}
+        {view === 'events' ? (
+          <ReportEventsSection period={period} />
+        ) : error ? (
           <div className="card-glass p-6 flex flex-col items-center text-center gap-3" role="alert">
             <p className="text-sm text-text-primary">{error}</p>
             <button
@@ -766,6 +773,7 @@ const CalendarReportView: React.FC = () => {
       <p className="text-[11px] sm:text-xs text-text-muted">
         Completions count by the day a task was checked off; tasks completed before completion times were recorded aren’t counted. Habit streaks are as of today.
         {' '}Mood comes from your daily check-ins; days without one are left out of every mood number, never counted as neutral.
+        {' '}Events count once they’re on your calendar; archived events still count for the dates that have passed.
       </p>
     </section>
   );

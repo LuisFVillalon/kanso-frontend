@@ -23,6 +23,10 @@ import type { EditTaskForm, LinkedRemoveMode } from '@/app/types/task';
 import { linkedTaskIndex, taskToEditForm } from '@/app/utils/taskUtils';
 import RemoveLinkedTasksDialog, { RemovedBranch } from './RemoveLinkedTasksDialog';
 import { SlippedTaskActionButtons, ReschedulePicker, isStillAhead } from './SlippedTaskActions';
+import { occurrenceKey, occurrenceMinutesOn, occurrencesStartingOn } from '@/app/utils/eventOccurrences';
+import { useEventsVersion } from '@/app/hooks/useEventsVersion';
+import type { EventOccurrence } from '@/app/types/event';
+import BriefSchedule from './BriefSchedule';
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
 
@@ -127,6 +131,16 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completionSyncToken]);
 
+  // Today's events, their capacity and their tags change with any event edit.
+  const eventsVersion = useEventsVersion();
+  const lastEventsVersion = useRef(eventsVersion);
+  useEffect(() => {
+    if (eventsVersion === lastEventsVersion.current) return;
+    lastEventsVersion.current = eventsVersion;
+    if (status === 'done' || status === 'error') run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventsVersion]);
+
   // A plain link to the mood form, only while the brief is open: the AI
   // brief itself never reads mood check-ins.
   const dailyMood = useDailyMood();
@@ -219,7 +233,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
 
           {status === 'idle' && (
             <p className="text-sm text-text-secondary text-center py-3">
-              See what slipped, what&apos;s due today and what&apos;s next, plus today&apos;s workload and how your time breaks down by tag.
+              See what slipped, what&apos;s due today and what&apos;s next, plus today&apos;s schedule, workload and how your time breaks down by tag.
             </p>
           )}
 
@@ -242,6 +256,8 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
           {debrief && (
             <div className="space-y-3">
               <WorkloadCard debrief={debrief} mood={mood} />
+
+              <BriefSchedule debrief={debrief} profile={profile} />
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <SectionCard
@@ -296,7 +312,7 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
                 <FocusNextCard items={debrief.focus_next} />
               </div>
 
-              <TimeByTagCard tasks={tasks} habits={habits} />
+              <TimeByTagCard tasks={tasks} habits={habits} events={occurrencesStartingOn(debrief.events_today, debrief.report_date)} today={debrief.report_date} />
             </div>
           )}
         </div>
@@ -434,11 +450,12 @@ interface CompletedItem {
   color: string;
 }
 
-// Every completed-today task/habit/note-with-time, normalized to one common
-// shape — the single pass over the three source lists
-// (completed_today_tasks, habit_status, notes_worked_today) that both the
-// Activity Log bar's total/segments and its per-tag breakdown are built
-// from, instead of walking them twice for two different output shapes.
+// Every completed-today task/habit/note-with-time and every event that has
+// passed today, normalized to one common shape — the single pass over the
+// four source lists (completed_today_tasks, habit_status, notes_worked_today,
+// passed_events_today) that both the Activity Log bar's total/segments and
+// its per-tag breakdown are built from, instead of walking them twice for
+// two different output shapes.
 function collectCompletedItems(debrief: DailyDebriefReport): CompletedItem[] {
   const items: CompletedItem[] = [];
 
@@ -478,6 +495,21 @@ function collectCompletedItems(debrief: DailyDebriefReport): CompletedItem[] {
       kindLabel: 'Note',
       minutes: note.minutes,
       color: note.tags[0]?.color ?? 'var(--tm-accent)',
+    });
+  }
+
+  // Only events that started today, so last night's event past midnight
+  // isn't logged again; all-day events have no minutes to log.
+  for (const event of occurrencesStartingOn(debrief.passed_events_today, debrief.report_date)) {
+    const minutes = occurrenceMinutesOn(event, debrief.report_date);
+    if (minutes <= 0) continue;
+    items.push({
+      key: `event-${occurrenceKey(event)}`,
+      tags: event.tags,
+      title: event.title,
+      kindLabel: 'Event',
+      minutes,
+      color: event.tags[0]?.color ?? 'var(--tm-accent)',
     });
   }
 
@@ -533,6 +565,11 @@ function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: R
   }));
 
   const pct = availableMinutes ? (totalMinutes / availableMinutes) * 100 : null;
+  // Event time in the work window comes out of today's capacity; say so.
+  const eventMinutes = workload.event_minutes ?? 0;
+  const capacityNote = eventMinutes > 0 && workload.window_minutes != null
+    ? `${formatMinutes(workload.window_minutes)} window − ${formatMinutes(eventMinutes)} of events`
+    : null;
   const overCap = availableMinutes != null && totalMinutes > availableMinutes;
   const barPct = pct != null ? Math.min(Math.max(pct, 0), 100) : (totalMinutes > 0 ? 100 : 0);
   const barColor = overCap ? 'var(--tm-danger)' : (pct != null && pct >= 70 ? 'var(--tm-warning)' : 'var(--tm-success)');
@@ -636,8 +673,9 @@ function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: R
             ))}
           </div>
           {pct != null && (
-            <p className="text-[11px] text-text-muted whitespace-nowrap flex-shrink-0">
-              {Math.round(pct)}% of today&apos;s capacity used
+            <p className="text-[11px] text-text-muted text-right flex-shrink-0">
+              <span className="whitespace-nowrap">{Math.round(pct)}% of today&apos;s capacity used</span>
+              {capacityNote && <span className="block whitespace-nowrap">{capacityNote}</span>}
             </p>
           )}
         </div>
@@ -720,13 +758,15 @@ function FocusNextRow({ item }: { item: FocusNextItem }) {
   );
 }
 
-function TimeByTagCard({ tasks, habits }: { tasks: Task[]; habits: Habit[] }) {
+function TimeByTagCard({ tasks, habits, events, today }: { tasks: Task[]; habits: Habit[]; events: EventOccurrence[]; today: string }) {
   const todayStr = toLocalDateStr(new Date());
   const todayTasks = tasks.filter(t => t.due_date && toLocalDateStr(t.due_date) === todayStr);
 
+  // Today's events count in their tags' time, archived (cancelled) ones left out.
   const todayItems = [
     ...todayTasks.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0, title: t.title })),
     ...habits.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0, title: h.title })),
+    ...events.filter(e => !e.archived).map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, today) / 60, title: e.title })),
   ];
 
   const buckets = bucketByTag(todayItems, item => item.value);
@@ -752,7 +792,7 @@ function TimeByTagCard({ tasks, habits }: { tasks: Task[]; habits: Habit[] }) {
       </div>
 
       {total === 0 ? (
-        <p className="text-xs text-text-muted py-1">No estimated time on today&apos;s tasks or habits.</p>
+        <p className="text-xs text-text-muted py-1">No estimated time on today&apos;s tasks, habits or events.</p>
       ) : (
         <>
           <div className="flex h-2.5 rounded-full" style={{ backgroundColor: 'var(--tm-border)' }}>

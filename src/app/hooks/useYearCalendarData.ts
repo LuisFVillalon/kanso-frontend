@@ -6,7 +6,10 @@ import { fetchCalendarActivity } from '@/app/lib/backend-api';
 import { Habit } from '@/app/types/habit';
 import { Task } from '@/app/types/task';
 import { Note } from '@/app/types/notes';
+import type { EventOccurrence } from '@/app/types/event';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { occurrenceDays } from '@/app/utils/eventOccurrences';
+import { useEventsVersion } from './useEventsVersion';
 
 export interface DayData {
   dateStr: string; // YYYY-MM-DD
@@ -15,44 +18,44 @@ export interface DayData {
   tasksCompleted: Task[];
   estimatedHours: number;
   notesEdited: Note[];
+  /** Events on the day in start order: past ones (archived ones flagged) and upcoming ones that aren't archived. */
+  events: EventOccurrence[];
 }
 
-interface HabitLogResult {
+interface YearActivityResult {
   /** The year this result answers, so a previous year's logs never paint onto the one being loaded. */
   year: number;
   logged: Map<number, Set<string>>;
+  events: EventOccurrence[];
 }
 
 /**
- * Aggregates tasks/habits/notes into a per-day map for Jan 1 – Dec 31 of
- * `year` (the current year by default). Habit completions come from
- * GET /get-calendar-activity for that whole year — one ranged request that
- * works for any past or future year, unlike fetchHabitHistory's "past N
- * days from today" window, which the backend caps at 365 days.
+ * Aggregates tasks/habits/notes/events into a per-day map for Jan 1 – Dec 31
+ * of `year` (the current year by default). Habit completions and event
+ * occurrences come from GET /get-calendar-activity for that whole year — one
+ * ranged request that works for any past or future year, unlike
+ * fetchHabitHistory's "past N days from today" window, which the backend caps
+ * at 365 days. It reloads when events change (see useEventsVersion).
  *
  * `loading` only covers the first load; while a different year's habit
- * completions load, `yearLoading` is set and the tasks/notes for the new
- * year already show.
+ * completions and events load, `yearLoading` is set and the tasks/notes for
+ * the new year already show.
  */
 export function useYearCalendarData(year: number = new Date().getFullYear()) {
   const { tasks, isLoading: tasksLoading } = useTasksContext();
   const { habits, habitsLoading } = useHabitsContext();
   const { notes, isLoading: notesLoading } = useNotesContext();
 
-  const [habitLogs, setHabitLogs] = useState<HabitLogResult | null>(null);
+  const [yearActivity, setYearActivity] = useState<YearActivityResult | null>(null);
+  const eventsVersion = useEventsVersion();
 
   useEffect(() => {
     if (habitsLoading) return;
 
-    if (habits.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing to fetch; record this year's empty result
-      setHabitLogs({ year, logged: new Map() });
-      return;
-    }
-
     let cancelled = false;
     const todayStr = toLocalDateStr(new Date());
 
+    // Fetched even without habits: the year's events come from the same call.
     fetchCalendarActivity(`${year}-01-01`, `${year}-12-31`)
       .then(activity => {
         if (cancelled) return;
@@ -67,11 +70,11 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
             else set.delete(todayStr);
           }
         }
-        setHabitLogs({ year, logged: map });
+        setYearActivity({ year, logged: map, events: activity.events ?? [] });
       })
       .catch(err => {
-        console.error('[useYearCalendarData] Failed to fetch habit completions:', err);
-        if (!cancelled) setHabitLogs({ year, logged: new Map() });
+        console.error('[useYearCalendarData] Failed to fetch the year\'s activity:', err);
+        if (!cancelled) setYearActivity({ year, logged: new Map(), events: [] });
       });
 
     return () => { cancelled = true; };
@@ -80,9 +83,11 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
     // logged_today toggle, which is unnecessary since that override is
     // applied locally above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [habitsLoading, habits.length, year]);
+  }, [habitsLoading, habits.length, year, eventsVersion]);
 
-  const habitLogged = habitLogs?.year === year ? habitLogs.logged : null;
+  const ready = yearActivity?.year === year ? yearActivity : null;
+  const habitLogged = ready?.logged ?? null;
+  const yearEvents = ready?.events ?? null;
 
   const dayData = useMemo(() => {
     const map = new Map<string, DayData>();
@@ -91,7 +96,7 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
     const ensure = (dateStr: string): DayData => {
       let d = map.get(dateStr);
       if (!d) {
-        d = { dateStr, habitsCompleted: [], tasksDue: [], tasksCompleted: [], estimatedHours: 0, notesEdited: [] };
+        d = { dateStr, habitsCompleted: [], tasksDue: [], tasksCompleted: [], estimatedHours: 0, notesEdited: [], events: [] };
         map.set(dateStr, d);
       }
       return d;
@@ -130,14 +135,20 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
       }
     }
 
+    for (const occurrence of yearEvents ?? []) {
+      for (const dateStr of occurrenceDays(occurrence)) {
+        if (dateStr.startsWith(yearPrefix)) ensure(dateStr).events.push(occurrence);
+      }
+    }
+
     return map;
-  }, [tasks, notes, habits, habitLogged, year]);
+  }, [tasks, notes, habits, habitLogged, yearEvents, year]);
 
   return {
     year,
     dayData,
     habits,
-    loading: tasksLoading || notesLoading || habitsLoading || habitLogs === null,
+    loading: tasksLoading || notesLoading || habitsLoading || yearActivity === null,
     yearLoading: habitLogged === null,
   };
 }

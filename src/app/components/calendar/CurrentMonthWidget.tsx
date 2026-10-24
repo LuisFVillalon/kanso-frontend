@@ -8,6 +8,7 @@ import { termColor, termOnDay } from '@/app/lib/termPeriods';
 import type { TermPeriod } from '@/app/types/calendar';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { monthCells } from '@/app/utils/monthGrid';
+import { eventColor } from '@/app/utils/events';
 import { CardShell } from '@/app/components/stats/CardShell';
 import TileTools from '@/app/components/stats/TileTools';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
@@ -45,7 +46,8 @@ const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, tod
       const data = dayData.get(dateStr);
       const hasTasks = !!data && (data.tasksDue.length > 0 || data.tasksCompleted.length > 0);
       const hasHabits = !!data && data.habitsCompleted.length > 0;
-      const busy = hasTasks || hasHabits;
+      const events = data?.events ?? [];
+      const busy = hasTasks || hasHabits || events.length > 0;
       const term = termOnDay(terms, dateStr);
       return (
         <button
@@ -54,7 +56,7 @@ const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, tod
           onClick={() => onSelectDay(date)}
           data-date={dateStr}
           title={term?.title}
-          aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}${term ? ` — ${term.title}` : ''}`}
+          aria-label={`${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}${term ? ` — ${term.title}` : ''}${events.length > 0 ? ` — ${events.length} event${events.length === 1 ? '' : 's'}` : ''}`}
           className="relative rounded-[4px] flex flex-col items-center justify-center gap-[2px] min-w-0 min-h-0"
           style={{
             border: isToday ? '1px solid var(--tm-accent)' : '1px solid var(--tm-border-subtle)',
@@ -68,6 +70,7 @@ const CompactMonthGrid: React.FC<CompactMonthGridProps> = ({ cells, dayData, tod
             <span className="flex items-center gap-[2px]">
               {hasTasks && <span className="w-[3px] h-[3px] rounded-full" style={{ backgroundColor: 'var(--tm-accent)' }} />}
               {hasHabits && <span className="w-[3px] h-[3px] rounded-full" style={{ backgroundColor: 'var(--tm-success)' }} />}
+              {events.length > 0 && <span data-event-dot className="w-[3px] h-[3px] rounded-full" style={{ backgroundColor: eventColor(events[0].tags) }} />}
             </span>
           )}
           {term && (
@@ -93,7 +96,7 @@ interface CurrentMonthWidgetProps {
 
 /**
  * Compact dashboard tile: a dense 6×7 day grid for the current month (task/
- * habit presence as dots, today outlined) — distinct from MonthCalendar's
+ * habit/event presence as dots, an event's in its tag color, today outlined) — distinct from MonthCalendar's
  * richer per-day cells, which are sized for the full page/overlay, not a
  * 168px-row tile. Days inside a term (the current Term Tracker or an
  * archived term) get a thin band along their foot. Clicking a day still

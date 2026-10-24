@@ -1,14 +1,25 @@
 'use client';
 
 import React from 'react';
-import { Flame, SquareCheck, FileText, Clock, CheckCircle2, Circle } from 'lucide-react';
+import { Flame, SquareCheck, FileText, Clock, CheckCircle2, Circle, CalendarClock, Repeat, Archive } from 'lucide-react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
 import type { Task } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
 import type { Note } from '@/app/types/notes';
+import type { EventOccurrence } from '@/app/types/event';
 import { toLocalDateStr, toLocalTimeStr, formatDurationShort } from '@/app/utils/dateUtils';
 import { formatTime12Hour } from '@/app/utils/taskUtils';
 import { bucketByTag } from '@/app/utils/tagBucketing';
+import {
+  formatEventMinutes,
+  formatEventTime,
+  occurrenceKey,
+  occurrenceMinutesOn,
+  occurrenceSpanOn,
+  repeatLabel,
+  timeToMinutes,
+} from '@/app/utils/eventOccurrences';
+import { eventColor } from '@/app/utils/events';
 import { useNoteTimeTotalsForRange, useNoteTimeTotalsByDay } from '@/app/hooks/useNoteTimeTotals';
 import TagChipList from '@/app/components/common/TagChipList';
 import { CategoryDonutChart, WeekTrendLineChart, type ChartCategory, type DayPoint } from './DayCharts';
@@ -29,28 +40,45 @@ const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}
 const normalizedTime = (t: Task): string | null =>
   typeof t.due_time === 'string' ? t.due_time : t.due_time instanceof Date ? toLocalTimeStr(t.due_time) : null;
 
-const hoursByTag = (tasks: Task[], habits: Habit[]): ChartCategory[] => {
+// A day's events as donut items: their hours on that day (an event past
+// midnight counts its part on each day).
+const eventItems = (events: EventOccurrence[], dateStr: string) =>
+  events.map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, dateStr) / 60, name: e.title, kind: 'Event' }));
+
+const eventHoursOn = (events: EventOccurrence[], dateStr: string) =>
+  events.reduce((sum, e) => sum + occurrenceMinutesOn(e, dateStr), 0) / 60;
+
+// Every event the calendar shows is planned time; only the past ones that
+// weren't archived (cancelled) count as time actually spent.
+const happened = (e: EventOccurrence) => e.past && !e.archived;
+
+const hoursByTag = (tasks: Task[], habits: Habit[], events: EventOccurrence[], dateStr: string): ChartCategory[] => {
   const items = [
     ...tasks.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0, name: t.title, kind: 'Task' })),
     ...habits.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0, name: h.title, kind: 'Habit' })),
+    ...eventItems(events, dateStr),
   ];
   return bucketByTag(items, i => i.value, i => i.name, i => i.kind);
 };
 
 // Actual hours worked, as opposed to `hoursByTag`'s allocated/estimated
 // hours: completed tasks and habits contribute their estimated_time (the
-// closest proxy available for time actually spent), and notes contribute
-// their tracked session time for the day (noteTimeTotals, in seconds).
+// closest proxy available for time actually spent), notes contribute
+// their tracked session time for the day (noteTimeTotals, in seconds), and
+// events that took place contribute their length.
 const actualHoursByTag = (
   tasksCompleted: Task[],
   habitsCompleted: Habit[],
   notesEdited: Note[],
   noteTimeTotals: Record<number, number>,
+  events: EventOccurrence[],
+  dateStr: string,
 ): ChartCategory[] => {
   const items = [
     ...tasksCompleted.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0, name: t.title, kind: 'Task' })),
     ...habitsCompleted.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0, name: h.title, kind: 'Habit' })),
     ...notesEdited.map(n => ({ tags: n.tags, value: (noteTimeTotals[n.id] ?? 0) / 3600, name: n.title || 'Untitled Note', kind: 'Note' })),
+    ...eventItems(events.filter(happened), dateStr),
   ];
   return bucketByTag(items, i => i.value, i => i.name, i => i.kind);
 };
@@ -124,6 +152,88 @@ function TaskDueItem({ task, compact = false }: { task: Task; compact?: boolean 
   );
 }
 
+/** An open task due during an event on the same day: "Essay is due at 1:00 PM, during Studio." */
+interface EventClash {
+  task: Task;
+  event: EventOccurrence;
+}
+
+function eventClashes(tasks: Task[], events: EventOccurrence[], dateStr: string): EventClash[] {
+  const clashes: EventClash[] = [];
+  for (const task of tasks) {
+    const time = normalizedTime(task);
+    if (task.completed || !time) continue;
+    const at = timeToMinutes(time);
+    const event = events.find(e => {
+      if (e.archived) return false;
+      const span = occurrenceSpanOn(e, dateStr);
+      return span !== null && at >= span.start && at < span.end;
+    });
+    if (event) clashes.push({ task, event });
+  }
+  return clashes;
+}
+
+const StatusChip: React.FC<{ children: React.ReactNode; muted?: boolean }> = ({ children, muted }) => (
+  <span
+    className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none"
+    style={{ backgroundColor: 'var(--tm-slipped-subtle)', color: muted ? 'var(--tm-text-muted)' : 'var(--tm-slipped-text)' }}
+  >
+    {children}
+  </span>
+);
+
+/**
+ * One event in the day report: its time, title, tags, how it repeats, a
+ * Past or Archived chip, and its description. Past events are faded and
+ * archived ones are hatched and struck through, as on the calendars.
+ */
+function EventItem({ event, compact = false }: { event: EventOccurrence; compact?: boolean }) {
+  const color = eventColor(event.tags);
+  const repeat = repeatLabel(event);
+  const description = event.description?.trim() ?? '';
+  return (
+    <div
+      data-event-row
+      className="p-2 rounded-md border border-border-subtle space-y-1"
+      style={{
+        borderLeft: `3px solid ${color}`,
+        background: event.archived
+          ? `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 8%, var(--tm-surface)) 0 5px, var(--tm-surface) 5px 10px)`
+          : undefined,
+        opacity: event.past && !event.archived ? 0.75 : 1,
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className={`text-sm font-medium truncate ${event.archived ? 'line-through text-text-muted' : 'text-text-primary'}`}>
+          {event.title}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted flex-shrink-0">
+          <Clock className="w-3 h-3" />
+          {formatEventTime(event)}
+        </span>
+      </div>
+      {description && (
+        <p className={`text-xs text-text-muted whitespace-pre-wrap ${compact ? 'line-clamp-1' : 'line-clamp-2'}`}>{description}</p>
+      )}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <TagChipList tags={event.tags} size="xs" />
+        {repeat && (
+          <span className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none border border-border text-text-muted bg-surface-raised">
+            <Repeat className="w-2.5 h-2.5" aria-hidden />
+            {repeat}
+          </span>
+        )}
+        {event.archived ? (
+          <StatusChip><Archive className="w-2.5 h-2.5" aria-hidden />Archived</StatusChip>
+        ) : event.past ? (
+          <StatusChip muted>Past</StatusChip>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 // Pins a section's list content to a fixed (not max) height with its own
 // scrollbar, so a day with a lot of habits/tasks/notes can't stretch the
 // widget card taller than the calendar card next to it. Using a fixed height
@@ -141,12 +251,13 @@ const ScrollBox: React.FC<{ height: number; children: React.ReactNode }> = ({ he
   <div className="overflow-y-auto scrollbar-custom pr-1" style={{ height }}>{children}</div>
 );
 
-const SummaryTile: React.FC<{ icon: React.ReactNode; label: string; value: string; color: string; bg: string }> = ({
-  icon, label, value, color, bg,
+const SummaryTile: React.FC<{ icon: React.ReactNode; label: string; value: string; color: string; bg: string; detail?: string }> = ({
+  icon, label, value, color, bg, detail,
 }) => (
-  <div className="p-2.5 rounded-lg border border-border-subtle flex flex-col gap-0.5" style={{ backgroundColor: bg }}>
-    <span className="flex items-center gap-1 text-[11px] font-semibold" style={{ color }}>{icon}{label}</span>
+  <div className="p-2.5 rounded-lg border border-border-subtle flex flex-col gap-0.5 min-w-0" style={{ backgroundColor: bg }}>
+    <span className="flex items-center gap-1 text-[11px] font-semibold leading-tight" style={{ color }}>{icon}{label}</span>
     <span className="text-lg font-bold leading-none text-text-primary">{value}</span>
+    {detail && <span className="text-[10px] text-text-muted truncate">{detail}</span>}
   </div>
 );
 
@@ -175,6 +286,7 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
   const tasksDue = data?.tasksDue ?? [];
   const tasksCompleted = data?.tasksCompleted ?? [];
   const notesEdited = data?.notesEdited ?? [];
+  const events = data?.events ?? [];
 
   const dateStr = toLocalDateStr(date);
   const noteTimeTotals = useNoteTimeTotalsForRange(dateStr, dateStr);
@@ -193,8 +305,9 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
   const weekDateStrs = weekDates.map(toLocalDateStr);
   const weekDays: DayPoint[] = weekDates.map((d, i) => {
     const ds = weekDateStrs[i];
-    const dueTasksHours = (dayData.get(ds)?.tasksDue ?? []).reduce((sum, t) => sum + (t.estimated_time ?? 0), 0);
-    return { date: d, hours: dueTasksHours + allHabitsHours, isSelected: ds === dateStr };
+    const dd = dayData.get(ds);
+    const dueTasksHours = (dd?.tasksDue ?? []).reduce((sum, t) => sum + (t.estimated_time ?? 0), 0);
+    return { date: d, hours: dueTasksHours + allHabitsHours + eventHoursOn(dd?.events ?? [], ds), isSelected: ds === dateStr };
   });
   const weekEnd = weekDays[6].date;
   const rangeLabel = `Week of ${sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${weekEnd.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
@@ -207,11 +320,19 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
     const tasksHours = (dd?.tasksCompleted ?? []).reduce((sum, t) => sum + (t.estimated_time ?? 0), 0);
     const dayNoteTotals = noteTimeTotalsByDay[ds] ?? {};
     const notesHours = (dd?.notesEdited ?? []).reduce((sum, n) => sum + (dayNoteTotals[n.id] ?? 0) / 3600, 0);
-    return { date: d, hours: habitsHours + tasksHours + notesHours, isSelected: ds === dateStr };
+    const eventsHours = eventHoursOn((dd?.events ?? []).filter(happened), ds);
+    return { date: d, hours: habitsHours + tasksHours + notesHours + eventsHours, isSelected: ds === dateStr };
   });
 
-  const donutCategories = hoursByTag(tasksDue, allHabits);
-  const actualDonutCategories = actualHoursByTag(tasksCompleted, habitsCompleted, notesEdited, noteTimeTotals);
+  const donutCategories = hoursByTag(tasksDue, allHabits, events, dateStr);
+  const actualDonutCategories = actualHoursByTag(tasksCompleted, habitsCompleted, notesEdited, noteTimeTotals, events, dateStr);
+
+  const eventMinutes = events.filter(e => !e.archived).reduce((sum, e) => sum + occurrenceMinutesOn(e, dateStr), 0);
+  const archivedEvents = events.filter(e => e.archived).length;
+  const eventsDetail = events.length === 0
+    ? undefined
+    : [eventMinutes > 0 && formatEventMinutes(eventMinutes), archivedEvents > 0 && `${archivedEvents} archived`].filter(Boolean).join(' · ') || undefined;
+  const clashes = eventClashes(tasksDue, events, dateStr);
 
   const compact = variant === 'widget';
   const wrap = (node: React.ReactNode, height: number): React.ReactNode =>
@@ -231,6 +352,24 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
         </div>
       ))}
     </div>
+  );
+
+  // The day's events lead the report, across the full width.
+  const eventsSection = (
+    <ListSection title="Events" isEmpty={events.length === 0} emptyText="No events">
+      <div className="space-y-1.5">
+        {events.map(e => <EventItem key={occurrenceKey(e)} event={e} compact={compact} />)}
+        {clashes.map(({ task, event }) => (
+          <p key={`clash-${task.id}`} data-event-clash className="flex items-start gap-1.5 text-xs text-text-secondary">
+            <span aria-hidden className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--tm-warning)' }} />
+            <span>
+              <span className="font-semibold text-text-primary">{task.title}</span> is due at {formatTime12Hour(normalizedTime(task))}, during{' '}
+              <span className="font-semibold text-text-primary">{event.title}</span> ({formatEventTime(event)}).
+            </span>
+          </p>
+        ))}
+      </div>
+    </ListSection>
   );
 
   const habitsSection = (
@@ -327,12 +466,22 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className={`grid grid-cols-2 ${compact ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-5'} gap-2.5`}>
+        <SummaryTile
+          icon={<CalendarClock className="w-3.5 h-3.5" />}
+          label="Events"
+          value={`${events.length}`}
+          detail={eventsDetail}
+          color="var(--tm-accent)"
+          bg="color-mix(in srgb, var(--tm-accent) 10%, var(--tm-surface))"
+        />
         <SummaryTile icon={<Flame className="w-3.5 h-3.5" />} label="Habits" value={`${habitsCompleted.length}/${totalHabits}`} color="#F97316" bg="var(--tm-warning-subtle)" />
         <SummaryTile icon={<SquareCheck className="w-3.5 h-3.5" />} label="Tasks due" value={`${tasksDue.length}`} color="var(--tm-danger)" bg="var(--tm-danger-subtle)" />
         <SummaryTile icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Tasks completed" value={`${tasksCompleted.length}`} color="var(--tm-success)" bg="var(--tm-success-subtle)" />
         <SummaryTile icon={<FileText className="w-3.5 h-3.5" />} label="Notes edited" value={`${notesEdited.length}`} color="var(--tm-accent)" bg="var(--tm-accent-subtle)" />
       </div>
+
+      {eventsSection}
 
       <div className={`grid grid-cols-1 ${compact ? 'sm:grid-cols-2' : 'xl:grid-cols-2'} gap-5`}>
         {habitsSection}

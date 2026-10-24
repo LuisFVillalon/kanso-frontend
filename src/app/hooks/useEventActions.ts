@@ -9,6 +9,7 @@ import {
   updateEvent,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
+import { notifyEventsChanged } from '@/app/hooks/useEventsVersion';
 import type { CalendarEventCreate, CalendarEventUpdate, EditScope, EventOccurrence } from '@/app/types/event';
 import { parseLocalDate } from '@/app/utils/dateUtils';
 
@@ -19,7 +20,9 @@ export const occurrenceDayLabel = (o: Pick<EventOccurrence, 'date'>) =>
 /**
  * The event changes a calendar can make, each reporting through a toast and
  * calling `onChanged` once the server has it, so the caller can refetch what
- * it shows. Archive and delete offer Undo. Each resolves true when it saved.
+ * it shows; the month calendars, daily brief and reports hear of it through
+ * notifyEventsChanged. Archive and delete offer Undo. Each resolves true when
+ * it saved.
  */
 export function useEventActions(onChanged: () => void) {
   const showToast = useToast();
@@ -29,6 +32,7 @@ export function useEventActions(onChanged: () => void) {
     try {
       const result = await work();
       onChanged();
+      notifyEventsChanged();
       return result;
     } catch (err) {
       console.error('[useEventActions]', err);

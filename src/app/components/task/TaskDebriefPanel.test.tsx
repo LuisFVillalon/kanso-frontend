@@ -7,6 +7,8 @@ import { NotificationsContext, type NotificationsContextValue } from '@/app/cont
 import type { ProfileFields } from '@/app/hooks/useProfile';
 import type { DailyDebriefReport } from '@/app/types/debrief';
 import type { Task } from '@/app/types/task';
+import type { EventOccurrence } from '@/app/types/event';
+import { notifyEventsChanged } from '@/app/hooks/useEventsVersion';
 import { DEFAULT_MOOD_SETTINGS, type MoodCheckin } from '@/app/types/mood';
 
 const api = vi.hoisted(() => ({
@@ -325,5 +327,143 @@ describe('TaskDebriefPanel Slipped actions', () => {
   it('shows no actions without the handlers', async () => {
     await render({ tasks: [slippedTask] });
     expect(button('Archive “File taxes”')).toBeUndefined();
+  });
+});
+
+describe('TaskDebriefPanel events', () => {
+  const tag = (id: number, name: string, color: string) => ({ id, name, color });
+  const cs = tag(1, 'CS 460', '#8b5cf6');
+  const art = tag(2, 'Art', '#ec4899');
+  const health = tag(3, 'Health', '#22c55e');
+  const event = (title: string, start: string, end: string, tags: { id: number; name: string; color: string }[], extra: Partial<EventOccurrence> = {}): EventOccurrence => ({
+    event_id: title.length, occurrence_date: '2026-10-23', title, description: null, tags, all_day: false,
+    date: '2026-10-23', end_date: '2026-10-23', start_time: `${start}:00`, end_time: `${end}:00`,
+    starts_at: `2026-10-23T${start}:00Z`, ends_at: `2026-10-23T${end}:00Z`, time_zone: 'America/Los_Angeles',
+    repeat_days: [1, 3, 5], repeat_interval: 1, reminder_minutes: null, edited: false, past: false, archived: false,
+    ...extra,
+  });
+  const gym = event('Gym', '07:00', '08:00', [health], { past: true });
+  const lecture = event('CS 460 Lecture', '10:00', '10:50', [cs], { past: true });
+  const yoga = event('Yoga', '09:00', '09:30', [health], { past: true, archived: true });
+  const studio = event('ART 157 Studio', '13:00', '15:50', [art]);
+  const prescription = {
+    id: 9, title: 'Pick up prescription', category: null, priority: null,
+    due_date: '2026-10-23', due_time: '13:00:00', estimated_time: 1, tags: [],
+  };
+
+  // Friday 11:40 AM, in a 10-hour work window (8 AM – 6 PM).
+  const workday: DailyDebriefReport = {
+    ...debrief,
+    report_date: '2026-10-23',
+    due_today_tasks: [prescription],
+    workload: {
+      is_rest_day: false, window_minutes: 600, event_minutes: 220, available_minutes: 380,
+      committed_minutes: 60, free_minutes: 320, utilization_pct: 15.8, is_overcommitted: false,
+    },
+    events_today: [gym, yoga, lecture, studio],
+    passed_events_today: [gym, lecture],
+    event_minutes_by_tag: [
+      { tag: art, minutes: 170, count: 1 }, { tag: health, minutes: 60, count: 1 }, { tag: cs, minutes: 50, count: 1 },
+    ],
+    passed_event_minutes_by_tag: [{ tag: health, minutes: 60, count: 1 }, { tag: cs, minutes: 50, count: 1 }],
+  };
+
+  const scheduleCard = () => document.querySelector('[data-brief-schedule]');
+
+  beforeEach(() => {
+    vi.setSystemTime(new Date(2026, 9, 23, 11, 40));
+    api.fetchTaskDebrief.mockResolvedValue(workday);
+  });
+
+  it("shows today's schedule under the Activity Log: what's next, the free time and the clashes", async () => {
+    await render();
+    const card = scheduleCard()!;
+    expect(card).not.toBeNull();
+    expect(activityLogCard()!.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.textContent).toContain('Next: ART 157 Studio at 1 PM · in 1h 20m');
+    // The archived yoga class is drawn but left out of the counts.
+    expect(card.querySelectorAll('[data-schedule-event]')).toHaveLength(4);
+    expect(card.textContent).toContain('3 events · 4h 40m');
+    expect(card.textContent).toContain('5h 20m free in your work window after events and tasks due');
+    expect(card.textContent).toContain('Pick up prescription is due at 1:00 PM, during ART 157 Studio. Do it before 1 PM or after 3:50 PM.');
+    expect(card.textContent).toContain('Gym (7:00 – 8:00 AM) is outside your work window, so it doesn’t count against today’s capacity.');
+    expect(card.querySelector('[data-work-window]')).not.toBeNull();
+    expect(card.querySelector('[data-schedule-now]')).not.toBeNull();
+  });
+
+  it("lists only the events that start today, all-day first, with its time, tags and whether it has passed", async () => {
+    const fair = event('Career fair', '00:00', '00:00', [cs], { all_day: true, start_time: null, end_time: null });
+    api.fetchTaskDebrief.mockResolvedValue({ ...workday, events_today: [gym, yoga, lecture, studio, fair] });
+    await render();
+    const rows = [...scheduleCard()!.querySelectorAll('[data-schedule-row]')].map(r => r.textContent);
+    expect(rows).toEqual([
+      'All dayCareer fairCS 460',
+      '7:00 – 8:00 AMGymHealthPassed',
+      '9:00 – 9:30 AMYogaHealthArchived',
+      '10:00 – 10:50 AMCS 460 LectureCS 460Passed',
+      '1:00 – 3:50 PMART 157 StudioArtUpcoming',
+    ]);
+    vi.setSystemTime(new Date(2026, 9, 23, 14, 0));
+    await render({ completionSyncToken: 1 });
+    expect(scheduleCard()!.querySelectorAll('[data-schedule-row]')[4].textContent).toContain('Now');
+  });
+
+  it("leaves last night's event past midnight out of the schedule, the Activity Log and the time allocation", async () => {
+    const stars = event('Stargazing club', '22:00', '01:00', [tag(4, 'Astronomy', '#0ea5e9')], {
+      occurrence_date: '2026-10-22', date: '2026-10-22', starts_at: '2026-10-23T05:00:00Z', ends_at: '2026-10-23T08:00:00Z', past: true,
+    });
+    api.fetchTaskDebrief.mockResolvedValue({ ...workday, events_today: [stars, ...workday.events_today!], passed_events_today: [stars, gym, lecture] });
+    await render();
+    expect(scheduleCard()!.querySelectorAll('[data-schedule-row]')).toHaveLength(4);
+    expect(scheduleCard()!.textContent).not.toContain('Stargazing');
+    expect(activityLogCard()!.textContent).not.toContain('Stargazing');
+    expect(activityLogCard()!.textContent).not.toContain('Astronomy');
+    expect(activityLogCard()!.textContent).toContain('Event: CS 460 Lecture');
+    expect(cardWithHeading("Today's Time Allocation")!.textContent).not.toContain('Astronomy');
+  });
+
+  it('shows no schedule when the only event started yesterday', async () => {
+    const stars = event('Stargazing club', '22:00', '01:00', [], { date: '2026-10-22', occurrence_date: '2026-10-22', past: true });
+    api.fetchTaskDebrief.mockResolvedValue({ ...workday, events_today: [stars], passed_events_today: [stars] });
+    await render();
+    expect(scheduleCard()).toBeNull();
+  });
+
+  it('says what is on now during an event', async () => {
+    vi.setSystemTime(new Date(2026, 9, 23, 14, 0));
+    await render();
+    expect(scheduleCard()!.textContent).toContain('Now: ART 157 Studio until 3:50 PM');
+  });
+
+  it("logs the events that have passed by their tags, against capacity left after events", async () => {
+    await render();
+    const log = activityLogCard()!;
+    expect(log.textContent).toContain('1h 50m / 6h 20m');
+    expect(log.textContent).toContain('29% of today\'s capacity used');
+    expect(log.textContent).toContain('10h window − 3h 40m of events');
+    expect(log.textContent).toContain('Event: CS 460 Lecture');
+    expect(log.textContent).toContain('Health');
+    expect(log.textContent).not.toContain('Studio');
+  });
+
+  it("puts today's live events in the time allocation bar by tag", async () => {
+    await render();
+    const allocation = cardWithHeading("Today's Time Allocation")!;
+    expect(allocation.textContent).toContain('4h 40m total');
+    expect(allocation.textContent).toContain('ART 157 Studio');
+    expect(allocation.textContent).not.toContain('Yoga');
+  });
+
+  it('shows no schedule on a day without events', async () => {
+    api.fetchTaskDebrief.mockResolvedValue({ ...workday, events_today: [], passed_events_today: [] });
+    await render();
+    expect(scheduleCard()).toBeNull();
+  });
+
+  it('reloads when an event changes', async () => {
+    await render();
+    expect(api.fetchTaskDebrief).toHaveBeenCalledTimes(1);
+    await act(async () => notifyEventsChanged());
+    expect(api.fetchTaskDebrief).toHaveBeenCalledTimes(2);
   });
 });
