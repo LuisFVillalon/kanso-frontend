@@ -116,7 +116,7 @@ describe('analyseMoodInsights on the demo and invented scenarios', () => {
     expect(r.why).toBe(WHY.stress);
     expect(r.notes.map(n => [n.num, n.insight.text])).toEqual([
       [1, 'Your best stretch was Oct 15–21 (mostly Good). The toughest stretch was Oct 7–12 (mostly Low, and stress ran high then too).'],
-      [2, 'Mood and stress moved together. On higher-stress days your mood averaged 2.0 (6 days); on calmer days, 3.6 (8 days).'],
+      [2, 'Stressful days were your low days. On higher-stress days your mood averaged 2.0 (6 days); on calmer days, 3.6 (8 days).'],
     ]);
     expect(headlineBasis(r)).toBe('Uses your 7-day trend: its highest and lowest weeks.');
   });
@@ -143,7 +143,7 @@ describe('analyseMoodInsights on the demo and invented scenarios', () => {
     expect(r.why).toBe(WHY.energy);
     expect(r.sure).toBe('Based on 76 check-ins since Jul 25.');
     expect(r.notes.map(n => n.insight.text)).toEqual([
-      'Mood and energy moved together. On low-energy days your mood averaged 2.9 (35 days); on high-energy days, 3.8 (21 days).',
+      'Low-energy days were your low days. On low-energy days your mood averaged 2.9 (35 days); on high-energy days, 3.8 (21 days).',
     ]);
   });
 });
@@ -233,6 +233,12 @@ describe('the rules', () => {
     expect(r.notes[0].insight.text).toBe('Your best stretch was Oct 7–13 (mostly Good). Things have felt harder since about Oct 16, and stress has run high too. Go easy on yourself.');
   });
 
+  it('adds no "why" line it hasn’t measured or that would contradict the headline', () => {
+    const ups = analyse(run('2026-10-01', Array.from({ length: 14 }, (_, i) => (i % 2 ? 5 : 1))), 'month');
+    expect(ups).toMatchObject({ headline: 'A month of ups and downs.', why: null });
+    expect(analyse(run('2026-03-01', Array(10).fill(3)), 'year').why).toBeNull();
+  });
+
   it('says where a month’s trend stayed when no stretch stood out', () => {
     expect(analyse(run('2026-10-01', Array(12).fill(3)), 'month').notes[0].insight.text).toBe('No stretch stood out: your 7-day trend stayed at 3.0.');
   });
@@ -264,7 +270,7 @@ describe('the rules', () => {
   it('says mood moved with stress only with 10 check-ins and 5 days on each side', () => {
     const moods = [4, 4, 4, 4, 4, 2, 2, 2, 2, 2];
     const together = (stress: (i: number) => number) => analyse(run('2026-10-01', moods, stress), 'month').notes.find(n => n.insight.kind === 'together')?.insight;
-    expect(together(i => (i < 5 ? 1 : 5))?.text).toBe('Mood and stress moved together. On higher-stress days your mood averaged 2.0 (5 days); on calmer days, 4.0 (5 days).');
+    expect(together(i => (i < 5 ? 1 : 5))?.text).toBe('Stressful days were your low days. On higher-stress days your mood averaged 2.0 (5 days); on calmer days, 4.0 (5 days).');
     // Four calm days aren't enough to compare.
     expect(together(i => (i < 4 ? 1 : 5))).toBeUndefined();
     expect(analyse(run('2026-10-01', moods.slice(1), i => (i < 4 ? 1 : 5)), 'month').notes.find(n => n.insight.kind === 'together')).toBeUndefined();
@@ -325,7 +331,7 @@ describe('numbered notes', () => {
       ['Toughest stretch', 1, true], ['Best stretch', undefined, true], ['Toughest stretch Best stretch', 1, false],
     ]);
     expect(marks.tags.find(t => t.spanKey)?.spanKey).toEqual([{ tone: 'worst', label: 'Toughest stretch' }, { tone: 'best', label: 'Best stretch' }]);
-    expect(marks.tags.find(t => t.series === 'stress')).toMatchObject({ num: 2, label: 'Moved opposite to mood' });
+    expect(marks.tags.find(t => t.series === 'stress')).toMatchObject({ num: 2, label: 'Higher stress, lower mood' });
   });
 
   it('draws the period before’s average as a line carrying the number', () => {

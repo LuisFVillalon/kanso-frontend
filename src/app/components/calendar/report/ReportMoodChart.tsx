@@ -534,7 +534,7 @@ const ReportMoodChart: React.FC<ReportMoodChartProps> = ({ period, buckets, byDa
       ) : (
         <div className="flex flex-col gap-1">
           <p className="font-display text-[17px] sm:text-[19px] font-semibold leading-tight text-text-primary">{insights.headline}</p>
-          <p className="text-[13px] text-text-secondary"><b className="font-bold">Why it matters:</b> {insights.why}</p>
+          {insights.why && <p className="text-[13px] text-text-secondary"><b className="font-bold">Why it matters:</b> {insights.why}</p>}
         </div>
       )}
 

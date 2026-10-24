@@ -91,7 +91,8 @@ export interface MoodInsights {
   sparse: boolean;
   gate: number;
   headline: string;
-  why: string;
+  /** Only when it says something measured that fits the headline. */
+  why: string | null;
   /** "Based on 18 check-ins over 23 days so far." */
   sure: string;
   /** The insight the headline says; null while sparse. */
@@ -393,8 +394,8 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
     if (clear.length) {
       const { series, c } = clear[0];
       const text = series === 'stress'
-        ? `Mood and stress moved together. On higher-stress days your mood averaged ${f1(c!.a)} (${days(c!.na)}); on calmer days, ${f1(c!.b)} (${days(c!.nb)}).`
-        : `Mood and energy moved together. On low-energy days your mood averaged ${f1(c!.a)} (${days(c!.na)}); on high-energy days, ${f1(c!.b)} (${days(c!.nb)}).`;
+        ? `Stressful days were your low days. On higher-stress days your mood averaged ${f1(c!.a)} (${days(c!.na)}); on calmer days, ${f1(c!.b)} (${days(c!.nb)}).`
+        : `Low-energy days were your low days. On low-energy days your mood averaged ${f1(c!.a)} (${days(c!.na)}); on high-energy days, ${f1(c!.b)} (${days(c!.nb)}).`;
       together = { kind: 'together', series, text, c, mark: { type: 'series', series } };
     }
   }
@@ -422,7 +423,7 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
     headline = levelText;
   }
 
-  let why: string;
+  let why: string | null;
   if ((head === direction || head === change) && head.c!.gap > 0) why = WHY.better;
   else if (head === direction || head === change) why = WHY.harder;
   else if (head === stretch && stretch.recent) why = WHY.now;
@@ -430,7 +431,7 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
   // A month's or year's best and hardest stretch is never "even", even when the headline is the plain level.
   else if (isStretch && kind !== 'week') why = WHY.stretch;
   else if (kind === 'week' && isStretch) why = WHY.days;
-  else why = WHY.steady;
+  else why = steady && shape !== 'mix' ? WHY.steady : null;
 
   // The notes: the headline's own first, then the others. Only notes with a
   // place on the chart are numbered; every number has exactly one note.
@@ -572,7 +573,7 @@ export const chartMarks = (notes: NumberedNote[], keys: string[], kind: ReportPe
       out.band = { lo: m.lo, hi: m.hi };
       out.tags.push({ series: 'mood', at: 0, num, label: 'Stayed in this range' });
     } else if (m.type === 'series') {
-      out.tags.push({ series: m.series, at: 0, num, label: m.series === 'stress' ? 'Moved opposite to mood' : 'Moved with mood' });
+      out.tags.push({ series: m.series, at: 0, num, label: m.series === 'stress' ? 'Higher stress, lower mood' : 'Lower energy, lower mood' });
     }
   }
   return out;
