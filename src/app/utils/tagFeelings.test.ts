@@ -5,6 +5,7 @@ import {
   analyseTagFeelings,
   chanceOf,
   describeTagFeeling,
+  formatAverage,
   isDayOff,
   summarizeTagFeelings,
   tagDayRows,
@@ -242,6 +243,13 @@ describe('analyseTagFeelings', () => {
     const cmp = tagOf(analyseTagFeelings(days, TAGS, 'p'), 'CS 460').feel.mood;
     expect(cmp).toMatchObject({ n: 3, nOther: 10, nAll: 11, verdict: 'thin' });
     expect(describeTagFeeling('CS 460', 'mood', cmp)).toContain('too few of them line up with other days of the same kind (work day or day off)');
+  });
+
+  it('puts your usual at the other days’ level when every day off has the tag', () => {
+    const days = [...repeat(5, () => row(4, { tags: ['tag:1'] })), ...repeat(2, () => row(2, { tags: ['tag:1'], off: true })), ...repeat(5, () => row(3))];
+    const cmp = tagOf(analyseTagFeelings(days, TAGS, 'p'), 'CS 460').feel.mood;
+    expect(cmp.gap).toBeCloseTo(1);
+    expect(formatAverage(cmp.other)).toBe('3.0');
   });
 
   it('splits the chance bar across the tags compared for a feeling', () => {

@@ -219,6 +219,18 @@ const gapOf = (groups: Group[]): number | null => {
   return w ? g / w : null;
 };
 
+/** The other days' means per group, weighted to the tag days' mix; groups without both sides are left out. */
+const usualOf = (groups: Group[]): number | null => {
+  let w = 0;
+  let u = 0;
+  for (const { tag, other } of groups) {
+    if (!tag.length || !other.length) continue;
+    w += tag.length;
+    u += tag.length * mean(other)!;
+  }
+  return w ? u / w : null;
+};
+
 /** How often shuffling the same days within each group gives a gap at least as big as `observed`. */
 export const chanceOf = (groups: Group[], observed: number, seed: number, shuffles = SHUFFLES): number => {
   const rnd = mulberry32(seed);
@@ -279,7 +291,7 @@ export const analyseTagFeelings = (days: TagDay[], tags: Map<string, FeelingTag>
         nAll: tv.length,
         nOtherAll: ov.length,
         avg,
-        other: gap != null && avg != null ? avg - gap : rawOther,
+        other: usualOf(groups) ?? rawOther,
         gap,
         rawOther,
         rawGap: avg != null && rawOther != null ? avg - rawOther : null,
