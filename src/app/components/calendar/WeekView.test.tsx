@@ -10,12 +10,20 @@ import type { ProfileFields } from '@/app/hooks/useProfile';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
+const { CLASS_TAG } = vi.hoisted(() => ({ CLASS_TAG: { id: 4, name: 'CS 460', color: '#3b82f6' } }));
+
 const mocks = vi.hoisted(() => ({
   tasks: [] as Task[],
   addTask: vi.fn(),
   updateTask: vi.fn(),
   saveLinkedTasks: vi.fn(),
   fetchCalendarActivity: vi.fn(),
+  fetchEvent: vi.fn(),
+  createEvent: vi.fn(),
+  updateEvent: vi.fn(),
+  setEventArchived: vi.fn(),
+  deleteEvent: vi.fn(),
+  restoreEvent: vi.fn(),
   push: vi.fn(),
 }));
 
@@ -23,6 +31,13 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/app/lib/backend-api', () => ({
   fetchCalendarActivity: mocks.fetchCalendarActivity,
   fetchHabitHistory: vi.fn().mockResolvedValue([]),
+  fetchEvent: mocks.fetchEvent,
+  createEvent: mocks.createEvent,
+  updateEvent: mocks.updateEvent,
+  setEventArchived: mocks.setEventArchived,
+  deleteEvent: mocks.deleteEvent,
+  restoreEvent: mocks.restoreEvent,
+  describeError: (_err: unknown, fallback: string) => fallback,
 }));
 vi.mock('@/app/context/TasksContext', () => ({
   useTasksContext: () => ({
@@ -30,7 +45,7 @@ vi.mock('@/app/context/TasksContext', () => ({
     saveLinkedTasks: mocks.saveLinkedTasks, completionSyncToken: 0,
   }),
 }));
-vi.mock('@/app/context/TagsContext', () => ({ useTagsContext: () => ({ tags: [] }) }));
+vi.mock('@/app/context/TagsContext', () => ({ useTagsContext: () => ({ tags: [CLASS_TAG] }) }));
 vi.mock('@/app/context/HabitsContext', () => ({
   useHabitsContext: () => ({ habits: [{ id: 5, title: 'Run' }], toggleDate: vi.fn() }),
 }));
@@ -41,6 +56,7 @@ vi.mock('@/app/context/NotificationsContextValue', async importOriginal => ({
 }));
 
 import WeekView from './WeekView';
+import type { CalendarEvent, EventOccurrence } from '@/app/types/event';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -63,6 +79,55 @@ const activityFor = (start: string, end: string): CalendarActivity => ({
   }],
   habit_completions: [{ habit_id: 5, habit_title: 'Run', date: '2026-10-21', estimated_time: null }],
 });
+
+/** The UTC instant of a local day and "HH:MM:SS" time. */
+const instant = (date: string, time: string | null) => {
+  const [y, m, d] = date.split('-').map(Number);
+  const [h, min] = (time ?? '00:00').split(':').map(Number);
+  return new Date(y, m - 1, d, h, min).toISOString();
+};
+
+/** A Mon/Wed/Fri lecture occurrence, 2:00–2:50 PM on Wed Oct 21 (later than the tests' noon) unless overridden. */
+const occurrence = (overrides: Partial<EventOccurrence> = {}): EventOccurrence => {
+  const o: EventOccurrence = {
+    event_id: 30, occurrence_date: '2026-10-21', title: 'CS 460 Lecture', description: 'Room 201', tags: [CLASS_TAG],
+    all_day: false, date: '2026-10-21', end_date: '2026-10-21', start_time: '14:00:00', end_time: '14:50:00',
+    starts_at: '', ends_at: '',
+    time_zone: 'America/Los_Angeles', repeat_days: [1, 3, 5], repeat_interval: 1, reminder_minutes: null,
+    edited: false, past: false, archived: false, ...overrides,
+  };
+  return {
+    ...o,
+    starts_at: overrides.starts_at ?? instant(o.date, o.start_time),
+    ends_at: overrides.ends_at ?? (o.all_day ? instant(o.end_date, null) : instant(o.end_date, o.end_time)),
+  };
+};
+
+const series = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
+  id: 30, title: 'CS 460 Lecture', description: 'Room 201', tags: [CLASS_TAG], all_day: false,
+  start_date: '2026-08-24', end_date: '2026-12-11', start_time: '14:00:00', end_time: '14:50:00',
+  time_zone: 'America/Los_Angeles', repeat_days: [1, 3, 5], repeat_interval: 1, reminder_minutes: null,
+  split_from_id: null, created_date: '2026-08-01T00:00:00Z', archived_at: null, deleted_at: null, ...overrides,
+});
+
+/** The week's activity with these events added. */
+const withEvents = (events: EventOccurrence[]) =>
+  mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({ ...activityFor(start, end), events }));
+
+const setInput = async (input: HTMLInputElement | HTMLTextAreaElement, value: string) => act(async () => {
+  const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+});
+
+/** A button anywhere in the document (popovers and modals are portaled to <body>) whose text is `text`. */
+const buttonByText = (text: string): HTMLButtonElement => {
+  const el = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim() === text);
+  if (!el) throw new Error(`No button reading "${text}"`);
+  return el;
+};
+
+const dialog = (label: string) => document.querySelector<HTMLElement>(`[role="dialog"][aria-label="${label}"]`);
 
 type Schedule = Pick<ProfileFields, 'dayStartTime' | 'shutoffTime' | 'restDays'> & Partial<Pick<ProfileFields, 'dayWindows'>>;
 
@@ -95,6 +160,9 @@ beforeEach(() => {
   mocks.updateTask.mockReset();
   mocks.saveLinkedTasks.mockReset();
   mocks.push.mockReset();
+  for (const fn of [mocks.fetchEvent, mocks.createEvent, mocks.updateEvent, mocks.setEventArchived, mocks.deleteEvent, mocks.restoreEvent]) {
+    fn.mockReset().mockResolvedValue(series());
+  }
   localStorage.clear();
   mocks.fetchCalendarActivity.mockReset().mockImplementation(async (start: string, end: string) => activityFor(start, end));
   container = document.createElement('div');
@@ -148,7 +216,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(container.querySelectorAll('[data-window-edge="opens"]')).toHaveLength(5);
     expect([...container.querySelectorAll('[data-window-edge]')].slice(0, 2).map(e => e.textContent)).toEqual(['Opens 8:00 AM', 'Closes 10:00 PM']);
     const legend = [...container.querySelectorAll('ul[aria-label="Legend"] li')].map(li => li.textContent);
-    expect(legend.slice(4)).toEqual(['Outside work hours', 'Rest day']);
+    expect(legend.slice(4)).toEqual(['Event (tag color)', 'Past', 'Archived', 'Clash', 'Outside work hours', 'Rest day']);
 
     await renderWithSchedule({ dayStartTime: '09:30', shutoffTime: '17:00', restDays: [3] });
     expect(daySchedules()[3]).toBe('Rest day');
@@ -268,9 +336,28 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(heading()).toBe('Jan 3–9, 2027');
   });
 
-  it('opens the New Task modal prefilled with the clicked slot and creates the task there', async () => {
+  it('opens a task quick-add on a clicked slot, and saves the task at that time', async () => {
     await render();
-    await act(async () => button('Create task on Thursday, October 22 at 9:30 AM').click());
+    await act(async () => button('Add a task or event on Thursday, October 22 at 9:30 AM').click());
+    const quick = dialog('New task')!;
+    expect(quick.textContent).toContain('Thu, Oct 22 · due 9:30 AM · 30 min estimate');
+    expect(quick.querySelector('[aria-pressed="true"]')!.textContent).toContain('Task');
+    // The slot's range stays highlighted while the quick-add is open.
+    expect(container.querySelector('[data-grid-selection]')!.textContent).toBe('9:30 AM – 10:00 AM');
+
+    mocks.addTask.mockResolvedValue(task({ id: 99 }));
+    await setInput(quick.querySelector<HTMLInputElement>('input[name="quick-title"]')!, 'Pick up prescription');
+    await act(async () => buttonByText('Save').click());
+    expect(mocks.addTask).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Pick up prescription', due_date: '2026-10-22', due_time: '09:30', estimated_time: 0.5,
+    }));
+    expect(dialog('New task')).toBeNull();
+  });
+
+  it('opens the New Task modal from the quick-add prefilled with the clicked slot and creates the task there', async () => {
+    await render();
+    await act(async () => button('Add a task or event on Thursday, October 22 at 9:30 AM').click());
+    await act(async () => buttonByText('More options').click());
     const inputs = [...container.ownerDocument.querySelectorAll<HTMLInputElement>('input[type=date], input[type=time]')];
     expect(inputs.map(i => i.value)).toEqual(['2026-10-22', '09:30']);
 
@@ -295,7 +382,8 @@ describe('WeekView', { timeout: 30_000 }, () => {
   it('creates a task with linked tasks, and keeps the modal open to retry when they fail to save', async () => {
     mocks.tasks = [task({ id: 7, title: 'Read the posting' })];
     await render();
-    await act(async () => button('Create task on Thursday, October 22 at 9:30 AM').click());
+    await act(async () => button('Add a task or event on Thursday, October 22 at 9:30 AM').click());
+    await act(async () => buttonByText('More options').click());
     const created = task({ id: 99, title: 'Apply' });
     mocks.addTask.mockResolvedValue(created);
     mocks.updateTask.mockResolvedValue(true);
@@ -348,7 +436,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
     const tabbable = () => [...container.querySelectorAll<HTMLButtonElement>('button[aria-describedby]')].filter(b => b.tabIndex === 0);
     expect(tabbable()).toHaveLength(1);
     const start = tabbable()[0];
-    expect(start.getAttribute('aria-label')).toBe('Create task on Wednesday, October 21 at 10:30 AM');
+    expect(start.getAttribute('aria-label')).toBe('Add a task or event on Wednesday, October 21 at 10:30 AM');
     await act(async () => {
       start.focus();
       start.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -356,7 +444,165 @@ describe('WeekView', { timeout: 30_000 }, () => {
     await act(async () => {
       (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     });
-    expect(document.activeElement?.getAttribute('aria-label')).toBe('Create task on Thursday, October 22 at 11:00 AM');
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Add a task or event on Thursday, October 22 at 11:00 AM');
     expect(tabbable()).toHaveLength(1);
+  });
+  describe('events', () => {
+    it('draws events in their tag color beside tasks, past and archived ones styled, and marks a task during one', async () => {
+      mocks.tasks = [task({ id: 3, title: 'Review notes', due_date: '2026-10-21', due_time: '14:30', estimated_time: 1 })];
+      withEvents([
+        occurrence({ occurrence_date: '2026-10-19', date: '2026-10-19', end_date: '2026-10-19', past: true }),
+        occurrence({ occurrence_date: '2026-10-20', date: '2026-10-20', end_date: '2026-10-20', past: true, archived: true, title: 'PSY 101', repeat_days: [] }),
+        occurrence(),
+      ]);
+      await render();
+      const block = button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM');
+      expect(block.style.borderLeft).toBe('3px solid rgb(59, 130, 246)');
+      expect(block.style.backgroundColor).toContain('#3b82f6 20%');
+      expect(button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM, past').style.opacity).toBe('0.78');
+      const archived = button('Event: PSY 101, 2:00 PM – 2:50 PM, archived');
+      expect(archived.style.borderLeft).toBe('3px dashed rgb(59, 130, 246)');
+      expect(archived.querySelector('.line-through')!.textContent).toBe('PSY 101');
+      // The task planned during the live lecture gets the clash ring; it sits beside the event, not under it.
+      const clashing = button('Planned task: Review notes, 2:30 PM – 3:30 PM, during CS 460 Lecture');
+      expect(clashing.style.outline).toBe('2px solid var(--tm-warning)');
+      expect(clashing.style.width).toBe('calc(50% - 4px)');
+    });
+
+    it('splits an event that runs past midnight across both days, and puts all-day events in the all-day row', async () => {
+      withEvents([
+        occurrence({
+          event_id: 31, title: 'Night shift', repeat_days: [], date: '2026-10-22', end_date: '2026-10-23',
+          occurrence_date: '2026-10-22', start_time: '22:00:00', end_time: '02:00:00',
+        }),
+        occurrence({ event_id: 32, title: 'MATH midterm', all_day: true, start_time: null, end_time: null, repeat_days: [], date: '2026-10-23', end_date: '2026-10-23', occurrence_date: '2026-10-23' }),
+      ]);
+      await render();
+      const pieces = [...container.querySelectorAll<HTMLButtonElement>('button[aria-label^="Event: Night shift"]')];
+      expect(pieces.map(p => p.getAttribute('aria-label'))).toEqual([
+        'Event: Night shift, 10:00 PM – 2:00 AM, runs past midnight',
+        'Event: Night shift, 10:00 PM – 2:00 AM, from the day before',
+      ]);
+      expect(pieces.map(p => p.closest('[data-day-column]')!.getAttribute('data-day-column'))).toEqual(['4', '5']);
+      expect(pieces[1].textContent).toContain('Until 2:00 AM');
+      expect(button('Event: MATH midterm, all day')).toBeTruthy();
+    });
+
+    it('drags out a range to make an event there, repeating weekly until the end of term', async () => {
+      const shell = {
+        profileState: { profile: DEFAULT_SCHEDULE },
+        calendarSettingsState: { calendarSettings: { id: 1, title: 'Fall 2026', start_date: '2026-08-24', end_date: '2026-12-11' } },
+      } as unknown as AppShellValue;
+      await act(async () => root.render(<AppShellContext.Provider value={shell}><WeekView /></AppShellContext.Provider>));
+
+      // Fri the 23rd, 4:00 PM down to 5:30 PM (48 px an hour, the column's top at 0 in jsdom).
+      const slot = button('Add a task or event on Friday, October 23 at 4:00 PM');
+      await act(async () => {
+        slot.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', button: 0, clientY: 16 * 48 + 5 }));
+        window.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientY: 17 * 48 }));
+        window.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientY: 17.5 * 48 }));
+        window.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'mouse', clientY: 17.5 * 48 }));
+      });
+      const quick = dialog('New event')!;
+      expect(quick).toBeTruthy();
+      expect(quick.textContent).toContain('Fri, Oct 23 · 4:00 PM – 5:30 PM');
+      expect(quick.textContent).toContain('Repeat every Friday until Dec 11');
+
+      await setInput(quick.querySelector<HTMLInputElement>('input[name="quick-title"]')!, 'Hike prep');
+      await act(async () => buttonByText('CS 460').click());
+      await act(async () => quick.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+      const fetchesBefore = mocks.fetchCalendarActivity.mock.calls.length;
+      await act(async () => buttonByText('Save').click());
+      expect(mocks.createEvent).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Hike prep', tags: [{ name: 'CS 460', color: '#3b82f6' }], all_day: false,
+        start_date: '2026-10-23', end_date: '2026-12-11', start_time: '16:00', end_time: '17:30',
+        repeat_days: [5], repeat_interval: 1, reminder_minutes: null,
+      }));
+      // The week reloads to show it.
+      expect(mocks.fetchCalendarActivity.mock.calls.length).toBeGreaterThan(fetchesBefore);
+    });
+
+    it("switches a click's quick-add to an event", async () => {
+      await render();
+      await act(async () => button('Add a task or event on Thursday, October 22 at 9:30 AM').click());
+      await act(async () => buttonByText('Event').click());
+      const quick = dialog('New event')!;
+      await setInput(quick.querySelector<HTMLInputElement>('input[name="quick-title"]')!, 'Office hours');
+      await act(async () => buttonByText('Save').click());
+      expect(mocks.addTask).not.toHaveBeenCalled();
+      expect(mocks.createEvent).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Office hours', start_date: '2026-10-22', start_time: '09:30', end_time: '10:00', repeat_days: [],
+      }));
+    });
+
+    it('opens an event card, and deletes just this occurrence of a repeating event', async () => {
+      withEvents([occurrence()]);
+      await render();
+      await act(async () => button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM').click());
+      const card = dialog('Event: CS 460 Lecture')!;
+      expect(card.textContent).toContain('Wednesday, October 21 · 2:00 PM – 2:50 PM');
+      expect(card.textContent).toContain('Weekly on Mon, Wed and Fri');
+      expect(card.textContent).toContain('Room 201');
+
+      await act(async () => buttonByText('Delete').click());
+      expect(document.body.textContent).toContain('Delete repeating event');
+      expect(document.querySelector<HTMLInputElement>('input[value="this"]')!.checked).toBe(true);
+      await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === 'Delete')!.click());
+      expect(mocks.deleteEvent).toHaveBeenCalledWith(30, 'this', '2026-10-21');
+    });
+
+    it('archives this and following occurrences by default from the card', async () => {
+      withEvents([occurrence()]);
+      await render();
+      await act(async () => button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM').click());
+      await act(async () => buttonByText('Archive').click());
+      expect(document.querySelector<HTMLInputElement>('input[value="following"]')!.checked).toBe(true);
+      await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === 'Archive')!.click());
+      expect(mocks.setEventArchived).toHaveBeenCalledWith(30, true, 'following', '2026-10-21');
+    });
+
+    it('restores an archived occurrence, the whole series when the series was archived', async () => {
+      withEvents([occurrence({ past: true, archived: true })]);
+      mocks.fetchEvent.mockResolvedValue(series({ archived_at: '2026-10-22T00:00:00Z' }));
+      await render();
+      await act(async () => button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM, archived').click());
+      await act(async () => buttonByText('Restore').click());
+      expect(mocks.setEventArchived).toHaveBeenCalledWith(30, false, 'all');
+    });
+
+    it('edits a repeating event, asking which occurrences the change is for', async () => {
+      withEvents([occurrence()]);
+      await render();
+      await act(async () => button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM').click());
+      await act(async () => buttonByText('Edit').click());
+      expect(mocks.fetchEvent).toHaveBeenCalledWith(30);
+      const title = document.querySelector<HTMLInputElement>('input[placeholder="e.g. CS 460 Lecture"]')!;
+      expect(title.value).toBe('CS 460 Lecture');
+      expect(document.body.textContent).toContain('Every Mon, Wed and Fri · 2:00 PM – 2:50 PM · Aug 24 – Dec 11');
+
+      await setInput(title, 'CS 460 Midterm');
+      await act(async () => {
+        document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      expect(document.body.textContent).toContain('Save repeating event');
+      await act(async () => document.querySelector<HTMLInputElement>('input[value="all"]')!.click());
+      await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === 'Save' && b.type === 'button')!.click());
+      expect(mocks.updateEvent).toHaveBeenCalledWith(30, { title: 'CS 460 Midterm' }, 'all', '2026-10-21');
+    });
+
+    it('only lets a change to how it repeats apply to this and following, or all', async () => {
+      withEvents([occurrence()]);
+      await render();
+      await act(async () => button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM').click());
+      await act(async () => buttonByText('Edit').click());
+      await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Tuesday"]')!.click());
+      await act(async () => {
+        document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      expect(document.querySelector<HTMLInputElement>('input[value="this"]')!.disabled).toBe(true);
+      expect(document.querySelector<HTMLInputElement>('input[value="following"]')!.checked).toBe(true);
+      await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === 'Save' && b.type === 'button')!.click());
+      expect(mocks.updateEvent).toHaveBeenCalledWith(30, { repeat_days: [1, 2, 3, 5] }, 'following', '2026-10-21');
+    });
   });
 });
