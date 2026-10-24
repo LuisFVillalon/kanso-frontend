@@ -75,7 +75,7 @@ const pathThrough = (points: ([number, number] | null)[]): string => {
 };
 
 /** The element's content width, following resizes, so the SVG is drawn 1:1 and its text never stretches. */
-const useMeasuredWidth = <T extends HTMLElement>() => {
+export const useMeasuredWidth = <T extends HTMLElement>() => {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   useEffect(() => {

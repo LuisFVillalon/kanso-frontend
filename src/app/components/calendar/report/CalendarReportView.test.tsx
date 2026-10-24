@@ -162,7 +162,8 @@ describe('CalendarReportView mood', () => {
     expect(text()).not.toContain('Patterns in your mood show up');
     await openPatterns();
     expect(text()).not.toContain('Mood & your activity');
-    expect(text()).toContain('they appear in the Month and Year reports');
+    expect(text()).toContain('Tags & feelings');
+    expect(text()).toContain('A week is too short to tell anything from chance');
     await click(buttonLabelled(/^See October$/));
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
     expect(text()).toContain('Mood & your activity');
@@ -180,6 +181,7 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Check in on a few more days to see how your tasks and your mood connect. You have 2 days with a check-in this month, and about 10 are needed.');
     expect(container.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
     expect(text()).toContain('Tags & mood');
+    expect(text()).toContain('Tags & feelings');
   });
 
   it('describes how mood moved with habits, and averages mood by tag', async () => {
@@ -717,7 +719,7 @@ describe('CalendarReportView tabs', () => {
     window.history.replaceState(null, '', '/reports?view=mood&mood=patterns');
     await render();
     expect(tab('Mood').getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('they appear in the Month and Year reports');
+    expect(text()).toContain('A week is too short to tell anything from chance');
     await click(buttonLabelled(/^Month$/));
     expect(text()).toContain('Mood & your activity');
     expect(text()).not.toContain('Mood over time');
