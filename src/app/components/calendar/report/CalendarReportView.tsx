@@ -44,9 +44,11 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import ReportActivityChart, { type ActivityMetric } from './ReportActivityChart';
+import type { TagItemKind } from '@/app/utils/tagReport';
+import ReportActivityChart from './ReportActivityChart';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
+import ReportTagActivityChart from './ReportTagActivityChart';
 import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
@@ -469,18 +471,21 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     );
   }
 
-  // Tasks shows only completions: its Note time is the Notes view's chart.
-  const activityCard = (metric?: ActivityMetric) => (
-    <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={period.kind === 'year' ? 'Activity by month' : 'Activity by day'}>
-      <ReportActivityChart buckets={report.buckets} kind={period.kind} metric={metric} />
-    </CardShell>
+  const byUnit = period.kind === 'year' ? 'by month' : 'by day';
+  // Tasks, Notes and Habits each chart only their own kind, split by its tags.
+  const tagChart = (itemKind: TagItemKind) => (
+    <ReportTagActivityChart period={period} buckets={report.buckets} activity={activity} itemKind={itemKind} />
   );
 
   switch (view) {
     case 'tasks':
       return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-          <div className="lg:col-span-2">{activityCard('completions')}</div>
+          <div className="lg:col-span-2">
+            <CardShell icon={<CircleCheck className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Tasks done ${byUnit}`}>
+              {tagChart('task')}
+            </CardShell>
+          </div>
           <div className="flex flex-col gap-3 sm:gap-4">
             <CardShell icon={<Target className="w-4 h-4" style={{ color: 'var(--tm-success)' }} />} header="Planned vs done">
               <PlannedVsDone report={report} />
@@ -500,21 +505,26 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           <CardShell icon={<FileText className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header="Top notes by time">
             <TopNotes report={report} />
           </CardShell>
-          <CardShell icon={<Clock className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header={period.kind === 'year' ? 'Note time by month' : 'Note time by day'}>
-            <ReportActivityChart buckets={report.buckets} kind={period.kind} metric="notes" />
+          <CardShell icon={<Clock className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header={`Note time ${byUnit}`}>
+            {tagChart('note')}
           </CardShell>
         </div>
       );
     case 'habits':
       return (
-        <CardShell icon={<Flame className="w-4 h-4" style={{ color: '#F97316' }} />} header="Habits">
-          <HabitList report={report} days={days} cells={cells} />
-          {report.habits.length > 0 && (
-            <p className="text-[11px] text-text-muted">
-              {period.kind === 'year' ? 'Each square is a month, darker the more days you checked in.' : 'Each square is a day.'} Streaks are as of today.
-            </p>
-          )}
-        </CardShell>
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <CardShell icon={<Repeat className="w-4 h-4" style={{ color: 'var(--tm-success)' }} />} header={`Habit check-ins ${byUnit}`}>
+            {tagChart('habit')}
+          </CardShell>
+          <CardShell icon={<Flame className="w-4 h-4" style={{ color: '#F97316' }} />} header="Habits">
+            <HabitList report={report} days={days} cells={cells} />
+            {report.habits.length > 0 && (
+              <p className="text-[11px] text-text-muted">
+                {period.kind === 'year' ? 'Each square is a month, darker the more days you checked in.' : 'Each square is a day.'} Streaks are as of today.
+              </p>
+            )}
+          </CardShell>
+        </div>
       );
     case 'mood':
       return mood.error ? (
@@ -532,7 +542,11 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
         <div className="flex flex-col gap-3 sm:gap-4">
           <StatTiles report={report} mood={periodMood} current={current} onOpen={onOpen} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-            <div className="lg:col-span-2">{activityCard()}</div>
+            <div className="lg:col-span-2">
+              <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Activity ${byUnit}`}>
+                <ReportActivityChart buckets={report.buckets} kind={period.kind} />
+              </CardShell>
+            </div>
             <ReportHighlights
               period={period}
               report={report}

@@ -13,8 +13,6 @@ const NOTE_COLOR = 'var(--tm-accent-2)';
 interface ReportActivityChartProps {
   buckets: ReportBucket[];
   kind: ReportPeriodKind;
-  /** Shows only this metric, without the Completions / Note time switch. */
-  metric?: ActivityMetric;
 }
 
 // A month has up to 31 bars; labelling every one crowds a phone screen, so
@@ -73,9 +71,8 @@ const describeBucket = (b: ReportBucket): string =>
  * "Note time" plots time spent in notes. Bars are plain flex boxes rather
  * than SVG so the axis labels never stretch at narrow widths.
  */
-const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind, metric: fixedMetric }) => {
-  const [chosenMetric, setMetric] = useState<ActivityMetric>('completions');
-  const metric = fixedMetric ?? chosenMetric;
+const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind }) => {
+  const [metric, setMetric] = useState<ActivityMetric>('completions');
 
   const valueOf = (b: ReportBucket) => (metric === 'completions' ? b.tasksCompleted + b.habitsCompleted : b.noteSeconds);
   const max = Math.max(...buckets.map(valueOf), 0);
@@ -89,12 +86,10 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
   return (
     <div className="flex-1 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        {!fixedMetric && (
-          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart metric">
-            <MetricButton active={metric === 'completions'} onClick={() => setMetric('completions')}>Completions</MetricButton>
-            <MetricButton active={metric === 'notes'} onClick={() => setMetric('notes')}>Note time</MetricButton>
-          </div>
-        )}
+        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart metric">
+          <MetricButton active={metric === 'completions'} onClick={() => setMetric('completions')}>Completions</MetricButton>
+          <MetricButton active={metric === 'notes'} onClick={() => setMetric('notes')}>Note time</MetricButton>
+        </div>
         <div className="ml-auto flex items-center gap-3">
           {metric === 'completions' ? (
             <>

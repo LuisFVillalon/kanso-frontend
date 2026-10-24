@@ -11,6 +11,7 @@
  */
 
 import type { CalendarActivity } from '@/app/types/activity';
+import { addSecondsByLocalDay } from '@/app/utils/calendarReport';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 export type TagMeasure = 'time' | 'count';
@@ -239,4 +240,74 @@ export const buildTagBreakdown = (
   }
   if (untagged.total > 0) rows.push(untagged);
   return { total, rows };
+};
+
+/** What a kind's chart counts: tasks completed, seconds in notes, habit check-ins. */
+export const KIND_MEASURE: Record<TagItemKind, TagMeasure> = { task: 'count', note: 'time', habit: 'count' };
+
+export interface TagSeries {
+  /** The kind's tags, as the Time tab lists them: largest first, then Other tags and Untagged. */
+  rows: TagRow[];
+  /** Per bucket key ("YYYY-MM-DD", or "YYYY-MM" by month), each row's value — seconds for notes. */
+  byBucket: Map<string, Map<string, number>>;
+}
+
+/**
+ * One kind's activity over `start` to `end`, per day (or per month with
+ * `byMonth`) and per tag, for the Tasks, Notes and Habits charts: tasks
+ * completed, note editing time or habit check-ins. Like the Time tab, an
+ * item with several tags is split evenly between them, so a bucket's tags
+ * add up to what was done in it.
+ */
+export const buildTagSeries = (
+  activity: CalendarActivity,
+  start: Date,
+  end: Date,
+  kind: TagItemKind,
+  byMonth: boolean,
+): TagSeries => {
+  const only: Record<TagItemKind, boolean> = { task: kind === 'task', note: kind === 'note', habit: kind === 'habit' };
+  const { rows } = buildTagBreakdown(collectTagItems(activity, start, end), KIND_MEASURE[kind], only);
+  const rowOf = new Map<string, string>();
+  for (const row of rows) {
+    if (row.key.startsWith('tag:')) rowOf.set(row.key, row.key);
+    for (const key of row.foldedKeys ?? []) rowOf.set(key, row.key);
+  }
+
+  const firstDay = toLocalDateStr(start);
+  const lastDay = toLocalDateStr(end);
+  const byBucket = new Map<string, Map<string, number>>();
+  const add = (dateStr: string, tags: ReportTag[], value: number) => {
+    if (dateStr < firstDay || dateStr > lastDay || value <= 0) return;
+    const key = byMonth ? dateStr.slice(0, 7) : dateStr;
+    let bucket = byBucket.get(key);
+    if (!bucket) {
+      bucket = new Map();
+      byBucket.set(key, bucket);
+    }
+    const keys = tags.length === 0 ? [UNTAGGED_KEY] : tags.map(t => rowOf.get(tagKey(t)) ?? OTHER_KEY);
+    for (const k of keys) bucket.set(k, (bucket.get(k) ?? 0) + value / keys.length);
+  };
+
+  if (kind === 'task') {
+    for (const task of activity.completed_tasks) {
+      if (task.completed_date) add(toLocalDateStr(new Date(task.completed_date)), task.tags, 1);
+    }
+  } else if (kind === 'note') {
+    const tagsOf = new Map((activity.notes ?? []).map(n => [n.id, n.tags]));
+    const rangeStartMs = startOfDay(start).getTime();
+    const rangeEndMs = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).getTime();
+    for (const session of activity.note_sessions) {
+      const startMs = Math.max(new Date(session.started_at).getTime(), rangeStartMs);
+      const endMs = Math.min(new Date(session.ended_at).getTime(), rangeEndMs);
+      if (endMs <= startMs) continue;
+      const seconds = new Map<string, number>();
+      addSecondsByLocalDay(startMs, endMs, seconds);
+      for (const [dateStr, s] of seconds) add(dateStr, tagsOf.get(session.note_id) ?? [], s);
+    }
+  } else {
+    const tagsOf = new Map((activity.habits ?? []).map(h => [h.id, h.tags]));
+    for (const c of activity.habit_completions) add(c.date, tagsOf.get(c.habit_id) ?? [], 1);
+  }
+  return { rows, byBucket };
 };

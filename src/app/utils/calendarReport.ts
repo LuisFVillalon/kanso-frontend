@@ -161,7 +161,7 @@ const BUSIEST_DAYS = 3;
  * seconds to its local day — a session that runs past midnight counts
  * toward both days.
  */
-const addSecondsByLocalDay = (startMs: number, endMs: number, into: Map<string, number>) => {
+export const addSecondsByLocalDay = (startMs: number, endMs: number, into: Map<string, number>) => {
   let cursor = startMs;
   while (cursor < endMs) {
     const day = new Date(cursor);

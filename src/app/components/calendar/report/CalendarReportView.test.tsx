@@ -835,3 +835,65 @@ describe('CalendarReportView tabs', () => {
     expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
   });
 });
+
+describe('CalendarReportView tag charts', () => {
+  const cs = { id: 1, name: 'CS 460', color: '#2F6FD6' };
+  const math = { id: 2, name: 'MATH 254', color: '#7A5AD0' };
+  const health = { id: 3, name: 'Health', color: '#3B9A5A' };
+  const task = (id: number, completed_date: string, tags: typeof cs[]) => ({
+    id, title: `Task ${id}`, category: null, priority: null, due_date: null, due_time: null, estimated_time: null,
+    completed: true, completed_date, parent_task_id: null, tags,
+  });
+  beforeEach(() => {
+    api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      start_date: start, end_date: end, scheduled_tasks: [],
+      completed_tasks: [task(1, '2026-10-20T18:00:00Z', [cs, math]), task(2, '2026-10-20T19:00:00Z', [cs]), task(3, '2026-10-21T18:00:00Z', [])],
+      note_sessions: [{ id: 1, note_id: 7, note_title: 'Lecture', started_at: '2026-10-21T16:00:00Z', ended_at: '2026-10-21T16:45:00Z', duration_seconds: 2700 }],
+      habit_completions: ['2026-10-19', '2026-10-20'].map(date => ({ habit_id: 4, habit_title: 'Run', date, estimated_time: 0.5 })),
+      notes: [{ id: 7, title: 'Lecture', tags: [math] }],
+      habits: [{ id: 4, title: 'Run', estimated_time: 0.5, tags: [health] }],
+    }));
+  });
+
+  const legend = () => [...document.querySelectorAll('[aria-label="Tags"] button')].map(b => b.textContent);
+  const segments = () => [...container.querySelectorAll<HTMLElement>('[data-tag]')];
+
+  it('charts only tasks on Tasks, by tag, and highlights a tapped tag', async () => {
+    await render();
+    await openTab('Tasks');
+    expect(text()).toContain('Tasks done by day');
+    expect(text()).not.toContain('Activity by day');
+    expect(legend()).toEqual(['CS 4601.5 tasks', 'MATH 2540.5 tasks', 'Untagged1 task']);
+    expect(text()).toContain('Only tasks count here');
+    expect(text()).toContain('A task with several tags is split evenly between them');
+    // No habit or note colors: every segment is one of the tasks' tags.
+    expect(new Set(segments().map(s => s.dataset.tag))).toEqual(new Set(['tag:1', 'tag:2', 'untagged']));
+
+    await click([...document.querySelectorAll('[aria-label="Tags"] button')][0]);
+    expect(document.querySelector('[aria-label="Tags"] button[aria-pressed="true"]')!.textContent).toContain('CS 460');
+    expect(text()).toContain('CS 460: 1.5 tasks · 50% of the total');
+    expect(segments().filter(s => s.style.opacity === '0.2').map(s => s.dataset.tag).sort()).toEqual(['tag:2', 'untagged']);
+    await click([...document.querySelectorAll('[aria-label="Tags"] button')][0]);
+    expect(document.querySelector('[aria-label="Tags"] button[aria-pressed="true"]')).toBeNull();
+  });
+
+  it('splits note time and habit check-ins by their own tags', async () => {
+    await render();
+    await openTab('Notes');
+    expect(text()).toContain('Note time by day');
+    expect(legend()).toEqual(['MATH 25445m']);
+    await openTab('Habits');
+    expect(text()).toContain('Habit check-ins by day');
+    expect(legend()).toEqual(['Health2 check-ins']);
+    expect(text()).toContain('Each square is a day.');
+    await click(buttonLabelled(/^Year$/));
+    expect(text()).toContain('Habit check-ins by month');
+  });
+
+  it('keeps the Overview chart of tasks and habits', async () => {
+    await render();
+    expect(text()).toContain('Activity by day');
+    expect(container.querySelector('[aria-label="Chart metric"]')).not.toBeNull();
+    expect(document.querySelector('[aria-label="Tags"]')).toBeNull();
+  });
+});
