@@ -8,7 +8,7 @@ import {
   indexMonthCheckins,
   monthMood,
   moodByTag,
-  moodFetchRange,
+  moodFetchRanges,
   periodRollingAverage,
   quantile,
   rollingAverage,
@@ -42,20 +42,24 @@ const checkin = (period_start: string, mood: number, overrides: Partial<MoodChec
   ...overrides,
 });
 
-describe('moodFetchRange', () => {
+describe('moodFetchRanges', () => {
+  const days = (ranges: { start: Date; end: Date }[]) => ranges.map(r => [day(r.start), day(r.end)]);
+
   it('fetches the period and the whole one before it, and a month’s last week', () => {
     const now = new Date(2026, 9, 21);
-    const week = moodFetchRange(periodContaining('week', now));
-    expect([day(week.start), day(week.end)]).toEqual(['2026-10-12', '2026-10-25']);
-    const month = moodFetchRange(periodContaining('month', now));
+    expect(days(moodFetchRanges(periodContaining('week', now)))).toEqual([['2026-10-12', '2026-10-25']]);
     // October ends on a Saturday, so its last week runs to Sunday Nov 1.
-    expect([day(month.start), day(month.end)]).toEqual(['2026-09-01', '2026-11-01']);
-    const may = moodFetchRange(periodContaining('month', new Date(2026, 4, 10))); // ends on a Sunday
-    expect([day(may.start), day(may.end)]).toEqual(['2026-04-01', '2026-05-31']);
-    const january = moodFetchRange(periodContaining('month', new Date(2026, 0, 10)));
-    expect([day(january.start), day(january.end)]).toEqual(['2025-12-01', '2026-02-01']);
-    const year = moodFetchRange(periodContaining('year', now));
-    expect([day(year.start), day(year.end)]).toEqual(['2025-01-01', '2026-12-31']);
+    expect(days(moodFetchRanges(periodContaining('month', now)))).toEqual([['2026-09-01', '2026-11-01']]);
+    const may = moodFetchRanges(periodContaining('month', new Date(2026, 4, 10))); // ends on a Sunday
+    expect(days(may)).toEqual([['2026-04-01', '2026-05-31']]);
+    const january = moodFetchRanges(periodContaining('month', new Date(2026, 0, 10)));
+    expect(days(january)).toEqual([['2025-12-01', '2026-02-01']]);
+  });
+
+  it('splits a year into one request per year, each within the 366-day limit', () => {
+    const year = moodFetchRanges(periodContaining('year', new Date(2026, 9, 21)));
+    expect(days(year)).toEqual([['2025-01-01', '2025-12-31'], ['2026-01-01', '2026-12-31']]);
+    for (const r of year) expect((r.end.getTime() - r.start.getTime()) / 86_400_000 + 1).toBeLessThanOrEqual(366);
   });
 });
 
