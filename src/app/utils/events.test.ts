@@ -184,6 +184,17 @@ describe('saving an edit', () => {
     expect(allowedEditScopes(both)).toEqual([]);
   });
 
+  it('allows only "all" for an end before the occurrence being edited', () => {
+    const later = eventFormFromOccurrence(occurrence({ date: '2026-11-20' }), series(), termEnd);
+    const early = eventFormEdit(later, { ...later, endMode: 'on', endDate: '2026-11-01' }, termEnd);
+    expect(allowedEditScopes(early)).toEqual(['all']);
+    const onIt = eventFormEdit(later, { ...later, endMode: 'on', endDate: '2026-11-20' }, termEnd);
+    expect(allowedEditScopes(onIt)).toEqual(['following', 'all']);
+
+    const pastTerm = eventFormFromOccurrence(occurrence({ date: '2027-01-15' }), series({ end_date: null }), termEnd);
+    expect(allowedEditScopes(eventFormEdit(pastTerm, { ...pastTerm, endMode: 'term' }, termEnd))).toEqual(['all']);
+  });
+
   it('moves the last occurrence past the series end as "this" alone', () => {
     const last = eventFormFromOccurrence(occurrence({ date: '2026-12-11' }), series(), termEnd);
     const onDate = { ...last, endMode: 'on' as const, endDate: termEnd };

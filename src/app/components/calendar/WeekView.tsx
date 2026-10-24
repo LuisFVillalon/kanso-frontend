@@ -343,6 +343,8 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         allowed,
         hint: allowed.length === 3 ? undefined : edit.date !== null
           ? 'A new date moves just this event. To move them all, change the days it repeats on.'
+          : allowed.length === 1
+          ? 'It would end before this date, so the change applies to all of them.'
           : 'Changes to how it repeats, when it ends or its reminder apply to this and following events, or all of them.',
         onConfirm: scope => { void eventActions.update(occurrence, editBody(edit, scope, true, values), scope).then(resolve); },
         onCancel: () => resolve(false),

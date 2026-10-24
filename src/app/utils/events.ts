@@ -302,6 +302,8 @@ export function eventFormWarnings(form: EventFormValues, { restDays, windowOn, o
 export interface EventEdit {
   /** Changes to the occurrence's own fields (title, description, tags, all day, times), as sent for any scope. */
   occurrence: CalendarEventUpdate;
+  /** The day of the occurrence being edited. */
+  from: string;
   /** The day it moved to, if it moved. */
   date: string | null;
   /** Changes to the series' fields (repeat, end, reminder). */
@@ -329,6 +331,7 @@ export function eventFormEdit(initial: EventFormValues, next: EventFormValues, t
   }
   return {
     occurrence,
+    from: initial.date,
     date: next.date !== initial.date ? next.date : null,
     series,
     repeatToggled: isRepeating(initial) !== isRepeating(next),
@@ -341,12 +344,14 @@ export const editIsEmpty = (edit: EventEdit) =>
 /**
  * The scopes an edit of a repeating event can be saved with. A new date moves
  * one occurrence, so it allows only "this"; a change to the repeat, end or
- * reminder belongs to a run of the series, so it rules "this" out.
+ * reminder belongs to a run of the series, so it rules "this" out, and an
+ * end before this occurrence leaves no following run, so it allows only "all".
  */
 export function allowedEditScopes(edit: EventEdit): EditScope[] {
   const seriesChanged = Object.keys(edit.series).length > 0 || edit.repeatToggled;
   if (edit.date !== null) return seriesChanged ? [] : ['this'];
-  return seriesChanged ? ['following', 'all'] : ['this', 'following', 'all'];
+  if (!seriesChanged) return ['this', 'following', 'all'];
+  return edit.series.end_date && edit.series.end_date < edit.from ? ['all'] : ['following', 'all'];
 }
 
 /**
