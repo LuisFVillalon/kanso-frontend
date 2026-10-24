@@ -93,6 +93,7 @@ export const TagBarsChart: React.FC<TagBarsChartProps> = ({ tags, hatched, selec
           const start = cx - (bw * 3 + 4) / 2;
           const labelY = top + plotH + 14;
           const isSelected = selected === t.tag.key;
+          const n = t.feel.mood.n;
           const name = clip(t.tag.name, tilt ? 12 : Math.max(6, Math.floor(groupW / 7)));
           return (
             <g
@@ -100,7 +101,7 @@ export const TagBarsChart: React.FC<TagBarsChartProps> = ({ tags, hatched, selec
               role="button"
               tabIndex={0}
               aria-pressed={isSelected}
-              aria-label={`${t.tag.name}, ${t.days} ${t.days === 1 ? 'day' : 'days'}: show its days over time`}
+              aria-label={`${t.tag.name}, ${n} ${n === 1 ? 'day' : 'days'}: show its days over time`}
               onClick={() => onSelect(t.tag.key)}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -159,17 +160,17 @@ export const TagBarsChart: React.FC<TagBarsChartProps> = ({ tags, hatched, selec
                     <text x={cx} y={labelY} textAnchor="middle" fontSize={11} fill="var(--tm-text-primary)">
                       <tspan style={{ fill: tagColor(t) }}>●</tspan> {name}
                     </text>
-                    <text x={cx} y={labelY + 14} textAnchor="middle" fontSize={10.5} fill="var(--tm-text-muted)">{t.days} {t.days === 1 ? 'day' : 'days'}</text>
+                    <text x={cx} y={labelY + 14} textAnchor="middle" fontSize={10.5} fill="var(--tm-text-muted)">{n} {n === 1 ? 'day' : 'days'}</text>
                   </>
                 )}
               </g>
-              {tilt && <text x={cx} y={top + plotH + bottom - 2} textAnchor="middle" fontSize={10.5} fill="var(--tm-text-muted)">{t.days}d</text>}
+              {tilt && <text x={cx} y={top + plotH + bottom - 2} textAnchor="middle" fontSize={10.5} fill="var(--tm-text-muted)">{n}d</text>}
             </g>
           );
         })}
         <line x1={padLeft} x2={width - padRight} y1={y(1)} y2={y(1)} stroke="var(--tm-text-muted)" strokeOpacity={0.6} />
         <text x={padLeft + (width - padLeft - padRight) / 2} y={height - 3} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--tm-text-muted)">
-          {tilt ? 'Tag, with the days it was on (d)' : 'Tag, with the days it was on'}
+          {tilt ? 'Tag, with the days compared (d)' : 'Tag, with the days compared'}
         </text>
       </svg>
 
@@ -186,7 +187,7 @@ export const TagBarsChart: React.FC<TagBarsChartProps> = ({ tags, hatched, selec
           <tbody>
             {tags.map(t => (
               <tr key={t.tag.key}>
-                <th scope="row">{t.tag.name}, {t.days} {t.days === 1 ? 'day' : 'days'}</th>
+                <th scope="row">{t.tag.name}, {t.feel.mood.n} {t.feel.mood.n === 1 ? 'day' : 'days'}</th>
                 {FEELINGS.map(f => <td key={f}>{describeTagFeeling(t.tag.name, f, t.feel[f])}</td>)}
               </tr>
             ))}

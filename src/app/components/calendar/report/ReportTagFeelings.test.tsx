@@ -51,6 +51,17 @@ afterEach(() => {
 const text = () => host.textContent ?? '';
 
 describe('ReportTagFeelings', () => {
+  it('labels each tag with the days it compares', () => {
+    // Work is also on every weekend day, so those days off have nothing to compare with.
+    const withWeekends: CalendarActivity = { ...activity, completed_tasks: days.filter(d => d % 2 || [4, 10, 18].includes(d)).map(d => task(d, d)) };
+    act(() => root.render(
+      <ReportTagFeelings activity={withWeekends} byDay={byDay} period={periodContaining('month', new Date(2026, 9, 21))} scopeLabel="this month" restDays={[]} />,
+    ));
+    expect(host.querySelector('g[role="button"]')!.getAttribute('aria-label')).toBe('Work, 7 days: show its days over time');
+    expect(text()).toContain('Tag, with the days compared');
+    expect(host.querySelector('th[scope="row"]')!.textContent).toBe('Work, 7 days');
+  });
+
   it('draws grouped bars per tag and opens a tag’s timeline on tap', async () => {
     const onWiden = vi.fn();
     act(() => root.render(
@@ -70,6 +81,7 @@ describe('ReportTagFeelings', () => {
     expect(group.getAttribute('aria-label')).toBe('Work, 10 days: show its days over time');
     await act(async () => { group.dispatchEvent(new MouseEvent('click', { bubbles: true })); });
     expect(text()).toContain('Your mood, day by day, with Work days highlighted');
+    expect(text()).toContain('Average on Work days compared');
     expect(text()).toContain('That’s a clear difference: lower mood.');
     expect(host.querySelector('svg[aria-label="Your mood day by day, with Work days highlighted"]')).not.toBeNull();
 
