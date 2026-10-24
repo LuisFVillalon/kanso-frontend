@@ -116,11 +116,6 @@ export const useTaskHandlers = ({
 
     const tag = await addTag(newTag);
     if (tag) {
-      setNewTask((prev: BaseTaskForm) => ({
-        ...prev,
-        tags: [...prev.tags, tag]
-      }));
-
       setNewTag({name: '', color: '#3B82F6' });
       setShowCreateTagModal(false);
     }
