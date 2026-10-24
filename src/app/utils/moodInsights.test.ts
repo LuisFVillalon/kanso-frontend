@@ -251,6 +251,14 @@ describe('the rules', () => {
     ], 'year');
     expect(r.notes[0].insight.text).toBe('Best month: June (4.0). Hardest: August (2.0).');
     expect(r.notes[0].insight.mark).toMatchObject({ type: 'months', best: ['2026-06'], worst: ['2026-08'] });
+    expect(r.why).toBe(WHY.stretch);
+  });
+
+  it('never calls a year with clearly different months even', () => {
+    // No year before to compare, too few check-ins to split, and a Good March and an Okay July.
+    const r = analyse([...run('2026-03-01', Array(8).fill(4)), ...run('2026-07-01', Array(8).fill(3))], 'year');
+    expect(r.notes.map(n => n.insight.text)).toEqual(['Best month: March (4.0). Hardest: July (3.0).']);
+    expect(r.why).toBe(WHY.stretch);
   });
 
   it('says mood moved with stress only with 10 check-ins and 5 days on each side', () => {

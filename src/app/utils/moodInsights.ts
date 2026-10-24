@@ -427,7 +427,8 @@ export const analyseMoodInsights = (period: ReportPeriod, byDay: Map<string, Moo
   else if (head === direction || head === change) why = WHY.harder;
   else if (head === stretch && stretch.recent) why = WHY.now;
   else if (together) why = WHY[together.series!];
-  else if (head === stretch) why = WHY.stretch;
+  // A month's or year's best and hardest stretch is never "even", even when the headline is the plain level.
+  else if (isStretch && kind !== 'week') why = WHY.stretch;
   else if (kind === 'week' && isStretch) why = WHY.days;
   else why = WHY.steady;
 
