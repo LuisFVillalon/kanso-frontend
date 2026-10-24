@@ -206,7 +206,10 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('Mood & your activity');
     // The Overview says the same as the activity card.
     await openTab('Productivity');
-    expect(buttonLabelled(/^Mood & your activity/).getAttribute('aria-label')).toBe('Mood & your activity: Can’t tell yet · Your tasks barely changed from day to day');
+    expect(buttonLabelled(/^Mood & your activity/).getAttribute('aria-label')).toBe(
+      'Mood & your activity: Too few days to tell anything yet: each side of a comparison needs 5 days with a check-in, and you have 2 days this month.',
+    );
+    expect(text()).toContain('Check in more · 2 days so far');
   });
 
   it('answers mood, energy and stress by one rule, opening on the clearest finding', async () => {
@@ -262,9 +265,9 @@ describe('CalendarReportView mood', () => {
   });
 
   it('opens on a finding past the first 8 rows with its row shown and picked', async () => {
-    // Eight moments on every day outrank "Exercised", the only one with a finding.
+    // Nine moments on every day outrank "Exercised", the only one with a finding.
     const days = Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 2).padStart(2, '0')}`);
-    const always = Array.from({ length: 8 }, (_, k) => `Always ${k + 1}`);
+    const always = Array.from({ length: 9 }, (_, k) => `Always ${k + 1}`);
     api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, (i % 5) + 1), id: i + 1, tags: [...always, ...(i % 5 >= 3 ? ['Exercised'] : [])] })));
     await render();
     await openTab('Mood');
@@ -274,6 +277,13 @@ describe('CalendarReportView mood', () => {
     expect(buttonLabelled(/^Always 8, 20 days: /)).toBeDefined();
     expect(buttonLabelled(/^Exercised, 8 days: Maybe higher$/).getAttribute('aria-pressed')).toBe('true');
     expect(text()).toContain('Your mood was maybe higher on days you picked “Exercised”. Too early to be sure · 8 days vs 12 other. Mood averaged');
+    expect(text()).toContain('Showing 9 of 10.');
+    // Tapped again it stays listed, until another row is picked.
+    await click(buttonLabelled(/^Exercised, 8 days: /));
+    expect(buttonLabelled(/^Exercised, 8 days: /).getAttribute('aria-pressed')).toBe('false');
+    await click(buttonLabelled(/^Always 1, 20 days: /));
+    expect(buttonLabelled(/^Exercised, 8 days: /)).toBeUndefined();
+    expect(text()).toContain('Showing 8 of 10.');
   });
 
   it('shows a tag row’s numbers under the list on tap, one row at a time', async () => {

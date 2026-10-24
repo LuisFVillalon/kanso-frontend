@@ -306,23 +306,40 @@ const MAX_NAMES = 5;
 const listNames = (names: string[]) =>
   names.length > MAX_NAMES ? `${names.slice(0, MAX_NAMES).join(', ')} and ${names.length - MAX_NAMES} more` : joinAnd(names);
 
+const settled = (r: PatternRow) => FEELINGS.some(f => r.answer[f].kind === 'same');
+const found = (r: PatternRow) => FEELINGS.some(f => r.answer[f].step);
+
+/** Whether any row has enough days to say even "about the same"; until then the page only asks for more check-ins. */
+export const anySettled = (rows: PatternRow[]): boolean => rows.some(settled);
+
+/** What the page says while nothing has enough days. */
+export const tooFewDays = (days: number, scope: string): string =>
+  `Too few days to tell anything yet: each side of a comparison needs ${TAG_MIN_SIDE} days with a check-in, and you have ${plural(days, 'day')} ${scope}.`;
+
+/** The activities answered "about the same" for every feeling they could. */
+export const quietActivities = (rows: PatternRow[]): PatternRow[] => rows.filter(r => r.source === 'activity' && settled(r) && !found(r));
+
+/** "How much you did made no clear difference to how you felt.", or the quiet activities named. */
+export const quietLine = (quiet: PatternRow[]): string | null =>
+  quiet.length === MOOD_METRICS.length ? 'How much you did made no clear difference to how you felt.'
+    : quiet.length ? `${capitalize(joinAnd(quiet.map(r => r.name.toLowerCase())))}: no clear difference to how you felt.` : null;
+
+/** "Too few days to tell yet: Habits.", for the rows that changed but have too few days for any feeling. */
+export const waitingLine = (rows: PatternRow[]): string | null => {
+  const waiting = rows.filter(r => !r.flat && FEELINGS.every(f => r.answer[f].kind === 'wait'));
+  return waiting.length ? `Too few days to tell yet: ${listNames(waiting.map(r => r.name))}.` : null;
+};
+
 /**
  * The plain lines after the findings: which activities made no clear
  * difference, that everything else was about the same (or that nothing stood
  * out), and what has too few days to tell yet.
  */
 export const patternsRest = ({ days, rows }: PatternsAnalysis, scope: string): string[] => {
-  const settled = (r: PatternRow) => FEELINGS.some(f => r.answer[f].kind === 'same');
-  const found = (r: PatternRow) => FEELINGS.some(f => r.answer[f].step);
-  if (!rows.some(settled)) {
-    return [`Too few days to tell anything yet: each side of a comparison needs ${TAG_MIN_SIDE} days with a check-in, and you have ${plural(days.length, 'day')} ${scope}.`];
-  }
-  const lines: string[] = [];
-  const quiet = rows.filter(r => r.source === 'activity' && settled(r) && !found(r));
-  if (quiet.length === MOOD_METRICS.length) lines.push('How much you did made no clear difference to how you felt.');
-  else if (quiet.length) lines.push(`${capitalize(joinAnd(quiet.map(r => r.name.toLowerCase())))}: no clear difference to how you felt.`);
-  lines.push(rows.some(found) ? 'Everything else was about the same.' : `Nothing stood out ${scope}: every difference was small enough to be luck.`);
-  const waiting = rows.filter(r => !r.flat && FEELINGS.every(f => r.answer[f].kind === 'wait'));
-  if (waiting.length) lines.push(`Too few days to tell yet: ${listNames(waiting.map(r => r.name))}.`);
-  return lines;
+  if (!anySettled(rows)) return [tooFewDays(days.length, scope)];
+  return [
+    quietLine(quietActivities(rows)),
+    rows.some(found) ? 'Everything else was about the same.' : `Nothing stood out ${scope}: every difference was small enough to be luck.`,
+    waitingLine(rows),
+  ].filter((line): line is string => !!line);
 };

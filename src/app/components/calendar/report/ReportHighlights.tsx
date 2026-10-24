@@ -8,8 +8,17 @@ import { moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import type { CalendarReport, ReportPeriod } from '@/app/utils/calendarReport';
 import type { MoodSummary } from '@/app/utils/moodReport';
-import { describePattern, patternFindings, patternSupport, periodPatterns } from '@/app/utils/patterns';
-import { FEELINGS } from '@/app/utils/tagFeelings';
+import {
+  anySettled,
+  describePattern,
+  patternFindings,
+  patternSupport,
+  periodPatterns,
+  quietActivities,
+  quietLine,
+  tooFewDays,
+  waitingLine,
+} from '@/app/utils/patterns';
 import { buildTagBreakdown, collectTagItems, UNTAGGED_KEY } from '@/app/utils/tagReport';
 import { formatTagHours } from './ReportTagBreakdown';
 import type { ReportView } from './CalendarReportView';
@@ -55,17 +64,25 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
   // Mood › Patterns' own answer for the activity rows; a week is too short for patterns (the Mood tab sends it to its month).
   const moodLink = useMemo((): { text: string; full: string } | null => {
     if (!byDay || period.kind === 'week') return null;
-    const rows = periodPatterns(activity, byDay, period.start, period.end, restDays).rows.filter(r => r.source === 'activity');
+    const analysis = periodPatterns(activity, byDay, period.start, period.end, restDays);
+    const rows = analysis.rows.filter(r => r.source === 'activity');
     const found = patternFindings(rows)[0];
     if (found) {
       const { row, feeling } = found;
       return { text: `${row.name} · ${row.answer[feeling].short} ${feeling}`, full: `${describePattern(row, feeling)} · ${patternSupport(row, feeling)}` };
     }
-    if (rows.some(r => FEELINGS.some(f => r.answer[f].kind === 'same'))) {
-      return { text: 'About the same', full: `How much you did made no clear difference to how you felt ${scopeLabel}` };
+    if (!anySettled(analysis.rows)) {
+      return { text: `Check in more · ${plural(analysis.days.length, 'day')} so far`, full: tooFewDays(analysis.days.length, scopeLabel) };
     }
-    const support = patternSupport(rows.find(r => !r.flat) ?? rows[0], 'mood');
-    return { text: support, full: `Can’t tell yet · ${support}` };
+    const quiet = quietActivities(rows);
+    const waiting = waitingLine(rows);
+    if (quiet.length) {
+      return {
+        text: quiet.length === rows.length ? 'About the same' : `${quiet.map(r => r.name).join(', ')} · About the same`,
+        full: [quietLine(quiet), waiting].filter(Boolean).join(' '),
+      };
+    }
+    return { text: 'Can’t tell yet', full: waiting ?? patternSupport(rows[0], 'mood') };
     // `periodKey` and `restKey` identify the period and rest days; their objects change identity every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activity, byDay, periodKey, restKey, scopeLabel]);

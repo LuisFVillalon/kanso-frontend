@@ -57,6 +57,8 @@ interface TagsPick {
   feeling: Feeling;
   /** The row whose numbers show under the list. */
   row: string | null;
+  /** A finding's row opened from past the first rows, listed after them until another row or list is picked. */
+  pinned: string | null;
 }
 
 /** Where the page opens: each card on its clearest finding, and on a phone the card holding the clearest of all. */
@@ -65,7 +67,7 @@ const opening = (findings: PatternFinding[]) => {
   const tag = findings.find(x => x.row.source !== 'activity');
   return {
     activity: { metric: act?.row.metric ?? 'tasks', feeling: act?.feeling ?? 'mood' } as ActivityPick,
-    tags: { source: (tag?.row.source ?? 'tag') as TagSource, feeling: tag?.feeling ?? 'mood', row: tag?.row.key ?? null } as TagsPick,
+    tags: { source: (tag?.row.source ?? 'tag') as TagSource, feeling: tag?.feeling ?? 'mood', row: tag?.row.key ?? null, pinned: tag?.row.key ?? null } as TagsPick,
     panel: findings[0] && findings[0].row.source !== 'activity' ? 'tags' as const : 'activity' as const,
   };
 };
@@ -123,7 +125,7 @@ const ReportPatterns: React.FC<ReportPatternsProps> = ({ activity, byDay, period
       setAct({ metric: row.metric!, feeling });
       setPanel('activity');
     } else {
-      setTags({ source: row.source, feeling, row: row.key });
+      setTags({ source: row.source, feeling, row: row.key, pinned: row.key });
       setPanel('tags');
     }
   };
@@ -287,7 +289,8 @@ const TagsCard: React.FC<{
   const all = analysis.rows.filter(r => r.source === pick.source);
   const top = all.slice(0, MAX_CHART_TAGS);
   const selected = all.find(r => r.key === pick.row) ?? null;
-  const rows = selected && !top.includes(selected) ? [...top, selected] : top;
+  const pinned = all.find(r => r.key === pick.pinned);
+  const rows = pinned && !top.includes(pinned) ? [...top, pinned] : top;
   const tag = pick.source === 'tag';
   return (
     <CardShell icon={<Tags className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={<span className="whitespace-nowrap">Tags &amp; moments</span>} headerAction={headerAction}>
@@ -298,7 +301,7 @@ const TagsCard: React.FC<{
             type="button"
             role="tab"
             aria-selected={pick.source === s.value}
-            onClick={() => onPick({ ...pick, source: s.value, row: null })}
+            onClick={() => onPick({ ...pick, source: s.value, row: null, pinned: null })}
             className={`flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
               pick.source === s.value ? 'bg-accent-subtle text-accent shadow-sm font-semibold' : 'text-text-secondary hover:text-text-primary'
             }`}
@@ -335,7 +338,7 @@ const TagsCard: React.FC<{
                 <li key={r.key}>
                   <button
                     type="button"
-                    onClick={() => onPick({ ...pick, row: on ? null : r.key })}
+                    onClick={() => onPick(on ? { ...pick, row: null } : { ...pick, row: r.key, pinned: r.key === pick.pinned ? pick.pinned : null })}
                     aria-pressed={on}
                     aria-label={`${r.name}, ${r.days} ${r.days === 1 ? 'day' : 'days'}: ${a.short}`}
                     className={`w-full grid grid-cols-[minmax(4rem,2fr)_auto_minmax(2.5rem,1fr)_auto] items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-xs sm:text-sm ${
@@ -370,7 +373,7 @@ const TagsCard: React.FC<{
             )}
           </p>
           <p className="mt-auto text-[11px] text-text-muted">
-            {all.length > rows.length && `Showing the ${MAX_CHART_TAGS} on the most days. `}Shows what went together, not what caused it.
+            {all.length > rows.length && `Showing ${rows.length} of ${all.length}. `}Shows what went together, not what caused it.
           </p>
         </>
       )}
