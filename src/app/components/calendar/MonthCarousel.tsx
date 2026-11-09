@@ -34,7 +34,7 @@ const ARROW_CLASS =
 const MonthCarousel: React.FC<MonthCarouselProps> = ({ year, month, onChangeMonth, dayData, todayStr, onSelectDay, selectedDate, onNavigate, terms, showMood = false }) => {
   const moods = useMonthMoods(year, month, showMood);
 
-  const step =(offset: number) => {
+  const step = (offset: number) => {
     const next = new Date(year, month + offset, 1);
     onChangeMonth(next.getFullYear(), next.getMonth());
   };
