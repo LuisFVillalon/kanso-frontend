@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   addTask: vi.fn(),
   updateTask: vi.fn(),
   saveLinkedTasks: vi.fn(),
+  taskEditSyncToken: 0,
+  tagSyncToken: 0,
   fetchCalendarActivity: vi.fn(),
   fetchEvent: vi.fn(),
   createEvent: vi.fn(),
@@ -42,10 +44,10 @@ vi.mock('@/app/lib/backend-api', () => ({
 vi.mock('@/app/context/TasksContext', () => ({
   useTasksContext: () => ({
     tasks: mocks.tasks, addTask: mocks.addTask, updateTask: mocks.updateTask,
-    saveLinkedTasks: mocks.saveLinkedTasks, completionSyncToken: 0,
+    saveLinkedTasks: mocks.saveLinkedTasks, completionSyncToken: 0, taskEditSyncToken: mocks.taskEditSyncToken,
   }),
 }));
-vi.mock('@/app/context/TagsContext', () => ({ useTagsContext: () => ({ tags: [CLASS_TAG] }) }));
+vi.mock('@/app/context/TagsContext', () => ({ useTagsContext: () => ({ tags: [CLASS_TAG], tagSyncToken: mocks.tagSyncToken }) }));
 vi.mock('@/app/context/HabitsContext', () => ({
   useHabitsContext: () => ({ habits: [{ id: 5, title: 'Run' }], toggleDate: vi.fn() }),
 }));
@@ -157,6 +159,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 9, 21, 12, 0)); // Wed 21 Oct 2026
   mocks.tasks = [];
+  mocks.taskEditSyncToken = 0;
+  mocks.tagSyncToken = 0;
   mocks.addTask.mockReset();
   mocks.updateTask.mockReset();
   mocks.saveLinkedTasks.mockReset();
@@ -218,6 +222,26 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(styleOf('Planned task: Plain')).toContain('var(--tm-pencil)');
     expect(styleOf('Note session: Lecture notes')).toContain('#22c55e');
     expect(styleOf('Habit completed: Run')).toContain('#ef4444');
+  });
+
+  it.each(['taskEditSyncToken', 'tagSyncToken'] as const)('recolors a completed block after a saved tag change (%s)', async token => {
+    const completedIn = (color: string) => async (start: string, end: string) => ({
+      ...activityFor(start, end),
+      completed_tasks: [{
+        id: 1, title: 'Read', completed_date: new Date(2026, 9, 20, 9, 0).toISOString(),
+        tags: [{ id: 1, name: 'Tag', color }],
+      }],
+    });
+    const completedStyle = () => container.querySelector('[aria-label^="Completed task: Read"]')!.getAttribute('style')!;
+
+    mocks.fetchCalendarActivity.mockImplementation(completedIn('#ef4444'));
+    await render();
+    expect(completedStyle()).toContain('#ef4444');
+
+    mocks.fetchCalendarActivity.mockImplementation(completedIn('#22c55e'));
+    mocks[token] = 1;
+    await render();
+    expect(completedStyle()).toContain('#22c55e');
   });
 
   it('shows rest days and when the work window opens and closes', async () => {

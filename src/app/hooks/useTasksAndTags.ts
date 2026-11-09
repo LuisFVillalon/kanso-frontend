@@ -44,6 +44,7 @@ export const useTasks = (enabled: boolean) => {
   // TaskDebriefPanel key their refetch off this instead of `tasks` so they
   // don't race the in-flight request and refetch before it has committed.
   const [completionSyncToken, setCompletionSyncToken] = useState(0);
+  const [taskEditSyncToken, setTaskEditSyncToken] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -328,6 +329,7 @@ export const useTasks = (enabled: boolean) => {
       };
       const updated = await updateWholeTask(id, taskToUpdate) as Task;
       setTasks(prev => prev.map(task => task.id === id ? updated : task));
+      setTaskEditSyncToken(token => token + 1);
       return true;
     } catch (err) {
       console.error(err);
@@ -378,6 +380,7 @@ export const useTasks = (enabled: boolean) => {
     saveLinkedTasks,
     pendingTaskIds,
     completionSyncToken,
+    taskEditSyncToken,
   };
 };
 
@@ -392,6 +395,7 @@ export const useTags = (enabled: boolean) => {
   const showToast = useToast();
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagsLoading, setTagsLoading] = useState(true);
+  const [tagSyncToken, setTagSyncToken] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -429,6 +433,7 @@ export const useTags = (enabled: boolean) => {
     try {
       await onDeleteTag(delTag.id);
       setTags(prev => prev.filter(t => t.id !== delTag.id));
+      setTagSyncToken(token => token + 1);
       return delTag.id;
     } catch (err) {
       console.error('Delete failed:', err);
@@ -468,6 +473,7 @@ export const useTags = (enabled: boolean) => {
     try {
       await updateTagApi(tagToUpdate.id, { name: tagToUpdate.name, color: tagToUpdate.color });
       setTags(prev => prev.map(tag => tag.id === tagToUpdate.id ? tagToUpdate : tag));
+      setTagSyncToken(token => token + 1);
       return tagToUpdate.id;
     } catch (err) {
       console.error('Update failed:', err);
@@ -483,6 +489,7 @@ export const useTags = (enabled: boolean) => {
     archiveTag,
     restoreTag,
     updateTag,
-    setTags
+    setTags,
+    tagSyncToken,
   };
 };
