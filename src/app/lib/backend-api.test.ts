@@ -8,6 +8,7 @@ import {
   ApiError, archiveTask, CanvasTaskExistsError, completeTaskWithLinked, connectCanvasFeed, createTask, deleteEvent,
   fetchCalendarActivity, fetchEventReport, fetchEvents, fetchTaskDebrief, purgeEvent, restoreEvent, setEventArchived, updateEvent,
   fetchCanvasCourses, fetchCanvasModules, fetchCanvasOverview, fetchCanvasPanelCourses, onDelete, syncCanvasLinkedTasks,
+  completeGoogleCalendar, updateGoogleCalendar, updateGoogleEventTags,
 } from './backend-api';
 
 const fetchMock = vi.fn();
@@ -23,6 +24,38 @@ afterEach(() => {
 
 const requestedUrl = (): URL => new URL(String(fetchMock.mock.calls[0][0]), 'http://api.test');
 const requestedParams = (): URLSearchParams => requestedUrl().searchParams;
+
+describe('Google Calendar', () => {
+  it('finishes the connection with the code and state in the body, not the address', async () => {
+    await completeGoogleCalendar('the-code', 'the-state');
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/google-calendar\/complete$/);
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ code: 'the-code', state: 'the-state' });
+  });
+
+  it("escapes a calendar id's @ and #", async () => {
+    await updateGoogleCalendar('en.usa#holiday@group.v.calendar.google.com', { selected: false });
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/google-calendar\/calendars\/en\.usa%23holiday%40group\.v\.calendar\.google\.com$/);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ selected: false });
+  });
+
+  it("sends an event's own tags", async () => {
+    await updateGoogleEventTags(-7, [1, 2]);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/google-calendar\/events\/-7\/tags$/);
+    expect(fetchMock.mock.calls[0][1].method).toBe('PATCH');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ tag_ids: [1, 2] });
+  });
+
+  it('sends an empty list without use_default to leave an event with no tags', async () => {
+    await updateGoogleEventTags(7, []);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ tag_ids: [] });
+  });
+
+  it('returns an event to its calendar default', async () => {
+    await updateGoogleEventTags(7, [], true);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ tag_ids: [], use_default: true });
+  });
+});
 
 describe('fetchCalendarActivity', () => {
   it('leaves archived items out by default', async () => {

@@ -16,6 +16,7 @@ import { useNavExpanded } from '@/app/hooks/useNavExpanded';
 import { useAppModalState } from '@/app/hooks/useAppModalState';
 import { useTaskHandlers } from '@/app/hooks/useTaskHandlers';
 import { useRestoreFromTrash } from '@/app/hooks/useRestoreFromTrash';
+import { useGoogleCalendarReturn } from '@/app/hooks/useGoogleCalendarReturn';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
 import type { SettingsSection } from '@/app/components/settings/SettingsModal';
 import SignOutConfirm from '@/app/components/common/SignOutConfirm';
@@ -48,6 +49,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading, demoSeeding, isDemo, signOut } = useAuth();
   const signedIn = !loading && !!user && !demoSeeding;
   const showToast = useToast();
+  const { notice: googleCalendarNotice, clearNotice: clearGoogleCalendarNotice } = useGoogleCalendarReturn(signedIn);
 
   const profileState = useProfile(user);
   const calendarSettingsState = useCalendarSettings(user);
@@ -204,11 +206,17 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     requestLogout: () => setConfirmingLogout(true),
     settingsClosedToken,
     registerNoteOpener,
+    googleCalendarNotice,
   };
 
   // The shortcut listener is bound once and reads the latest actions from here.
   const actions = useRef(value);
   useEffect(() => { actions.current = value; });
+
+  // Back from Google's consent screen: its Settings page says how that went.
+  useEffect(() => {
+    if (googleCalendarNotice) actions.current.openSettings('google-calendar');
+  }, [googleCalendarNotice]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -352,7 +360,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           // Settings
           showSettings={state.showSettings}
           settingsSection={settingsSection}
-          onCloseSettings={() => { state.setShowSettings(false); setSettingsClosedToken(n => n + 1); }}
+          onCloseSettings={() => { state.setShowSettings(false); setSettingsClosedToken(n => n + 1); clearGoogleCalendarNotice(); }}
           onAccountDeleted={handleLogout}
           onSignOut={handleLogout}
           profile={profile}

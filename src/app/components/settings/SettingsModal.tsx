@@ -7,7 +7,7 @@
  *
  *   Account    Profile · Sign-in and security
  *   Your days  Work day and rest · Term Tracker
- *   App        Notifications · Appearance · Canvas
+ *   App        Notifications · Appearance · Canvas · Google Calendar
  *   Sign out
  *
  * Every change saves itself (see autosave.ts): text after a pause, toggles
@@ -21,13 +21,13 @@
  *
  * Demo sandboxes (Supabase anonymous users) have no credentials or account to
  * manage, so they get no Sign-in and security page, and Canvas says it needs
- * a real account.
+ * a real account. Google Calendar appears only once the server has its keys.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Loader2, Check, AlertTriangle, ChevronLeft, ChevronRight, User, ShieldCheck, Clock,
-  Hourglass, Bell, Palette, GraduationCap, LogOut,
+  Hourglass, Bell, Palette, GraduationCap, CalendarSync, LogOut,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/app/context/AuthContext';
@@ -43,7 +43,9 @@ import MoodCheckinSettingsSection, { MOOD_GROUP, MOOD_TOGGLES } from '@/app/comp
 import NotificationPreferencesForm from '@/app/components/settings/NotificationPreferencesForm';
 import SettingsGroup from '@/app/components/settings/SettingsGroup';
 import CanvasIntegrationSection from '@/app/components/settings/CanvasIntegrationSection';
+import GoogleCalendarSection from '@/app/components/settings/GoogleCalendarSection';
 import { useCanvasTabHidden } from '@/app/hooks/useCanvasTabHidden';
+import { useGoogleCalendarStatus } from '@/app/hooks/useGoogleCalendarStatus';
 import ProfilePage from '@/app/components/settings/pages/ProfilePage';
 import WorkDayPage, { REST_DAY_OPTIONS } from '@/app/components/settings/pages/WorkDayPage';
 import AppearancePage from '@/app/components/settings/pages/AppearancePage';
@@ -83,7 +85,7 @@ interface Props {
 export type SettingsPage =
   | 'profile' | 'security'
   | 'workday' | 'term'
-  | 'notifications' | 'appearance' | 'canvas';
+  | 'notifications' | 'appearance' | 'canvas' | 'google-calendar';
 
 /** A page, or one of the old tab names, which still open the page that holds them. */
 export type SettingsSection = SettingsPage | 'mood' | 'integrations' | 'password' | 'email' | 'delete';
@@ -124,6 +126,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { page: 'notifications', label: 'Notifications', icon: Bell, lede: 'Task reminders, mood check-ins and when to keep quiet.' },
       { page: 'appearance', label: 'Appearance', icon: Palette, lede: 'Theme, accent color and page ruling.' },
       { page: 'canvas', label: 'Canvas', icon: GraduationCap, lede: 'Your classes and due dates from Canvas.' },
+      { page: 'google-calendar', label: 'Google Calendar', icon: CalendarSync, lede: 'Your Google events on your kanso calendars.' },
     ],
   },
 ];
@@ -193,10 +196,13 @@ export default function SettingsModal({
   const isOAuth = OAUTH_PROVIDERS.has(provider);
   const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1); // "Google"
 
+  const googleCalendar = useGoogleCalendarStatus(isOpen);
+  const googleCalendarConfigured = googleCalendar.status?.configured === true;
   const available = useCallback((page: SettingsPage) => {
     if (page === 'security') return !isDemo;
+    if (page === 'google-calendar') return googleCalendarConfigured;
     return true;
-  }, [isDemo]);
+  }, [isDemo, googleCalendarConfigured]);
   const groups = NAV_GROUPS
     .map(g => ({ ...g, items: g.items.filter(item => available(item.page)) }))
     .filter(g => g.items.length > 0);
@@ -207,7 +213,8 @@ export default function SettingsModal({
   const [phoneView, setPhoneView] = useState<'menu' | 'page'>('menu');
   const headingRef = useRef<HTMLHeadingElement>(null);
   const navRef = useRef<HTMLElement>(null);
-  const currentPage = available(page) ? page : 'profile';
+  // Coming back from Google lands on its page before the status has answered.
+  const currentPage = available(page) || (page === 'google-calendar' && !googleCalendar.settled) ? page : 'profile';
   const currentItem = ALL_ITEMS.find(item => item.page === currentPage)!;
 
   const openPage = (next: SettingsPage) => {
@@ -501,6 +508,8 @@ export default function SettingsModal({
         );
       case 'canvas':
         return <CanvasIntegrationSection isDemo={isDemo} homeCanvasTab={{ hidden: canvasTabHidden, onChange: setCanvasTabHidden }} />;
+      case 'google-calendar':
+        return <GoogleCalendarSection isDemo={isDemo} status={googleCalendar.status} onStatusChange={googleCalendar.setStatus} />;
     }
   })();
 

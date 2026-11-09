@@ -4,6 +4,7 @@ import { createContext, useContext } from 'react';
 import type { useProfile } from '@/app/hooks/useProfile';
 import type { useCalendarSettings } from '@/app/hooks/useCalendarSettings';
 import type { SettingsSection } from '@/app/components/settings/SettingsModal';
+import type { IntegrationNoticeValue } from '@/app/components/settings/IntegrationParts';
 import type { Note } from '@/app/types/notes';
 import type { Task } from '@/app/types/task';
 
@@ -31,6 +32,8 @@ export interface AppShellValue {
   settingsClosedToken: number;
   /** Home registers how a new note opens on it; pass null to unregister. */
   registerNoteOpener: (open: ((note: Note) => void) | null) => void;
+  /** How connecting Google Calendar went, just after coming back from Google. */
+  googleCalendarNotice: IntegrationNoticeValue | null;
 }
 
 export const AppShellContext = createContext<AppShellValue | null>(null);

@@ -23,7 +23,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, Award, CalendarSync, Check, CircleAlert, CircleCheck, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Link2,
+  AlertTriangle, Award, CalendarSync, CircleAlert, CircleCheck, CircleHelp, Clock, Eye, EyeOff, GraduationCap, KeyRound, Link2,
   Loader2, PlugZap, RefreshCw, ShieldCheck, Trash2,
 } from 'lucide-react';
 import {
@@ -43,6 +43,7 @@ import type {
   CanvasCapabilities, CanvasConnection, CanvasConnectionType, CanvasCourse, CanvasErrorCode,
 } from '@/app/types/canvas';
 import { canvasCan, canvasConnectionType } from '@/app/utils/canvas';
+import { IntegrationBanner, IntegrationNotice, type IntegrationNoticeValue } from './IntegrationParts';
 
 /** How far ahead of the token's expiry Settings starts warning about it. */
 export const EXPIRING_SOON_DAYS = 7;
@@ -170,23 +171,7 @@ const NOT_CONNECTED: CanvasConnection = {
 
 const hostOf = (baseUrl: string | null) => (baseUrl ?? '').replace(/^https:\/\//, '');
 
-type Notice = { tone: 'success' | 'error'; text: string };
-
 // ── Small pieces ─────────────────────────────────────────────────────────────
-
-const Banner: React.FC<{ tone: 'warning' | 'danger'; icon: React.ElementType; children: React.ReactNode }> = ({
-  tone,
-  icon: Icon,
-  children,
-}) => (
-  <div
-    className="flex gap-2 items-start rounded-lg px-3 py-2.5 text-sm"
-    style={{ backgroundColor: `var(--tm-${tone}-subtle)`, color: 'var(--tm-text-primary)' }}
-  >
-    <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: `var(--tm-${tone})` }} />
-    <div>{children}</div>
-  </div>
-);
 
 const SecurityNote = () => (
   <div
@@ -853,7 +838,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('view');
   const [busy, setBusy] = useState<'test' | 'remove' | 'courses' | 'auto-complete' | null>(null);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notice, setNotice] = useState<IntegrationNoticeValue | null>(null);
   const [courses, setCourses] = useState<{ key: string; list: CanvasCourse[] } | null>(null);
 
   const load = useCallback(() => fetchCanvasConnection().then(setConnection, (err: unknown) => {
@@ -992,7 +977,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
     return (
       <div className="space-y-4">
         {intro}
-        <Banner tone="warning" icon={AlertTriangle}>
+        <IntegrationBanner tone="warning" icon={AlertTriangle}>
           <p className="font-semibold">
             {isDemo ? 'Canvas isn\'t available in the demo.' : 'Canvas isn\'t available for this account.'}
           </p>
@@ -1001,7 +986,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
               ? 'Connecting Canvas stores your calendar feed link or access token, so it needs your own kanso account. Create one to connect Canvas.'
               : unavailable}
           </p>
-        </Banner>
+        </IntegrationBanner>
       </div>
     );
   }
@@ -1047,18 +1032,7 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
       onCancel={onCancel}
     />
   );
-  const noticeEl = notice && (
-    <p
-      role={notice.tone === 'error' ? 'alert' : 'status'}
-      className="flex items-start gap-1.5 text-sm rounded-md px-3 py-2"
-      style={notice.tone === 'error'
-        ? { backgroundColor: 'var(--tm-danger-subtle)', color: 'var(--tm-danger)' }
-        : { backgroundColor: 'var(--tm-success-subtle)', color: 'var(--tm-text-primary)' }}
-    >
-      {notice.tone === 'success' && <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: 'var(--tm-success)' }} />}
-      <span>{notice.text}</span>
-    </p>
-  );
+  const noticeEl = notice && <IntegrationNotice notice={notice} />;
 
   if (view === 'not-connected') {
     return (
@@ -1120,21 +1094,21 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
       <div className="space-y-4">
         {noticeEl}
         {feed ? (
-          <Banner tone="danger" icon={CalendarSync}>
+          <IntegrationBanner tone="danger" icon={CalendarSync}>
             <p>
               <strong className="font-semibold">Canvas stopped serving your calendar feed link{rejectedOn}.</strong>{' '}
               The link may have changed in Canvas. Paste the current one to reconnect.
             </p>
-          </Banner>
+          </IntegrationBanner>
         ) : (
-          <Banner tone="danger" icon={KeyRound}>
+          <IntegrationBanner tone="danger" icon={KeyRound}>
             <p>
               <strong className="font-semibold">
                 {isExpired(connection, now) ? 'Your Canvas token expired.' : `Canvas stopped accepting your token${rejectedOn}.`}
               </strong>{' '}
               It expired or was deleted in Canvas. Paste a new token to reconnect. Your course choices are kept.
             </p>
-          </Banner>
+          </IntegrationBanner>
         )}
         <ConnectionCard connection={connection} now={now} />
         {mode === 'remove' ? removeConfirm : <>
@@ -1149,20 +1123,20 @@ const CanvasIntegrationSection: React.FC<Props> = ({ isDemo, homeCanvasTab }) =>
     <div className="space-y-4">
       {noticeEl}
       {view === 'expiring' && (
-        <Banner tone="warning" icon={Clock}>
+        <IntegrationBanner tone="warning" icon={Clock}>
           <p>
             <strong className="font-semibold">Your token expires {formatDate(connection.token_expires_at!)}.</strong>{' '}
             Many schools cap student tokens at about 90 days, so make a new one and replace it before then.
           </p>
-        </Banner>
+        </IntegrationBanner>
       )}
       {view === 'error' && (
-        <Banner tone="warning" icon={AlertTriangle}>
+        <IntegrationBanner tone="warning" icon={AlertTriangle}>
           <p>
             <strong className="font-semibold">kanso couldn&apos;t reach Canvas the last time it checked.</strong>{' '}
             Your {feed ? 'calendar feed link' : 'token'} is still saved. Press Test to try again.
           </p>
-        </Banner>
+        </IntegrationBanner>
       )}
       <ConnectionCard connection={connection} now={now} />
 

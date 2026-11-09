@@ -23,6 +23,9 @@ import {
   timeToMinutes,
 } from '@/app/utils/eventOccurrences';
 import { eventColor, repeatText } from '@/app/utils/events';
+import { isImportedEvent } from '@/app/utils/importedEvents';
+import GoogleMark from '@/app/components/event/GoogleMark';
+import { ImportedEventDisclosure } from '@/app/components/event/ImportedEventControls';
 import {
   dayTimeline,
   daySentence,
@@ -129,13 +132,15 @@ const StatusChip: React.FC<{ children: React.ReactNode; muted?: boolean }> = ({ 
  * One event in the day report: its time, title, tags, how it repeats and its
  * description. Archived ones are hatched and struck through, as on the
  * calendars. Only today's report marks the events already over as Past (and
- * fades them): on a past day every event is.
+ * fades them): on a past day every event is. One imported from Google Calendar
+ * carries the Google mark, its tag controls and its link to Google.
  */
 function EventItem({ event, showPast }: { event: EventOccurrence; showPast: boolean }) {
   const color = eventColor(event.tags);
   const repeat = repeatText(event);
   const description = event.description?.trim() ?? '';
   const faded = showPast && event.past && !event.archived;
+  const imported = isImportedEvent(event);
   return (
     <div
       data-event-row
@@ -149,8 +154,9 @@ function EventItem({ event, showPast }: { event: EventOccurrence; showPast: bool
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className={`text-sm font-medium truncate ${event.archived ? 'line-through text-text-muted' : 'text-text-primary'}`}>
-          {event.title}
+        <span className={`inline-flex items-center gap-1 min-w-0 text-sm font-medium ${event.archived ? 'line-through text-text-muted' : 'text-text-primary'}`}>
+          {imported && <GoogleMark style={{ color }} />}
+          <span className="truncate">{event.title}</span>
         </span>
         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-muted flex-shrink-0">
           <Clock className="w-3 h-3" />
@@ -174,6 +180,7 @@ function EventItem({ event, showPast }: { event: EventOccurrence; showPast: bool
           ) : null}
         </div>
       )}
+      {imported && <ImportedEventDisclosure occurrence={event} />}
     </div>
   );
 }

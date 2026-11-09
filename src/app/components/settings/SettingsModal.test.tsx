@@ -22,6 +22,9 @@ vi.mock('next/link', () => ({
 vi.mock('@/app/components/settings/CanvasIntegrationSection', () => ({
   default: () => <p>Canvas section</p>,
 }));
+vi.mock('@/app/components/settings/GoogleCalendarSection', () => ({
+  default: () => <p>Google Calendar section</p>,
+}));
 
 const supabaseAuth = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
@@ -40,6 +43,7 @@ const api = vi.hoisted(() => {
     ApiError,
     updatePassword: vi.fn(),
     deleteAccount: vi.fn(),
+    fetchGoogleCalendarStatus: vi.fn(async () => ({ configured: false, connected: false, email: null, last_synced_at: null, last_error: null })),
     describeError: (_err: unknown, fallback: string) => fallback,
   };
 });
@@ -272,6 +276,44 @@ describe('SettingsModal navigation', () => {
     await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
     expect(onSaveProfileField).toHaveBeenCalledWith({ name: 'Maya C' });
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('SettingsModal Google Calendar', () => {
+  const status = { configured: true, connected: false, email: null, last_synced_at: null, last_error: null };
+  const renderSettled = async (section?: SettingsSection) => {
+    render(section);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  };
+
+  it('offers no Google Calendar page without the server keys', async () => {
+    await renderSettled();
+    expect(navItem('Google Calendar')).toBeUndefined();
+  });
+
+  it('offers no Google Calendar page when the status route fails, as on a server without it', async () => {
+    api.fetchGoogleCalendarStatus.mockRejectedValueOnce(new Error('404'));
+    await renderSettled();
+    expect(navItem('Google Calendar')).toBeUndefined();
+  });
+
+  it('adds the page once the server has its keys', async () => {
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce(status);
+    await renderSettled();
+    await click(navItem('Google Calendar')!);
+    expect(heading()).toBe('Google Calendar');
+    expect(document.body.textContent).toContain('Google Calendar section');
+  });
+
+  it('opens straight on the page when coming back from Google', async () => {
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce(status);
+    await renderSettled('google-calendar');
+    expect(heading()).toBe('Google Calendar');
+  });
+
+  it('falls back to Profile when asked for the page without the server keys', async () => {
+    await renderSettled('google-calendar');
+    expect(heading()).toBe('Profile');
   });
 });
 

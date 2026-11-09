@@ -6,8 +6,11 @@ import AnchoredPopover from '@/app/components/common/AnchoredPopover';
 import type { EventOccurrence } from '@/app/types/event';
 import { parseLocalDate } from '@/app/utils/dateUtils';
 import { eventColor, repeatText } from '@/app/utils/events';
+import { isImportedEvent } from '@/app/utils/importedEvents';
 import { formatLeadTime } from '@/app/utils/notifications';
 import { formatMinutes, parseTimeToMinutes } from '@/app/utils/weekLayout';
+import GoogleMark from './GoogleMark';
+import { ImportedEventNote, ImportedEventTagPicker, OpenInGoogleLink } from './ImportedEventControls';
 
 /** "Friday, October 23" for a "YYYY-MM-DD" day. */
 const longDay = (date: string) =>
@@ -46,10 +49,15 @@ const chipClass = 'inline-flex items-center gap-1 rounded-full px-2 py-px text-[
  * The card a clicked event opens, like Google Calendar's: its title in its
  * tag color, when it happens and how it repeats, its tags and state (past,
  * archived, changed for this date), its description, and Edit, Archive (or
- * Restore) and Delete.
+ * Restore) and Delete. An event imported from Google Calendar can't be changed
+ * here, so it offers its kanso tags and a link to Google instead.
  */
 const EventCard: React.FC<EventCardProps> = ({ occurrence: o, past, anchor, busy = false, onClose, onEdit, onArchive, onRestore, onDelete }) => {
   const repeat = repeatText(o);
+  const imported = isImportedEvent(o);
+  // An imported event's picker already shows its tags.
+  const chipTags = imported ? [] : o.tags;
+  const edited = o.edited && !imported;
   return (
     <AnchoredPopover anchor={anchor} onClose={onClose} label={`Event: ${o.title}`} initialFocus="[data-autofocus]">
       <div className="flex items-start gap-2.5">
@@ -63,13 +71,14 @@ const EventCard: React.FC<EventCardProps> = ({ occurrence: o, past, anchor, busy
       </div>
       <div className="ml-[22px] mt-1.5 flex flex-col gap-1 text-[12.5px] text-text-secondary">
         <p>{occurrenceWhen(o)}</p>
+        {imported && <p className="flex items-center gap-1"><GoogleMark className="w-3.5 h-3.5" /> From Google Calendar</p>}
         {repeat && <p className="flex items-center gap-1"><Repeat className="w-3.5 h-3.5" aria-hidden /> {repeat}</p>}
         {o.reminder_minutes !== null && (
           <p className="flex items-center gap-1"><Bell className="w-3.5 h-3.5" aria-hidden /> {reminderText(o.reminder_minutes)}</p>
         )}
-        {(o.tags.length > 0 || past || o.archived || o.edited) && (
+        {(chipTags.length > 0 || past || o.archived || edited) && (
           <p className="flex flex-wrap items-center gap-1.5">
-            {o.tags.map(tag => (
+            {chipTags.map(tag => (
               <span key={tag.id} className={chipClass} style={{ backgroundColor: `color-mix(in srgb, ${tag.color} 18%, var(--tm-surface))`, color: 'var(--tm-text-primary)' }}>
                 <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
                 {tag.name}
@@ -83,30 +92,38 @@ const EventCard: React.FC<EventCardProps> = ({ occurrence: o, past, anchor, busy
             {past && !o.archived && (
               <span className={chipClass} style={{ backgroundColor: 'var(--tm-slipped-subtle)', color: 'var(--tm-text-muted)' }}>Past</span>
             )}
-            {o.edited && (
+            {edited && (
               <span className={chipClass} style={{ backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-accent)' }}>Changed for this date</span>
             )}
           </p>
         )}
-        {o.description && <p className="mt-1 whitespace-pre-wrap break-words text-[13px]">{o.description}</p>}
+        {o.description && <p className="mt-1 max-h-32 overflow-y-auto scrollbar-custom whitespace-pre-wrap break-words text-[13px]">{o.description}</p>}
       </div>
-      <div className="mt-3 flex flex-wrap justify-end gap-1">
-        {o.archived ? (
-          <button type="button" onClick={onRestore} disabled={busy} className="btn btn-secondary px-2.5 py-1 text-xs gap-1">
-            <RotateCcw className="w-3.5 h-3.5" /> Restore
+      {imported ? (
+        <div className="mt-3 ml-[22px] space-y-2">
+          <ImportedEventTagPicker occurrence={o} />
+          <ImportedEventNote />
+          <OpenInGoogleLink occurrence={o} />
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap justify-end gap-1">
+          {o.archived ? (
+            <button type="button" onClick={onRestore} disabled={busy} className="btn btn-secondary px-2.5 py-1 text-xs gap-1">
+              <RotateCcw className="w-3.5 h-3.5" /> Restore
+            </button>
+          ) : (
+            <button type="button" onClick={onArchive} disabled={busy} className="btn btn-secondary px-2.5 py-1 text-xs gap-1">
+              <Archive className="w-3.5 h-3.5" /> Archive
+            </button>
+          )}
+          <button type="button" onClick={onDelete} disabled={busy} className="btn btn-secondary px-2.5 py-1 text-xs gap-1" style={{ color: 'var(--tm-danger)' }}>
+            <Trash2 className="w-3.5 h-3.5" /> Delete
           </button>
-        ) : (
-          <button type="button" onClick={onArchive} disabled={busy} className="btn btn-secondary px-2.5 py-1 text-xs gap-1">
-            <Archive className="w-3.5 h-3.5" /> Archive
+          <button type="button" onClick={onEdit} disabled={busy} data-autofocus className="btn btn-primary px-2.5 py-1 text-xs gap-1">
+            <Pencil className="w-3.5 h-3.5" /> Edit
           </button>
-        )}
-        <button type="button" onClick={onDelete} disabled={busy} className="btn btn-secondary px-2.5 py-1 text-xs gap-1" style={{ color: 'var(--tm-danger)' }}>
-          <Trash2 className="w-3.5 h-3.5" /> Delete
-        </button>
-        <button type="button" onClick={onEdit} disabled={busy} data-autofocus className="btn btn-primary px-2.5 py-1 text-xs gap-1">
-          <Pencil className="w-3.5 h-3.5" /> Edit
-        </button>
-      </div>
+        </div>
+      )}
     </AnchoredPopover>
   );
 };
