@@ -15,14 +15,16 @@ const NO_MOODS: DayMoods = new Map();
 /**
  * The mood of each day in a month that has a daily check-in, by local day
  * ("YYYY-MM-DD"), kept current with saves made anywhere in the app
- * (utils/moodCheckinSync.ts). Empty until loaded, or if it can't load.
+ * (utils/moodCheckinSync.ts). Empty until loaded; holds only later saves if it
+ * can't load. While not `enabled`, stays empty and loads nothing.
  */
-export function useMonthMoods(year: number, month: number): DayMoods {
+export function useMonthMoods(year: number, month: number, enabled: boolean): DayMoods {
   const start = toLocalDateStr(new Date(year, month, 1));
   const end = toLocalDateStr(new Date(year, month + 1, 0));
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     // Saves since this month began loading: newer than anything the fetch returns.
     const changes = new Map<string, number | null>();
@@ -41,7 +43,10 @@ export function useMonthMoods(year: number, month: number): DayMoods {
         const days = rows.filter(r => r.period_kind === 'day').map(r => [r.period_start, r.mood] as const);
         setLoaded({ start, moods: withChanges(days) });
       })
-      .catch(err => console.error('[useMonthMoods] Failed to fetch mood check-ins:', err));
+      .catch(err => {
+        console.error('[useMonthMoods] Failed to fetch mood check-ins:', err);
+        if (!cancelled) setLoaded({ start, moods: withChanges([]) });
+      });
 
     const unsubscribe = onMoodCheckin(({ kind, start: day, row }) => {
       if (kind !== 'day' || day < start || day > end) return;
@@ -52,7 +57,7 @@ export function useMonthMoods(year: number, month: number): DayMoods {
       cancelled = true;
       unsubscribe();
     };
-  }, [start, end]);
+  }, [start, end, enabled]);
 
-  return loaded?.start === start ? loaded.moods : NO_MOODS;
+  return enabled && loaded?.start === start ? loaded.moods : NO_MOODS;
 }

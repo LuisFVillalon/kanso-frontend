@@ -130,6 +130,7 @@ const CalendarView: React.FC = () => {
                   selectedDate={selectedDate}
                   onNavigate={pickDay}
                   terms={terms}
+                  showMood={showMood}
                 />
               </div>
               <div className="lg:flex-1 lg:min-w-0">

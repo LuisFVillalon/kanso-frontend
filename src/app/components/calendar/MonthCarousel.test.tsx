@@ -21,7 +21,7 @@ const checkin = (mood: number, date: string, kind: MoodPeriodKind = 'day'): Mood
   created_at: '2026-10-19T22:00:00Z', updated_at: '2026-10-19T22:00:00Z',
 });
 
-const render = (month: number) => act(async () => root.render(
+const render = (month: number, showMood = true) => act(async () => root.render(
   <MonthCarousel
     year={2026}
     month={month}
@@ -31,6 +31,7 @@ const render = (month: number) => act(async () => root.render(
     onSelectDay={() => {}}
     selectedDate={null}
     onNavigate={() => {}}
+    showMood={showMood}
   />,
 ));
 const cell = (date: string) => container.querySelector<HTMLButtonElement>(`button[data-date="${date}"]`)!;
@@ -126,5 +127,51 @@ describe('MonthCarousel moods', () => {
     expect(container.querySelector('[data-mood-face]')).toBeNull();
     expect(cell('2026-10-14')).not.toBeNull();
     error.mockRestore();
+  });
+
+  it('still shows a save made after the check-ins could not load', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    api.fetchMoodCheckins.mockRejectedValue(new Error('down'));
+    await render(9);
+
+    announce('2026-10-14', checkin(4, '2026-10-14'));
+
+    expect(face('2026-10-14')!.style.color).toBe('var(--tm-mood-4)');
+    error.mockRestore();
+  });
+
+  it('keeps a save made while a load that then fails was in flight', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let fail: (reason: Error) => void = () => {};
+    api.fetchMoodCheckins.mockReturnValue(new Promise<MoodCheckin[]>((_, reject) => { fail = reject; }));
+    await render(9);
+
+    announce('2026-10-14', checkin(2, '2026-10-14'));
+    await act(async () => fail(new Error('down')));
+
+    expect(face('2026-10-14')!.style.color).toBe('var(--tm-mood-2)');
+    error.mockRestore();
+  });
+
+  it('neither loads nor draws moods while daily mood is off', async () => {
+    api.fetchMoodCheckins.mockResolvedValue([checkin(4, '2026-10-14')]);
+    await render(9, false);
+    announce('2026-10-15', checkin(5, '2026-10-15'));
+
+    expect(api.fetchMoodCheckins).not.toHaveBeenCalled();
+    expect(container.querySelector('[data-mood-face]')).toBeNull();
+    expect(cell('2026-10-14').getAttribute('aria-label')).not.toContain('Mood');
+  });
+
+  it('clears the faces when daily mood turns off and loads them when it turns on', async () => {
+    api.fetchMoodCheckins.mockResolvedValue([checkin(4, '2026-10-14')]);
+    await render(9, false);
+
+    await render(9, true);
+    expect(api.fetchMoodCheckins).toHaveBeenCalledTimes(1);
+    expect(face('2026-10-14')!.style.color).toBe('var(--tm-mood-4)');
+
+    await render(9, false);
+    expect(face('2026-10-14')).toBeNull();
   });
 });
