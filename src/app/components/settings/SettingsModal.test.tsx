@@ -22,6 +22,9 @@ vi.mock('next/link', () => ({
 vi.mock('@/app/components/settings/CanvasIntegrationSection', () => ({
   default: () => <p>Canvas section</p>,
 }));
+vi.mock('@/app/components/settings/GoogleCalendarSection', () => ({
+  default: ({ status }: { status: { connected: boolean } | null }) => <p>Google Calendar section{status?.connected ? ' (connected)' : ''}</p>,
+}));
 
 const supabaseAuth = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
@@ -40,12 +43,14 @@ const api = vi.hoisted(() => {
     ApiError,
     updatePassword: vi.fn(),
     deleteAccount: vi.fn(),
+    fetchGoogleCalendarStatus: vi.fn(async () => ({ configured: false, connected: false, email: null, last_synced_at: null, last_error: null })),
     describeError: (_err: unknown, fallback: string) => fallback,
   };
 });
 vi.mock('@/app/lib/backend-api', () => api);
 
 import SettingsModal, { type SettingsSection } from './SettingsModal';
+import { AppShellContext, type AppShellValue } from '@/app/context/AppShellContext';
 import { ToastProvider } from '@/app/context/ToastContext';
 import { AUTOSAVE_DEBOUNCE_MS } from './autosave';
 
@@ -272,6 +277,63 @@ describe('SettingsModal navigation', () => {
     await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
     expect(onSaveProfileField).toHaveBeenCalledWith({ name: 'Maya C' });
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('SettingsModal Google Calendar', () => {
+  const status = { configured: true, connected: false, email: null, last_synced_at: null, last_error: null };
+  const renderSettled = async (section?: SettingsSection) => {
+    render(section);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  };
+
+  it('offers no Google Calendar page without the server keys', async () => {
+    await renderSettled();
+    expect(navItem('Google Calendar')).toBeUndefined();
+  });
+
+  it('offers no Google Calendar page when the status route fails, as on a server without it', async () => {
+    api.fetchGoogleCalendarStatus.mockRejectedValueOnce(new Error('404'));
+    await renderSettled();
+    expect(navItem('Google Calendar')).toBeUndefined();
+  });
+
+  it('adds the page once the server has its keys', async () => {
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce(status);
+    await renderSettled();
+    await click(navItem('Google Calendar')!);
+    expect(heading()).toBe('Google Calendar');
+    expect(document.body.textContent).toContain('Google Calendar section');
+  });
+
+  it('opens straight on the page when coming back from Google', async () => {
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce(status);
+    await renderSettled('google-calendar');
+    expect(heading()).toBe('Google Calendar');
+  });
+
+  it('reloads the status when a connection finishes while Settings is open', async () => {
+    const shell = (finished: number) => (
+      <ToastProvider>
+        <AppShellContext.Provider value={{ googleCalendarConnectionsFinished: finished } as Partial<AppShellValue> as AppShellValue}>
+          <Harness initialSection="google-calendar" initialProfile={profile} initialTerm={calendarSettings} initialRollover={noRollover} />
+        </AppShellContext.Provider>
+      </ToastProvider>
+    );
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce(status);
+    act(() => root.render(shell(0)));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(document.body.textContent).not.toContain('(connected)');
+
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce({ ...status, connected: true });
+    act(() => root.render(shell(1)));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(document.body.textContent).toContain('(connected)');
+  });
+
+  it('falls back to Profile when asked for the page without the server keys', async () => {
+    await renderSettled('google-calendar');
+    expect(heading()).toBe('Profile');
   });
 });
 

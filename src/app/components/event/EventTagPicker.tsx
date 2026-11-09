@@ -7,13 +7,14 @@ interface EventTagPickerProps {
   tags: Tag[];
   selected: Tag[];
   onToggle: (tag: Tag) => void;
+  disabled?: boolean;
   /** Names the group, e.g. the id of a visible label. */
   'aria-labelledby'?: string;
   className?: string;
 }
 
 /** Tag chips that each toggle, with the tag's color as a dot and, once picked, as the chip's tint. */
-const EventTagPicker: React.FC<EventTagPickerProps> = ({ tags, selected, onToggle, 'aria-labelledby': labelledBy, className = '' }) => {
+const EventTagPicker: React.FC<EventTagPickerProps> = ({ tags, selected, onToggle, disabled = false, 'aria-labelledby': labelledBy, className = '' }) => {
   if (tags.length === 0) {
     return <p className="text-xs text-text-muted">No tags yet. Make some from Manage tags to color your events.</p>;
   }
@@ -26,8 +27,9 @@ const EventTagPicker: React.FC<EventTagPickerProps> = ({ tags, selected, onToggl
             key={tag.id}
             type="button"
             aria-pressed={on}
+            disabled={disabled}
             onClick={() => onToggle(tag)}
-            className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors disabled:opacity-60"
             style={{
               borderColor: on ? tag.color : 'var(--tm-border)',
               backgroundColor: on ? `color-mix(in srgb, ${tag.color} 16%, var(--tm-surface))` : 'var(--tm-surface)',

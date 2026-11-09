@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   setEventArchived: vi.fn(),
   deleteEvent: vi.fn(),
   restoreEvent: vi.fn(),
+  updateGoogleEventTags: vi.fn(),
   push: vi.fn(),
 }));
 
@@ -41,6 +42,7 @@ vi.mock('@/app/lib/backend-api', () => ({
   setEventArchived: mocks.setEventArchived,
   deleteEvent: mocks.deleteEvent,
   restoreEvent: mocks.restoreEvent,
+  updateGoogleEventTags: mocks.updateGoogleEventTags,
   describeError: (_err: unknown, fallback: string) => fallback,
 }));
 vi.mock('@/app/context/TasksContext', () => ({
@@ -689,6 +691,54 @@ describe('WeekView', { timeout: 30_000 }, () => {
       expect(document.querySelector<HTMLInputElement>('input[value="following"]')!.checked).toBe(true);
       await act(async () => [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === 'Save' && b.type === 'button')!.click());
       expect(mocks.updateEvent).toHaveBeenCalledWith(30, { repeat_days: [1, 2, 3, 5] }, 'following', '2026-10-21');
+    });
+
+    describe('imported from Google Calendar', () => {
+      const imported = (overrides: Partial<EventOccurrence> = {}) => occurrence({
+        event_id: -30, title: 'Team sync', tags: [], repeat_days: [], source: 'google', ...overrides,
+      });
+      const label = 'Google Calendar event: Team sync, 2:00 PM – 2:50 PM';
+
+      it('shows on the grid with the Google mark and opens without edit, archive or delete', async () => {
+        withEvents([imported()]);
+        await render();
+        expect(button(label).querySelector('[data-google-mark]')).not.toBeNull();
+        await act(async () => button(label).click());
+        const card = dialog('Event: Team sync')!;
+        const actions = [...card.querySelectorAll('button')].map(b => b.textContent?.trim());
+        expect(actions).not.toEqual(expect.arrayContaining(['Edit']));
+        expect(actions).not.toEqual(expect.arrayContaining(['Archive']));
+        expect(actions).not.toEqual(expect.arrayContaining(['Delete']));
+        expect(mocks.fetchEvent).not.toHaveBeenCalled();
+      });
+
+      it('starts the tag picks fresh when another event opens over the card', async () => {
+        mocks.updateGoogleEventTags.mockReset().mockResolvedValue(undefined);
+        const other = imported({ event_id: -31, title: 'Standup', start_time: '16:00:00', end_time: '16:50:00' });
+        withEvents([imported(), other]);
+        await render();
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('CS 460').click());
+        expect(mocks.updateGoogleEventTags).toHaveBeenLastCalledWith(-30, [CLASS_TAG.id], false);
+
+        await act(async () => button('Google Calendar event: Standup, 4:00 PM – 4:50 PM').click());
+        expect(dialog('Event: Standup')).not.toBeNull();
+        expect(buttonByText('CS 460').getAttribute('aria-pressed')).toBe('false');
+        await act(async () => buttonByText('CS 460').click());
+        expect(mocks.updateGoogleEventTags).toHaveBeenLastCalledWith(-31, [CLASS_TAG.id], false);
+      });
+
+      it("updates the open card and the block's color once a tag saves, without a reload", async () => {
+        mocks.updateGoogleEventTags.mockReset().mockResolvedValue(undefined);
+        withEvents([imported()]);
+        await render();
+        await act(async () => button(label).click());
+        withEvents([imported({ tags: [CLASS_TAG] })]);
+        await act(async () => buttonByText('CS 460').click());
+        expect(mocks.updateGoogleEventTags).toHaveBeenCalledWith(-30, [CLASS_TAG.id], false);
+        expect(buttonByText('CS 460').getAttribute('aria-pressed')).toBe('true');
+        expect(button(label).style.borderLeft).toContain('rgb(59, 130, 246)');
+      });
     });
   });
 });

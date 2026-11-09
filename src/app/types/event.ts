@@ -98,6 +98,10 @@ export interface EventOccurrence {
   past: boolean;
   /** Archived, on its own or with its series. */
   archived: boolean;
+  /** Where it came from; absent counts as "kanso". An imported event's event_id is negative, and nothing here can change it except its kanso tags. */
+  source?: 'kanso' | 'google';
+  /** Imported only: the event's page in Google Calendar, when Google gave one. */
+  html_link?: string | null;
 }
 
 /** Event minutes under one tag; an event with several tags counts in full under each. */

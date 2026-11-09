@@ -16,6 +16,8 @@ import {
   WorkDayMarks,
 } from '@/app/utils/weekLayout';
 import { eventColor } from '@/app/utils/events';
+import { isImportedEvent } from '@/app/utils/importedEvents';
+import GoogleMark from '@/app/components/event/GoogleMark';
 
 const HOUR_PX = 48;
 const SLOT_PX = (HOUR_PX * SLOT_MINUTES) / 60;
@@ -105,13 +107,16 @@ const eventRange = ({ occurrence }: EventPlacement): string => {
 /** ", past" / ", archived" for an event's screen-reader label. */
 const eventState = ({ past, archived }: EventPlacement) => (archived ? ', archived' : past ? ', past' : '');
 
+/** How an event's screen-reader label starts. */
+const eventNoun = ({ occurrence }: EventPlacement) => (isImportedEvent(occurrence) ? 'Google Calendar event' : 'Event');
+
 const timedLabel = (e: TimedEvent): string => {
   if (e.kind === 'completed') return `Completed task: ${e.title}, at ${formatMinutes(e.startMin)}`;
   const range = `${formatMinutes(e.startMin)} – ${formatMinutes(e.endMin)}`;
   if (e.kind === 'note') return `Note session: ${e.title}, ${range}, ${workedText(e.workedMin ?? 0)}`;
   if (e.kind === 'event' && e.event) {
     const runs = e.event.intoNextDay ? ', runs past midnight' : e.event.fromPreviousDay ? ', from the day before' : '';
-    return `Event: ${e.title}, ${eventRange(e.event)}${runs}${eventState(e.event)}`;
+    return `${eventNoun(e.event)}: ${e.title}, ${eventRange(e.event)}${runs}${eventState(e.event)}`;
   }
   const clash = e.clashWith ? `, during ${e.clashWith}` : '';
   return `${e.completed ? 'Planned task (done)' : 'Planned task'}: ${e.title}, ${range}${clash}`;
@@ -466,9 +471,10 @@ const WindowEdge: React.FC<{ minutes: number; edge: 'opens' | 'closes' }> = ({ m
   </div>
 );
 
-/** An event's icon in its color: archived, repeating, or a one-off. */
+/** An event's icon in its color: imported from Google, archived, repeating, or a one-off. */
 const EventIcon: React.FC<{ event: EventPlacement; color: string }> = ({ event, color }) => {
   const props = { className: 'w-3 h-3 flex-shrink-0', style: { color }, 'aria-hidden': true } as const;
+  if (isImportedEvent(event.occurrence)) return <GoogleMark className="w-2.5 h-2.5" style={{ color }} />;
   if (event.archived) return <Archive {...props} />;
   return event.occurrence.repeat_days.length > 0 ? <Repeat {...props} /> : <CalendarDays {...props} />;
 };
@@ -566,7 +572,7 @@ const AllDayChip: React.FC<{ item: AllDayItem; openable: boolean; onOpen: (ancho
   let struck: boolean;
   if (item.kind === 'event' && item.event) {
     const color = eventColor(item.event.occurrence.tags);
-    label = `Event: ${item.title}, all day${eventState(item.event)}`;
+    label = `${eventNoun(item.event)}: ${item.title}, all day${eventState(item.event)}`;
     Icon = null;
     iconColor = color;
     style = eventStyle(color, item.event);

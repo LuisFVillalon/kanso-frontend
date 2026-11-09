@@ -17,6 +17,9 @@ vi.mock('@/app/hooks/useDayMoodCheckin', () => ({
   useDayMoodCheckin: (date: string | null) => ({ checkin: date ? mood.checkin : undefined, failed: false }),
 }));
 vi.mock('./DayMoodChip', () => ({ default: () => <button type="button">Log mood</button> }));
+vi.mock('@/app/components/event/ImportedEventControls', () => ({
+  ImportedEventDisclosure: () => <button type="button">Change tags</button>,
+}));
 
 import DaySummary from './DaySummary';
 
@@ -200,5 +203,20 @@ describe('DaySummary', () => {
     render(data, true);
     expect(container.querySelector('[data-day-sentence]')!.textContent).toBe('No check-in for a lighter day: 2 events, 0 of 1 task done.');
     expect(section('mood').querySelector('[data-preview]')!.textContent).toBe('No check-in');
+  });
+
+  it('marks an imported event, offers its tags, and still counts it', () => {
+    const sync = event('Team sync', '16:00', '17:00', { source: 'google' });
+    render({ ...data, events: [sync] });
+    expect(container.querySelector('[data-day-counts]')!.textContent).toContain('1 event');
+    const row = container.querySelector('[data-event-row]')!;
+    expect(row.querySelector('[data-google-mark]')).not.toBeNull();
+    expect(row.textContent).toContain('Change tags');
+  });
+
+  it('offers no tag controls on a kanso event', () => {
+    render({ ...data, events: [studio] });
+    expect(container.querySelector('[data-event-row]')!.textContent).not.toContain('Change tags');
+    expect(container.querySelector('[data-google-mark]')).toBeNull();
   });
 });

@@ -24,6 +24,7 @@ import WeekQuickAdd, { type QuickAddDraft, type QuickAddValues } from '@/app/com
 import DragHandle from '@/app/components/common/DragHandle';
 import { useResizableSplit } from '@/app/hooks/useResizableSplit';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
+import { occurrenceKey } from '@/app/utils/eventOccurrences';
 import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import {
   allowedEditScopes,
@@ -228,6 +229,10 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     others: editingId === undefined ? events : events.filter(e => e.event_id !== editingId),
     term,
   });
+  // The open card follows the latest load, so an imported event's new tags show on it.
+  const cardOccurrence = card
+    ? events.find(e => occurrenceKey(e) === occurrenceKey(card.event.occurrence)) ?? card.event.occurrence
+    : null;
 
   /** The new-event form for a range on `day`, with what a quick-add filled in. */
   const newEventForm = (day: Date, startMin: number, endMin: number, values?: Omit<QuickAddValues, 'kind'>) => blankEventForm({
@@ -512,9 +517,10 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         />
       )}
 
-      {card && (
+      {card && cardOccurrence && (
         <EventCard
-          occurrence={card.event.occurrence}
+          key={occurrenceKey(cardOccurrence)}
+          occurrence={cardOccurrence}
           past={card.event.past}
           anchor={card.anchor}
           busy={cardBusy}

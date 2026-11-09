@@ -10,6 +10,8 @@ import { termColor } from '@/app/lib/termPeriods';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { formatEventTime, occurrenceKey } from '@/app/utils/eventOccurrences';
 import { eventColor } from '@/app/utils/events';
+import { isImportedEvent } from '@/app/utils/importedEvents';
+import GoogleMark from '@/app/components/event/GoogleMark';
 import type { EventOccurrence } from '@/app/types/event';
 
 interface DayCellProps {
@@ -36,7 +38,7 @@ const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}
 const MAX_EVENT_BARS = 2;
 
 const eventTitle = (o: EventOccurrence) =>
-  `${o.title} · ${formatEventTime(o)}${o.archived ? ' · archived' : o.past ? ' · past' : ''}`;
+  `${o.title} · ${formatEventTime(o)}${o.archived ? ' · archived' : o.past ? ' · past' : ''}${isImportedEvent(o) ? ' · from Google Calendar' : ''}`;
 
 /**
  * One event as a bar in its tag's color, with its title from sm up; a phone
@@ -59,6 +61,7 @@ const EventBar: React.FC<{ occurrence: EventOccurrence }> = ({ occurrence: o }) 
         textDecoration: o.archived ? 'line-through' : undefined,
       }}
     >
+      {isImportedEvent(o) && <GoogleMark className="hidden sm:inline-block w-2 h-2 mr-0.5 align-[-0.05em]" />}
       {o.title}
     </span>
   );

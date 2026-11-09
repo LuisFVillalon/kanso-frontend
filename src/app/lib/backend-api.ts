@@ -35,6 +35,7 @@ import {
   CanvasOverview,
   CanvasRange,
 } from "../types/canvas";
+import { GoogleCalendarEntry, GoogleCalendarStatus, GoogleCalendarUpdate } from "../types/googleCalendar";
 import type { StructuredNoteContent } from "../utils/noteContentExtractor";
 import { supabase } from "./supabase";
 
@@ -1112,6 +1113,87 @@ export async function updateNotificationPreferences(
   });
   await assertOk(res, "updateNotificationPreferences");
   return res.json();
+}
+
+// ── Google Calendar ───────────────────────────────────────────────────────────
+// A read-only import: nothing here writes to Google. Imported events arrive
+// with the user's other events in the activity and report responses; these
+// routes manage the connection, which calendars show and their kanso tags.
+
+/** Whether Google Calendar is set up on the server and connected for this user. */
+export async function fetchGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/status`, { headers });
+  await assertOk(res, "fetchGoogleCalendarStatus");
+  return res.json();
+}
+
+/** Starts the connection: returns the Google consent page to send the browser to. */
+export async function connectGoogleCalendar(): Promise<{ authorization_url: string }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/connect`, { method: "POST", headers });
+  await assertOk(res, "connectGoogleCalendar");
+  return res.json();
+}
+
+/** Finishes the connection with what Google's consent screen sent back. A 403 means another kanso account started it. */
+export async function completeGoogleCalendar(code: string, state: string): Promise<GoogleCalendarStatus> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/complete`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ code, state }),
+  });
+  await assertOk(res, "completeGoogleCalendar");
+  return res.json();
+}
+
+/** Revokes kanso's access and deletes the token and everything imported. */
+export async function disconnectGoogleCalendar(): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/connection`, { method: "DELETE", headers });
+  await assertOk(res, "disconnectGoogleCalendar");
+}
+
+/** The connected account's calendars, shown or not. */
+export async function fetchGoogleCalendars(): Promise<GoogleCalendarEntry[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/calendars`, { headers });
+  await assertOk(res, "fetchGoogleCalendars");
+  return res.json();
+}
+
+/** Shows or hides a calendar, or sets its default tag. Google's calendar ids hold "@" and "#", so they're escaped. */
+export async function updateGoogleCalendar(id: string, changes: GoogleCalendarUpdate): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/calendars/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(changes),
+  });
+  await assertOk(res, "updateGoogleCalendar");
+}
+
+/** Imports from Google now; the status it returns says how that went. */
+export async function syncGoogleCalendar(): Promise<GoogleCalendarStatus> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/sync`, { method: "POST", headers });
+  await assertOk(res, "syncGoogleCalendar");
+  return res.json();
+}
+
+/**
+ * Replaces an imported event's own kanso tags. An empty list leaves it with
+ * no tags; `useDefault` instead returns it to its calendar's default tag.
+ */
+export async function updateGoogleEventTags(eventId: number, tagIds: number[], useDefault = false): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/google-calendar/events/${eventId}/tags`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(useDefault ? { tag_ids: [], use_default: true } : { tag_ids: tagIds }),
+  });
+  await assertOk(res, "updateGoogleEventTags");
 }
 
 // ── Canvas LMS ────────────────────────────────────────────────────────────────
