@@ -667,7 +667,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           </div>
 
           {/* ── Editor body ──────────────────────────────────────────────────── */}
-          <div className="flex-1 overflow-y-auto scrollbar-custom">
+          <div className="isolate flex-1 overflow-y-auto scrollbar-custom">
             <div className={`px-6 sm:px-10 py-4 ${focusMode ? FOCUS_COLUMN : ''}`}>
               <EditorContent editor={editor} />
             </div>
