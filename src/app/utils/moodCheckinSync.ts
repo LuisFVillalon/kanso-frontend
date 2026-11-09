@@ -1,7 +1,7 @@
 /**
  * Keeps the places that show a check-in in step when one of them saves,
  * edits or undoes it: the dashboard's weekly and monthly chips, the Daily Brief's mood chip, the
- * calendar day panel and the form a notification opens. In-memory and
+ * calendar day panel, the calendar's month grid and the form a notification opens. In-memory and
  * per-tab; each place still loads its own rows from the server.
  */
 

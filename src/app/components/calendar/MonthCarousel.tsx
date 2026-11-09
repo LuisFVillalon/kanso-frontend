@@ -3,6 +3,7 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
+import { useMonthMoods } from '@/app/hooks/useMonthMoods';
 import type { TermPeriod } from '@/app/types/calendar';
 import MonthCalendar from './MonthCalendar';
 
@@ -20,6 +21,8 @@ interface MonthCarouselProps {
   onNavigate: (date: Date) => void;
   /** Term periods to mark; see MonthCalendar. */
   terms?: TermPeriod[];
+  /** Whether to load each day's mood and draw its face in the grid. */
+  showMood?: boolean;
 }
 
 const ARROW_CLASS =
@@ -28,7 +31,9 @@ const ARROW_CLASS =
 // Single-month carousel — arrows step the displayed month back and forth,
 // crossing into the previous or next year at the ends (December -> January
 // of the next year and back).
-const MonthCarousel: React.FC<MonthCarouselProps> = ({ year, month, onChangeMonth, dayData, todayStr, onSelectDay, selectedDate, onNavigate, terms }) => {
+const MonthCarousel: React.FC<MonthCarouselProps> = ({ year, month, onChangeMonth, dayData, todayStr, onSelectDay, selectedDate, onNavigate, terms, showMood = false }) => {
+  const moods = useMonthMoods(year, month, showMood);
+
   const step = (offset: number) => {
     const next = new Date(year, month + offset, 1);
     onChangeMonth(next.getFullYear(), next.getMonth());
@@ -55,6 +60,7 @@ const MonthCarousel: React.FC<MonthCarouselProps> = ({ year, month, onChangeMont
           selectedDate={selectedDate}
           onNavigate={onNavigate}
           terms={terms}
+          moods={moods}
         />
       </div>
 

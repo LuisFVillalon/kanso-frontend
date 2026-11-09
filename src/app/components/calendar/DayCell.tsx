@@ -2,8 +2,10 @@
 
 import React from 'react';
 import { SquareCheck, FileText } from 'lucide-react';
+import { MoodFace, moodColor } from '@/app/components/mood/MoodFacePicker';
 import type { DayData } from '@/app/hooks/useYearCalendarData';
 import type { TermPeriod } from '@/app/types/calendar';
+import { moodLabel } from '@/app/types/mood';
 import { termColor } from '@/app/lib/termPeriods';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { formatEventTime, occurrenceKey } from '@/app/utils/eventOccurrences';
@@ -24,6 +26,8 @@ interface DayCellProps {
   tabIndex?: number;
   /** The term this day falls in, marked by a band along the cell's foot. */
   term?: TermPeriod;
+  /** The mood of this day's daily check-in, shown as its face. */
+  mood?: number;
 }
 
 const fmtHours = (hours: number): string => (Number.isInteger(hours) ? `${hours}` : hours.toFixed(1));
@@ -60,13 +64,13 @@ const EventBar: React.FC<{ occurrence: EventOccurrence }> = ({ occurrence: o }) 
   );
 };
 
-// A single day cell in a month grid — day number plus compact indicators for
-// habits completed (colored dots, tag color), events (tag-colored bars),
+// A single day cell in a month grid — day number, the day's mood face, and
+// compact indicators for habits completed (colored dots, tag color), events (tag-colored bars),
 // tasks due + estimated hours, and notes edited, with a band along the foot
 // on days inside a term.
 // Deliberately terse; the day panel beside the calendar
 // page's month (or the dashboard tile's DayDetailModal) carries the full text.
-const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, holidayName, isSelected, tabIndex, term }) => {
+const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, holidayName, isSelected, tabIndex, term, mood }) => {
   const habitDots = data?.habitsCompleted ?? [];
   const taskCount = data?.tasksDue.length ?? 0;
   const hours = data?.estimatedHours ?? 0;
@@ -76,6 +80,7 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
   const visibleEvents = events.slice(0, MAX_EVENT_BARS);
   const overflowEvents = events.length - visibleEvents.length;
   const eventsLabel = events.length > 0 ? ` — ${events.length} event${events.length === 1 ? '' : 's'}` : '';
+  const moodName = mood === undefined ? null : `Mood: ${moodLabel(mood)}`;
 
   const visibleDots = habitDots.slice(0, 4);
   const overflowDots = habitDots.length - visibleDots.length;
@@ -87,8 +92,8 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
       data-date={toLocalDateStr(date)}
       aria-pressed={isSelected}
       tabIndex={tabIndex}
-      title={[holidayName ?? date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' }), term?.title].filter(Boolean).join(' · ')}
-      aria-label={`${date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}${holidayName ? ` — ${holidayName}` : ''}${term ? ` — ${term.title}` : ''}${eventsLabel}${hasContent ? ' — has activity' : ''}`}
+      title={[holidayName ?? date.toLocaleDateString(undefined, { month: 'long', day: 'numeric' }), term?.title, moodName].filter(Boolean).join(' · ')}
+      aria-label={`${date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}${holidayName ? ` — ${holidayName}` : ''}${term ? ` — ${term.title}` : ''}${moodName ? ` — ${moodName}` : ''}${eventsLabel}${hasContent ? ' — has activity' : ''}`}
       className="relative flex flex-col text-left rounded-md p-1 sm:p-1.5 transition-transform duration-150 ease-in-out hover:z-10 hover:-translate-y-px"
       style={{
         minHeight: 60,
@@ -103,6 +108,17 @@ const DayCell: React.FC<DayCellProps> = ({ date, data, isToday, onSelect, hue, h
       >
         {date.getDate()}
       </span>
+
+      {mood !== undefined && (
+        // Under the number on a phone, where the two don't fit side by side.
+        <span
+          data-mood-face
+          className="block w-3.5 h-3.5 mt-1 sm:absolute sm:mt-0 sm:top-1.5 sm:right-2 sm:w-4 sm:h-4"
+          style={{ color: moodColor(mood) }}
+        >
+          <MoodFace mood={mood} filled className="w-full h-full" />
+        </span>
+      )}
 
       {holidayName && (
         <span

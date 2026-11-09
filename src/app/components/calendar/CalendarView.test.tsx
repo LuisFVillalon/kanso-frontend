@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const auth = vi.hoisted(() => ({ user: { id: 'user-1' } as { id: string } | null }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
-vi.mock('@/app/hooks/useDailyMood', () => ({ useDailyMood: () => false }));
+const dailyMood = vi.hoisted(() => ({ value: false as boolean | null }));
+vi.mock('@/app/hooks/useDailyMood', () => ({ useDailyMood: () => dailyMood.value }));
+const fetchMoodCheckins = vi.hoisted(() => vi.fn());
 const yearData = vi.hoisted(() => vi.fn());
 vi.mock('@/app/hooks/useYearCalendarData', () => ({ useYearCalendarData: yearData }));
 vi.mock('./WeekView', () => ({ default: () => <p>week view</p> }));
@@ -26,7 +28,7 @@ vi.mock('./MonthCalendar', () => ({
     </div>
   ),
 }));
-vi.mock('@/app/lib/backend-api', () => ({}));
+vi.mock('@/app/lib/backend-api', () => ({ fetchMoodCheckins }));
 
 import CalendarView from './CalendarView';
 import { CALENDAR_VIEW_KEY_PREFIX } from '@/app/hooks/useCalendarViewMode';
@@ -56,6 +58,8 @@ beforeEach(() => {
     dayData: new Map(), habits: [], loading: false, yearLoading: year !== 2026,
   }));
   auth.user = { id: 'user-1' };
+  dailyMood.value = false;
+  fetchMoodCheckins.mockReset().mockResolvedValue([]);
   localStorage.clear();
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -214,5 +218,15 @@ describe('CalendarView', () => {
     remount();
     expect(pressed()).toEqual(['Month view']);
     expect(months()).toEqual(['month 2026-10']);
+  });
+
+  it.each([
+    [true, 1],
+    [false, 0],
+    [null, 0],
+  ])('with daily mood %s, loads the month grid\'s moods %i time(s)', async (setting, loads) => {
+    dailyMood.value = setting;
+    await act(async () => root.render(<CalendarView />));
+    expect(fetchMoodCheckins).toHaveBeenCalledTimes(loads);
   });
 });
