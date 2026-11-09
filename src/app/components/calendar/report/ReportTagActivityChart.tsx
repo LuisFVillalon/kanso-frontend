@@ -46,7 +46,7 @@ const COPY: Record<TagChartKind, KindCopy> = {
     empty: 'No habit check-ins in this period',
     bar: unit => `Each bar is your habit check-ins that ${unit}, colored by the habits’ tags.`,
     split: 'A habit with several tags has each check-in split evenly between them, as in the Time tab.',
-    tap: 'Tap a tag to highlight it.',
+    tap: 'Tap a tag to highlight it and list its habits.',
     amount: v => plural(trim(v), 'check-in'),
   },
 };
