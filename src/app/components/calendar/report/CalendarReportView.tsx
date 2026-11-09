@@ -294,7 +294,7 @@ const BusiestDays: React.FC<{ report: CalendarReport }> = ({ report }) => {
 
 const TopNotes: React.FC<{ report: CalendarReport; tag: TagRow | null }> = ({ report, tag }) => {
   const notes = tag ? topNotesOfRow(tag) : report.topNotes;
-  if (notes.length === 0) return <EmptyLine>{tag ? `No notes under ${tag.name} in this period.` : 'No time spent in notes.'}</EmptyLine>;
+  if (notes.length === 0) return <EmptyLine>No time spent in notes.</EmptyLine>;
   const max = notes[0].seconds;
   return (
     <ul className="flex flex-col gap-2">
