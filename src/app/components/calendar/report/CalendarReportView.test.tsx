@@ -1103,6 +1103,63 @@ describe('CalendarReportView tag charts', () => {
     expect(text()).toContain('Habit check-ins by month');
   });
 
+  describe('Top notes follows the tag picked in the chart', () => {
+    const session = (id: number, note_id: number, title: string, startHour: number, minutes: number) => ({
+      id, note_id, note_title: title,
+      started_at: new Date(2026, 9, 20, startHour).toISOString(),
+      ended_at: new Date(2026, 9, 20, startHour, minutes).toISOString(),
+      duration_seconds: minutes * 60,
+    });
+    beforeEach(() => {
+      api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+        start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], habit_completions: [],
+        note_sessions: start > '2026-10-19' || end < '2026-10-19'
+          ? []
+          : [session(1, 1, 'Both', 8, 40), session(2, 2, 'Calc', 10, 20), session(3, 3, 'Loose', 12, 50)],
+        notes: [{ id: 1, title: 'Both', tags: [cs, math] }, { id: 2, title: 'Calc', tags: [math] }, { id: 3, title: 'Loose', tags: [] }],
+      }));
+    });
+
+    const tagButton = (name: string) => [...document.querySelectorAll('[aria-label="Tags"] button')].find(b => b.textContent?.startsWith(name))!;
+    const topNotesCard = () => [...container.querySelectorAll('.card-glass')].find(c => c.textContent?.includes('Top notes by time'))!;
+    const rows = () => [...topNotesCard().querySelectorAll('li')].map(li => [...li.querySelectorAll('span')].map(s => s.textContent).filter(Boolean).join(' '));
+    const barWidths = () => [...topNotesCard().querySelectorAll<HTMLElement>('li [aria-hidden="true"] > div')].map(b => b.style.width);
+
+    it('narrows to a tag with each note’s full time, and restores on deselect', async () => {
+      await render();
+      await openTab('Notes');
+      expect(rows()).toEqual(['Loose 50m', 'Both 40m', 'Calc 20m']);
+      expect(topNotesCard().textContent).not.toContain('Showing');
+
+      await click(tagButton('MATH 254'));
+      expect(rows()).toEqual(['Both 40m', 'Calc 20m']);
+      expect(barWidths()).toEqual(['100%', '50%']);
+      expect(topNotesCard().textContent).toContain('ShowingMATH 254');
+
+      await click(tagButton('MATH 254'));
+      expect(rows()).toEqual(['Loose 50m', 'Both 40m', 'Calc 20m']);
+      expect(topNotesCard().textContent).not.toContain('Showing');
+    });
+
+    it('shows untagged notes for Untagged', async () => {
+      await render();
+      await openTab('Notes');
+      await click(tagButton('Untagged'));
+      expect(rows()).toEqual(['Loose 50m']);
+      expect(topNotesCard().textContent).toContain('ShowingUntagged');
+    });
+
+    it('clears when the period changes', async () => {
+      await render();
+      await openTab('Notes');
+      await click(tagButton('CS 460'));
+      expect(rows()).toEqual(['Both 40m']);
+      await click(buttonLabelled(/^Month$/));
+      expect(document.querySelector('[aria-label="Tags"] button[aria-pressed="true"]')).toBeNull();
+      expect(topNotesCard().textContent).not.toContain('Showing');
+    });
+  });
+
   it('keeps the Overview chart of tasks and habits', async () => {
     await render();
     expect(text()).toContain('Activity by day');

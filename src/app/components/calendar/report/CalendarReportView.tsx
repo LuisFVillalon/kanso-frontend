@@ -47,12 +47,12 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import type { TagChartKind } from '@/app/utils/tagReport';
+import { topNotesOfRow, UNTAGGED_KEY, type TagChartKind, type TagRow } from '@/app/utils/tagReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
-import ReportTagActivityChart from './ReportTagActivityChart';
-import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
+import ReportTagActivityChart, { TagActivityChart, useTagSelection } from './ReportTagActivityChart';
+import ReportTagBreakdown, { ReportTagShareBar, rowColor } from './ReportTagBreakdown';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
   { kind: 'week', label: 'Week' },
@@ -292,12 +292,13 @@ const BusiestDays: React.FC<{ report: CalendarReport }> = ({ report }) => {
   );
 };
 
-const TopNotes: React.FC<{ report: CalendarReport }> = ({ report }) => {
-  if (report.topNotes.length === 0) return <EmptyLine>No time spent in notes.</EmptyLine>;
-  const max = report.topNotes[0].seconds;
+const TopNotes: React.FC<{ report: CalendarReport; tag: TagRow | null }> = ({ report, tag }) => {
+  const notes = tag ? topNotesOfRow(tag) : report.topNotes;
+  if (notes.length === 0) return <EmptyLine>{tag ? `No notes under ${tag.name} in this period.` : 'No time spent in notes.'}</EmptyLine>;
+  const max = notes[0].seconds;
   return (
     <ul className="flex flex-col gap-2">
-      {report.topNotes.map(n => (
+      {notes.map(n => (
         <li key={n.noteId} className="flex items-center gap-2">
           <span className="text-xs sm:text-sm text-text-secondary truncate flex-shrink-0 w-28 sm:w-36" title={n.title || 'Untitled Note'}>
             {n.title || 'Untitled Note'}
@@ -429,6 +430,38 @@ const PlannedVsDone: React.FC<{ report: CalendarReport }> = ({ report }) => (
   </div>
 );
 
+// ── Notes view ──────────────────────────────────────────────────────────────
+
+const TagFilterLabel: React.FC<{ tag: TagRow }> = ({ tag }) => (
+  <span className="inline-flex items-center gap-1.5 min-w-0 text-xs text-text-muted">
+    Showing
+    <span className="inline-flex items-center gap-1.5 min-w-0 px-2 py-0.5 rounded-full border border-border-strong bg-surface-raised text-text-primary">
+      <span className="w-2.5 h-2.5 rounded-[3px] flex-shrink-0" style={{ backgroundColor: rowColor(tag) }} aria-hidden="true" />
+      <span className={`truncate ${tag.key === UNTAGGED_KEY ? 'italic' : ''}`}>{tag.name}</span>
+    </span>
+  </span>
+);
+
+/** The Notes tab's two cards: a tag tapped in the chart narrows the top notes to it. */
+const NotesReport: React.FC<{ period: ReportPeriod; report: CalendarReport; activity: CalendarActivity; byUnit: string }> = ({ period, report, activity, byUnit }) => {
+  const selection = useTagSelection(period, activity, 'note');
+  const { selected } = selection;
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+      <CardShell
+        icon={<FileText className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />}
+        header="Top notes by time"
+        headerAction={selected && <TagFilterLabel tag={selected} />}
+      >
+        <TopNotes report={report} tag={selected} />
+      </CardShell>
+      <CardShell icon={<Clock className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header={`Note time ${byUnit}`}>
+        <TagActivityChart period={period} buckets={report.buckets} itemKind="note" selection={selection} />
+      </CardShell>
+    </div>
+  );
+};
+
 // ── Report body ─────────────────────────────────────────────────────────────
 
 const isEmpty = (r: CalendarReport) =>
@@ -535,16 +568,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
         </div>
       );
     case 'notes':
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-          <CardShell icon={<FileText className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header="Top notes by time">
-            <TopNotes report={report} />
-          </CardShell>
-          <CardShell icon={<Clock className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header={`Note time ${byUnit}`}>
-            {tagChart('note')}
-          </CardShell>
-        </div>
-      );
+      return <NotesReport period={period} report={report} activity={activity} byUnit={byUnit} />;
     case 'habits':
       return (
         <div className="flex flex-col gap-3 sm:gap-4">

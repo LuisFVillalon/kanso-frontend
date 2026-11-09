@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import type { CalendarActivity } from '@/app/types/activity';
 import type { ReportBucket, ReportPeriod } from '@/app/utils/calendarReport';
 import { formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
-import { buildTagSeries, UNTAGGED_KEY, type TagChartKind, type TagRow } from '@/app/utils/tagReport';
+import { buildTagSeries, UNTAGGED_KEY, type TagChartKind, type TagRow, type TagSeries } from '@/app/utils/tagReport';
 import { axisTicks } from './ReportActivityChart';
 import { rowColor } from './ReportTagBreakdown';
 
@@ -19,6 +19,8 @@ interface KindCopy {
   bar: (unit: string) => string;
   /** How an item with several tags counts. */
   split: string;
+  /** What tapping a tag does. */
+  tap: string;
   amount: (value: number) => string;
 }
 
@@ -28,6 +30,7 @@ const COPY: Record<TagChartKind, KindCopy> = {
     empty: 'No tasks completed in this period',
     bar: unit => `Each bar is the tasks you checked off that ${unit}, colored by their tags. Only tasks count here; habits and notes have their own tabs.`,
     split: 'A task with several tags is split evenly between them, as in the Time tab.',
+    tap: 'Tap a tag to highlight it.',
     amount: v => plural(trim(v), 'task'),
   },
   note: {
@@ -35,6 +38,7 @@ const COPY: Record<TagChartKind, KindCopy> = {
     empty: 'No time in notes in this period',
     bar: unit => `Each bar is the time you spent editing notes that ${unit}, colored by the notes’ tags.`,
     split: 'A note with several tags has its time split evenly between them, as in the Time tab.',
+    tap: 'Tap a tag to highlight it and list its notes.',
     amount: v => (v > 0 ? formatDurationShort(v) : '0m'),
   },
   habit: {
@@ -42,6 +46,7 @@ const COPY: Record<TagChartKind, KindCopy> = {
     empty: 'No habit check-ins in this period',
     bar: unit => `Each bar is your habit check-ins that ${unit}, colored by the habits’ tags.`,
     split: 'A habit with several tags has each check-in split evenly between them, as in the Time tab.',
+    tap: 'Tap a tag to highlight it.',
     amount: v => plural(trim(v), 'check-in'),
   },
 };
@@ -54,6 +59,29 @@ const showLabel = (kind: ReportPeriod['kind'], index: number) =>
 const formatTick = (value: number, itemKind: TagChartKind) => {
   if (itemKind !== 'note' || value === 0) return String(value);
   return value < 3600 ? `${value / 60}m` : `${Math.round((value / 3600) * 10) / 10}h`;
+};
+
+export interface TagSelection {
+  series: TagSeries;
+  /** The tapped row. A tap only holds for the period it was made in. */
+  selected: TagRow | null;
+  /** Selects a row, or clears it when it is already selected. */
+  toggle: (key: string) => void;
+}
+
+/** The chart's data and tapped tag, for a parent that also reacts to the tag. */
+export const useTagSelection = (period: ReportPeriod, activity: CalendarActivity, itemKind: TagChartKind): TagSelection => {
+  const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
+  const series = useMemo(
+    () => buildTagSeries(activity, period.start, period.end, itemKind, period.kind === 'year'),
+    // `periodKey` identifies the period; its Date objects change identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activity, periodKey, itemKind],
+  );
+  const [picked, setPicked] = useState<{ periodKey: string; key: string } | null>(null);
+  const selected = picked?.periodKey === periodKey ? series.rows.find(r => r.key === picked.key) ?? null : null;
+  const toggle = (key: string) => setPicked(p => (p?.periodKey === periodKey && p.key === key ? null : { periodKey, key }));
+  return { series, selected, toggle };
 };
 
 interface ReportTagActivityChartProps {
@@ -69,17 +97,9 @@ interface ReportTagActivityChartProps {
  * each bar split by the items' tags in their own colors and Untagged in
  * grey. Tapping a tag in the legend highlights its part of every bar.
  */
-const ReportTagActivityChart: React.FC<ReportTagActivityChartProps> = ({ period, buckets, activity, itemKind }) => {
-  const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
-  const series = useMemo(
-    () => buildTagSeries(activity, period.start, period.end, itemKind, period.kind === 'year'),
-    // `periodKey` identifies the period; its Date objects change identity every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activity, periodKey, itemKind],
-  );
-  const [picked, setPicked] = useState<{ periodKey: string; key: string } | null>(null);
-  const selected = picked?.periodKey === periodKey ? series.rows.find(r => r.key === picked.key) ?? null : null;
-
+export const TagActivityChart: React.FC<Omit<ReportTagActivityChartProps, 'activity'> & { selection: TagSelection }> = ({
+  period, buckets, itemKind, selection: { series, selected, toggle },
+}) => {
   const copy = COPY[itemKind];
   const unit = period.kind === 'year' ? 'month' : 'day';
   const totalOf = (b: ReportBucket) => [...(series.byBucket.get(b.key)?.values() ?? [])].reduce((sum, v) => sum + v, 0);
@@ -113,7 +133,7 @@ const ReportTagActivityChart: React.FC<ReportTagActivityChartProps> = ({ period,
             <button
               key={row.key}
               type="button"
-              onClick={() => setPicked(p => (p?.periodKey === periodKey && p.key === row.key ? null : { periodKey, key: row.key }))}
+              onClick={() => toggle(row.key)}
               aria-pressed={isSelected}
               className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs transition-colors ${
                 isSelected ? 'border-border-strong bg-surface-raised text-text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'
@@ -206,7 +226,7 @@ const ReportTagActivityChart: React.FC<ReportTagActivityChartProps> = ({ period,
         </p>
       )}
       <p className="m-0 text-[11px] sm:text-xs text-text-muted">
-        {copy.bar(unit)} Tap a tag to highlight it. {copy.split}
+        {copy.bar(unit)} {copy.tap} {copy.split}
       </p>
 
       {/* sr-only on the table itself doesn't shrink it — tables size to their content. */}
@@ -231,6 +251,12 @@ const ReportTagActivityChart: React.FC<ReportTagActivityChartProps> = ({ period,
       </div>
     </div>
   );
+};
+
+/** The chart keeping its tapped tag to itself. */
+const ReportTagActivityChart: React.FC<ReportTagActivityChartProps> = ({ activity, ...chart }) => {
+  const selection = useTagSelection(chart.period, activity, chart.itemKind);
+  return <TagActivityChart {...chart} selection={selection} />;
 };
 
 export default ReportTagActivityChart;
