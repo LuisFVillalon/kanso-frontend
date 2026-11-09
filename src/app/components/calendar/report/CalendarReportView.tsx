@@ -47,7 +47,7 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import { topNotesOfRow, UNTAGGED_KEY, type TagChartKind, type TagRow } from '@/app/utils/tagReport';
+import { rowHasTags, topNotesOfRow, UNTAGGED_KEY, type TagChartKind, type TagRow } from '@/app/utils/tagReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
@@ -372,14 +372,17 @@ interface HabitListProps {
   days: number;
   /** Adds a square per day (or per month in a year) to each habit's row. */
   cells?: HabitCells;
+  /** The tag tapped in the chart, which narrows the list to its habits. */
+  tag: TagRow | null;
 }
 
-const HabitList: React.FC<HabitListProps> = ({ report, days, cells }) => {
+const HabitList: React.FC<HabitListProps> = ({ report, days, cells, tag }) => {
   if (report.habits.length === 0) return <EmptyLine>No habits yet.</EmptyLine>;
   const empty = report.buckets.map(b => (b.isFuture ? null : 0));
+  const habits = tag ? report.habits.filter(h => rowHasTags(tag, h.tags)) : report.habits;
   return (
     <ul className={`flex flex-col ${cells ? 'gap-3' : 'gap-2'}`}>
-      {report.habits.map(h => (
+      {habits.map(h => (
         <li key={h.habitId} className="flex items-center gap-2">
           <span className={`text-xs sm:text-sm text-text-secondary truncate min-w-0 ${cells ? 'w-24 sm:w-40 flex-shrink-0' : 'flex-1'}`} title={h.title}>{h.title}</span>
           {cells && <HabitStrip cells={cells.get(h.habitId) ?? empty} buckets={report.buckets} byMonth={report.buckets[0]?.key.length === 7} />}
@@ -457,6 +460,40 @@ const NotesReport: React.FC<{ period: ReportPeriod; report: CalendarReport; acti
         headerAction={selected && <TagFilterLabel tag={selected} />}
       >
         <TopNotes report={report} tag={selected} />
+      </CardShell>
+    </div>
+  );
+};
+
+interface HabitsReportProps {
+  period: ReportPeriod;
+  report: CalendarReport;
+  activity: CalendarActivity;
+  days: number;
+  cells?: HabitCells;
+  byUnit: string;
+}
+
+/** The Habits tab's two cards: a tag tapped in the chart narrows the habit list to it. */
+const HabitsReport: React.FC<HabitsReportProps> = ({ period, report, activity, days, cells, byUnit }) => {
+  const selection = useTagSelection(period, activity, 'habit');
+  const { selected } = selection;
+  return (
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <CardShell icon={<Repeat className="w-4 h-4" style={{ color: 'var(--tm-success)' }} />} header={`Habit check-ins ${byUnit}`}>
+        <TagActivityChart period={period} buckets={report.buckets} itemKind="habit" selection={selection} />
+      </CardShell>
+      <CardShell
+        icon={<Flame className="w-4 h-4" style={{ color: '#F97316' }} />}
+        header="Habits"
+        headerAction={selected && <TagFilterLabel tag={selected} />}
+      >
+        <HabitList report={report} days={days} cells={cells} tag={selected} />
+        {report.habits.length > 0 && (
+          <p className="text-[11px] text-text-muted">
+            {period.kind === 'year' ? 'Each square is a month, darker the more days you checked in.' : 'Each square is a day.'} Streaks are as of today.
+          </p>
+        )}
       </CardShell>
     </div>
   );
@@ -570,21 +607,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     case 'notes':
       return <NotesReport period={period} report={report} activity={activity} byUnit={byUnit} />;
     case 'habits':
-      return (
-        <div className="flex flex-col gap-3 sm:gap-4">
-          <CardShell icon={<Repeat className="w-4 h-4" style={{ color: 'var(--tm-success)' }} />} header={`Habit check-ins ${byUnit}`}>
-            {tagChart('habit')}
-          </CardShell>
-          <CardShell icon={<Flame className="w-4 h-4" style={{ color: '#F97316' }} />} header="Habits">
-            <HabitList report={report} days={days} cells={cells} />
-            {report.habits.length > 0 && (
-              <p className="text-[11px] text-text-muted">
-                {period.kind === 'year' ? 'Each square is a month, darker the more days you checked in.' : 'Each square is a day.'} Streaks are as of today.
-              </p>
-            )}
-          </CardShell>
-        </div>
-      );
+      return <HabitsReport period={period} report={report} activity={activity} days={days} cells={cells} byUnit={byUnit} />;
     case 'mood':
       return mood.error ? (
         <div className="card-glass p-4 flex flex-wrap items-center gap-3" role="alert">
