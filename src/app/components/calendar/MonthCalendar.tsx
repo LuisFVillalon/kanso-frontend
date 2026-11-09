@@ -39,6 +39,8 @@ interface MonthCalendarProps {
   onNavigate?: (date: Date) => void;
   /** Term periods to mark across their days (the current term and archived ones). */
   terms?: TermPeriod[];
+  /** Each day's daily check-in mood, by "YYYY-MM-DD"; a face marks those days. Omit for no faces. */
+  moods?: ReadonlyMap<string, number>;
 }
 
 const DAY_HEADERS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -68,6 +70,7 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
   selectedDate,
   onNavigate,
   terms = NO_TERMS,
+  moods,
 }) => {
   const now = new Date();
   const isCurrent = year === now.getFullYear() && month === now.getMonth();
@@ -253,6 +256,7 @@ const MonthCalendar: React.FC<MonthCalendarProps> = ({
                 hue={hue}
                 holidayName={monthHolidays[date.getDate()]}
                 term={termOnDay(monthTerms, dateStr)}
+                mood={moods?.get(dateStr)}
                 isSelected={selectedDate === undefined ? undefined : dateStr === selectedStr}
                 tabIndex={onNavigate ? (dateStr === tabStopStr ? 0 : -1) : undefined}
               />

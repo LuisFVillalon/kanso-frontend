@@ -97,6 +97,12 @@ describe('MonthCalendar', () => {
     expect(cell('2026-10-21').hasAttribute('tabindex')).toBe(false);
   });
 
+  it('shows no faces when given no moods, as on the dashboard', () => {
+    act(() => root.render(<MonthCalendar year={2026} month={9} dayData={new Map()} todayStr="2026-10-21" onSelectDay={() => {}} />));
+    expect(container.querySelector('[data-mood-face]')).toBeNull();
+    expect(cell('2026-10-21').getAttribute('aria-label')).not.toContain('Mood');
+  });
+
   it("marks the term's days and names the terms touching the month", () => {
     act(() => root.render(
       <MonthCalendar
