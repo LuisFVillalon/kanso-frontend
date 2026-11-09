@@ -201,15 +201,14 @@ const Summary: React.FC<{
   );
 };
 
-/** "Mood & your activity": how you felt on days you did more of one activity, for one feeling, with a tile per activity. */
+/** "Mood & your activity": how you felt on days you did more of one activity, for one feeling. */
 const ActivityCard: React.FC<{
   analysis: PatternsAnalysis;
   pick: ActivityPick;
   onPick: (pick: ActivityPick) => void;
   headerAction: React.ReactNode;
 }> = ({ analysis, pick, onPick, headerAction }) => {
-  const rows = analysis.rows.filter(r => r.source === 'activity');
-  const row = rows.find(r => r.metric === pick.metric)!;
+  const row = analysis.rows.find(r => r.source === 'activity' && r.metric === pick.metric)!;
   const f = pick.feeling;
   const answer = row.answer[f];
   return (
@@ -251,30 +250,6 @@ const ActivityCard: React.FC<{
           <p className="text-[11px] text-text-muted">Shows what tends to go together — not what causes what. A busy week, sleep or the season can drive both.</p>
         </div>
       </details>
-
-      <div className="hidden sm:grid grid-cols-3 gap-2 [@media(max-height:760px)]:hidden">
-        {rows.map(r => {
-          const a = r.answer[f];
-          const active = r.metric === pick.metric;
-          return (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => onPick({ ...pick, metric: r.metric! })}
-              aria-pressed={active}
-              className={`text-left rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 border transition-colors ${
-                active ? 'border-transparent bg-accent-subtle' : 'border-border-subtle hover:bg-surface-raised'
-              }`}
-            >
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-text-muted">{r.name}</span>
-              <span className="flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-semibold text-text-primary">
-                <AnswerIcon kind={a.kind} className="w-4 h-4 shrink-0" />
-                {a.short}
-              </span>
-            </button>
-          );
-        })}
-      </div>
     </CardShell>
   );
 };
