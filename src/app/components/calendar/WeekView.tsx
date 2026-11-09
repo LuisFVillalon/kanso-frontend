@@ -517,6 +517,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
 
       {card && cardOccurrence && (
         <EventCard
+          key={occurrenceKey(cardOccurrence)}
           occurrence={cardOccurrence}
           past={card.event.past}
           anchor={card.anchor}

@@ -667,6 +667,22 @@ describe('WeekView', { timeout: 30_000 }, () => {
         expect(mocks.fetchEvent).not.toHaveBeenCalled();
       });
 
+      it('starts the tag picks fresh when another event opens over the card', async () => {
+        mocks.updateGoogleEventTags.mockReset().mockResolvedValue(undefined);
+        const other = imported({ event_id: -31, title: 'Standup', start_time: '16:00:00', end_time: '16:50:00' });
+        withEvents([imported(), other]);
+        await render();
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('CS 460').click());
+        expect(mocks.updateGoogleEventTags).toHaveBeenLastCalledWith(-30, [CLASS_TAG.id], false);
+
+        await act(async () => button('Google Calendar event: Standup, 4:00 PM – 4:50 PM').click());
+        expect(dialog('Event: Standup')).not.toBeNull();
+        expect(buttonByText('CS 460').getAttribute('aria-pressed')).toBe('false');
+        await act(async () => buttonByText('CS 460').click());
+        expect(mocks.updateGoogleEventTags).toHaveBeenLastCalledWith(-31, [CLASS_TAG.id], false);
+      });
+
       it("updates the open card and the block's color once a tag saves, without a reload", async () => {
         mocks.updateGoogleEventTags.mockReset().mockResolvedValue(undefined);
         withEvents([imported()]);
