@@ -94,8 +94,8 @@
   --tm-course-saffron:   #D99A00;
   --tm-course-blue:      #1F6FC4;
 
-  /* Week calendar kinds: planned task, completed, note session, habit. Four
-     hues (blue, green, magenta, orange) that stay apart under red/green and
+  /* Activity kinds in the day report and Daily Brief: planned task, completed,
+     note session, habit. Four hues (blue, green, magenta, orange) that stay apart under red/green and
      blue/yellow color blindness, each 3.3:1 or more on paper and surface.
      They don't follow the user's accent, so they never collide with it. */
   --tm-week-task:        #1A56A8;

@@ -188,6 +188,8 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     completedTasks: activity?.completed_tasks ?? [],
     noteSessions: activity?.note_sessions ?? [],
     habitCompletions: activity?.habit_completions ?? [],
+    notes: activity?.notes,
+    habits: activity?.habits,
     events: activity?.events ?? [],
     now,
   }), [weekStart, tasks, activity, now]);

@@ -194,13 +194,30 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(grid().classList.contains('min-h-0')).toBe(true);
   });
 
-  it('colors each legend kind with its own week color', async () => {
+  it('has one tag-color entry in the legend instead of an entry per kind', async () => {
     await render();
-    const swatches = [...container.querySelectorAll<HTMLElement>('ul[aria-label="Legend"] li span')].slice(0, 4);
-    expect(swatches.map(s => s.parentElement!.textContent)).toEqual(['Planned task', 'Completed', 'Note session', 'Habit']);
-    expect(swatches.map(s => s.style.backgroundColor)).toEqual([
-      'var(--tm-week-task)', 'var(--tm-week-completed)', 'var(--tm-week-note)', 'var(--tm-week-habit)',
-    ]);
+    const legend = [...container.querySelectorAll('ul[aria-label="Legend"] li')].map(li => li.textContent);
+    expect(legend).toEqual(['Colored by tag', 'Past', 'Archived', 'Clash', 'Outside work hours or rest day']);
+  });
+
+  it('colors tasks, notes and habits by their first tag, and untagged ones like an untagged event', async () => {
+    const red = { id: 1, name: 'Red', color: '#ef4444' };
+    const green = { id: 2, name: 'Green', color: '#22c55e' };
+    mocks.tasks = [
+      task({ id: 1, title: 'Tagged', due_date: '2026-10-21', due_time: '09:00:00', tags: [red, green] }),
+      task({ id: 2, title: 'Plain', due_date: '2026-10-22', due_time: '09:00:00' }),
+    ];
+    mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      ...activityFor(start, end),
+      notes: [{ id: 42, title: 'Lecture notes', tags: [green] }],
+      habits: [{ id: 5, title: 'Run', estimated_time: null, tags: [red] }],
+    }));
+    await render();
+    const styleOf = (label: string) => container.querySelector<HTMLElement>(`[aria-label^="${label}"]`)!.getAttribute('style')!;
+    expect(styleOf('Planned task: Tagged')).toContain('#ef4444');
+    expect(styleOf('Planned task: Plain')).toContain('var(--tm-pencil)');
+    expect(styleOf('Note session: Lecture notes')).toContain('#22c55e');
+    expect(styleOf('Habit completed: Run')).toContain('#ef4444');
   });
 
   it('shows rest days and when the work window opens and closes', async () => {
@@ -216,11 +233,10 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(columns[0].querySelectorAll('[data-window-edge]')).toHaveLength(0);
     expect(container.querySelectorAll('[data-window-edge="opens"]')).toHaveLength(5);
     expect([...container.querySelectorAll('[data-window-edge]')].slice(0, 2).map(e => e.textContent)).toEqual(['Opens 8:00 AM', 'Closes 10:00 PM']);
-    const legend = [...container.querySelectorAll('ul[aria-label="Legend"] li')].map(li => li.textContent);
-    expect(legend.slice(4)).toEqual(['Event (tag color)', 'Past', 'Archived', 'Clash', 'Outside work hours', 'Rest day']);
-    const swatch = (label: string) => String(WEEK_LEGEND.find(l => l.label === label)?.swatch.background);
-    expect(swatch('Rest day')).not.toContain('gradient');
-    expect(swatch('Rest day')).not.toBe(swatch('Outside work hours'));
+    const offHours = [...container.querySelectorAll<HTMLElement>('[data-off-hours]')].map(e => e.style.background);
+    expect(offHours.length).toBeGreaterThan(columns.length);
+    expect(new Set(offHours).size).toBe(1);
+    expect(WEEK_LEGEND.at(-1)?.swatch.background).toBe(offHours[0]);
 
     await renderWithSchedule({ dayStartTime: '09:30', shutoffTime: '17:00', restDays: [3] });
     expect(daySchedules()[3]).toBe('Rest day');

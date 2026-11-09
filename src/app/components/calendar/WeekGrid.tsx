@@ -25,19 +25,18 @@ const GRID_COLUMNS = `${GUTTER_REM}rem repeat(7, minmax(0, 1fr))`;
 
 const minutesToPx = (minutes: number) => (minutes * HOUR_PX) / 60;
 
-/** A kind's block tint: a little of its color over the surface, so tints differ by hue too. */
-const kindStyle = (color: string) => ({ bg: `color-mix(in srgb, ${color} 14%, var(--tm-surface))`, edge: color });
+/** A task, note or habit block in its tag's color: a light tint that keeps the ink legible on any tag, and a solid left edge. */
+const tagTint = (color: string): React.CSSProperties => ({
+  backgroundColor: `color-mix(in srgb, ${color} 14%, var(--tm-surface))`,
+  borderLeft: `3px solid ${color}`,
+});
 
-const KIND_STYLE: Record<Exclude<TimedEvent['kind'], 'event'> | 'habit', { bg: string; edge: string }> = {
-  task: kindStyle('var(--tm-week-task)'),
-  completed: kindStyle('var(--tm-week-completed)'),
-  note: kindStyle('var(--tm-week-note)'),
-  habit: kindStyle('var(--tm-week-habit)'),
-};
+/** A kind's icon sits in text color, since a tag's own color can vanish against the block's tint. */
+const KIND_ICON_COLOR = 'var(--tm-text-secondary)';
 
 /**
  * An event's block in its tag's color, with a full border so it never reads
- * as a task even when the tag is close to the task blue. A past event fades;
+ * as a task with the same tag. A past event fades;
  * an archived one (always past on the calendar: upcoming archived ones are
  * left off) is hatched and dashed.
  */
@@ -69,28 +68,21 @@ const CLASH_RING = '2px solid var(--tm-warning)';
 /** The grid's own height; it scrolls the hours inside. A taller box (a dragged week view) stretches it. */
 const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
 
-/** Hours outside the work window: a flat wash of the muted text color. */
+/** Hours outside the work window and rest days: a flat wash of the muted text color. On a rest day it covers the whole column, header included. */
 const OFF_HOURS_BG = 'color-mix(in srgb, var(--tm-text-muted) 9%, transparent)';
-/** Rest days: the same wash a step deeper and down the whole column, header included, so a day off reads differently from an evening. */
-const REST_DAY_BG = 'color-mix(in srgb, var(--tm-text-muted) 14%, transparent)';
 /** The lines where the work window opens and closes. */
 const WINDOW_EDGE = 'color-mix(in srgb, var(--tm-accent) 55%, transparent)';
 
-/** A sample tag color for the legend's event swatches. */
-const LEGEND_EVENT_COLOR = '#8b5cf6';
+/** A sample tag color for the legend's swatches. */
+const LEGEND_TAG_COLOR = '#8b5cf6';
 
-/** The week's legend: each kind's swatch, then the event states, then the work schedule. */
+/** The week's legend: tag coloring, then the states a block can be in, then the work schedule. */
 export const WEEK_LEGEND: { label: string; swatch: React.CSSProperties }[] = [
-  { label: 'Planned task', swatch: { backgroundColor: KIND_STYLE.task.edge } },
-  { label: 'Completed', swatch: { backgroundColor: KIND_STYLE.completed.edge } },
-  { label: 'Note session', swatch: { backgroundColor: KIND_STYLE.note.edge } },
-  { label: 'Habit', swatch: { backgroundColor: KIND_STYLE.habit.edge } },
-  { label: 'Event (tag color)', swatch: eventStyle(LEGEND_EVENT_COLOR, { past: false, archived: false }) },
-  { label: 'Past', swatch: { ...eventStyle(LEGEND_EVENT_COLOR, { past: true, archived: false }), opacity: 1 } },
-  { label: 'Archived', swatch: eventStyle(LEGEND_EVENT_COLOR, { past: true, archived: true }) },
+  { label: 'Colored by tag', swatch: eventStyle(LEGEND_TAG_COLOR, { past: false, archived: false }) },
+  { label: 'Past', swatch: { ...eventStyle(LEGEND_TAG_COLOR, { past: true, archived: false }), opacity: 1 } },
+  { label: 'Archived', swatch: eventStyle(LEGEND_TAG_COLOR, { past: true, archived: true }) },
   { label: 'Clash', swatch: { outline: CLASH_RING, outlineOffset: -2 } },
-  { label: 'Outside work hours', swatch: { background: OFF_HOURS_BG, border: '1px solid var(--tm-border-subtle)' } },
-  { label: 'Rest day', swatch: { background: REST_DAY_BG, border: '1px solid var(--tm-border-subtle)' } },
+  { label: 'Outside work hours or rest day', swatch: { background: OFF_HOURS_BG, border: '1px solid var(--tm-border-subtle)' } },
 ];
 
 const dayLabel = (day: Date) =>
@@ -170,8 +162,9 @@ interface WeekGridProps {
  * a range, in 15-minute steps, for a new event. Events, planned tasks,
  * completions and note sessions sit on top as blocks, side by side where they
  * overlap, and all-day events, undated-time tasks and habit completions fill
- * the all-day row. Hours outside the user's work window are washed out and rest
- * days shaded deeper, with dashed lines where the window opens and closes. Scrolls
+ * the all-day row. Hours outside the user's work window and whole rest days share
+ * one wash, with dashed lines where the window opens and closes. Every block
+ * takes its first tag's color, and its icon and text tell the kinds apart. Scrolls
  * both ways inside its own box, with the day headers and hour gutter pinned,
  * so it stays usable at phone width.
  */
@@ -252,7 +245,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                   aria-current={isToday ? 'date' : undefined}
                   title={rest ? 'Rest day' : undefined}
                   className="flex flex-col items-center py-2 border-l border-border-subtle"
-                  style={rest ? { backgroundColor: REST_DAY_BG } : undefined}
+                  style={rest ? { backgroundColor: OFF_HOURS_BG } : undefined}
                 >
                   <span
                     className="text-[11px] font-semibold uppercase tracking-wide"
@@ -285,7 +278,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
               <div
                 key={i}
                 className="relative min-h-9 border-l border-border-subtle"
-                style={workDays[i].rest ? { backgroundColor: REST_DAY_BG } : undefined}
+                style={workDays[i].rest ? { backgroundColor: OFF_HOURS_BG } : undefined}
               >
                 <button
                   type="button"
@@ -357,7 +350,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                     style={{
                       top: minutesToPx(start),
                       height: minutesToPx(end - start),
-                      background: marks.rest ? REST_DAY_BG : OFF_HOURS_BG,
+                      background: OFF_HOURS_BG,
                     }}
                   />
                 ))}
@@ -510,16 +503,14 @@ const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: 
     timeText = eventTimeText(event);
     struck = event.event!.archived;
   } else {
-    const { bg, edge } = KIND_STYLE[event.kind as Exclude<TimedEvent['kind'], 'event'>];
     style = {
       ...position,
-      backgroundColor: bg,
-      borderLeft: `3px solid ${edge}`,
+      ...tagTint(eventColor(event.tags ?? [])),
       opacity: event.kind === 'task' && event.completed ? 0.7 : 1,
       ...(event.clashWith ? { outline: CLASH_RING, outlineOffset: -1 } : {}),
     };
     Icon = event.kind === 'note' ? FileText : event.kind === 'completed' ? CheckCircle2 : event.completed ? Check : null;
-    iconColor = edge;
+    iconColor = KIND_ICON_COLOR;
     const range = `${formatMinutes(event.startMin)} – ${formatMinutes(event.endMin)}`;
     timeText = event.kind === 'completed'
       ? formatMinutes(event.startMin)
@@ -581,13 +572,12 @@ const AllDayChip: React.FC<{ item: AllDayItem; openable: boolean; onOpen: (ancho
     style = eventStyle(color, item.event);
     struck = item.event.archived;
   } else {
-    const { bg, edge } = KIND_STYLE[item.kind as 'task' | 'habit'];
     label = item.kind === 'habit'
       ? `Habit completed: ${item.title}`
       : `${item.completed ? 'Planned task (done)' : 'Planned task'}: ${item.title}, no time set`;
     Icon = item.kind === 'habit' ? Flame : item.completed ? Check : Circle;
-    iconColor = edge;
-    style = { backgroundColor: bg, borderLeft: `3px solid ${edge}`, opacity: item.kind === 'task' && item.completed ? 0.7 : 1 };
+    iconColor = KIND_ICON_COLOR;
+    style = { ...tagTint(eventColor(item.tags ?? [])), opacity: item.kind === 'task' && item.completed ? 0.7 : 1 };
     struck = item.kind === 'task' && !!item.completed;
   }
   const className = 'pointer-events-auto flex items-center gap-1 w-full min-w-0 rounded px-1.5 py-0.5 text-left text-[11px] leading-tight text-text-primary';
