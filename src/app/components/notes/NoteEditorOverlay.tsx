@@ -26,6 +26,12 @@ interface NoteEditorOverlayProps {
   backLabel?: string;
 }
 
+/**
+ * The centered panel's width: room for the full note row and every formatting
+ * group, which need about 800px, so neither folds on a normal desktop window.
+ */
+const CENTERED_WIDTH = 'max-w-4xl';
+
 const NoteEditorOverlay: React.FC<NoteEditorOverlayProps> = ({
   note,
   allTags,
@@ -56,7 +62,7 @@ const NoteEditorOverlay: React.FC<NoteEditorOverlayProps> = ({
       position={centered ? 'fixed' : 'absolute'}
       closeOnBackdropClick={centered}
       panelClassName={centered
-        ? 'modal-panel w-full max-w-2xl h-[85vh] flex flex-col overflow-hidden'
+        ? `modal-panel w-full ${CENTERED_WIDTH} h-[85vh] flex flex-col overflow-hidden`
         : 'modal-panel relative w-full h-full flex flex-col overflow-hidden'}
     >
       {/* Header */}

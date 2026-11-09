@@ -284,14 +284,45 @@ describe('NoteEditor toolbar', () => {
     expect(byLabel('More note actions')).not.toBeNull();
   });
 
-  it('keeps the formatting toolbar in focus mode and hides the Focus button there', () => {
+  it('keeps the formatting toolbar and note tools in focus mode and hides the Focus button there', () => {
     render(vi.fn<Update>().mockResolvedValue(true));
     act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
     act(() => { vi.advanceTimersByTime(600); });
     expect(byLabel('Bold (Ctrl+B)')).not.toBeNull();
-    expect(byLabel('Outline')).toBeNull();
-    expect(byLabel('Resources')).toBeNull();
+    expect(byLabel('Outline')).not.toBeNull();
+    expect(byLabel('Resources')).not.toBeNull();
+    expect(byLabel('Export')).not.toBeNull();
+    expect(container.querySelector('[title="Words, reading time and time spent"]')).not.toBeNull();
+    expect(byLabel('More note actions')).toBeNull();
     expect(byLabel('Focus mode (Ctrl+Shift+F)')).toBeNull();
+  });
+
+  it('keeps the note tools in focus mode on a narrow window, where there is no More menu', () => {
+    atWidth(680);
+    render(vi.fn<Update>().mockResolvedValue(true));
+    clickMenuItem('More note actions', 'Focus mode');
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(byLabel('Outline')).not.toBeNull();
+    expect(byLabel('Export')).not.toBeNull();
+  });
+
+  it('shows the word count as just its icon in focus mode on a phone, so the row fits', () => {
+    atWidth(390);
+    render(vi.fn<Update>().mockResolvedValue(true));
+    clickMenuItem('More note actions', 'Focus mode');
+    act(() => { vi.advanceTimersByTime(600); });
+    const words = container.querySelector('[title="Words, reading time and time spent"]')!;
+    expect(words.textContent).toBe('');
+  });
+
+  it('opens the Outline panel and the note details in focus mode', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => byLabel('Outline')!.click());
+    expect(byLabel('Close outline')!.closest<HTMLElement>('.shrink-0.border-l')!.style.width).toBe('260px');
+    act(() => container.querySelector<HTMLElement>('[title="Words, reading time and time spent"]')!.click());
+    expect(container.querySelector('[title="Words, reading time and time spent"]')!.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('leaves focus mode from the X and k button, which has no text', () => {

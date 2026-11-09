@@ -446,6 +446,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const compact = editorWidth !== null && editorWidth < BOTTOM_BAR_MAX_WIDTH;
   // The note row's own buttons; jsdom measures no width, so tests get the full row.
   const roomy = editorWidth === null || editorWidth >= NOTE_ROW_FULL_WIDTH;
+  // Focus mode has no More menu to fold these into, so they stay at any width.
+  const showNoteTools = focusMode || roomy;
 
   const resourcesOpen = sidePanel === 'resources';
   const outlineOpen = sidePanel === 'outline';
@@ -497,7 +499,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         >
           <NoteSaveStatus status={saveStatus} savedAt={savedAt} onRetry={saveNoteNow} />
 
-          {!focusMode && roomy && wordCount > 0 && (
+          {showNoteTools && wordCount > 0 && (
             <button
               type="button"
               data-note-details-trigger
@@ -508,11 +510,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               style={RING_STYLE}
             >
               <Type className="w-3.5 h-3.5" aria-hidden="true" />
-              {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}
+              {/* Icon only on a phone, so focus mode's row still fits; its popover has the count. */}
+              {!compact && <>{wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}</>}
             </button>
           )}
 
-          {!focusMode && roomy && (
+          {showNoteTools && (
             <ToolbarButton toggle active={outlineOpen} title="Outline" onClick={toggleOutline}>
               <ListTree className="w-4 h-4" />
             </ToolbarButton>
@@ -531,7 +534,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </span>
           )}
 
-          {!focusMode && showExtendedActions && (
+          {showExtendedActions && (
             <button
               type="button"
               onClick={handleGetResources}
@@ -552,7 +555,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </button>
           )}
 
-          {!focusMode && roomy && showExport && (
+          {showNoteTools && showExport && (
             <NoteExportMenu onDownloadPdf={handleDownloadPDF} pdfLoading={pdfLoading} />
           )}
 
@@ -581,11 +584,11 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </div>
           )}
 
-          {details && !focusMode && <NoteDetails stats={details} onClose={closeDetails} />}
+          {details && <NoteDetails stats={details} onClose={closeDetails} />}
         </EditorToolbar>
 
       {/* ── Main content: editor column + side panel ─────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
         {/* Editor column */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* ── Title ──────────────────────────────────────────────────────── */}
@@ -675,9 +678,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 
         {/* ── Side panel: Learning resources or Outline ─────────────────────── */}
         <div
-          className="shrink-0 flex flex-col border-l overflow-hidden transition-[width] duration-300 ease-in-out"
+          className={`shrink-0 flex flex-col border-l overflow-hidden transition-[width] duration-300 ease-in-out ${
+            // On a phone, focus mode's panel covers the note instead of squeezing the writing column.
+            focusMode ? 'max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-10 max-md:max-w-full' : ''
+          }`}
           style={{
-            width: sidePanel && !focusMode ? (sidePanel === 'outline' ? '260px' : '300px') : '0px',
+            width: sidePanel ? (sidePanel === 'outline' ? '260px' : '300px') : '0px',
             borderColor: 'var(--tm-border)',
             backgroundColor: 'var(--tm-surface-raised)',
           }}
