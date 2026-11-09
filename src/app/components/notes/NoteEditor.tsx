@@ -258,19 +258,20 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     };
   }, [editor, focusMode, sidePanel]);
 
-  // Escape leaves focus mode, unless it's closing the slash menu or the link
-  // editor first. Listens in the capture phase: the editor marks Escape as
+  // Escape leaves focus mode, unless it's closing the slash menu, the link
+  // editor, the note details or a toolbar menu first. Listens in the capture phase: the editor marks Escape as
   // handled before it would bubble up to the document.
   useEffect(() => {
     if (!focusMode) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || linkEditorOpen) return;
+      if (e.key !== 'Escape' || linkEditorOpen || details) return;
       if (editor && slashCommandPluginKey.getState(editor.state)?.active) return;
+      if (containerRef.current?.querySelector('[aria-expanded="true"]')) return;
       setFocusMode(false);
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [focusMode, linkEditorOpen, editor]);
+  }, [focusMode, linkEditorOpen, details, editor]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -446,8 +447,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const compact = editorWidth !== null && editorWidth < BOTTOM_BAR_MAX_WIDTH;
   // The note row's own buttons; jsdom measures no width, so tests get the full row.
   const roomy = editorWidth === null || editorWidth >= NOTE_ROW_FULL_WIDTH;
-  // Focus mode has no More menu to fold these into, so they stay at any width.
-  const showNoteTools = focusMode || roomy;
+  // Focus mode has no breadcrumb to make room for, so only a phone folds these, keeping Leave focus on screen.
+  const showNoteTools = focusMode ? !compact : roomy;
 
   const resourcesOpen = sidePanel === 'resources';
   const outlineOpen = sidePanel === 'outline';
@@ -510,8 +511,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               style={RING_STYLE}
             >
               <Type className="w-3.5 h-3.5" aria-hidden="true" />
-              {/* Icon only on a phone, so focus mode's row still fits; its popover has the count. */}
-              {!compact && <>{wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}</>}
+              {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}
             </button>
           )}
 
@@ -559,7 +559,20 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             <NoteExportMenu onDownloadPdf={handleDownloadPDF} pdfLoading={pdfLoading} />
           )}
 
-          {focusMode ? (
+          {(!focusMode || !showNoteTools) && (
+            <div data-note-details-trigger className="contents">
+              <NoteMoreMenu
+                onDownloadPdf={!showNoteTools && showExport ? handleDownloadPDF : undefined}
+                pdfLoading={pdfLoading}
+                onShowDetails={toggleDetails}
+                outlineOpen={outlineOpen}
+                onToggleOutline={showNoteTools ? undefined : toggleOutline}
+                onFocusMode={focusMode || roomy ? undefined : startFocusMode}
+              />
+            </div>
+          )}
+
+          {focusMode && (
             <button
               type="button"
               onClick={() => setFocusMode(false)}
@@ -571,17 +584,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               <X className="w-4 h-4" aria-hidden="true" />
               <KansoKIcon className="w-[18px] h-[18px]" />
             </button>
-          ) : (
-            <div data-note-details-trigger className="contents">
-              <NoteMoreMenu
-                onDownloadPdf={!roomy && showExport ? handleDownloadPDF : undefined}
-                pdfLoading={pdfLoading}
-                onShowDetails={toggleDetails}
-                outlineOpen={outlineOpen}
-                onToggleOutline={roomy ? undefined : toggleOutline}
-                onFocusMode={roomy ? undefined : startFocusMode}
-              />
-            </div>
           )}
 
           {details && <NoteDetails stats={details} onClose={closeDetails} />}

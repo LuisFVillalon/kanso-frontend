@@ -306,13 +306,55 @@ describe('NoteEditor toolbar', () => {
     expect(byLabel('Export')).not.toBeNull();
   });
 
-  it('shows the word count as just its icon in focus mode on a phone, so the row fits', () => {
+  it.each([390, 320])('folds the note tools into More in focus mode at %ipx, keeping Resources and Leave', width => {
+    atWidth(width);
+    render(vi.fn<Update>().mockResolvedValue(true));
+    clickMenuItem('More note actions', 'Focus mode');
+    act(() => { vi.advanceTimersByTime(600); });
+    expect(byLabel('Outline')).toBeNull();
+    expect(byLabel('Export')).toBeNull();
+    expect(container.querySelector('[title="Words, reading time and time spent"]')).toBeNull();
+    expect(byLabel('Resources')).not.toBeNull();
+    expect(byLabel('Leave focus')).not.toBeNull();
+    expect(menuItems('More note actions')).toEqual(['Download PDF', 'Note details', 'Outline']);
+  });
+
+  const pressEscape = () => act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); });
+
+  it('closes the note details on Escape before leaving focus mode', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => container.querySelector<HTMLElement>('[title="Words, reading time and time spent"]')!.click());
+    expect(byLabel('Note details')).not.toBeNull();
+    pressEscape();
+    expect(byLabel('Note details')).toBeNull();
+    expect(byLabel('Leave focus')).not.toBeNull();
+    pressEscape();
+    expect(byLabel('Leave focus')).toBeNull();
+  });
+
+  it('closes the note details opened from More on a phone before leaving focus mode', () => {
     atWidth(390);
     render(vi.fn<Update>().mockResolvedValue(true));
     clickMenuItem('More note actions', 'Focus mode');
     act(() => { vi.advanceTimersByTime(600); });
-    const words = container.querySelector('[title="Words, reading time and time spent"]')!;
-    expect(words.textContent).toBe('');
+    clickMenuItem('More note actions', 'Note details');
+    expect(byLabel('Note details')).not.toBeNull();
+    pressEscape();
+    expect(byLabel('Note details')).toBeNull();
+    expect(byLabel('Leave focus')).not.toBeNull();
+  });
+
+  it('closes the Export menu on Escape before leaving focus mode', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    act(() => byLabel('Focus mode (Ctrl+Shift+F)')!.click());
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => byLabel('Export')!.click());
+    expect(byLabel('Export')!.getAttribute('aria-expanded')).toBe('true');
+    pressEscape();
+    expect(byLabel('Export')!.getAttribute('aria-expanded')).toBe('false');
+    expect(byLabel('Leave focus')).not.toBeNull();
   });
 
   it('opens the Outline panel and the note details in focus mode', () => {
