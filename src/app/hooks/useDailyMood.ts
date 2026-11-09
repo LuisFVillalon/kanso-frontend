@@ -5,7 +5,8 @@ import { useOptionalNotifications } from '@/app/context/NotificationsContextValu
 /**
  * Whether daily mood check-ins are on: the Notifications "Mood check-in
  * reminder" switch (the `mood_reminder` type), which turns on both the
- * reminder and logging the day's mood from the Daily Brief and the calendar.
+ * reminder and logging the day's mood from the Daily Brief and the calendar,
+ * and shows each day's mood face in the calendar page's month grid.
  * null until the notification settings load. On by default, so it is also on
  * when they can't load or the notifications feature isn't there at all.
  */
