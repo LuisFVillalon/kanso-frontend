@@ -30,6 +30,7 @@ export const useNotes = (enabled: boolean) => {
   // Bumped only after an archive, delete or restore is confirmed by the
   // server, so the daily debrief can re-fetch without racing the request.
   const [archiveSyncToken, setArchiveSyncToken] = useState(0);
+  const [tagSyncToken, setTagSyncToken] = useState(0);
 
   // Mirrors `notes` so callbacks can read the latest state without a stale
   // closure (setState updates aren't visible synchronously).
@@ -80,6 +81,11 @@ export const useNotes = (enabled: boolean) => {
           note.id === id ? { ...note, ...changes, updated_date: new Date().toISOString() } : note,
         ),
       );
+
+      const confirmSaved = () => {
+        if (changes.tags) setTagSyncToken(v => v + 1);
+        return true;
+      };
 
       const realId = draftRealId.current.get(id);
 
@@ -132,7 +138,7 @@ export const useNotes = (enabled: boolean) => {
               prev.map(n => (n.id === id ? { ...n, updated_date: updated.updated_date } : n)),
             );
           }
-          return true;
+          return confirmSaved();
         } catch {
           setError('Failed to save note');
           return false;
@@ -151,7 +157,7 @@ export const useNotes = (enabled: boolean) => {
             note.id === id ? { ...note, updated_date: updated.updated_date } : note,
           ),
         );
-        return true;
+        return confirmSaved();
       } catch {
         setError('Failed to save note');
         return false;
@@ -279,6 +285,6 @@ export const useNotes = (enabled: boolean) => {
 
   return {
     notes, isLoading, error, addNote, updateNote, deleteNote, archiveNote, restoreNote, removeTagFromNotes, addTagToNotes,
-    discardDraft, pendingNoteIds, archiveSyncToken,
+    discardDraft, pendingNoteIds, archiveSyncToken, tagSyncToken,
   };
 };

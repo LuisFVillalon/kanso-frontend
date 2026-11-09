@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   saveLinkedTasks: vi.fn(),
   taskEditSyncToken: 0,
   tagSyncToken: 0,
+  habitEditSyncToken: 0,
+  noteTagSyncToken: 0,
   fetchCalendarActivity: vi.fn(),
   fetchEvent: vi.fn(),
   createEvent: vi.fn(),
@@ -49,8 +51,9 @@ vi.mock('@/app/context/TasksContext', () => ({
 }));
 vi.mock('@/app/context/TagsContext', () => ({ useTagsContext: () => ({ tags: [CLASS_TAG], tagSyncToken: mocks.tagSyncToken }) }));
 vi.mock('@/app/context/HabitsContext', () => ({
-  useHabitsContext: () => ({ habits: [{ id: 5, title: 'Run' }], toggleDate: vi.fn() }),
+  useHabitsContext: () => ({ habits: [{ id: 5, title: 'Run' }], toggleDate: vi.fn(), editSyncToken: mocks.habitEditSyncToken }),
 }));
+vi.mock('@/app/context/NotesContext', () => ({ useNotesContext: () => ({ tagSyncToken: mocks.noteTagSyncToken }) }));
 vi.mock('@/app/context/ToastContext', () => ({ useToast: () => vi.fn() }));
 vi.mock('@/app/context/NotificationsContextValue', async importOriginal => ({
   ...(await importOriginal<typeof import('@/app/context/NotificationsContextValue')>()),
@@ -161,6 +164,8 @@ beforeEach(() => {
   mocks.tasks = [];
   mocks.taskEditSyncToken = 0;
   mocks.tagSyncToken = 0;
+  mocks.habitEditSyncToken = 0;
+  mocks.noteTagSyncToken = 0;
   mocks.addTask.mockReset();
   mocks.updateTask.mockReset();
   mocks.saveLinkedTasks.mockReset();
@@ -224,7 +229,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect(styleOf('Habit completed: Run')).toContain('#ef4444');
   });
 
-  it.each(['taskEditSyncToken', 'tagSyncToken'] as const)('recolors a completed block after a saved tag change (%s)', async token => {
+  it.each(['taskEditSyncToken', 'tagSyncToken', 'habitEditSyncToken', 'noteTagSyncToken'] as const)('recolors a completed block after a saved tag change (%s)', async token => {
     const completedIn = (color: string) => async (start: string, end: string) => ({
       ...activityFor(start, end),
       completed_tasks: [{

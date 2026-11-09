@@ -111,14 +111,14 @@ describe('useTags sync token', () => {
   const tag = { id: 1, name: 'Red', color: '#ef4444' };
   let tagsHook: ReturnType<typeof useTags>;
   let tagsRoot: Root;
-  const TagsProbe = () => {
-    tagsHook = useTags(false);
+  const TagsProbe: React.FC<{ onResult: (r: typeof tagsHook) => void }> = ({ onResult }) => {
+    onResult(useTags(false));
     return null;
   };
 
   beforeEach(() => {
     tagsRoot = createRoot(document.createElement('div'));
-    act(() => tagsRoot.render(<TagsProbe />));
+    act(() => tagsRoot.render(<TagsProbe onResult={r => { tagsHook = r; }} />));
   });
   afterEach(() => act(() => tagsRoot.unmount()));
 
@@ -129,6 +129,12 @@ describe('useTags sync token', () => {
     expect(tagsHook.tagSyncToken).toBe(1);
     await act(async () => { await tagsHook.delTag(tag); });
     expect(tagsHook.tagSyncToken).toBe(2);
+  });
+
+  it('bumps when a restored tag comes back', () => {
+    act(() => tagsHook.restoreTag(tag));
+    expect(tagsHook.tagSyncToken).toBe(1);
+    expect(tagsHook.tags).toEqual([tag]);
   });
 
   it('stays put when the server rejects the change', async () => {

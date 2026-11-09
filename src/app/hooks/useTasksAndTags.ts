@@ -467,6 +467,7 @@ export const useTags = (enabled: boolean) => {
   // Puts a tag restored from the Archive page back into the active list.
   const restoreTag = (restored: Tag) => {
     setTags(prev => [...prev.filter(t => t.id !== restored.id), restored]);
+    setTagSyncToken(token => token + 1);
   };
 
   const updateTag = async (tagToUpdate: Tag) => {

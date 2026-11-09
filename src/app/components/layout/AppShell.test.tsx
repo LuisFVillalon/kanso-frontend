@@ -36,7 +36,7 @@ vi.mock('@/app/context/TagsContext', () => ({
   useTagsContext: () => ({ tags: mocks.tags, addTag: vi.fn(), delTag: vi.fn(), archiveTag: vi.fn(), updateTag: vi.fn() }),
 }));
 vi.mock('@/app/context/HabitsContext', () => ({
-  useHabitsContext: () => ({ habits: [], toggleDate: vi.fn(), refetch: vi.fn(), deleteHabit: vi.fn(), archiveHabit: vi.fn() }),
+  useHabitsContext: () => ({ habits: [], toggleDate: vi.fn(), refetch: vi.fn(), reloadEdited: vi.fn(), deleteHabit: vi.fn(), archiveHabit: vi.fn() }),
 }));
 vi.mock('@/app/context/NotesContext', () => ({
   useNotesContext: () => ({ addNote: mocks.addNote, removeTagFromNotes: vi.fn() }),
