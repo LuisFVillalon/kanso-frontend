@@ -30,7 +30,7 @@ const COPY: Record<TagChartKind, KindCopy> = {
     empty: 'No tasks completed in this period',
     bar: unit => `Each bar is the tasks you checked off that ${unit}, colored by their tags. Only tasks count here; habits and notes have their own tabs.`,
     split: 'A task with several tags is split evenly between them, as in the Time tab.',
-    tap: 'Tap a tag to highlight it.',
+    tap: 'Tap a tag to highlight it and list its tasks.',
     amount: v => plural(trim(v), 'task'),
   },
   note: {
@@ -84,11 +84,11 @@ export const useTagSelection = (period: ReportPeriod, activity: CalendarActivity
   return { series, selected, toggle };
 };
 
-interface ReportTagActivityChartProps {
+interface TagActivityChartProps {
   period: ReportPeriod;
   buckets: ReportBucket[];
-  activity: CalendarActivity;
   itemKind: TagChartKind;
+  selection: TagSelection;
 }
 
 /**
@@ -97,7 +97,7 @@ interface ReportTagActivityChartProps {
  * each bar split by the items' tags in their own colors and Untagged in
  * grey. Tapping a tag in the legend highlights its part of every bar.
  */
-export const TagActivityChart: React.FC<Omit<ReportTagActivityChartProps, 'activity'> & { selection: TagSelection }> = ({
+export const TagActivityChart: React.FC<TagActivityChartProps> = ({
   period, buckets, itemKind, selection: { series, selected, toggle },
 }) => {
   const copy = COPY[itemKind];
@@ -252,11 +252,3 @@ export const TagActivityChart: React.FC<Omit<ReportTagActivityChartProps, 'activ
     </div>
   );
 };
-
-/** The chart keeping its tapped tag to itself. */
-const ReportTagActivityChart: React.FC<ReportTagActivityChartProps> = ({ activity, ...chart }) => {
-  const selection = useTagSelection(chart.period, activity, chart.itemKind);
-  return <TagActivityChart {...chart} selection={selection} />;
-};
-
-export default ReportTagActivityChart;

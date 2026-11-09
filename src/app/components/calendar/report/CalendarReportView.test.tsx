@@ -1164,6 +1164,80 @@ describe('CalendarReportView tag charts', () => {
     });
   });
 
+  describe('Tasks follows the tag picked in the chart', () => {
+    const done = (id: number, title: string, tags: typeof cs[], day: number, hour: number) => ({
+      id, title, category: null, priority: null, due_date: null, due_time: null, estimated_time: null,
+      completed: true, completed_date: new Date(2026, 9, day, hour, 30).toISOString(), parent_task_id: null, tags,
+    });
+    const respond = (completedThisWeek: boolean) => api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      start_date: start, end_date: end, scheduled_tasks: [], note_sessions: [],
+      completed_tasks: [
+        ...(completedThisWeek ? [done(1, 'Both', [cs, math], 19, 9), done(2, 'Calc', [math], 20, 15), done(3, 'Loose', [], 21, 8)] : []),
+        ...(start <= '2026-10-02' && end >= '2026-10-02' ? [done(4, 'Earlier', [cs], 2, 11)] : []),
+      ],
+      habit_completions: [{ habit_id: 1, habit_title: 'Walk', date: '2026-10-20', estimated_time: null }],
+    }));
+    beforeEach(() => respond(true));
+
+    const tagButton = (name: string) => [...document.querySelectorAll('[aria-label="Tags"] button')].find(b => b.textContent?.startsWith(name))!;
+    const tasksCard = () => [...container.querySelectorAll('.card-glass')].find(c => c.firstElementChild?.textContent?.startsWith('Tasks') && !c.firstElementChild?.textContent?.startsWith('Tasks done'))!;
+    const rows = () => [...tasksCard().querySelectorAll('li')].map(li => li.querySelector('span')!.textContent);
+
+    it('lists the week’s tasks newest first with when each was done, under the other cards', async () => {
+      await render();
+      await openTab('Tasks');
+      expect([...container.querySelectorAll('.card-glass')].map(c => c.firstElementChild?.textContent)).toEqual(['Tasks done by day', 'Planned vs done', 'Busiest days', 'Tasks']);
+      expect(rows()).toEqual(['Loose', 'Calc', 'Both']);
+      expect(tasksCard().querySelector('li time')!.textContent).toBe('Wed, Oct 21, 8:30 AM');
+      expect(tasksCard().querySelector('[role="region"]')!.className).toContain('overflow-y-auto');
+      expect(tasksCard().textContent).not.toContain('Showing');
+    });
+
+    it('shows each of a task’s tag colors, and none for an untagged task', async () => {
+      await render();
+      await openTab('Tasks');
+      expect([...tasksCard().querySelectorAll('li')].map(li => li.querySelector('[role="img"]')?.getAttribute('aria-label'))).toEqual([undefined, 'MATH 254', 'CS 460, MATH 254']);
+    });
+
+    it('narrows to a tag and restores on deselect', async () => {
+      await render();
+      await openTab('Tasks');
+      await click(tagButton('MATH 254'));
+      expect(rows()).toEqual(['Calc', 'Both']);
+      expect(tasksCard().textContent).toContain('ShowingMATH 254');
+
+      await click(tagButton('MATH 254'));
+      expect(rows()).toEqual(['Loose', 'Calc', 'Both']);
+      expect(tasksCard().textContent).not.toContain('Showing');
+    });
+
+    it('lists untagged tasks for Untagged', async () => {
+      await render();
+      await openTab('Tasks');
+      await click(tagButton('Untagged'));
+      expect(rows()).toEqual(['Loose']);
+      expect(tasksCard().textContent).toContain('ShowingUntagged');
+    });
+
+    it('clears the tag when the period changes', async () => {
+      await render();
+      await openTab('Tasks');
+      await click(tagButton('CS 460'));
+      expect(rows()).toEqual(['Both']);
+      await click(buttonLabelled(/^Month$/));
+      expect(rows()).toEqual(['Loose', 'Calc', 'Both', 'Earlier']);
+      expect(tasksCard().textContent).not.toContain('Showing');
+    });
+
+    it('says so when the period has other activity but no completed tasks', async () => {
+      respond(false);
+      await render();
+      await openTab('Tasks');
+      expect(rows()).toEqual([]);
+      expect(tasksCard().textContent).toContain('No tasks completed in this period.');
+    });
+  });
+
   describe('Top notes follows the tag picked in the chart', () => {
     const session = (id: number, note_id: number, title: string, startHour: number, minutes: number) => ({
       id, note_id, note_title: title,

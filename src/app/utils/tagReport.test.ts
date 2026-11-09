@@ -6,6 +6,7 @@ import {
   buildTagBreakdown,
   buildTagSeries,
   collectTagItems,
+  completedTasksOf,
   MAX_TAG_ROWS,
   OTHER_KEY,
   rowHasTags,
@@ -339,6 +340,41 @@ describe('rowHasTags', () => {
     expect(rowHasTags(row(OTHER_KEY), [tags[MAX_TAG_ROWS + 1]])).toBe(true);
     expect(rowHasTags(row(OTHER_KEY), [tags[0]])).toBe(false);
     expect(rowHasTags(row(OTHER_KEY), [])).toBe(false);
+  });
+});
+
+describe('completedTasksOf', () => {
+  const done = (id: number, tags: typeof cs[], day: number, hour = 9) => task({ id, tags, completed_date: at(day, hour) });
+  const rowOf = (data: CalendarActivity, name: string) =>
+    buildTagSeries(data, week.start, week.end, 'task', false).rows.find(r => r.name.startsWith(name))!;
+  const ids = (data: CalendarActivity, row: ReturnType<typeof rowOf> | null) =>
+    completedTasksOf(data, week.start, week.end, row).map(t => t.id);
+
+  it('lists the period’s completed tasks, newest first', () => {
+    const data = activity({
+      completed_tasks: [done(1, [], 19), done(2, [cs], 21, 8), done(3, [], 21, 17), done(4, [], 12), done(5, [], 26), task({ id: 6 })],
+    });
+    expect(ids(data, null)).toEqual([3, 2, 1]);
+  });
+
+  it('counts a task on its local day, as the chart does', () => {
+    const lastMinute = task({ id: 1, completed_date: new Date(2026, 9, 25, 23, 59).toISOString() });
+    const nextDay = task({ id: 2, completed_date: new Date(2026, 9, 26, 0, 1).toISOString() });
+    expect(ids(activity({ completed_tasks: [lastMinute, nextDay] }), null)).toEqual([1]);
+  });
+
+  it('lists a tag’s tasks, and untagged tasks for Untagged', () => {
+    const data = activity({ completed_tasks: [done(1, [cs, math], 19), done(2, [math], 20), done(3, [], 21)] });
+    expect(ids(data, rowOf(data, 'MATH 254'))).toEqual([2, 1]);
+    expect(ids(data, rowOf(data, 'CS 460'))).toEqual([1]);
+    expect(ids(data, rowOf(data, 'Untagged'))).toEqual([3]);
+  });
+
+  it('lists a task once under Other tags, even with two folded tags', () => {
+    const tags = Array.from({ length: MAX_TAG_ROWS + 2 }, (_, i) => ({ id: 100 + i, name: `T${i}`, color: '#123456' }));
+    const top = tags.slice(0, MAX_TAG_ROWS).flatMap((tag, i) => [done(10 + i * 2, [tag], 20), done(11 + i * 2, [tag], 20)]);
+    const data = activity({ completed_tasks: [...top, done(1, tags.slice(MAX_TAG_ROWS), 19)] });
+    expect(ids(data, rowOf(data, 'Other tags'))).toEqual([1]);
   });
 });
 
