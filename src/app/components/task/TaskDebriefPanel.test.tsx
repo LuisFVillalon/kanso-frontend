@@ -170,7 +170,8 @@ describe('TaskDebriefPanel mood chip', () => {
     });
     await render();
     const card = activityLogCard()!.textContent ?? '';
-    expect(card).toContain('Today is a rest day. Take it easy; anything you do still shows here.');
+    expect(card).toContain('Today is a rest day.');
+    expect(card).not.toContain('Take it easy');
     expect(card).toContain('Writing');
     expect(card).not.toContain('capacity');
     expect(card).not.toContain('Overcommitted');
