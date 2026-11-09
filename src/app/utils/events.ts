@@ -10,10 +10,10 @@ import {
   addDays, formatMinutes, MINUTES_PER_DAY, minutesToTimeStr, parseTimeToMinutes, startOfWeek, type WindowMinutes,
 } from './weekLayout';
 
-/** An event without a tag: the warm gray the app uses for icons and dividers. */
+/** An event or week-view block without a tag: the warm gray the app uses for icons and dividers. */
 export const EVENT_FALLBACK_COLOR = 'var(--tm-pencil)';
 
-/** An event's color: its first tag's, like a calendar's color in Google Calendar. */
+/** An event's or week-view block's color: its first tag's, like a calendar's color in Google Calendar. */
 export const eventColor = (tags: Pick<Tag, 'color'>[]): string => tags[0]?.color || EVENT_FALLBACK_COLOR;
 
 export const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
