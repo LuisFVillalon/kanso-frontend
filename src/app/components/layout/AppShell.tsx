@@ -73,7 +73,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { tasks, addTask, updateTask, saveLinkedTasks, setTasks } = useTasksContext();
   const { tags, addTag, delTag, archiveTag, updateTag } = useTagsContext();
   const {
-    habits, toggleDate: toggleHabitDate, refetch: refetchHabits, deleteHabit, archiveHabit,
+    habits, toggleDate: toggleHabitDate, refetch: refetchHabits, reloadEdited: reloadEditedHabits, deleteHabit, archiveHabit,
   } = useHabitsContext();
   const { addNote, removeTagFromNotes } = useNotesContext();
   const restoreFromTrash = useRestoreFromTrash();
@@ -144,7 +144,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const handleUpdateHabit = async (id: number, title: string, habitTags: Tag[], estimatedTime?: number | null) => {
     try {
       await updateHabit(id, { title, tags: habitTags, estimated_time: estimatedTime ?? null });
-      refetchHabits();
+      reloadEditedHabits();
     } catch (err) {
       console.error('Failed to update habit:', err);
       showToast(describeError(err, "Couldn't update the habit. Please try again."));

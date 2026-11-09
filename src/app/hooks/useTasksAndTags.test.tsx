@@ -11,6 +11,9 @@ const api = vi.hoisted(() => ({
   completeTaskWithLinked: vi.fn(),
   restoreTask: vi.fn(),
   createTask: vi.fn(),
+  updateWholeTask: vi.fn(),
+  updateTag: vi.fn(),
+  onDeleteTag: vi.fn(),
 }));
 const showToast = vi.hoisted(() => vi.fn());
 vi.mock('@/app/lib/backend-api', () => ({
@@ -20,7 +23,7 @@ vi.mock('@/app/lib/backend-api', () => ({
 }));
 vi.mock('@/app/context/ToastContext', () => ({ useToast: () => showToast }));
 
-import { useTasks } from './useTasksAndTags';
+import { useTags, useTasks } from './useTasksAndTags';
 import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -85,6 +88,61 @@ describe('useTasks.saveLinkedTasks', () => {
     expect(err).toBeInstanceOf(LinkedTasksSaveError);
     expect(err).toMatchObject({ task: parent, message: 'Task 7 is archived; restore it before linking it' });
     expect(hook.tasks).toEqual(before);
+  });
+});
+
+describe('useTasks.updateTask', () => {
+  const form = { ...task(1, 'Read'), tags: [] } as unknown as Parameters<typeof hook.updateTask>[1];
+
+  it('bumps the edit token once the server has saved the task', async () => {
+    api.updateWholeTask.mockResolvedValue(task(1, 'Read'));
+    await act(() => hook.updateTask(1, form));
+    expect(hook.taskEditSyncToken).toBe(1);
+  });
+
+  it('leaves the edit token alone when the save fails', async () => {
+    api.updateWholeTask.mockRejectedValue(new Error('500'));
+    await act(() => hook.updateTask(1, form));
+    expect(hook.taskEditSyncToken).toBe(0);
+  });
+});
+
+describe('useTags sync token', () => {
+  const tag = { id: 1, name: 'Red', color: '#ef4444' };
+  let tagsHook: ReturnType<typeof useTags>;
+  let tagsRoot: Root;
+  const TagsProbe: React.FC<{ onResult: (r: typeof tagsHook) => void }> = ({ onResult }) => {
+    onResult(useTags(false));
+    return null;
+  };
+
+  beforeEach(() => {
+    tagsRoot = createRoot(document.createElement('div'));
+    act(() => tagsRoot.render(<TagsProbe onResult={r => { tagsHook = r; }} />));
+  });
+  afterEach(() => act(() => tagsRoot.unmount()));
+
+  it('bumps once the server has updated or deleted a tag', async () => {
+    api.updateTag.mockResolvedValue(undefined);
+    api.onDeleteTag.mockResolvedValue(undefined);
+    await act(async () => { await tagsHook.updateTag(tag); });
+    expect(tagsHook.tagSyncToken).toBe(1);
+    await act(async () => { await tagsHook.delTag(tag); });
+    expect(tagsHook.tagSyncToken).toBe(2);
+  });
+
+  it('bumps when a restored tag comes back', () => {
+    act(() => tagsHook.restoreTag(tag));
+    expect(tagsHook.tagSyncToken).toBe(1);
+    expect(tagsHook.tags).toEqual([tag]);
+  });
+
+  it('stays put when the server rejects the change', async () => {
+    api.updateTag.mockRejectedValue(new Error('500'));
+    api.onDeleteTag.mockRejectedValue(new Error('500'));
+    await act(async () => { await tagsHook.updateTag(tag); });
+    await act(async () => { await tagsHook.delTag(tag); });
+    expect(tagsHook.tagSyncToken).toBe(0);
   });
 });
 

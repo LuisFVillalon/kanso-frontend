@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchCalendarActivity } from '@/app/lib/backend-api';
 import { useTasksContext } from '@/app/context/TasksContext';
+import { useTagsContext } from '@/app/context/TagsContext';
+import { useHabitsContext } from '@/app/context/HabitsContext';
+import { useNotesContext } from '@/app/context/NotesContext';
 import { useEventsVersion } from '@/app/hooks/useEventsVersion';
 import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
@@ -16,21 +19,27 @@ interface ActivityResult {
 /**
  * Loads GET /get-calendar-activity for the seven days starting `weekStart`.
  * Refetches when the week changes and whenever the server confirms a task
- * completion toggle or archive (TasksContext's completionSyncToken) or an
- * event changes (useEventsVersion), so
- * completions made elsewhere on the page show up without a reload. Call
+ * completion toggle or archive (TasksContext's completionSyncToken), a task
+ * edit (taskEditSyncToken), a tag edit, delete or restore (TagsContext's
+ * tagSyncToken), a habit edit (HabitsContext's editSyncToken), a note's tags
+ * saved (NotesContext's tagSyncToken) or an event change
+ * (useEventsVersion), so completions and tag colors changed
+ * elsewhere on the page show up without a reload. Call
  * `refetch` after any other change that alters activity (e.g. a habit date
  * toggled). While a refetch is in flight the last result stays on screen.
  */
 export function useWeekActivity(weekStart: Date) {
-  const { completionSyncToken } = useTasksContext();
+  const { completionSyncToken, taskEditSyncToken } = useTasksContext();
+  const { tagSyncToken } = useTagsContext();
+  const { editSyncToken: habitEditSyncToken } = useHabitsContext();
+  const { tagSyncToken: noteTagSyncToken } = useNotesContext();
   const eventsVersion = useEventsVersion();
   const [result, setResult] = useState<ActivityResult | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const startStr = toLocalDateStr(weekStart);
   const endStr = toLocalDateStr(addDays(weekStart, 6));
-  const requestKey = `${startStr}|${completionSyncToken}|${eventsVersion}|${reloadToken}`;
+  const requestKey = `${startStr}|${completionSyncToken}|${taskEditSyncToken}|${tagSyncToken}|${habitEditSyncToken}|${noteTagSyncToken}|${eventsVersion}|${reloadToken}`;
 
   useEffect(() => {
     let cancelled = false;

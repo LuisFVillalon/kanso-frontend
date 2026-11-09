@@ -7,9 +7,9 @@
  * the block sits in, read from local calendar fields so they stay correct
  * for the viewer's own time zone.
  */
-import type { ActivityHabitCompletion, ActivityNoteSession, ActivityTask } from '@/app/types/activity';
+import type { ActivityHabit, ActivityHabitCompletion, ActivityNote, ActivityNoteSession, ActivityTask } from '@/app/types/activity';
 import type { EventOccurrence } from '@/app/types/event';
-import type { Task } from '@/app/types/task';
+import type { Tag, Task } from '@/app/types/task';
 import { parseLocalDate, toLocalDateStr, toLocalTimeStr } from './dateUtils';
 
 export const MINUTES_PER_DAY = 24 * 60;
@@ -28,6 +28,8 @@ export const NOTE_MERGE_GAP_MINUTES = 30;
 
 export type TimedEventKind = 'task' | 'completed' | 'note' | 'event';
 export type AllDayItemKind = 'task' | 'habit' | 'event';
+/** The tags behind a task, note or habit's block, which take its color. */
+export type BlockTags = Pick<Tag, 'color'>[];
 
 /** How an event's block or chip on one day relates to the occurrence behind it. */
 export interface EventPlacement {
@@ -59,6 +61,8 @@ export interface TimedEvent {
   completed?: boolean;
   /** Notes only: minutes actually spent editing within the block's range. */
   workedMin?: number;
+  /** Not on events, which color from their occurrence's tags. Absent means untagged. */
+  tags?: BlockTags;
   /** Events only. */
   event?: EventPlacement;
   /** Open planned tasks only: the title of a live event the block falls during. */
@@ -73,6 +77,8 @@ export interface AllDayItem {
   taskId?: number;
   habitId?: number;
   completed?: boolean;
+  /** Not on events, which color from their occurrence's tags. Absent means untagged. */
+  tags?: BlockTags;
   /** Events only. */
   event?: EventPlacement;
 }
@@ -133,15 +139,19 @@ const drawExtent = (startMin: number, endMin: number, minLength = MIN_BLOCK_MINU
   return { drawStartMin, drawEndMin };
 };
 
-type ScheduledTask = Pick<Task, 'id' | 'title' | 'due_date' | 'due_time' | 'estimated_time' | 'completed'>;
+type ScheduledTask = Pick<Task, 'id' | 'title' | 'due_date' | 'due_time' | 'estimated_time' | 'completed' | 'tags'>;
 
 interface BuildWeekEventsInput {
   weekStart: Date;
   /** Tasks with a due date; those due outside the week are ignored. */
   scheduledTasks: ScheduledTask[];
-  completedTasks: Pick<ActivityTask, 'id' | 'title' | 'completed_date'>[];
+  completedTasks: Pick<ActivityTask, 'id' | 'title' | 'completed_date' | 'tags'>[];
   noteSessions: ActivityNoteSession[];
   habitCompletions: ActivityHabitCompletion[];
+  /** The notes behind `noteSessions`, for their tags. */
+  notes?: Pick<ActivityNote, 'id' | 'tags'>[];
+  /** The habits behind `habitCompletions`, for their tags. */
+  habits?: Pick<ActivityHabit, 'id' | 'tags'>[];
   /** Event occurrences, as GET /get-calendar-activity places them on our calendar. */
   events?: EventOccurrence[];
   /** Occurrences that ended before this count as past, even if they hadn't when fetched. */
@@ -168,6 +178,8 @@ export function buildWeekEvents({
   completedTasks,
   noteSessions,
   habitCompletions,
+  notes = [],
+  habits = [],
   events = [],
   now = new Date(),
 }: BuildWeekEventsInput): { timed: TimedEvent[]; allDay: AllDayItem[] } {
@@ -187,14 +199,14 @@ export function buildWeekEvents({
     const timeStr = task.due_time instanceof Date ? toLocalTimeStr(task.due_time) : task.due_time;
     const startMin = timeStr ? parseTimeToMinutes(timeStr) : null;
     if (startMin === null) {
-      allDay.push({ key: `task-${task.id}`, kind: 'task', title: task.title, dayIndex, taskId: task.id, completed: task.completed });
+      allDay.push({ key: `task-${task.id}`, kind: 'task', title: task.title, dayIndex, taskId: task.id, completed: task.completed, tags: task.tags });
       continue;
     }
     const estimate = task.estimated_time ? Math.round(task.estimated_time * 60) : DEFAULT_TASK_MINUTES;
     const endMin = Math.min(MINUTES_PER_DAY, startMin + estimate);
     timed.push({
       key: `task-${task.id}`, kind: 'task', title: task.title, dayIndex, startMin, endMin,
-      ...drawExtent(startMin, endMin), taskId: task.id, completed: task.completed,
+      ...drawExtent(startMin, endMin), taskId: task.id, completed: task.completed, tags: task.tags,
     });
   }
 
@@ -207,18 +219,19 @@ export function buildWeekEvents({
     const startMin = minutesOfDay(at);
     timed.push({
       key: `completed-${task.id}`, kind: 'completed', title: task.title, dayIndex, startMin, endMin: startMin,
-      ...drawExtent(startMin, startMin, COMPLETION_MARKER_MINUTES), taskId: task.id,
+      ...drawExtent(startMin, startMin, COMPLETION_MARKER_MINUTES), taskId: task.id, tags: task.tags,
     });
   }
 
-  timed.push(...buildNoteBlocks(noteSessions, days));
+  timed.push(...buildNoteBlocks(noteSessions, days, notes));
 
+  const habitTags = new Map(habits.map(h => [h.id, h.tags]));
   for (const completion of habitCompletions) {
     const dayIndex = dayIndexByDate.get(completion.date);
     if (dayIndex === undefined) continue;
     allDay.push({
       key: `habit-${completion.habit_id}-${completion.date}`, kind: 'habit', title: completion.habit_title,
-      dayIndex, habitId: completion.habit_id,
+      dayIndex, habitId: completion.habit_id, tags: habitTags.get(completion.habit_id),
     });
   }
 
@@ -307,7 +320,12 @@ interface NoteSegment {
  * the latest end, and `workedMin` counts the time covered by its sessions,
  * without counting overlaps twice.
  */
-export function buildNoteBlocks(noteSessions: ActivityNoteSession[], days: Date[]): TimedEvent[] {
+export function buildNoteBlocks(
+  noteSessions: ActivityNoteSession[],
+  days: Date[],
+  notes: Pick<ActivityNote, 'id' | 'tags'>[] = [],
+): TimedEvent[] {
+  const noteTags = new Map(notes.map(n => [n.id, n.tags]));
   const segments: NoteSegment[] = [];
   for (const session of noteSessions) {
     const start = new Date(session.started_at);
@@ -348,7 +366,7 @@ export function buildNoteBlocks(noteSessions: ActivityNoteSession[], days: Date[
     blocks.push({
       key: `note-${first.sessionId}-${first.dayIndex}`, kind: 'note', title: first.title,
       dayIndex: first.dayIndex, startMin, endMin, ...drawExtent(startMin, endMin),
-      noteId: first.noteId, workedMin: Math.round(workedMs / 60_000),
+      noteId: first.noteId, workedMin: Math.round(workedMs / 60_000), tags: noteTags.get(first.noteId),
     });
     run = [];
   };

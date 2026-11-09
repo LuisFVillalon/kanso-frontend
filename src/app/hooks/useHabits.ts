@@ -31,6 +31,7 @@ export function useHabits(enabled: boolean) {
   // Bumped only once the server has confirmed an archive, delete or restore,
   // so the daily debrief can re-fetch without racing the request.
   const [syncToken, setSyncToken] = useState(0);
+  const [editSyncToken, setEditSyncToken] = useState(0);
 
   // Mirrors `habits` so callbacks can read the latest list without a stale closure.
   const habitsRef = useRef<Habit[]>([]);
@@ -49,6 +50,11 @@ export function useHabits(enabled: boolean) {
   }, []);
 
   useEffect(() => { if (enabled) load(); }, [enabled, load]);
+
+  const reloadEdited = useCallback(() => {
+    setEditSyncToken(v => v + 1);
+    return load();
+  }, [load]);
 
   const toggleDate = useCallback(async (id: number, date: string) => {
     if (pendingRef.current.has(id)) return;
@@ -157,6 +163,6 @@ export function useHabits(enabled: boolean) {
 
   return {
     habits, habitsLoading, toggle, toggleDate, pendingHabitIds: pendingIds, refetch: load,
-    deleteHabit, archiveHabit, restoreHabit, syncToken,
+    deleteHabit, archiveHabit, restoreHabit, syncToken, reloadEdited, editSyncToken,
   };
 }

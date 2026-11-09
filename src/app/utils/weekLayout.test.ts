@@ -62,7 +62,7 @@ describe('buildWeekEvents', () => {
   it('places a timed task at its due time, sized by its estimate in hours', () => {
     const { timed, allDay } = buildWeekEvents({
       ...empty, weekStart,
-      scheduledTasks: [{ id: 1, title: 'Essay', due_date: '2026-10-21', due_time: '14:00:00', estimated_time: 1.5, completed: false }],
+      scheduledTasks: [{ id: 1, title: 'Essay', due_date: '2026-10-21', due_time: '14:00:00', estimated_time: 1.5, completed: false, tags: [] }],
     });
     expect(allDay).toEqual([]);
     expect(timed).toMatchObject([{ kind: 'task', taskId: 1, dayIndex: 2, startMin: 840, endMin: 930, drawStartMin: 840, drawEndMin: 930 }]);
@@ -72,8 +72,8 @@ describe('buildWeekEvents', () => {
     const { timed } = buildWeekEvents({
       ...empty, weekStart,
       scheduledTasks: [
-        { id: 1, title: 'A', due_date: '2026-10-19', due_time: '08:00', estimated_time: null, completed: false },
-        { id: 2, title: 'B', due_date: '2026-10-19', due_time: '23:00', estimated_time: 3, completed: false },
+        { id: 1, title: 'A', due_date: '2026-10-19', due_time: '08:00', estimated_time: null, completed: false, tags: [] },
+        { id: 2, title: 'B', due_date: '2026-10-19', due_time: '23:00', estimated_time: 3, completed: false, tags: [] },
       ],
     });
     expect(timed.find(e => e.taskId === 1)).toMatchObject({ startMin: 480, endMin: 510 });
@@ -84,13 +84,49 @@ describe('buildWeekEvents', () => {
     const { timed, allDay } = buildWeekEvents({
       ...empty, weekStart,
       scheduledTasks: [
-        { id: 1, title: 'Anytime', due_date: '2026-10-25', due_time: null, estimated_time: 2, completed: true },
-        { id: 2, title: 'Next week', due_date: '2026-10-26', due_time: '09:00', estimated_time: 1, completed: false },
-        { id: 3, title: 'Undated', due_date: null, due_time: null, estimated_time: 1, completed: false },
+        { id: 1, title: 'Anytime', due_date: '2026-10-25', due_time: null, estimated_time: 2, completed: true, tags: [] },
+        { id: 2, title: 'Next week', due_date: '2026-10-26', due_time: '09:00', estimated_time: 1, completed: false, tags: [] },
+        { id: 3, title: 'Undated', due_date: null, due_time: null, estimated_time: 1, completed: false, tags: [] },
       ],
     });
     expect(timed).toEqual([]);
-    expect(allDay).toEqual([{ key: 'task-1', kind: 'task', title: 'Anytime', dayIndex: 6, taskId: 1, completed: true }]);
+    expect(allDay).toEqual([{ key: 'task-1', kind: 'task', title: 'Anytime', dayIndex: 6, taskId: 1, completed: true, tags: [] }]);
+  });
+
+  it('carries each task, note and habit its own tags, leaving those without a match untagged', () => {
+    const red = [{ id: 1, name: 'red', color: '#ef4444' }];
+    const green = [{ id: 2, name: 'green', color: '#22c55e' }];
+    const blue = [{ id: 3, name: 'blue', color: '#3b82f6' }];
+    const amber = [{ id: 4, name: 'amber', color: '#f59e0b' }];
+    const session = (id: number, noteId: number) => ({
+      id, note_id: noteId, note_title: 'Lecture', duration_seconds: 3600,
+      started_at: new Date(2026, 9, 20 + id, 9).toISOString(),
+      ended_at: new Date(2026, 9, 20 + id, 10).toISOString(),
+    });
+    const { timed, allDay } = buildWeekEvents({
+      ...empty, weekStart,
+      scheduledTasks: [
+        { id: 1, title: 'Timed', due_date: '2026-10-21', due_time: '14:00', estimated_time: 1, completed: false, tags: red },
+        { id: 2, title: 'Anytime', due_date: '2026-10-21', due_time: null, estimated_time: null, completed: false, tags: green },
+      ],
+      completedTasks: [{ id: 3, title: 'Done', completed_date: new Date(2026, 9, 20, 16).toISOString(), tags: blue }],
+      noteSessions: [session(1, 9), session(2, 10)],
+      habitCompletions: [
+        { habit_id: 5, habit_title: 'Run', date: '2026-10-21', estimated_time: null },
+        { habit_id: 6, habit_title: 'Read', date: '2026-10-21', estimated_time: null },
+      ],
+      notes: [{ id: 9, tags: amber }],
+      habits: [{ id: 5, tags: green }],
+    });
+    const timedTags = (key: string) => timed.find(e => e.key.startsWith(key))?.tags;
+    const allDayTags = (key: string) => allDay.find(e => e.key.startsWith(key))?.tags;
+    expect(timedTags('task-1')).toBe(red);
+    expect(timedTags('completed-3')).toBe(blue);
+    expect(timed.find(e => e.noteId === 9)?.tags).toBe(amber);
+    expect(timed.find(e => e.noteId === 10)?.tags).toBeUndefined();
+    expect(allDayTags('task-2')).toBe(green);
+    expect(allDayTags('habit-5')).toBe(green);
+    expect(allDayTags('habit-6')).toBeUndefined();
   });
 
   it('marks completions at their local completion instant', () => {
@@ -98,8 +134,8 @@ describe('buildWeekEvents', () => {
     const { timed } = buildWeekEvents({
       ...empty, weekStart,
       completedTasks: [
-        { id: 7, title: 'Done', completed_date: at.toISOString() },
-        { id: 8, title: 'Legacy', completed_date: null },
+        { id: 7, title: 'Done', completed_date: at.toISOString(), tags: [] },
+        { id: 8, title: 'Legacy', completed_date: null, tags: [] },
       ],
     });
     expect(timed).toMatchObject([{ kind: 'completed', taskId: 7, dayIndex: 1, startMin: 1005, drawStartMin: 1005, drawEndMin: 1035 }]);
@@ -108,7 +144,7 @@ describe('buildWeekEvents', () => {
   it('keeps a completion marker inside the day when it lands just before midnight', () => {
     const { timed } = buildWeekEvents({
       ...empty, weekStart,
-      completedTasks: [{ id: 7, title: 'Late', completed_date: new Date(2026, 9, 19, 23, 50).toISOString() }],
+      completedTasks: [{ id: 7, title: 'Late', completed_date: new Date(2026, 9, 19, 23, 50).toISOString(), tags: [] }],
     });
     expect(timed[0]).toMatchObject({ startMin: 1430, drawStartMin: 1410, drawEndMin: 1440 });
   });
@@ -393,7 +429,7 @@ describe('events on the week', () => {
   it('puts an all-day event in the all-day row, first, with archived ones flagged', () => {
     const allDayEvent = event({ all_day: true, start_time: null, end_time: null, date: '2026-10-23', end_date: '2026-10-23', archived: true, past: true });
     const { allDay } = buildWeekEvents({
-      weekStart, scheduledTasks: [{ id: 5, title: 'Read', due_date: '2026-10-23', due_time: null, estimated_time: null, completed: false }],
+      weekStart, scheduledTasks: [{ id: 5, title: 'Read', due_date: '2026-10-23', due_time: null, estimated_time: null, completed: false, tags: [] }],
       completedTasks: [], noteSessions: [], habitCompletions: [], events: [allDayEvent], now,
     });
     expect(allDay.map(i => [i.kind, i.dayIndex, i.event?.archived])).toEqual([['event', 4, true], ['task', 4, undefined]]);
@@ -401,10 +437,10 @@ describe('events on the week', () => {
 
   it('marks an open planned task during a live event as a clash, but not during an archived one', () => {
     const tasks = [
-      { id: 1, title: 'Pick up prescription', due_date: '2026-10-21', due_time: '13:00', estimated_time: 0.5, completed: false },
-      { id: 2, title: 'Done already', due_date: '2026-10-21', due_time: '14:00', estimated_time: 0.5, completed: true },
-      { id: 3, title: 'Later', due_date: '2026-10-21', due_time: '16:00', estimated_time: 0.5, completed: false },
-      { id: 4, title: 'During archived', due_date: '2026-10-20', due_time: '13:00', estimated_time: 0.5, completed: false },
+      { id: 1, title: 'Pick up prescription', due_date: '2026-10-21', due_time: '13:00', estimated_time: 0.5, completed: false, tags: [] },
+      { id: 2, title: 'Done already', due_date: '2026-10-21', due_time: '14:00', estimated_time: 0.5, completed: true, tags: [] },
+      { id: 3, title: 'Later', due_date: '2026-10-21', due_time: '16:00', estimated_time: 0.5, completed: false, tags: [] },
+      { id: 4, title: 'During archived', due_date: '2026-10-20', due_time: '13:00', estimated_time: 0.5, completed: false, tags: [] },
     ];
     const { timed } = buildWeekEvents({
       weekStart, scheduledTasks: tasks, completedTasks: [], noteSessions: [], habitCompletions: [], now,
