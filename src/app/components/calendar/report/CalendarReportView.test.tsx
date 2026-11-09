@@ -1193,12 +1193,6 @@ describe('CalendarReportView tag charts', () => {
       expect(tasksCard().textContent).not.toContain('Showing');
     });
 
-    it('shows each of a task’s tag colors, and none for an untagged task', async () => {
-      await render();
-      await openTab('Tasks');
-      expect([...tasksCard().querySelectorAll('li')].map(li => li.querySelector('[role="img"]')?.getAttribute('aria-label'))).toEqual([undefined, 'MATH 254', 'CS 460, MATH 254']);
-    });
-
     it('narrows to a tag and restores on deselect', async () => {
       await render();
       await openTab('Tasks');

@@ -436,9 +436,6 @@ const PlannedVsDone: React.FC<{ report: CalendarReport }> = ({ report }) => (
 
 // ── Tasks view ──────────────────────────────────────────────────────────────
 
-/** A row has room for this many tag colors; the rest are named on hover. */
-const MAX_TASK_TAG_COLORS = 3;
-
 const TaskList: React.FC<{ tasks: ActivityTask[] }> = ({ tasks }) => {
   if (tasks.length === 0) return <EmptyLine>No tasks completed in this period.</EmptyLine>;
   return (
@@ -450,24 +447,14 @@ const TaskList: React.FC<{ tasks: ActivityTask[] }> = ({ tasks }) => {
       aria-label="Completed tasks"
     >
       <ul className="flex flex-col gap-1.5">
-        {tasks.map(task => {
-          const tagNames = task.tags.map(t => t.name).join(', ');
-          return (
-            <li key={task.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'var(--tm-surface-raised)' }}>
-              <span className="flex-1 min-w-0 text-xs sm:text-sm text-text-primary truncate" title={task.title}>{task.title}</span>
-              {task.tags.length > 0 && (
-                <span className="flex items-center gap-1 flex-shrink-0" role="img" aria-label={tagNames} title={tagNames}>
-                  {task.tags.slice(0, MAX_TASK_TAG_COLORS).map(t => (
-                    <span key={t.id} className="w-2.5 h-2.5 rounded-[3px]" style={{ backgroundColor: t.color }} />
-                  ))}
-                </span>
-              )}
-              <time dateTime={task.completed_date!} className="text-xs text-text-muted whitespace-nowrap">
-                {new Date(task.completed_date!).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-              </time>
-            </li>
-          );
-        })}
+        {tasks.map(task => (
+          <li key={task.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'var(--tm-surface-raised)' }}>
+            <span className="flex-1 min-w-0 text-xs sm:text-sm text-text-primary truncate" title={task.title}>{task.title}</span>
+            <time dateTime={task.completed_date!} className="text-xs text-text-muted whitespace-nowrap">
+              {new Date(task.completed_date!).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </time>
+          </li>
+        ))}
       </ul>
     </div>
   );
