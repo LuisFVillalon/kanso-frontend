@@ -14,7 +14,7 @@
  * something moves its past time too.
  */
 
-import type { CalendarActivity } from '@/app/types/activity';
+import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import { addSecondsByLocalDay, TOP_NOTES, type NoteTime } from '@/app/utils/calendarReport';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 
@@ -303,6 +303,24 @@ export const topNotesOfRow = (row: TagRow): NoteTime[] =>
 export const rowHasTags = (row: TagRow, tags: ReportTag[]): boolean => {
   if (row.key === UNTAGGED_KEY) return tags.length === 0;
   return tags.some(tag => tagKey(tag) === row.key || row.foldedKeys?.includes(tagKey(tag)));
+};
+
+/**
+ * The tasks completed in the local days `start` to `end`, the ones the Tasks
+ * chart counts, newest first. With `row`, only the tasks behind that row of
+ * the chart.
+ */
+export const completedTasksOf = (activity: CalendarActivity, start: Date, end: Date, row: TagRow | null): ActivityTask[] => {
+  const firstDay = toLocalDateStr(start);
+  const lastDay = toLocalDateStr(end);
+  const ids = row && new Set(row.shares.map(s => s.item.id));
+  return activity.completed_tasks
+    .filter(task => {
+      if (!task.completed_date || (ids && !ids.has(task.id))) return false;
+      const completedOn = toLocalDateStr(new Date(task.completed_date));
+      return completedOn >= firstDay && completedOn <= lastDay;
+    })
+    .sort((a, b) => new Date(b.completed_date!).getTime() - new Date(a.completed_date!).getTime());
 };
 
 /** What a kind's chart counts: tasks completed, seconds in notes, habit check-ins. */

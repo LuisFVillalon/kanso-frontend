@@ -14,6 +14,7 @@ import {
   Flame,
   Hourglass,
   LayoutDashboard,
+  ListChecks,
   Percent,
   Repeat,
   Smile,
@@ -30,7 +31,7 @@ import { useAppShell } from '@/app/context/AppShellContext';
 import { useCalendarReport } from '@/app/hooks/useCalendarReport';
 import { useEventReport } from '@/app/hooks/useEventReport';
 import { useReportMood } from '@/app/hooks/useReportMood';
-import type { CalendarActivity } from '@/app/types/activity';
+import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import { moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate } from '@/app/utils/dateUtils';
 import { formatEventMinutes } from '@/app/utils/eventOccurrences';
@@ -47,11 +48,11 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import { rowHasTags, topNotesOfRow, UNTAGGED_KEY, type TagChartKind, type TagRow } from '@/app/utils/tagReport';
+import { completedTasksOf, rowHasTags, topNotesOfRow, UNTAGGED_KEY, type TagRow } from '@/app/utils/tagReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
-import ReportTagActivityChart, { TagActivityChart, useTagSelection } from './ReportTagActivityChart';
+import { TagActivityChart, useTagSelection } from './ReportTagActivityChart';
 import ReportTagBreakdown, { ReportTagShareBar, rowColor } from './ReportTagBreakdown';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
@@ -433,6 +434,67 @@ const PlannedVsDone: React.FC<{ report: CalendarReport }> = ({ report }) => (
   </div>
 );
 
+// ── Tasks view ──────────────────────────────────────────────────────────────
+
+const TaskList: React.FC<{ tasks: ActivityTask[] }> = ({ tasks }) => {
+  if (tasks.length === 0) return <EmptyLine>No tasks completed in this period.</EmptyLine>;
+  return (
+    // A year can hold hundreds of tasks. Focusable so the keyboard can scroll it too.
+    <div
+      className="max-h-80 overflow-y-auto scrollbar-custom pr-1 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--tm-accent)]"
+      tabIndex={0}
+      role="region"
+      aria-label="Completed tasks"
+    >
+      <ul className="flex flex-col gap-1.5">
+        {tasks.map(task => (
+          <li key={task.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ backgroundColor: 'var(--tm-surface-raised)' }}>
+            <span className="flex-1 min-w-0 text-xs sm:text-sm text-text-primary truncate" title={task.title}>{task.title}</span>
+            <time dateTime={task.completed_date!} className="text-xs text-text-muted whitespace-nowrap">
+              {new Date(task.completed_date!).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </time>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+/** The Tasks tab's cards: a tag tapped in the chart narrows the task list to it. */
+const TasksReport: React.FC<{ period: ReportPeriod; report: CalendarReport; activity: CalendarActivity; days: number; byUnit: string }> = ({ period, report, activity, days, byUnit }) => {
+  const selection = useTagSelection(period, activity, 'task');
+  const { selected } = selection;
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+      <div className="lg:col-span-2">
+        <CardShell icon={<CircleCheck className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Tasks done ${byUnit}`}>
+          <TagActivityChart period={period} buckets={report.buckets} itemKind="task" selection={selection} />
+        </CardShell>
+      </div>
+      <div className="flex flex-col gap-3 sm:gap-4">
+        <CardShell icon={<Target className="w-4 h-4" style={{ color: 'var(--tm-success)' }} />} header="Planned vs done">
+          <PlannedVsDone report={report} />
+        </CardShell>
+        <CardShell icon={<Trophy className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Busiest days">
+          <BusiestDays report={report} />
+          {report.activeDays > 0 && (
+            <p className="text-[11px] text-text-muted mt-auto">Active on {plural(report.activeDays, 'day')}{days > 0 ? ` of ${days}` : ''}</p>
+          )}
+        </CardShell>
+      </div>
+      <div className="lg:col-span-3">
+        <CardShell
+          icon={<ListChecks className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />}
+          header="Tasks"
+          headerAction={selected && <TagFilterLabel tag={selected} />}
+        >
+          <TaskList tasks={completedTasksOf(activity, period.start, period.end, selected)} />
+        </CardShell>
+      </div>
+    </div>
+  );
+};
+
 // ── Notes view ──────────────────────────────────────────────────────────────
 
 const TagFilterLabel: React.FC<{ tag: TagRow }> = ({ tag }) => (
@@ -577,33 +639,10 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
   }
 
   const byUnit = period.kind === 'year' ? 'by month' : 'by day';
-  // Tasks, Notes and Habits each chart only their own kind, split by its tags.
-  const tagChart = (itemKind: TagChartKind) => (
-    <ReportTagActivityChart period={period} buckets={report.buckets} activity={activity} itemKind={itemKind} />
-  );
 
   switch (view) {
     case 'tasks':
-      return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
-          <div className="lg:col-span-2">
-            <CardShell icon={<CircleCheck className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Tasks done ${byUnit}`}>
-              {tagChart('task')}
-            </CardShell>
-          </div>
-          <div className="flex flex-col gap-3 sm:gap-4">
-            <CardShell icon={<Target className="w-4 h-4" style={{ color: 'var(--tm-success)' }} />} header="Planned vs done">
-              <PlannedVsDone report={report} />
-            </CardShell>
-            <CardShell icon={<Trophy className="w-4 h-4" style={{ color: 'var(--tm-warning)' }} />} header="Busiest days">
-              <BusiestDays report={report} />
-              {report.activeDays > 0 && (
-                <p className="text-[11px] text-text-muted mt-auto">Active on {plural(report.activeDays, 'day')}{days > 0 ? ` of ${days}` : ''}</p>
-              )}
-            </CardShell>
-          </div>
-        </div>
-      );
+      return <TasksReport period={period} report={report} activity={activity} days={days} byUnit={byUnit} />;
     case 'notes':
       return <NotesReport period={period} report={report} activity={activity} byUnit={byUnit} />;
     case 'habits':
