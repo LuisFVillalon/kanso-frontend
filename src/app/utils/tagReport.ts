@@ -48,7 +48,7 @@ export interface TagReportItem {
   occurrences: number;
   /** A task without an estimate (1), or a habit's check-ins without one. */
   missingEstimates: number;
-  /** A task's local completion day ("YYYY-MM-DD"), or the local day an event first starts on. */
+  /** A task's local completion day ("YYYY-MM-DD"), or the local day an event first starts on in the range (the day before it when it only runs in). */
   completedOn: string | null;
   /** A habit's estimate per check-in, in hours. */
   hoursEach: number | null;
@@ -166,7 +166,10 @@ export const collectTagItems = (activity: CalendarActivity, start: Date, end: Da
       events.set(key, event);
     }
     event.hours += hours;
-    if (startsInRange) event.occurrences++;
+    if (startsInRange) {
+      if (event.occurrences === 0) event.completedOn = occurrence.date;
+      event.occurrences++;
+    }
   }
   items.push(...events.values());
 

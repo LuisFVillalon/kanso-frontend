@@ -148,6 +148,13 @@ describe('collectTagItems events', () => {
     expect(buildTagBreakdown([before, after], 'count', all).total).toBe(1);
   });
 
+  it('dates an event by its first occurrence starting in the range, not one running in from before it', () => {
+    const fromLastWeek = occurrence(3, 'Night shift', 18, 22, 2, { end_date: '2026-10-19', ends_at: at(19, 2) });
+    const lastNight = occurrence(3, 'Night shift', 25, 22, 2, { end_date: '2026-10-26', ends_at: at(26, 2) });
+    expect(eventItems([fromLastWeek, lastNight])[0]).toMatchObject({ hours: 4, occurrences: 1, completedOn: '2026-10-25' });
+    expect(eventItems([fromLastWeek])[0]).toMatchObject({ hours: 2, occurrences: 0, completedOn: '2026-10-18' });
+  });
+
   it('counts a past archived event, and is fine on a backend that sends no events', () => {
     expect(eventItems([occurrence(5, 'Old class', 20, 9, 10, { archived: true })])[0]).toMatchObject({ hours: 1, occurrences: 1 });
     expect(collectTagItems(activity({}), week.start, week.end)).toEqual([]);
