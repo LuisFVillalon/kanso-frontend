@@ -22,6 +22,7 @@ import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import AppNav, { NAV_ITEMS } from '@/app/components/layout/AppNav';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
 import NewEventModal from '@/app/components/event/NewEventModal';
+import DoodleBackdrop from '@/app/components/doodle/DoodleBackdrop';
 import type { Note } from '@/app/types/notes';
 import type { Tag, Task } from '@/app/types/task';
 
@@ -243,6 +244,8 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   return (
     <AppShellContext.Provider value={value}>
+      {signedIn && <DoodleBackdrop />}
+
       {signedIn && (
         <AppNav
           expanded={navExpanded}

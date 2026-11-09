@@ -23,10 +23,10 @@
 
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import { fetchDrawing, saveDrawingRemote, deleteDrawingRemote } from '@/app/lib/backend-api';
+import { cacheDrawing, clearCachedDrawing, readCachedDrawing } from '@/app/lib/doodleDrawing';
 
 const STROKE_WIDTH = 2.5;
 const ERASER_WIDTH = 24;
-const STORAGE_KEY = 'tm_doodle_drawing';
 const REMOTE_SAVE_DEBOUNCE_MS = 800;
 
 export interface DoodleCanvasHandle {
@@ -50,11 +50,7 @@ const DoodleCanvas = forwardRef<DoodleCanvasHandle, DoodleCanvasProps>(({ active
     if (!canvas) return;
     const dataUrl = canvas.toDataURL('image/png');
 
-    try {
-      localStorage.setItem(STORAGE_KEY, dataUrl);
-    } catch {
-      // Storage full or unavailable (private browsing) — drawing just won't persist locally.
-    }
+    cacheDrawing(dataUrl);
 
     // Debounced backend save — every stroke-end calls saveDrawing(), but a
     // full-canvas PNG re-encode on every single stroke would be wasteful
@@ -125,12 +121,7 @@ const DoodleCanvas = forwardRef<DoodleCanvasHandle, DoodleCanvasProps>(({ active
     };
 
     const loadFromLocalStorage = () => {
-      let stored: string | null = null;
-      try {
-        stored = localStorage.getItem(STORAGE_KEY);
-      } catch {
-        stored = null;
-      }
+      const stored = readCachedDrawing();
       if (stored) drawDataUrl(stored);
     };
 
@@ -138,11 +129,7 @@ const DoodleCanvas = forwardRef<DoodleCanvasHandle, DoodleCanvasProps>(({ active
       .then(drawing => {
         if (!drawing) { loadFromLocalStorage(); return; }
         drawDataUrl(drawing.image_data_url);
-        try {
-          localStorage.setItem(STORAGE_KEY, drawing.image_data_url);
-        } catch {
-          // Storage full or unavailable — the backend copy just won't be cached locally.
-        }
+        cacheDrawing(drawing.image_data_url);
       })
       .catch(loadFromLocalStorage);
   }, []);
@@ -189,11 +176,7 @@ const DoodleCanvas = forwardRef<DoodleCanvasHandle, DoodleCanvasProps>(({ active
       if (!canvas || !ctx) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (remoteSaveTimerRef.current) clearTimeout(remoteSaveTimerRef.current);
-      try {
-        localStorage.removeItem(STORAGE_KEY);
-      } catch {
-        // ignore
-      }
+      clearCachedDrawing();
       deleteDrawingRemote().catch(() => {
         // Endpoint doesn't exist yet (or the request failed) — the local clear above already stuck.
       });

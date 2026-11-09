@@ -42,7 +42,7 @@ vi.mock('@/app/context/NotesContext', () => ({
   useNotesContext: () => ({ addNote: mocks.addNote, removeTagFromNotes: vi.fn() }),
 }));
 vi.mock('@/app/hooks/useRestoreFromTrash', () => ({ useRestoreFromTrash: () => vi.fn() }));
-vi.mock('@/app/lib/backend-api', () => ({ createHabit: vi.fn(), updateHabit: vi.fn(), describeError: vi.fn() }));
+vi.mock('@/app/lib/backend-api', () => ({ createHabit: vi.fn(), updateHabit: vi.fn(), describeError: vi.fn(), fetchDrawing: vi.fn(async () => null) }));
 vi.mock('@/app/hooks/useProfile', () => ({
   useProfile: () => ({ profile: { name: 'Luis', avatar: null }, loading: false, loaded: true, saveProfile: vi.fn() }),
 }));
