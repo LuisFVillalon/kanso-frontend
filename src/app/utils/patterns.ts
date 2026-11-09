@@ -71,7 +71,7 @@ export interface PatternAnswer {
   kind: AnswerKind;
   /** Set for higher and lower only. */
   step: AnswerStep | null;
-  /** A few words, for tiles and rows: "Maybe higher", "About the same", "Can’t tell yet". */
+  /** A few words, for rows: "Maybe higher", "About the same", "Can’t tell yet". */
   short: string;
 }
 
