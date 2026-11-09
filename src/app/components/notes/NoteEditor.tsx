@@ -258,19 +258,20 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     };
   }, [editor, focusMode, sidePanel]);
 
-  // Escape leaves focus mode, unless it's closing the slash menu or the link
-  // editor first. Listens in the capture phase: the editor marks Escape as
+  // Escape leaves focus mode, unless it's closing the slash menu, the link
+  // editor, the note details or a toolbar menu first. Listens in the capture phase: the editor marks Escape as
   // handled before it would bubble up to the document.
   useEffect(() => {
     if (!focusMode) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || linkEditorOpen) return;
+      if (e.key !== 'Escape' || linkEditorOpen || details) return;
       if (editor && slashCommandPluginKey.getState(editor.state)?.active) return;
+      if (containerRef.current?.querySelector('[aria-expanded="true"]')) return;
       setFocusMode(false);
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [focusMode, linkEditorOpen, editor]);
+  }, [focusMode, linkEditorOpen, details, editor]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -446,6 +447,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
   const compact = editorWidth !== null && editorWidth < BOTTOM_BAR_MAX_WIDTH;
   // The note row's own buttons; jsdom measures no width, so tests get the full row.
   const roomy = editorWidth === null || editorWidth >= NOTE_ROW_FULL_WIDTH;
+  // Focus mode has no breadcrumb to make room for, so only a phone folds these, keeping Leave focus on screen.
+  const showNoteTools = focusMode ? !compact : roomy;
 
   const resourcesOpen = sidePanel === 'resources';
   const outlineOpen = sidePanel === 'outline';
@@ -497,7 +500,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         >
           <NoteSaveStatus status={saveStatus} savedAt={savedAt} onRetry={saveNoteNow} />
 
-          {!focusMode && roomy && wordCount > 0 && (
+          {showNoteTools && wordCount > 0 && (
             <button
               type="button"
               data-note-details-trigger
@@ -512,7 +515,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </button>
           )}
 
-          {!focusMode && roomy && (
+          {showNoteTools && (
             <ToolbarButton toggle active={outlineOpen} title="Outline" onClick={toggleOutline}>
               <ListTree className="w-4 h-4" />
             </ToolbarButton>
@@ -531,7 +534,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </span>
           )}
 
-          {!focusMode && showExtendedActions && (
+          {showExtendedActions && (
             <button
               type="button"
               onClick={handleGetResources}
@@ -552,11 +555,24 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             </button>
           )}
 
-          {!focusMode && roomy && showExport && (
+          {showNoteTools && showExport && (
             <NoteExportMenu onDownloadPdf={handleDownloadPDF} pdfLoading={pdfLoading} />
           )}
 
-          {focusMode ? (
+          {(!focusMode || !showNoteTools) && (
+            <div data-note-details-trigger className="contents">
+              <NoteMoreMenu
+                onDownloadPdf={!showNoteTools && showExport ? handleDownloadPDF : undefined}
+                pdfLoading={pdfLoading}
+                onShowDetails={toggleDetails}
+                outlineOpen={outlineOpen}
+                onToggleOutline={showNoteTools ? undefined : toggleOutline}
+                onFocusMode={focusMode || roomy ? undefined : startFocusMode}
+              />
+            </div>
+          )}
+
+          {focusMode && (
             <button
               type="button"
               onClick={() => setFocusMode(false)}
@@ -568,24 +584,13 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
               <X className="w-4 h-4" aria-hidden="true" />
               <KansoKIcon className="w-[18px] h-[18px]" />
             </button>
-          ) : (
-            <div data-note-details-trigger className="contents">
-              <NoteMoreMenu
-                onDownloadPdf={!roomy && showExport ? handleDownloadPDF : undefined}
-                pdfLoading={pdfLoading}
-                onShowDetails={toggleDetails}
-                outlineOpen={outlineOpen}
-                onToggleOutline={roomy ? undefined : toggleOutline}
-                onFocusMode={roomy ? undefined : startFocusMode}
-              />
-            </div>
           )}
 
-          {details && !focusMode && <NoteDetails stats={details} onClose={closeDetails} />}
+          {details && <NoteDetails stats={details} onClose={closeDetails} />}
         </EditorToolbar>
 
       {/* ── Main content: editor column + side panel ─────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="relative flex flex-1 overflow-hidden">
         {/* Editor column */}
         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           {/* ── Title ──────────────────────────────────────────────────────── */}
@@ -662,7 +667,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
           </div>
 
           {/* ── Editor body ──────────────────────────────────────────────────── */}
-          <div className="flex-1 overflow-y-auto scrollbar-custom">
+          <div className="isolate flex-1 overflow-y-auto scrollbar-custom">
             <div className={`px-6 sm:px-10 py-4 ${focusMode ? FOCUS_COLUMN : ''}`}>
               <EditorContent editor={editor} />
             </div>
@@ -675,9 +680,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 
         {/* ── Side panel: Learning resources or Outline ─────────────────────── */}
         <div
-          className="shrink-0 flex flex-col border-l overflow-hidden transition-[width] duration-300 ease-in-out"
+          className={`shrink-0 flex flex-col border-l overflow-hidden transition-[width] duration-300 ease-in-out ${
+            // On a phone, focus mode's panel covers the note instead of squeezing the writing column.
+            focusMode ? 'max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-10 max-md:max-w-full' : ''
+          }`}
           style={{
-            width: sidePanel && !focusMode ? (sidePanel === 'outline' ? '260px' : '300px') : '0px',
+            width: sidePanel ? (sidePanel === 'outline' ? '260px' : '300px') : '0px',
             borderColor: 'var(--tm-border)',
             backgroundColor: 'var(--tm-surface-raised)',
           }}

@@ -1016,7 +1016,7 @@ export const EditorToolbar: React.FC<EditorToolbarProps> = ({
   onEditLink,
   children,
 }) => (
-  <div className="@container shrink-0">
+  <div className="@container relative z-20 shrink-0">
     <div
       className="flex flex-nowrap items-center gap-1 px-3 sm:pl-4 py-2 min-h-12 border-b border-border-subtle"
       style={{ backgroundColor: 'var(--tm-surface-raised)' }}
