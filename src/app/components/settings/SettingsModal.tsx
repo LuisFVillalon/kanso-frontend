@@ -24,7 +24,7 @@
  * a real account. Google Calendar appears only once the server has its keys.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Loader2, Check, AlertTriangle, ChevronLeft, ChevronRight, User, ShieldCheck, Clock,
   Hourglass, Bell, Palette, GraduationCap, CalendarSync, LogOut,
@@ -46,6 +46,7 @@ import CanvasIntegrationSection from '@/app/components/settings/CanvasIntegratio
 import GoogleCalendarSection from '@/app/components/settings/GoogleCalendarSection';
 import { useCanvasTabHidden } from '@/app/hooks/useCanvasTabHidden';
 import { useGoogleCalendarStatus } from '@/app/hooks/useGoogleCalendarStatus';
+import { AppShellContext } from '@/app/context/AppShellContext';
 import ProfilePage from '@/app/components/settings/pages/ProfilePage';
 import WorkDayPage, { REST_DAY_OPTIONS } from '@/app/components/settings/pages/WorkDayPage';
 import AppearancePage from '@/app/components/settings/pages/AppearancePage';
@@ -196,7 +197,7 @@ export default function SettingsModal({
   const isOAuth = OAUTH_PROVIDERS.has(provider);
   const providerLabel = provider.charAt(0).toUpperCase() + provider.slice(1); // "Google"
 
-  const googleCalendar = useGoogleCalendarStatus(isOpen);
+  const googleCalendar = useGoogleCalendarStatus(isOpen, useContext(AppShellContext)?.googleCalendarConnectionsFinished ?? 0);
   const googleCalendarConfigured = googleCalendar.status?.configured === true;
   const available = useCallback((page: SettingsPage) => {
     if (page === 'security') return !isDemo;

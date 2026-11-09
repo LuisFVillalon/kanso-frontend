@@ -34,7 +34,7 @@ const occurrence = (overrides: Partial<EventOccurrence> = {}): EventOccurrence =
   ...overrides,
 });
 const google = (overrides: Partial<EventOccurrence> = {}) => occurrence({
-  event_id: -5, source: 'google', read_only: true, html_link: 'https://www.google.com/calendar/event?eid=abc', ...overrides,
+  event_id: -5, source: 'google', html_link: 'https://www.google.com/calendar/event?eid=abc', ...overrides,
 });
 
 const render = (o: EventOccurrence) => {
@@ -109,6 +109,13 @@ describe('EventCard for an imported event', () => {
   it('sends an empty list when the last tag comes off, leaving it with no tags', async () => {
     render(google());
     await click(button('Work'));
+    expect(api.updateGoogleEventTags).toHaveBeenCalledWith(-5, [], false);
+  });
+
+  it('shows a tag archived since it was given, so it can come off', async () => {
+    render(google({ tags: [{ id: 9, name: 'Old', color: '#000000' }] }));
+    expect(button('Old')!.getAttribute('aria-pressed')).toBe('true');
+    await click(button('Old'));
     expect(api.updateGoogleEventTags).toHaveBeenCalledWith(-5, [], false);
   });
 

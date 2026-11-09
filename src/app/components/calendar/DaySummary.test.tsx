@@ -206,7 +206,7 @@ describe('DaySummary', () => {
   });
 
   it('marks an imported event, offers its tags, and still counts it', () => {
-    const sync = event('Team sync', '16:00', '17:00', { source: 'google', read_only: true });
+    const sync = event('Team sync', '16:00', '17:00', { source: 'google' });
     render({ ...data, events: [sync] });
     expect(container.querySelector('[data-day-counts]')!.textContent).toContain('1 event');
     const row = container.querySelector('[data-event-row]')!;

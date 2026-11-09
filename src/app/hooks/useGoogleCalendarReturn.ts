@@ -57,10 +57,13 @@ async function finishConnecting(result: GoogleCalendarReturn): Promise<Integrati
  * no cleanup to cancel it, or that repeat would throw the answer away.
  *
  * `notice` says how it went, once it has; `clearNotice` drops it.
+ * `connectionsFinished` counts the attempts that have ended, and isn't lowered
+ * by clearing the notice.
  */
 export function useGoogleCalendarReturn(signedIn: boolean) {
   const showToast = useToast();
   const [notice, setNotice] = useState<IntegrationNoticeValue | null>(null);
+  const [connectionsFinished, setConnectionsFinished] = useState(0);
 
   useLayoutEffect(() => {
     const result = takeGoogleCalendarReturn();
@@ -75,9 +78,10 @@ export function useGoogleCalendarReturn(signedIn: boolean) {
     void finishConnecting(result).then(next => {
       dismiss?.();
       setNotice(next);
+      setConnectionsFinished(n => n + 1);
     });
   }, [signedIn, showToast]);
 
   const clearNotice = useCallback(() => setNotice(null), []);
-  return { notice, clearNotice };
+  return { notice, connectionsFinished, clearNotice };
 }

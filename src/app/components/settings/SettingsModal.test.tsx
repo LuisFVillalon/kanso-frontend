@@ -23,7 +23,7 @@ vi.mock('@/app/components/settings/CanvasIntegrationSection', () => ({
   default: () => <p>Canvas section</p>,
 }));
 vi.mock('@/app/components/settings/GoogleCalendarSection', () => ({
-  default: () => <p>Google Calendar section</p>,
+  default: ({ status }: { status: { connected: boolean } | null }) => <p>Google Calendar section{status?.connected ? ' (connected)' : ''}</p>,
 }));
 
 const supabaseAuth = vi.hoisted(() => ({
@@ -50,6 +50,7 @@ const api = vi.hoisted(() => {
 vi.mock('@/app/lib/backend-api', () => api);
 
 import SettingsModal, { type SettingsSection } from './SettingsModal';
+import { AppShellContext, type AppShellValue } from '@/app/context/AppShellContext';
 import { ToastProvider } from '@/app/context/ToastContext';
 import { AUTOSAVE_DEBOUNCE_MS } from './autosave';
 
@@ -309,6 +310,25 @@ describe('SettingsModal Google Calendar', () => {
     api.fetchGoogleCalendarStatus.mockResolvedValueOnce(status);
     await renderSettled('google-calendar');
     expect(heading()).toBe('Google Calendar');
+  });
+
+  it('reloads the status when a connection finishes while Settings is open', async () => {
+    const shell = (finished: number) => (
+      <ToastProvider>
+        <AppShellContext.Provider value={{ googleCalendarConnectionsFinished: finished } as Partial<AppShellValue> as AppShellValue}>
+          <Harness initialSection="google-calendar" initialProfile={profile} initialTerm={calendarSettings} initialRollover={noRollover} />
+        </AppShellContext.Provider>
+      </ToastProvider>
+    );
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce(status);
+    act(() => root.render(shell(0)));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(document.body.textContent).not.toContain('(connected)');
+
+    api.fetchGoogleCalendarStatus.mockResolvedValueOnce({ ...status, connected: true });
+    act(() => root.render(shell(1)));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(document.body.textContent).toContain('(connected)');
   });
 
   it('falls back to Profile when asked for the page without the server keys', async () => {

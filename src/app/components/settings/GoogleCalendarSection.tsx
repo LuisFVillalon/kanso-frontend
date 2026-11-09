@@ -105,8 +105,14 @@ interface Props {
 
 const GoogleCalendarSection: React.FC<Props> = ({ isDemo, status, onStatusChange }) => {
   const { tags } = useTagsContext();
-  const returnNotice = useContext(AppShellContext)?.googleCalendarNotice ?? null;
-  const [notice, setNotice] = useState<IntegrationNoticeValue | null>(returnNotice);
+  const shell = useContext(AppShellContext);
+  const returnNotice = shell?.googleCalendarNotice ?? null;
+  const [pageNotice, setPageNotice] = useState<IntegrationNoticeValue | null>(null);
+  const notice = returnNotice ?? pageNotice;
+  const setNotice = (next: IntegrationNoticeValue | null) => {
+    setPageNotice(next);
+    shell?.clearGoogleCalendarNotice();
+  };
   const [busy, setBusy] = useState<'connect' | 'sync' | 'disconnect' | 'calendar' | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [calendars, setCalendars] = useState<GoogleCalendarEntry[] | null>(null);

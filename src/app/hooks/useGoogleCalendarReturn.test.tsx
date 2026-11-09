@@ -27,8 +27,8 @@ let root: Root;
 type Notice = ReturnType<typeof useGoogleCalendarReturn>['notice'];
 
 function Probe({ signedIn }: { signedIn: boolean }) {
-  const { notice } = useGoogleCalendarReturn(signedIn);
-  return <output>{JSON.stringify(notice)}</output>;
+  const { notice, connectionsFinished } = useGoogleCalendarReturn(signedIn);
+  return <output data-finished={connectionsFinished}>{JSON.stringify(notice)}</output>;
 }
 
 const shown = (): Notice => JSON.parse(container.querySelector('output')!.textContent || 'null');
@@ -57,6 +57,12 @@ afterEach(() => {
 const complete = '/settings?google_calendar=complete&code=secret-code&state=secret-state';
 
 describe('useGoogleCalendarReturn', () => {
+  it('counts a connection attempt once it has ended, so the status can reload', async () => {
+    window.history.replaceState(null, '', complete);
+    await render(true);
+    expect(container.querySelector('output')!.getAttribute('data-finished')).toBe('1');
+  });
+
   it('does nothing on an ordinary page load', async () => {
     window.history.replaceState(null, '', '/settings?keep=1');
     await render(true);

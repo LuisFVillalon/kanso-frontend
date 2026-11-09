@@ -43,6 +43,8 @@ export const ImportedEventTagPicker: React.FC<{ occurrence: EventOccurrence }> =
 
   const baseline = tagSignature(o.tags);
   const selected = draft?.baseline === baseline ? draft.tags : o.tags;
+  // A tag archived since it was given still has to show, so it can come off.
+  const options = [...tags, ...selected.filter(s => !tags.some(t => t.id === s.id))];
 
   const save = async (next: Tag[] | null) => {
     setDraft(next ? { baseline, tags: next } : null);
@@ -65,7 +67,7 @@ export const ImportedEventTagPicker: React.FC<{ occurrence: EventOccurrence }> =
       <div className="max-h-28 overflow-y-auto scrollbar-custom">
         <EventTagPicker
           aria-labelledby={labelId}
-          tags={tags}
+          tags={options}
           selected={selected}
           disabled={saving}
           onToggle={tag => void save(toggleTag(selected, tag))}

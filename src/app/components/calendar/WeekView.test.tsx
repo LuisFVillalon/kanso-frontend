@@ -650,7 +650,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
 
     describe('imported from Google Calendar', () => {
       const imported = (overrides: Partial<EventOccurrence> = {}) => occurrence({
-        event_id: -30, title: 'Team sync', tags: [], repeat_days: [], source: 'google', read_only: true, ...overrides,
+        event_id: -30, title: 'Team sync', tags: [], repeat_days: [], source: 'google', ...overrides,
       });
       const label = 'Google Calendar event: Team sync, 2:00 PM – 2:50 PM';
 

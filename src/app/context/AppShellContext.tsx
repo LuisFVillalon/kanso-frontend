@@ -34,6 +34,10 @@ export interface AppShellValue {
   registerNoteOpener: (open: ((note: Note) => void) | null) => void;
   /** How connecting Google Calendar went, just after coming back from Google. */
   googleCalendarNotice: IntegrationNoticeValue | null;
+  /** Drops that notice once something newer on the page replaces it. */
+  clearGoogleCalendarNotice: () => void;
+  /** Goes up each time coming back from Google ends, so Settings reloads the status. */
+  googleCalendarConnectionsFinished: number;
 }
 
 export const AppShellContext = createContext<AppShellValue | null>(null);

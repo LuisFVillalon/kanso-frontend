@@ -25,6 +25,7 @@ vi.mock('@/app/hooks/useEventsVersion', () => ({ notifyEventsChanged }));
 
 import GoogleCalendarSection from './GoogleCalendarSection';
 import { AppShellContext, type AppShellValue } from '@/app/context/AppShellContext';
+import type { IntegrationNoticeValue } from './IntegrationParts';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -106,14 +107,44 @@ describe('connecting', () => {
     expect(button('Connect Google Calendar')!.disabled).toBe(false);
   });
 
-  it('shows how coming back from Google went', async () => {
+  const clearNotice = vi.fn();
+  const renderInShell = async (notice: IntegrationNoticeValue | null) => {
     await act(async () => {
       root.render(
-        <AppShellContext.Provider value={{ googleCalendarNotice: { tone: 'error', text: "It didn't connect." } } as AppShellValue}>
+        <AppShellContext.Provider value={{ googleCalendarNotice: notice, clearGoogleCalendarNotice: clearNotice } as Partial<AppShellValue> as AppShellValue}>
           <Harness initial={notConnected} isDemo={false} />
         </AppShellContext.Provider>,
       );
     });
+  };
+  const failed: IntegrationNoticeValue = { tone: 'error', text: "It didn't connect." };
+
+  it('shows how coming back from Google went', async () => {
+    await renderInShell(failed);
+    expect(container.querySelector('[role="alert"]')!.textContent).toBe("It didn't connect.");
+  });
+
+  it('shows how it went when the answer arrives with the page already open', async () => {
+    await renderInShell(null);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    await renderInShell(failed);
+    expect(container.querySelector('[role="alert"]')!.textContent).toBe("It didn't connect.");
+  });
+
+  it('drops the return notice for good once something on the page replaces it', async () => {
+    clearNotice.mockReset();
+    api.connectGoogleCalendar.mockRejectedValue(new Error('nope'));
+    await renderInShell(failed);
+    await click(button('Connect Google Calendar'));
+    expect(clearNotice).toHaveBeenCalled();
+  });
+
+  it('puts the return notice over an older one from the page', async () => {
+    api.connectGoogleCalendar.mockRejectedValue(new Error('nope'));
+    await renderInShell(null);
+    await click(button('Connect Google Calendar'));
+    expect(container.querySelector('[role="alert"]')!.textContent).toContain("Couldn't start connecting");
+    await renderInShell(failed);
     expect(container.querySelector('[role="alert"]')!.textContent).toBe("It didn't connect.");
   });
 });

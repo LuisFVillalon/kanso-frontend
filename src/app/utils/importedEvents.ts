@@ -2,8 +2,7 @@ import type { EventOccurrence } from '@/app/types/event';
 import type { Tag } from '@/app/types/task';
 
 /** An event imported from Google Calendar: shown and counted like any other, but only its kanso tags can change. */
-export const isImportedEvent = (o: Pick<EventOccurrence, 'source' | 'read_only'>): boolean =>
-  o.source === 'google' || o.read_only === true;
+export const isImportedEvent = (o: Pick<EventOccurrence, 'source'>): boolean => o.source === 'google';
 
 /** The event's page in Google Calendar, or null without a usable https link. */
 export function googleEventLink(o: Pick<EventOccurrence, 'html_link'>): string | null {

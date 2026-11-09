@@ -66,7 +66,7 @@ describe('DayCell events', () => {
   });
 
   it('marks an event imported from Google, and only that one', () => {
-    render(day([event('Team sync', { source: 'google', read_only: true }), event('Lecture', { source: 'kanso', read_only: false })]));
+    render(day([event('Team sync', { source: 'google' }), event('Lecture', { source: 'kanso' })]));
     const [imported, own] = bars();
     expect(imported.querySelector('[data-google-mark]')).not.toBeNull();
     expect(imported.title).toContain('from Google Calendar');

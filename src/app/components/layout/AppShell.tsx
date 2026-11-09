@@ -49,7 +49,11 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading, demoSeeding, isDemo, signOut } = useAuth();
   const signedIn = !loading && !!user && !demoSeeding;
   const showToast = useToast();
-  const { notice: googleCalendarNotice, clearNotice: clearGoogleCalendarNotice } = useGoogleCalendarReturn(signedIn);
+  const {
+    notice: googleCalendarNotice,
+    connectionsFinished: googleCalendarConnectionsFinished,
+    clearNotice: clearGoogleCalendarNotice,
+  } = useGoogleCalendarReturn(signedIn);
 
   const profileState = useProfile(user);
   const calendarSettingsState = useCalendarSettings(user);
@@ -207,6 +211,8 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     settingsClosedToken,
     registerNoteOpener,
     googleCalendarNotice,
+    clearGoogleCalendarNotice,
+    googleCalendarConnectionsFinished,
   };
 
   // The shortcut listener is bound once and reads the latest actions from here.

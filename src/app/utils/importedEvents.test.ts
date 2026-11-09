@@ -11,16 +11,15 @@ const occurrence = (overrides: Partial<EventOccurrence> = {}): EventOccurrence =
   repeat_days: [], repeat_interval: 1, reminder_minutes: null, edited: false, past: false, archived: false,
   ...overrides,
 });
-const google = (overrides: Partial<EventOccurrence> = {}) => occurrence({ event_id: -5, source: 'google', read_only: true, ...overrides });
+const google = (overrides: Partial<EventOccurrence> = {}) => occurrence({ event_id: -5, source: 'google', ...overrides });
 
 describe('isImportedEvent', () => {
-  it('is true for a Google event or anything read-only', () => {
+  it('is true for a Google event', () => {
     expect(isImportedEvent(google())).toBe(true);
-    expect(isImportedEvent(occurrence({ read_only: true }))).toBe(true);
   });
 
   it('is false for a kanso event, including one from a server that sends no source', () => {
-    expect(isImportedEvent(occurrence({ source: 'kanso', read_only: false }))).toBe(false);
+    expect(isImportedEvent(occurrence({ source: 'kanso' }))).toBe(false);
     expect(isImportedEvent(occurrence())).toBe(false);
   });
 });
