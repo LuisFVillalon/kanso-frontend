@@ -76,10 +76,10 @@ const WINDOW_EDGE = 'color-mix(in srgb, var(--tm-accent) 55%, transparent)';
 /** A sample tag color for the legend's swatches. */
 const LEGEND_TAG_COLOR = '#8b5cf6';
 
-/** The week's legend: tag coloring, then the states a block can be in, then the work schedule. */
+/** The week's legend: tag coloring, then past events (only events fade once past), archived items and clashes, then the work schedule. */
 export const WEEK_LEGEND: { label: string; swatch: React.CSSProperties }[] = [
   { label: 'Colored by tag', swatch: eventStyle(LEGEND_TAG_COLOR, { past: false, archived: false }) },
-  { label: 'Past', swatch: { ...eventStyle(LEGEND_TAG_COLOR, { past: true, archived: false }), opacity: 1 } },
+  { label: 'Past event', swatch: { ...eventStyle(LEGEND_TAG_COLOR, { past: true, archived: false }), opacity: 1 } },
   { label: 'Archived', swatch: eventStyle(LEGEND_TAG_COLOR, { past: true, archived: true }) },
   { label: 'Clash', swatch: { outline: CLASH_RING, outlineOffset: -2 } },
   { label: 'Outside work hours or rest day', swatch: { background: OFF_HOURS_BG, border: '1px solid var(--tm-border-subtle)' } },

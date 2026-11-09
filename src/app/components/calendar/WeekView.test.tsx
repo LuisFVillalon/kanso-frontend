@@ -197,7 +197,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
   it('has one tag-color entry in the legend instead of an entry per kind', async () => {
     await render();
     const legend = [...container.querySelectorAll('ul[aria-label="Legend"] li')].map(li => li.textContent);
-    expect(legend).toEqual(['Colored by tag', 'Past', 'Archived', 'Clash', 'Outside work hours or rest day']);
+    expect(legend).toEqual(['Colored by tag', 'Past event', 'Archived', 'Clash', 'Outside work hours or rest day']);
   });
 
   it('colors tasks, notes and habits by their first tag, and untagged ones like an untagged event', async () => {
