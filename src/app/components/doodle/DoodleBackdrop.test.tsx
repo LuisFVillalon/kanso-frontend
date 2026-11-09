@@ -153,7 +153,45 @@ describe('DoodleBackdrop', () => {
   it('picks up a change made in another tab', async () => {
     await render();
     localStorage.setItem('tm_doodle_drawing', NEW);
-    act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'tm_doodle_drawing' })); });
+    act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'tm_doodle_drawing', newValue: NEW })); });
     expect(shown()).toBe(showing(NEW));
+  });
+
+  it('shows the latest strokes when the cache write fails', async () => {
+    cacheDrawing(OLD);
+    mocks.pathname = '/';
+    await render();
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+    act(() => cacheDrawing(NEW));
+    setItem.mockRestore();
+    expect(readCachedDrawing()).toBe(OLD);
+
+    await navigate('/notes');
+    expect(shown()).toBe(showing(NEW));
+    expect(mocks.fetchDrawing).not.toHaveBeenCalled();
+  });
+
+  it('replaces a fetched drawing when the cache write fails', async () => {
+    mocks.fetchDrawing.mockResolvedValue(saved(OLD));
+    await render();
+    await navigate('/');
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
+    act(() => cacheDrawing(NEW));
+    setItem.mockRestore();
+
+    await navigate('/reports');
+    expect(shown()).toBe(showing(NEW));
+  });
+
+  it('hides a cleared drawing when the cache removal fails', async () => {
+    cacheDrawing(OLD);
+    mocks.pathname = '/';
+    await render();
+    const removeItem = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('denied'); });
+    act(() => clearCachedDrawing());
+    removeItem.mockRestore();
+
+    await navigate('/trash');
+    expect(shown()).toBeNull();
   });
 });

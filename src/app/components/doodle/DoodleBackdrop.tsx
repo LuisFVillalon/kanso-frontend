@@ -15,16 +15,19 @@ import { readCachedDrawing, subscribeToDrawing } from '@/app/lib/doodleDrawing';
 const DoodleBackdrop: React.FC = () => {
   const onHome = usePathname() === '/';
   const cached = useSyncExternalStore(subscribeToDrawing, readCachedDrawing, () => null);
-  const [fetched, setFetched] = useState<string | null>(null);
+  // Undefined until something newer than the cache turns up.
+  const [latest, setLatest] = useState<string | null | undefined>(undefined);
   const localChange = useRef(false);
   const fetchStarted = useRef(false);
 
-  // The cache only changes when Home restores or edits the drawing, and from
-  // then on it's newer than anything fetched here: the backend save is
-  // debounced, so a fetch can still return the strokes before the latest.
-  useEffect(() => subscribeToDrawing(() => {
+  // The drawing only changes when Home restores or edits it, and from then on
+  // it's newer than anything fetched here: the backend save is debounced, so a
+  // fetch can still return the strokes before the latest. Held in state so it
+  // shows even if the cache write failed, and goes away at sign-out, when this
+  // unmounts.
+  useEffect(() => subscribeToDrawing(dataUrl => {
     localChange.current = true;
-    setFetched(null);
+    setLatest(dataUrl);
   }), []);
 
   // Covers landing on another page first, on a device whose cache is empty
@@ -34,14 +37,14 @@ const DoodleBackdrop: React.FC = () => {
     fetchStarted.current = true;
     fetchDrawing()
       .then(drawing => {
-        if (drawing && !localChange.current) setFetched(drawing.image_data_url);
+        if (drawing && !localChange.current) setLatest(drawing.image_data_url);
       })
       .catch(() => {
         // Backend unreachable — the cached copy is still showing.
       });
   }, [onHome]);
 
-  const drawing = fetched ?? cached;
+  const drawing = latest === undefined ? cached : latest;
   if (onHome || !drawing) return null;
 
   // Sized to the viewport including any scrollbar, as DoodleCanvas is

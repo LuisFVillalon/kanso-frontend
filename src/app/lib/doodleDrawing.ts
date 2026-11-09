@@ -5,8 +5,10 @@
 
 const STORAGE_KEY = 'tm_doodle_drawing';
 
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach(listener => listener());
+type DrawingListener = (dataUrl: string | null) => void;
+
+const listeners = new Set<DrawingListener>();
+const notify = (dataUrl: string | null) => listeners.forEach(listener => listener(dataUrl));
 
 export function readCachedDrawing(): string | null {
   try {
@@ -22,7 +24,7 @@ export function cacheDrawing(dataUrl: string): void {
   } catch {
     // Storage full or unavailable (private browsing) — drawing just won't persist locally.
   }
-  notify();
+  notify(dataUrl);
 }
 
 export function clearCachedDrawing(): void {
@@ -31,14 +33,17 @@ export function clearCachedDrawing(): void {
   } catch {
     // ignore
   }
-  notify();
+  notify(null);
 }
 
-/** Calls `listener` when the cached drawing changes, in this tab or another. */
-export function subscribeToDrawing(listener: () => void): () => void {
+/**
+ * Calls `listener` with the new drawing (null once cleared) when it changes,
+ * in this tab or another. In this tab that's the drawing as written, which the
+ * cache won't hold if the write failed.
+ */
+export function subscribeToDrawing(listener: DrawingListener): () => void {
   const onStorage = (e: StorageEvent) => {
-    // A null key means the other tab cleared all of localStorage.
-    if (e.key === STORAGE_KEY || e.key === null) listener();
+    if (e.key === STORAGE_KEY) listener(e.newValue);
   };
   listeners.add(listener);
   window.addEventListener('storage', onStorage);
