@@ -8,6 +8,7 @@ import {
   collectTagItems,
   MAX_TAG_ROWS,
   OTHER_KEY,
+  rowHasTags,
   topNotesOfRow,
   UNTAGGED_KEY,
   type TagItemKind,
@@ -310,6 +311,34 @@ describe('buildTagSeries', () => {
     expect(rows).toHaveLength(MAX_TAG_ROWS + 1);
     expect(rows[MAX_TAG_ROWS].key).toBe(OTHER_KEY);
     expect(byBucket.get('2026-10-20')!.get(OTHER_KEY)).toBe(2);
+  });
+});
+
+describe('rowHasTags', () => {
+  const completion = (habit_id: number) => ({ habit_id, habit_title: `Habit ${habit_id}`, date: '2026-10-20', estimated_time: null });
+  const tags = Array.from({ length: MAX_TAG_ROWS + 2 }, (_, i) => ({ id: 100 + i, name: `T${i}`, color: '#123456' }));
+  // Eight large tags, the last two fold into Other tags, and one habit carries none.
+  const { rows } = buildTagSeries(activity({
+    habit_completions: [...tags.flatMap((_, i) => Array.from({ length: tags.length - i }, () => completion(i + 1))), completion(50)],
+    habits: [...tags.map((t, i) => ({ id: i + 1, title: `Habit ${i + 1}`, estimated_time: null, tags: [t] })), { id: 50, title: 'Habit 50', estimated_time: null, tags: [] }],
+  }), week.start, week.end, 'habit', false);
+  const row = (key: string) => rows.find(r => r.key === key)!;
+
+  it('matches a tag row by the tag', () => {
+    expect(rowHasTags(row('tag:100'), [tags[0], tags[1]])).toBe(true);
+    expect(rowHasTags(row('tag:100'), [tags[1]])).toBe(false);
+    expect(rowHasTags(row('tag:100'), [])).toBe(false);
+  });
+
+  it('matches Untagged only with no tags', () => {
+    expect(rowHasTags(row(UNTAGGED_KEY), [])).toBe(true);
+    expect(rowHasTags(row(UNTAGGED_KEY), [tags[0]])).toBe(false);
+  });
+
+  it('matches Other tags by any folded tag', () => {
+    expect(rowHasTags(row(OTHER_KEY), [tags[MAX_TAG_ROWS + 1]])).toBe(true);
+    expect(rowHasTags(row(OTHER_KEY), [tags[0]])).toBe(false);
+    expect(rowHasTags(row(OTHER_KEY), [])).toBe(false);
   });
 });
 

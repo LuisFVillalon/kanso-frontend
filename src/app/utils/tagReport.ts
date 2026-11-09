@@ -299,6 +299,12 @@ export const topNotesOfRow = (row: TagRow): NoteTime[] =>
     .sort((a, b) => b.seconds - a.seconds)
     .slice(0, TOP_NOTES);
 
+/** Whether something carrying `tags` belongs to a chart row, including any tag folded into Other tags. */
+export const rowHasTags = (row: TagRow, tags: ReportTag[]): boolean => {
+  if (row.key === UNTAGGED_KEY) return tags.length === 0;
+  return tags.some(tag => tagKey(tag) === row.key || row.foldedKeys?.includes(tagKey(tag)));
+};
+
 /** What a kind's chart counts: tasks completed, seconds in notes, habit check-ins. */
 export const KIND_MEASURE: Record<TagChartKind, TagMeasure> = { task: 'count', note: 'time', habit: 'count' };
 

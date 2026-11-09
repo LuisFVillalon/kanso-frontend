@@ -195,10 +195,31 @@ describe('buildCalendarReport', () => {
     const report = buildCalendarReport(activity, week, habits, now);
     expect(report.habitCheckIns).toBe(3);
     expect(report.habits).toEqual([
-      { habitId: 1, title: 'Read', completions: 2, currentStreak: 2, bestStreak: 10 },
-      { habitId: 9, title: 'Old habit', completions: 1, currentStreak: null, bestStreak: null },
-      { habitId: 2, title: 'Run', completions: 0, currentStreak: 0, bestStreak: 4 },
+      { habitId: 1, title: 'Read', completions: 2, currentStreak: 2, bestStreak: 10, tags: [] },
+      { habitId: 9, title: 'Old habit', completions: 1, currentStreak: null, bestStreak: null, tags: [] },
+      { habitId: 2, title: 'Run', completions: 0, currentStreak: 0, bestStreak: 4, tags: [] },
     ]);
+  });
+
+  it('tags a habit as the chart does, and one with no check-ins by its own tags', () => {
+    const health = { id: 3, name: 'Health', color: '#3B9A5A' };
+    const math = { id: 2, name: 'Math', color: '#7A5AD0' };
+    const report = buildCalendarReport({
+      start_date: '2026-10-12', end_date: '2026-10-18', scheduled_tasks: [], completed_tasks: [], note_sessions: [],
+      habit_completions: [
+        { habit_id: 1, habit_title: 'Read', date: '2026-10-12', estimated_time: null },
+        { habit_id: 9, habit_title: 'Old habit', date: '2026-10-13', estimated_time: null },
+        { habit_id: 3, habit_title: 'Stretch', date: '2026-10-13', estimated_time: null },
+      ],
+      habits: [{ id: 1, title: 'Read', estimated_time: null, tags: [health] }, { id: 9, title: 'Old habit', estimated_time: null, tags: [math] }],
+    }, week, [
+      habit({ id: 1, title: 'Read', tags: [math] }),
+      habit({ id: 2, title: 'Run', tags: [health] }),
+      habit({ id: 3, title: 'Stretch', tags: [health] }),
+    ], now);
+    expect(Object.fromEntries(report.habits.map(h => [h.title, h.tags]))).toEqual({
+      Read: [health], 'Old habit': [math], Run: [health], Stretch: [],
+    });
   });
 
   it('ranks busiest days by completions, then note time', () => {

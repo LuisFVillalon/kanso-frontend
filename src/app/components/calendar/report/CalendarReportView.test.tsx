@@ -20,7 +20,7 @@ const api = vi.hoisted(() => ({
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 const auth = vi.hoisted(() => ({ user: { id: 'user-1' } }));
 vi.mock('@/app/context/AuthContext', () => ({ useAuth: () => auth }));
-const habitsContext = vi.hoisted(() => ({ habits: [] }));
+const habitsContext = vi.hoisted(() => ({ habits: [] as object[] }));
 vi.mock('@/app/context/HabitsContext', () => ({ useHabitsContext: () => habitsContext }));
 // The open tab lives in the URL: read it from window.location, and re-render on pushState like Next does.
 vi.mock('next/navigation', async () => {
@@ -1101,6 +1101,67 @@ describe('CalendarReportView tag charts', () => {
     expect(text()).toContain('Each square is a day.');
     await click(buttonLabelled(/^Year$/));
     expect(text()).toContain('Habit check-ins by month');
+  });
+
+  describe('Habits follows the tag picked in the chart', () => {
+    const habit = (id: number, title: string, tags: typeof cs[], current_streak = 0) => ({ id, title, current_streak, max_streak: 5, logged_today: false, tags });
+    beforeEach(() => {
+      habitsContext.habits = [habit(1, 'Both', [cs, math], 3), habit(2, 'Calc', [math]), habit(3, 'Loose', []), habit(4, 'Idle', [math]), habit(5, 'Idle loose', [])];
+      api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+        start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [],
+        habit_completions: start > '2026-10-20' || end < '2026-10-19' ? [] : [
+          { habit_id: 1, habit_title: 'Both', date: '2026-10-19', estimated_time: null },
+          { habit_id: 1, habit_title: 'Both', date: '2026-10-20', estimated_time: null },
+          { habit_id: 2, habit_title: 'Calc', date: '2026-10-20', estimated_time: null },
+          { habit_id: 3, habit_title: 'Loose', date: '2026-10-20', estimated_time: null },
+        ],
+        habits: [{ id: 1, title: 'Both', estimated_time: null, tags: [cs, math] }, { id: 2, title: 'Calc', estimated_time: null, tags: [math] }, { id: 3, title: 'Loose', estimated_time: null, tags: [] }],
+      }));
+    });
+    afterEach(() => { habitsContext.habits = []; });
+
+    const tagButton = (name: string) => [...document.querySelectorAll('[aria-label="Tags"] button')].find(b => b.textContent?.startsWith(name))!;
+    const habitsCard = () => [...container.querySelectorAll('.card-glass')].find(c => c.firstElementChild?.textContent?.startsWith('Habits'))!;
+    const titles = () => [...habitsCard().querySelectorAll('li')].map(li => li.querySelector('span')!.textContent);
+    const all = ['Both', 'Calc', 'Loose', 'Idle', 'Idle loose'];
+
+    it('narrows to a tag’s habits in the same order, with full rows, and restores on deselect', async () => {
+      await render();
+      await openTab('Habits');
+      expect(titles()).toEqual(all);
+      expect(habitsCard().textContent).not.toContain('Showing');
+
+      await click(tagButton('MATH 254'));
+      expect(titles()).toEqual(['Both', 'Calc', 'Idle']);
+      expect(habitsCard().textContent).toContain('ShowingMATH 254');
+      const both = habitsCard().querySelector('li')!;
+      expect(both.textContent).toContain('2 / 3 days');
+      expect(both.querySelectorAll('[title$="done"]').length).toBe(3);
+      expect(both.querySelector('[title="Current streak"]')!.textContent).toContain('3');
+      expect(habitsCard().textContent).toContain('Each square is a day.');
+
+      await click(tagButton('MATH 254'));
+      expect(titles()).toEqual(all);
+      expect(habitsCard().textContent).not.toContain('Showing');
+    });
+
+    it('lists untagged habits for Untagged', async () => {
+      await render();
+      await openTab('Habits');
+      await click(tagButton('Untagged'));
+      expect(titles()).toEqual(['Loose', 'Idle loose']);
+      expect(habitsCard().textContent).toContain('ShowingUntagged');
+    });
+
+    it('clears the tag when the period changes', async () => {
+      await render();
+      await openTab('Habits');
+      await click(tagButton('CS 460'));
+      expect(titles()).toEqual(['Both']);
+      await click(buttonLabelled(/^Month$/));
+      expect(titles()).toEqual(all);
+      expect(habitsCard().textContent).not.toContain('Showing');
+    });
   });
 
   describe('Top notes follows the tag picked in the chart', () => {

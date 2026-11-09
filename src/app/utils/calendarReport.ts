@@ -121,6 +121,8 @@ export interface HabitReportRow {
   /** From the habit itself — null for a habit that has since been archived or deleted. */
   currentStreak: number | null;
   bestStreak: number | null;
+  /** The tags that place it in the Habits chart's rows. */
+  tags: Habit['tags'];
 }
 
 export interface CalendarReport {
@@ -327,16 +329,19 @@ export const buildCalendarReport = (
     entry.count++;
     habitCounts.set(completion.habit_id, entry);
   }
+  const activityTags = new Map((activity.habits ?? []).map(h => [h.id, h.tags]));
   const habitRows: HabitReportRow[] = habits.map(h => ({
     habitId: h.id,
     title: h.title,
     completions: habitCounts.get(h.id)?.count ?? 0,
     currentStreak: h.current_streak,
     bestStreak: Math.max(h.max_streak, h.current_streak),
+    // A habit with check-ins follows the activity, as the chart does, so a chart row always lists its habits.
+    tags: activityTags.get(h.id) ?? (habitCounts.has(h.id) ? [] : h.tags),
   }));
   for (const [habitId, { title, count }] of habitCounts) {
     if (habits.some(h => h.id === habitId)) continue;
-    habitRows.push({ habitId, title, completions: count, currentStreak: null, bestStreak: null });
+    habitRows.push({ habitId, title, completions: count, currentStreak: null, bestStreak: null, tags: activityTags.get(habitId) ?? [] });
   }
   habitRows.sort((a, b) => b.completions - a.completions || a.title.localeCompare(b.title));
 
