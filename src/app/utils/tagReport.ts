@@ -15,7 +15,7 @@
  */
 
 import type { CalendarActivity } from '@/app/types/activity';
-import { addSecondsByLocalDay } from '@/app/utils/calendarReport';
+import { addSecondsByLocalDay, TOP_NOTES, type NoteTime } from '@/app/utils/calendarReport';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 export type TagMeasure = 'time' | 'count';
@@ -286,6 +286,18 @@ export const buildTagBreakdown = (
   if (untagged.total > 0) rows.push(untagged);
   return { total, rows };
 };
+
+/**
+ * The notes behind a row of the Notes chart, most time first, as long as the
+ * report's top-notes list. Each keeps its own full time in the period, not
+ * the share of it the row got.
+ */
+export const topNotesOfRow = (row: TagRow): NoteTime[] =>
+  row.shares
+    // Back to whole milliseconds: hours summed as floats can land just under a minute, which would then display as one less.
+    .map(({ item }) => ({ noteId: item.id, title: item.title, seconds: Math.round(item.hours * 3600000) / 1000 }))
+    .sort((a, b) => b.seconds - a.seconds)
+    .slice(0, TOP_NOTES);
 
 /** What a kind's chart counts: tasks completed, seconds in notes, habit check-ins. */
 export const KIND_MEASURE: Record<TagChartKind, TagMeasure> = { task: 'count', note: 'time', habit: 'count' };

@@ -8,6 +8,7 @@ import {
   collectTagItems,
   MAX_TAG_ROWS,
   OTHER_KEY,
+  topNotesOfRow,
   UNTAGGED_KEY,
   type TagItemKind,
 } from './tagReport';
@@ -309,5 +310,51 @@ describe('buildTagSeries', () => {
     expect(rows).toHaveLength(MAX_TAG_ROWS + 1);
     expect(rows[MAX_TAG_ROWS].key).toBe(OTHER_KEY);
     expect(byBucket.get('2026-10-20')!.get(OTHER_KEY)).toBe(2);
+  });
+});
+
+describe('topNotesOfRow', () => {
+  const session = (id: number, note_id: number, minutes: number, day = 20) => ({
+    id, note_id, note_title: `Note ${note_id}`, started_at: at(day, 9), ended_at: at(day, 9, minutes), duration_seconds: minutes * 60,
+  });
+  const rowsOf = (data: CalendarActivity) => buildTagSeries(data, week.start, week.end, 'note', false).rows;
+  const named = (rows: ReturnType<typeof rowsOf>, name: string) => rows.find(r => r.name === name)!;
+
+  it('ranks a tag’s notes by each one’s own full time, not its split share', () => {
+    const rows = rowsOf(activity({
+      note_sessions: [session(1, 1, 40), session(2, 2, 30), session(3, 2, 20, 21), session(4, 3, 10)],
+      notes: [{ id: 1, title: 'Note 1', tags: [cs, math] }, { id: 2, title: 'Note 2', tags: [cs] }, { id: 3, title: 'Note 3', tags: [math] }],
+    }));
+    expect(topNotesOfRow(named(rows, 'CS 460'))).toEqual([
+      { noteId: 2, title: 'Note 2', seconds: 3000 },
+      { noteId: 1, title: 'Note 1', seconds: 2400 },
+    ]);
+    expect(topNotesOfRow(named(rows, 'MATH 254')).map(n => n.noteId)).toEqual([1, 3]);
+  });
+
+  it('lists untagged notes for Untagged', () => {
+    const rows = rowsOf(activity({ note_sessions: [session(1, 1, 30), session(2, 2, 30)], notes: [{ id: 1, title: 'Note 1', tags: [cs] }, { id: 2, title: 'Note 2', tags: [] }] }));
+    expect(topNotesOfRow(named(rows, 'Untagged')).map(n => n.noteId)).toEqual([2]);
+  });
+
+  it('lists a note once under Other tags, even with two folded tags', () => {
+    const tags = Array.from({ length: MAX_TAG_ROWS + 2 }, (_, i) => ({ id: 100 + i, name: `T${i}`, color: '#123456' }));
+    const big = tags.slice(0, MAX_TAG_ROWS).map((t, i) => ({ id: i + 1, title: `Note ${i + 1}`, tags: [t] }));
+    const rows = rowsOf(activity({
+      note_sessions: [...big.map(n => session(n.id, n.id, 30)), session(99, 99, 5)],
+      notes: [...big, { id: 99, title: 'Note 99', tags: tags.slice(MAX_TAG_ROWS) }],
+    }));
+    expect(topNotesOfRow(rows.find(r => r.key === OTHER_KEY)!)).toEqual([{ noteId: 99, title: 'Note 99', seconds: 300 }]);
+  });
+
+  it('keeps to five notes and to whole milliseconds', () => {
+    const notes = Array.from({ length: 7 }, (_, i) => ({ id: i + 1, title: `Note ${i + 1}`, tags: [cs] }));
+    const top = topNotesOfRow(named(rowsOf(activity({
+      // Three thirds of an hour: summed as floats, these miss a clean hour.
+      note_sessions: [...notes.map(n => session(n.id, n.id, n.id)), session(11, 7, 20, 21), session(12, 7, 20, 22), session(13, 7, 13, 23)],
+      notes,
+    })), 'CS 460'));
+    expect(top.map(n => n.noteId)).toEqual([7, 6, 5, 4, 3]);
+    expect(top[0].seconds).toBe(3600);
   });
 });

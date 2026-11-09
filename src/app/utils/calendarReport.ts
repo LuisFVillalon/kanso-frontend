@@ -151,7 +151,7 @@ export interface CalendarReport {
   buckets: ReportBucket[];
 }
 
-const TOP_NOTES = 5;
+export const TOP_NOTES = 5;
 const BUSIEST_DAYS = 3;
 
 /**
