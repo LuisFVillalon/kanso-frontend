@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
+import type { EventOccurrence } from '@/app/types/event';
 import { periodContaining } from './calendarReport';
 import {
   buildTagBreakdown,
@@ -20,7 +21,7 @@ vi.hoisted(() => {
 const cs = { id: 1, name: 'CS 460', color: '#2F6FD6' };
 const math = { id: 2, name: 'MATH 254', color: '#7A5AD0' };
 const health = { id: 3, name: 'Health', color: '#3B9A5A' };
-const all: Record<TagItemKind, boolean> = { task: true, note: true, habit: true };
+const all: Record<TagItemKind, boolean> = { task: true, note: true, habit: true, event: true };
 
 const task = (overrides: Partial<ActivityTask>): ActivityTask => ({
   id: 1,
@@ -51,6 +52,15 @@ const activity = (overrides: Partial<CalendarActivity>): CalendarActivity => ({
 const at = (day: number, hour = 12, minute = 0) => new Date(2026, 9, day, hour, minute).toISOString();
 
 const week = periodContaining('week', new Date(2026, 9, 21));
+
+// A timed occurrence on an October 2026 local day, as the calendar sends it.
+const occurrence = (id: number, title: string, day: number, startHour: number, endHour: number, overrides: Partial<EventOccurrence> = {}): EventOccurrence => ({
+  event_id: id, occurrence_date: `2026-10-${day}`, title, description: null, tags: [], all_day: false,
+  date: `2026-10-${day}`, end_date: `2026-10-${day}`, start_time: `${startHour}:00:00`, end_time: `${endHour}:00:00`,
+  starts_at: at(day, startHour), ends_at: at(day, endHour), time_zone: 'America/Los_Angeles',
+  repeat_days: [], repeat_interval: 1, reminder_minutes: null, edited: false, past: true, archived: false,
+  ...overrides,
+} as EventOccurrence);
 
 describe('collectTagItems', () => {
   it('collects completed tasks, clipped note time and habit check-ins in the range', () => {
@@ -103,6 +113,64 @@ describe('collectTagItems', () => {
   });
 });
 
+describe('collectTagItems events', () => {
+  const eventItems = (events: EventOccurrence[]) => collectTagItems(activity({ events }), week.start, week.end);
+
+  it('makes a repeating event one item, adding up its occurrences', () => {
+    const items = eventItems([occurrence(1, 'Lecture', 20, 9, 11, { tags: [cs] }), occurrence(1, 'Lecture', 22, 9, 10, { tags: [cs] })]);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ kind: 'event', title: 'Lecture', hours: 3, occurrences: 2, completedOn: '2026-10-20', tags: [cs] });
+  });
+
+  it('keeps apart an occurrence retitled or re-tagged on its own, with ids that stay unique', () => {
+    const items = eventItems([
+      occurrence(1, 'Lecture', 20, 9, 10, { tags: [cs] }),
+      occurrence(1, 'Guest lecture', 21, 9, 10, { tags: [cs] }),
+      occurrence(1, 'Lecture', 22, 9, 10, { tags: [math] }),
+    ]);
+    expect(items.map(i => i.title)).toEqual(['Lecture', 'Guest lecture', 'Lecture']);
+    expect(new Set(items.map(i => i.id)).size).toBe(3);
+  });
+
+  it('counts an all-day event without adding time', () => {
+    const [item] = eventItems([occurrence(2, 'Holiday', 21, 0, 0, { all_day: true, start_time: null, end_time: null, ends_at: at(22, 0) })]);
+    expect(item).toMatchObject({ hours: 0, occurrences: 1 });
+    expect(buildTagBreakdown([item], 'time', all).total).toBe(0);
+    expect(buildTagBreakdown([item], 'count', all).total).toBe(1);
+  });
+
+  it('clips an event at the range, counting it only in the period it starts in', () => {
+    const fromLastWeek = occurrence(3, 'Night shift', 18, 22, 2, { end_date: '2026-10-19', ends_at: at(19, 2) });
+    const intoNextWeek = occurrence(4, 'Late show', 25, 23, 1, { end_date: '2026-10-26', ends_at: at(26, 1) });
+    const [before, after] = eventItems([fromLastWeek, intoNextWeek]);
+    expect(before).toMatchObject({ hours: 2, occurrences: 0 });
+    expect(after).toMatchObject({ hours: 1, occurrences: 1 });
+    expect(buildTagBreakdown([before, after], 'count', all).total).toBe(1);
+  });
+
+  it('counts a past archived event, and is fine on a backend that sends no events', () => {
+    expect(eventItems([occurrence(5, 'Old class', 20, 9, 10, { archived: true })])[0]).toMatchObject({ hours: 1, occurrences: 1 });
+    expect(collectTagItems(activity({}), week.start, week.end)).toEqual([]);
+  });
+
+  it('splits a multi-tag event evenly and sends an untagged one to Untagged', () => {
+    const items = eventItems([occurrence(6, 'Review', 20, 9, 11, { tags: [cs, math] }), occurrence(7, 'Dentist', 21, 9, 10)]);
+    const { total, rows } = buildTagBreakdown(items, 'time', all);
+    expect(total).toBe(3);
+    expect(rows.map(r => [r.key, r.total, r.byKind.event, r.counts.event])).toEqual([
+      [`tag:${cs.id}`, 1, 1, 1],
+      [`tag:${math.id}`, 1, 1, 1],
+      [UNTAGGED_KEY, 1, 1, 1],
+    ]);
+    expect(buildTagBreakdown(items, 'time', { ...all, event: false }).total).toBe(0);
+  });
+
+  it('stays out of the per-kind charts', () => {
+    const data = activity({ events: [occurrence(1, 'Lecture', 20, 9, 11, { tags: [cs] })] });
+    expect(buildTagSeries(data, week.start, week.end, 'task', false).rows).toEqual([]);
+  });
+});
+
 describe('buildTagBreakdown', () => {
   const items = collectTagItems(activity({
     completed_tasks: [
@@ -132,8 +200,8 @@ describe('buildTagBreakdown', () => {
     ]);
     expect(rows.reduce((sum, r) => sum + r.total, 0)).toBe(total);
     const csRow = rows[0];
-    expect(csRow.byKind).toEqual({ task: 1.5, note: 2, habit: 0 });
-    expect(csRow.counts).toEqual({ task: 1, note: 1, habit: 0 });
+    expect(csRow.byKind).toEqual({ task: 1.5, note: 2, habit: 0, event: 0 });
+    expect(csRow.counts).toEqual({ task: 1, note: 1, habit: 0, event: 0 });
   });
 
   it('counts a task once, a note once however many sessions, and each habit check-in', () => {
@@ -149,7 +217,7 @@ describe('buildTagBreakdown', () => {
   });
 
   it('leaves out kinds that are switched off', () => {
-    const { total, rows } = buildTagBreakdown(items, 'time', { task: false, note: true, habit: false });
+    const { total, rows } = buildTagBreakdown(items, 'time', { task: false, note: true, habit: false, event: false });
     expect(total).toBe(2);
     expect(rows.map(r => r.key)).toEqual([`tag:${cs.id}`]);
   });

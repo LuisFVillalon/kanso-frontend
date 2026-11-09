@@ -13,7 +13,7 @@ interface FetchedEventReport {
 const periodKey = (p: ReportPeriod) => `${p.kind}:${toLocalDateStr(p.start)}`;
 
 /**
- * Loads Reports → Events for a period: GET /get-event-report over the whole
+ * Loads a report period's event totals: GET /get-event-report over the whole
  * period (past archived occurrences count, upcoming archived ones don't).
  * Reloads when events change.
  */

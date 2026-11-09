@@ -1,13 +1,17 @@
 /**
  * The /reports page's "Where your time went" card: how much of a week, month
- * or year each tag took, from completed tasks, time in notes and habit
- * check-ins. Like the rest of the report it works on local days, and counts
+ * or year each tag took, from completed tasks, time in notes, habit check-ins
+ * and events. Like the rest of the report it works on local days, and counts
  * archived items too (they come back from GET /get-calendar-activity).
  *
  * Time is the estimate of each completed task, the editing time in each note
- * (clipped to the range) and a habit's estimate per check-in. Count is one per
- * completed task, one per note worked on and one per habit check-in. Tags are
- * the ones items carry now, so re-tagging something moves its past time too.
+ * (clipped to the range), a habit's estimate per check-in and each event's
+ * length (clipped to the range; an all-day event adds none). Count is one per
+ * completed task, one per note worked on, one per habit check-in and one per
+ * event starting in the range. Events follow GET /get-event-report: what the
+ * calendar shows, so past archived occurrences count and upcoming archived
+ * ones never arrive. Tags are the ones items carry now, so re-tagging
+ * something moves its past time too.
  */
 
 import type { CalendarActivity } from '@/app/types/activity';
@@ -16,9 +20,15 @@ import { toLocalDateStr } from '@/app/utils/dateUtils';
 
 export type TagMeasure = 'time' | 'count';
 
-export type TagItemKind = 'task' | 'note' | 'habit';
+export type TagItemKind = 'task' | 'note' | 'habit' | 'event';
 
-export const TAG_ITEM_KINDS: TagItemKind[] = ['task', 'note', 'habit'];
+export const TAG_ITEM_KINDS: TagItemKind[] = ['task', 'note', 'habit', 'event'];
+
+/** Every kind switched on, for the summaries of "Where your time went". */
+export const ALL_TAG_KINDS: Record<TagItemKind, boolean> = { task: true, note: true, habit: true, event: true };
+
+/** The kinds with a chart of their own, on the Tasks, Notes and Habits tabs. */
+export type TagChartKind = Exclude<TagItemKind, 'event'>;
 
 export interface ReportTag {
   id: number;
@@ -28,16 +38,17 @@ export interface ReportTag {
 
 export interface TagReportItem {
   kind: TagItemKind;
+  /** Unique within its kind. */
   id: number;
   title: string;
   tags: ReportTag[];
-  /** Estimated hours for a task or a habit's check-ins, editing hours for a note. */
+  /** Estimated hours for a task or a habit's check-ins, editing hours for a note, hours inside the range for an event. */
   hours: number;
-  /** 1 for a task, editing sessions for a note, check-ins for a habit. */
+  /** 1 for a task, editing sessions for a note, check-ins for a habit, occurrences starting in the range for an event. */
   occurrences: number;
   /** A task without an estimate (1), or a habit's check-ins without one. */
   missingEstimates: number;
-  /** A task's local completion day ("YYYY-MM-DD"). */
+  /** A task's local completion day ("YYYY-MM-DD"), or the local day an event first starts on. */
   completedOn: string | null;
   /** A habit's estimate per check-in, in hours. */
   hoursEach: number | null;
@@ -46,10 +57,10 @@ export interface TagReportItem {
 const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 /**
- * Every completed task, note with editing time and habit with check-ins in
- * the local days `start` to `end` (inclusive), one item each. A note's
- * sessions are clipped to the range, so one running past midnight on the
- * last day counts only up to midnight.
+ * Every completed task, note with editing time, habit with check-ins and
+ * event in the local days `start` to `end` (inclusive), one item each. A
+ * note's sessions and an event's occurrences are clipped to the range, so one
+ * running past midnight on the last day counts only up to midnight.
  */
 export const collectTagItems = (activity: CalendarActivity, start: Date, end: Date): TagReportItem[] => {
   const firstDay = toLocalDateStr(start);
@@ -130,13 +141,45 @@ export const collectTagItems = (activity: CalendarActivity, start: Date, end: Da
   }
   items.push(...habits.values());
 
+  const events = new Map<string, TagReportItem>();
+  for (const occurrence of activity.events ?? []) {
+    const startsInRange = inRange(occurrence.date);
+    const startMs = Math.max(new Date(occurrence.starts_at).getTime(), rangeStartMs);
+    const endMs = Math.min(new Date(occurrence.ends_at).getTime(), rangeEndMs);
+    const hours = occurrence.all_day ? 0 : Math.max(endMs - startMs, 0) / 3600000;
+    if (!startsInRange && hours === 0) continue;
+    // A repeating event is one item, but an occurrence retitled or re-tagged on its own stands apart.
+    const key = `${occurrence.event_id}|${occurrence.title}|${occurrence.tags.map(t => t.id).sort((a, b) => a - b).join(',')}`;
+    let event = events.get(key);
+    if (!event) {
+      event = {
+        kind: 'event',
+        id: events.size,
+        title: occurrence.title,
+        tags: occurrence.tags,
+        hours: 0,
+        occurrences: 0,
+        missingEstimates: 0,
+        completedOn: occurrence.date,
+        hoursEach: null,
+      };
+      events.set(key, event);
+    }
+    event.hours += hours;
+    if (startsInRange) event.occurrences++;
+  }
+  items.push(...events.values());
+
   return items;
 };
+
+/** How many things an item stands for: a habit's check-ins or an event's occurrences, otherwise one. */
+const countOf = (item: TagReportItem) => (item.kind === 'habit' || item.kind === 'event' ? item.occurrences : 1);
 
 /** What an item adds to its tags under `measure`. */
 export const itemValue = (item: TagReportItem, measure: TagMeasure): number => {
   if (measure === 'time') return item.hours;
-  return item.kind === 'habit' ? item.occurrences : 1;
+  return countOf(item);
 };
 
 export const UNTAGGED_KEY = 'untagged';
@@ -159,7 +202,7 @@ export interface TagRow {
   color: string | null;
   total: number;
   byKind: Record<TagItemKind, number>;
-  /** Tasks, notes and habit check-ins behind the row. */
+  /** Tasks, notes, habit check-ins and event occurrences behind the row. */
   counts: Record<TagItemKind, number>;
   shares: TagShare[];
   /** For Other tags: the keys of the tags folded into it. */
@@ -174,8 +217,7 @@ export interface TagBreakdown {
 }
 
 const tagKey = (tag: ReportTag) => `tag:${tag.id}`;
-const zeroByKind = (): Record<TagItemKind, number> => ({ task: 0, note: 0, habit: 0 });
-const countOf = (item: TagReportItem) => (item.kind === 'habit' ? item.occurrences : 1);
+const zeroByKind = (): Record<TagItemKind, number> => ({ task: 0, note: 0, habit: 0, event: 0 });
 
 const newRow = (key: string, name: string, color: string | null): TagRow => ({
   key, name, color, total: 0, byKind: zeroByKind(), counts: zeroByKind(), shares: [],
@@ -243,7 +285,7 @@ export const buildTagBreakdown = (
 };
 
 /** What a kind's chart counts: tasks completed, seconds in notes, habit check-ins. */
-export const KIND_MEASURE: Record<TagItemKind, TagMeasure> = { task: 'count', note: 'time', habit: 'count' };
+export const KIND_MEASURE: Record<TagChartKind, TagMeasure> = { task: 'count', note: 'time', habit: 'count' };
 
 export interface TagSeries {
   /** The kind's tags, as the Time tab lists them: largest first, then Other tags and Untagged. */
@@ -263,10 +305,10 @@ export const buildTagSeries = (
   activity: CalendarActivity,
   start: Date,
   end: Date,
-  kind: TagItemKind,
+  kind: TagChartKind,
   byMonth: boolean,
 ): TagSeries => {
-  const only: Record<TagItemKind, boolean> = { task: kind === 'task', note: kind === 'note', habit: kind === 'habit' };
+  const only: Record<TagItemKind, boolean> = { task: kind === 'task', note: kind === 'note', habit: kind === 'habit', event: false };
   const { rows } = buildTagBreakdown(collectTagItems(activity, start, end), KIND_MEASURE[kind], only);
   const rowOf = new Map<string, string>();
   for (const row of rows) {

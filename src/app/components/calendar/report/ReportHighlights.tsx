@@ -20,7 +20,7 @@ import {
   waitingLine,
   waitsOnCheckIns,
 } from '@/app/utils/patterns';
-import { buildTagBreakdown, collectTagItems, UNTAGGED_KEY } from '@/app/utils/tagReport';
+import { ALL_TAG_KINDS, buildTagBreakdown, collectTagItems, UNTAGGED_KEY } from '@/app/utils/tagReport';
 import { formatTagHours } from './ReportTagBreakdown';
 import type { ReportView } from './CalendarReportView';
 import type { MoodView } from './ReportMoodSection';
@@ -89,7 +89,7 @@ const ReportHighlights: React.FC<ReportHighlightsProps> = ({ period, report, act
   }, [activity, byDay, periodKey, restKey, scopeLabel]);
 
   const topTag = useMemo(() => {
-    const { rows, total } = buildTagBreakdown(collectTagItems(activity, period.start, period.end), 'time', { task: true, note: true, habit: true });
+    const { rows, total } = buildTagBreakdown(collectTagItems(activity, period.start, period.end), 'time', ALL_TAG_KINDS);
     const top = rows.find(r => r.key !== UNTAGGED_KEY && !r.foldedKeys);
     return top && total > 0 ? { name: top.name, hours: top.total, share: Math.round((top.total / total) * 100), total } : null;
     // `periodKey` identifies the period; its Date objects change identity every render.

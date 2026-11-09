@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ChevronRight, CircleCheck, FileText, Repeat, Tag as TagIcon } from 'lucide-react';
+import { ArrowLeft, CalendarClock, ChevronRight, CircleCheck, FileText, Repeat, Tag as TagIcon } from 'lucide-react';
 import { CardShell } from '@/app/components/stats/CardShell';
 import { formatHours } from '@/app/components/stats/charts';
 import type { CalendarActivity } from '@/app/types/activity';
 import { formatDurationShort, parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
 import type { ReportPeriod } from '@/app/utils/calendarReport';
 import {
+  ALL_TAG_KINDS,
   buildTagBreakdown,
   collectTagItems,
   TAG_ITEM_KINDS,
@@ -19,14 +20,19 @@ import {
   type TagShare,
 } from '@/app/utils/tagReport';
 
-const KIND_LABEL: Record<TagItemKind, string> = { task: 'Tasks', note: 'Notes', habit: 'Habits' };
+const KIND_LABEL: Record<TagItemKind, string> = { task: 'Tasks', note: 'Notes', habit: 'Habits', event: 'Events' };
 const KIND_ICON: Record<TagItemKind, React.FC<{ className?: string; 'aria-hidden'?: boolean }>> = {
   task: CircleCheck,
   note: FileText,
   habit: Repeat,
+  event: CalendarClock,
 };
-/** How strongly each kind's part of a row's bar shows its tag color: tasks solid, habits faintest. */
-const KIND_TINT: Record<TagItemKind, number> = { task: 100, note: 62, habit: 34 };
+/**
+ * How strongly each kind's part of a row's bar shows its tag color: tasks
+ * solid, habits faintest. Any two kinds differ by enough to tell apart when
+ * they sit side by side.
+ */
+const KIND_TINT: Record<TagItemKind, number> = { task: 100, event: 76, note: 52, habit: 28 };
 const ITEMS_SHOWN = 6;
 
 export const rowColor = (row: TagRow): string =>
@@ -46,8 +52,14 @@ export const formatTagHours = (hours: number): string => {
 const formatValue = (value: number, measure: TagMeasure) => (measure === 'time' ? formatTagHours(value) : trim(value));
 const percent = (value: number, total: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
 
-const kindCount = (kind: TagItemKind, n: number) =>
-  kind === 'task' ? plural(n, 'task') : kind === 'note' ? plural(n, 'note') : plural(n, 'check-in');
+const KIND_NOUN: Record<TagItemKind, string> = { task: 'task', note: 'note', habit: 'check-in', event: 'event' };
+const kindCount = (kind: TagItemKind, n: number) => plural(n, KIND_NOUN[kind]);
+
+const hasEvents = (breakdown: TagBreakdown) => breakdown.rows.some(r => r.byKind.event > 0);
+
+/** What the total is made of. Events are on the calendar whether or not they've happened yet. */
+const timeWords = (breakdown: TagBreakdown) => (hasEvents(breakdown) ? 'estimated, tracked and scheduled' : 'estimated and tracked');
+const countWords = (breakdown: TagBreakdown) => (hasEvents(breakdown) ? 'things done or scheduled' : 'things done');
 
 const periodWord = (period: ReportPeriod) => (period.kind === 'year' ? `in ${period.start.getFullYear()}` : `this ${period.kind}`);
 
@@ -64,8 +76,8 @@ const KindSplit: React.FC<{ row: TagRow; measure: TagMeasure }> = ({ row, measur
       return (
         <span key={k} className="inline-flex items-center gap-1">
           <Icon className="w-3 h-3" aria-hidden />
-          {measure === 'time' && `${formatTagHours(row.byKind[k])} · `}
-          {kindCount(k, row.counts[k])}
+          {/* An event running in from the night before adds time but no count. */}
+          {[measure === 'time' && formatTagHours(row.byKind[k]), row.counts[k] > 0 && kindCount(k, row.counts[k])].filter(Boolean).join(' · ')}
         </span>
       );
     })}
@@ -89,7 +101,7 @@ const Overview: React.FC<OverviewProps> = ({ breakdown, measure, kinds, period, 
       <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 m-0">
         <span className="font-display text-2xl sm:text-3xl text-text-primary">{formatValue(total, measure)}</span>
         <span className="text-xs sm:text-sm text-text-secondary">
-          {measure === 'time' ? 'estimated and tracked' : 'things done'} {periodWord(period)}
+          {measure === 'time' ? timeWords(breakdown) : countWords(breakdown)} {periodWord(period)}
           {top && (
             <>
               {' · most went to '}
@@ -120,7 +132,7 @@ const Overview: React.FC<OverviewProps> = ({ breakdown, measure, kinds, period, 
             {KIND_LABEL[k]}
           </span>
         ))}
-        <span className="ml-auto">Tap a tag to see its tasks, notes and habits.</span>
+        <span className="ml-auto">Tap a tag to see its tasks, notes, habits and events.</span>
       </div>
 
       <ul className="flex flex-col gap-0.5 m-0 p-0 list-none">
@@ -174,6 +186,8 @@ const ShareItem: React.FC<{ share: TagShare; row: TagRow; measure: TagMeasure }>
     meta.push(item.missingEstimates ? 'no estimate' : `est. ${formatTagHours(item.hours)}`);
   } else if (item.kind === 'note') {
     meta.push(plural(item.occurrences, 'session'), `${formatTagHours(item.hours)} editing`);
+  } else if (item.kind === 'event') {
+    meta.push(item.occurrences > 1 ? plural(item.occurrences, 'time') : shortDate(item.completedOn!), item.hours > 0 ? formatTagHours(item.hours) : 'all day');
   } else {
     meta.push(plural(item.occurrences, 'check-in'), item.hoursEach != null ? `${formatTagHours(item.hoursEach)} each` : 'no estimate');
   }
@@ -209,13 +223,15 @@ const ShareItem: React.FC<{ share: TagShare; row: TagRow; measure: TagMeasure }>
 interface DetailProps {
   row: TagRow;
   total: number;
+  /** What the Count total is made of, for its percentage. */
+  countLabel: string;
   measure: TagMeasure;
   kinds: Record<TagItemKind, boolean>;
   period: ReportPeriod;
   onBack: () => void;
 }
 
-const Detail: React.FC<DetailProps> = ({ row, total, measure, kinds, period, onBack }) => {
+const Detail: React.FC<DetailProps> = ({ row, total, countLabel, measure, kinds, period, onBack }) => {
   const [showAll, setShowAll] = useState<Partial<Record<TagItemKind, boolean>>>({});
   const backRef = useRef<HTMLButtonElement>(null);
   useEffect(() => backRef.current?.focus(), []);
@@ -238,15 +254,15 @@ const Detail: React.FC<DetailProps> = ({ row, total, measure, kinds, period, onB
       <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 m-0">
         <span className="font-display text-2xl sm:text-3xl text-text-primary">{formatValue(row.total, measure)}</span>
         <span className="text-xs sm:text-sm text-text-secondary">
-          {percent(row.total, total)}% of your {measure === 'time' ? 'time' : 'things done'} {periodWord(period)}
+          {percent(row.total, total)}% of your {measure === 'time' ? 'time' : countLabel} {periodWord(period)}
         </span>
       </p>
       {row.key === UNTAGGED_KEY && (
         <p className="m-0 text-xs text-text-secondary rounded-lg px-2.5 py-2" style={{ backgroundColor: 'var(--tm-accent-subtle)' }}>
-          These have no tags. Tag a task, note or habit and its time moves to that tag here, for past periods too.
+          These have no tags. Tag a task, note, habit or event and its time moves to that tag here, for past periods too.
         </p>
       )}
-      <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
         {TAG_ITEM_KINDS.map(k => {
           const Icon = KIND_ICON[k];
           return (
@@ -261,7 +277,7 @@ const Detail: React.FC<DetailProps> = ({ row, total, measure, kinds, period, onB
           );
         })}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {TAG_ITEM_KINDS.filter(k => kinds[k]).map(k => {
           const Icon = KIND_ICON[k];
           const shares = row.shares
@@ -309,13 +325,13 @@ interface ReportTagBreakdownProps {
 
 /**
  * "Where your time went": how much of the period each tag took, from completed
- * tasks, time in notes and habit check-ins, as a share bar over one row per
- * tag. Time (estimates plus note editing time) or Count, with Tasks / Notes /
- * Habits switched on or off; a row opens the tag's items.
+ * tasks, time in notes, habit check-ins and events, as a share bar over one row
+ * per tag. Time (estimates, note editing time and event length) or Count, with
+ * Tasks / Notes / Habits / Events switched on or off; a row opens the tag's items.
  */
 const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activity }) => {
   const [measure, setMeasure] = useState<TagMeasure>('time');
-  const [kinds, setKinds] = useState<Record<TagItemKind, boolean>>({ task: true, note: true, habit: true });
+  const [kinds, setKinds] = useState<Record<TagItemKind, boolean>>(ALL_TAG_KINDS);
   const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
   const [open, setOpen] = useState<{ periodKey: string; key: string } | null>(null);
 
@@ -354,8 +370,8 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
                 onClick={() => setMeasure(m)}
                 aria-pressed={measure === m}
                 title={m === 'time'
-                  ? 'Task and habit estimates, plus time spent editing notes'
-                  : 'Tasks completed, notes worked on and habit check-ins'}
+                  ? 'Task and habit estimates, time spent editing notes, and how long events run'
+                  : 'Tasks completed, notes worked on, habit check-ins and events'}
                 className={`px-2 sm:px-2.5 py-1 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                   measure === m ? 'bg-surface-raised text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
                 }`}
@@ -391,6 +407,7 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
               key={openKey}
               row={openRow}
               total={breakdown.total}
+              countLabel={countWords(breakdown)}
               measure={measure}
               kinds={kinds}
               period={period}
@@ -415,8 +432,8 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
         ) : (
           <p className="m-0 text-xs sm:text-sm text-text-muted italic py-2">
             {measure === 'time'
-              ? 'No estimated or tracked time to break down yet.'
-              : 'Nothing done yet to break down.'}
+              ? 'No estimated, tracked or scheduled time to break down yet.'
+              : 'Nothing done or scheduled yet to break down.'}
           </p>
         )}
       </CardShell>
@@ -425,8 +442,6 @@ const ReportTagBreakdown: React.FC<ReportTagBreakdownProps> = ({ period, activit
 };
 
 // ── Share bar ───────────────────────────────────────────────────────────────
-
-const ALL_KINDS: Record<TagItemKind, boolean> = { task: true, note: true, habit: true };
 
 interface ReportTagShareBarProps {
   period: ReportPeriod;
@@ -443,7 +458,7 @@ interface ReportTagShareBarProps {
 export const ReportTagShareBar: React.FC<ReportTagShareBarProps> = ({ period, activity, onOpen }) => {
   const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
   const breakdown = useMemo(
-    () => buildTagBreakdown(collectTagItems(activity, period.start, period.end), 'time', ALL_KINDS),
+    () => buildTagBreakdown(collectTagItems(activity, period.start, period.end), 'time', ALL_TAG_KINDS),
     // `periodKey` identifies the period; its Date objects change identity every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [activity, periodKey],
@@ -451,8 +466,8 @@ export const ReportTagShareBar: React.FC<ReportTagShareBarProps> = ({ period, ac
   const { rows, total } = breakdown;
   const top = rows.find(r => r.key !== UNTAGGED_KEY && !r.foldedKeys);
   const summary = total > 0
-    ? `${formatTagHours(total)} estimated and tracked ${periodWord(period)}${top ? `, most went to ${top.name} (${percent(top.total, total)}%)` : ''}`
-    : 'No estimated or tracked time to break down yet';
+    ? `${formatTagHours(total)} ${timeWords(breakdown)} ${periodWord(period)}${top ? `, most went to ${top.name} (${percent(top.total, total)}%)` : ''}`
+    : 'No estimated, tracked or scheduled time to break down yet';
 
   return (
     <button
@@ -471,7 +486,7 @@ export const ReportTagShareBar: React.FC<ReportTagShareBarProps> = ({ period, ac
           <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-lg font-bold text-text-primary">{formatTagHours(total)}</span>
             <span className="text-xs text-text-secondary">
-              estimated and tracked {periodWord(period)}
+              {timeWords(breakdown)} {periodWord(period)}
               {top && (
                 <>
                   {' · most went to '}

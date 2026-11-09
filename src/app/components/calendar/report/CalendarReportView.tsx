@@ -28,10 +28,12 @@ import { formatHours } from '@/app/components/stats/charts';
 import { moodColor } from '@/app/components/mood/MoodFacePicker';
 import { useAppShell } from '@/app/context/AppShellContext';
 import { useCalendarReport } from '@/app/hooks/useCalendarReport';
+import { useEventReport } from '@/app/hooks/useEventReport';
 import { useReportMood } from '@/app/hooks/useReportMood';
 import type { CalendarActivity } from '@/app/types/activity';
 import { moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate } from '@/app/utils/dateUtils';
+import { formatEventMinutes } from '@/app/utils/eventOccurrences';
 import {
   describePeriod,
   elapsedDays,
@@ -45,13 +47,12 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import type { TagItemKind } from '@/app/utils/tagReport';
+import type { TagChartKind } from '@/app/utils/tagReport';
 import ReportActivityChart from './ReportActivityChart';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
 import ReportTagActivityChart from './ReportTagActivityChart';
 import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
-import ReportEventsSection from './ReportEventsSection';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
   { kind: 'week', label: 'Week' },
@@ -62,16 +63,15 @@ const KINDS: { kind: ReportPeriodKind; label: string }[] = [
 const iconClass = 'w-3.5 h-3.5 sm:w-4 sm:h-4';
 
 /** The report's views; the open one is the URL's `view` (none for Overview). */
-export type ReportView = 'overview' | 'tasks' | 'notes' | 'habits' | 'mood' | 'time' | 'events';
+export type ReportView = 'overview' | 'tasks' | 'notes' | 'habits' | 'mood' | 'time';
 
-/** The report's four tabs, each holding one or more views. */
-type ReportGroup = 'productivity' | 'mood' | 'time' | 'events';
+/** The report's three tabs, each holding one or more views. */
+type ReportGroup = 'productivity' | 'mood' | 'time';
 
 const GROUPS: readonly SegmentedTab<ReportGroup>[] = [
   { value: 'productivity', label: 'Productivity', icon: LayoutDashboard },
   { value: 'mood', label: 'Mood', icon: Smile },
   { value: 'time', label: 'Time', icon: Tag },
-  { value: 'events', label: 'Events', icon: CalendarClock },
 ];
 
 const PRODUCTIVITY_VIEWS: readonly SegmentedTab<ReportView>[] = [
@@ -90,12 +90,14 @@ const GROUPS_ID = 'report-groups';
 const VIEWS_ID = 'report-views';
 const VIEW_PANEL_ID = 'report-views-tabpanel';
 
-const VIEW_VALUES: readonly ReportView[] = ['overview', 'tasks', 'notes', 'habits', 'mood', 'time', 'events'];
+const VIEW_VALUES: readonly ReportView[] = ['overview', 'tasks', 'notes', 'habits', 'mood', 'time'];
 
-const parseView = (value: string | null): ReportView => VIEW_VALUES.find(v => v === value) ?? 'overview';
+// Events used to be a tab of its own; links and bookmarks to it land where its time now shows.
+const parseView = (value: string | null): ReportView =>
+  (value === 'events' ? 'time' : VIEW_VALUES.find(v => v === value) ?? 'overview');
 const parseMoodView = (value: string | null): MoodView => (value === 'patterns' ? 'patterns' : 'time');
 const groupOf = (view: ReportView): ReportGroup =>
-  (view === 'mood' || view === 'time' || view === 'events' ? view : 'productivity');
+  (view === 'mood' || view === 'time' ? view : 'productivity');
 
 // ── Stat tiles ──────────────────────────────────────────────────────────────
 
@@ -108,9 +110,11 @@ interface StatTileProps {
   bg: string;
   /** Makes the tile a button, e.g. to open its tab. */
   onClick?: () => void;
+  /** Extra grid classes, e.g. to span the row's leftover columns. */
+  gridClass?: string;
 }
 
-const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, bg, onClick }) => {
+const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, bg, onClick, gridClass = '' }) => {
   const body = (
     <>
       <span className="flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-sm font-semibold whitespace-nowrap overflow-hidden" style={{ color }}>
@@ -122,7 +126,7 @@ const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, 
       <span className="hidden sm:block text-xs text-text-secondary">{detail}</span>
     </>
   );
-  const className = 'p-1.5 sm:p-3 rounded-lg border border-border-subtle flex flex-col gap-1 min-w-0 text-left';
+  const className = `p-1.5 sm:p-3 rounded-lg border border-border-subtle flex flex-col gap-1 min-w-0 text-left ${gridClass}`;
   if (!onClick) return <div className={className} style={{ backgroundColor: bg }}>{body}</div>;
   return (
     <button
@@ -137,6 +141,11 @@ const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, 
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+// Seven tiles: rows of three on a phone and four on a tablet, with the last
+// tile filling what's left of the final row, then one row on a wide screen.
+const STAT_GRID = 'grid grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2 sm:gap-3';
+const STAT_LAST_TILE = 'col-span-3 md:col-span-2 xl:col-span-1';
 
 const plannedDetail = (report: CalendarReport): string =>
   report.tasksPlanned === 0 ? 'No tasks due' : `${report.plannedCompleted} of ${plural(report.tasksPlanned, 'task')} due`;
@@ -161,11 +170,31 @@ const MoodTile: React.FC<{ summary: MoodSummary | null; current: boolean; onClic
       color={color}
       bg={`color-mix(in srgb, ${color} 10%, var(--tm-surface))`}
       onClick={onClick}
+      gridClass={STAT_LAST_TILE}
+    />
+  );
+};
+
+const EVENTS_COLOR = 'var(--tm-week-note)';
+
+/** Loads the event report itself, so a failure costs only this tile. */
+const EventsTile: React.FC<{ period: ReportPeriod; onClick: () => void }> = ({ period, onClick }) => {
+  const { report, error } = useEventReport(period);
+  return (
+    <StatTile
+      icon={<CalendarClock className={iconClass} />}
+      title="Events"
+      onClick={onClick}
+      value={report ? formatEventMinutes(report.total_minutes) : '—'}
+      detail={report ? plural(report.event_count, 'event') : error ? 'Couldn’t load events' : 'Loading events…'}
+      color={EVENTS_COLOR}
+      bg={`color-mix(in srgb, ${EVENTS_COLOR} 10%, var(--tm-surface))`}
     />
   );
 };
 
 interface StatTilesProps {
+  period: ReportPeriod;
   report: CalendarReport;
   /** Null when it failed to load. */
   mood: MoodSummary | null;
@@ -174,8 +203,8 @@ interface StatTilesProps {
   onOpen: (view: ReportView) => void;
 }
 
-const StatTiles: React.FC<StatTilesProps> = ({ report, mood, current, onOpen }) => (
-  <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+const StatTiles: React.FC<StatTilesProps> = ({ period, report, mood, current, onOpen }) => (
+  <div className={STAT_GRID}>
     <StatTile
       icon={<CircleCheck className={iconClass} />}
       title="Completed"
@@ -196,13 +225,14 @@ const StatTiles: React.FC<StatTilesProps> = ({ report, mood, current, onOpen }) 
     />
     <StatTile
       icon={<Hourglass className={iconClass} />}
-      title="Est. hours"
+      title="Task hours"
       onClick={() => onOpen('tasks')}
       value={`${formatHours(report.completedEstimatedHours)}h`}
       detail={report.plannedEstimatedHours > 0 ? `done · ${formatHours(report.plannedEstimatedHours)}h planned` : 'in completed tasks'}
       color="var(--tm-warning)"
       bg="var(--tm-warning-subtle)"
     />
+    <EventsTile period={period} onClick={() => onOpen('time')} />
     <StatTile
       icon={<Clock className={iconClass} />}
       title="In notes"
@@ -453,7 +483,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     />
   );
 
-  if (isEmpty(report) && !hasMood && !mood.error) {
+  if (isEmpty(report) && !activity.events?.length && !hasMood && !mood.error) {
     // While weekly or monthly check-ins are on, the period's weeks or months stay there to log.
     const offersPeriodCheckins = !!checkins && days > 0 && (period.kind === 'year' ? mood.settings.monthly : mood.settings.weekly);
     const empty = (
@@ -463,7 +493,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           {days === 0 ? 'This period hasn’t started yet' : `Nothing recorded for ${describePeriod(period)}`}
         </h3>
         <p className="text-sm text-text-muted max-w-sm">
-          Tasks you plan and complete, time in notes and habit check-ins will show up here.
+          Tasks you plan and complete, time in notes, habit check-ins and events will show up here.
         </p>
       </div>
     );
@@ -478,7 +508,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
 
   const byUnit = period.kind === 'year' ? 'by month' : 'by day';
   // Tasks, Notes and Habits each chart only their own kind, split by its tags.
-  const tagChart = (itemKind: TagItemKind) => (
+  const tagChart = (itemKind: TagChartKind) => (
     <ReportTagActivityChart period={period} buckets={report.buckets} activity={activity} itemKind={itemKind} />
   );
 
@@ -545,7 +575,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
     default:
       return (
         <div className="flex flex-col gap-3 sm:gap-4">
-          <StatTiles report={report} mood={periodMood} current={current} onOpen={onOpen} />
+          <StatTiles period={period} report={report} mood={periodMood} current={current} onOpen={onOpen} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
             <div className="lg:col-span-2">
               <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Activity ${byUnit}`}>
@@ -574,9 +604,9 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
 
 const ReportSkeleton: React.FC = () => (
   <div className="flex flex-col gap-3 sm:gap-4" aria-hidden="true">
-    <div className="grid grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
-      {Array.from({ length: 6 }, (_, i) => (
-        <div key={i} className="h-16 sm:h-24 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--tm-surface-raised)' }} />
+    <div className={STAT_GRID}>
+      {Array.from({ length: 7 }, (_, i) => (
+        <div key={i} className={`h-16 sm:h-24 rounded-lg animate-pulse ${i === 6 ? STAT_LAST_TILE : ''}`} style={{ backgroundColor: 'var(--tm-surface-raised)' }} />
       ))}
     </div>
     <div className="h-64 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--tm-surface-raised)' }} />
@@ -586,10 +616,10 @@ const ReportSkeleton: React.FC = () => (
 // ── View ────────────────────────────────────────────────────────────────────
 
 /**
- * Weekly / monthly / yearly report on the /reports page, in four tabs whose
+ * Weekly / monthly / yearly report on the /reports page, in three tabs whose
  * views each fit one screen: Productivity (Overview — the stat tiles, the
  * activity chart, highlights and how the time split by tag — then Tasks, Notes
- * and Habits), Mood (Over time or Patterns), Time and Events. The open view lives in
+ * and Habits), Mood (Over time or Patterns) and Time. The open view lives in
  * the URL (`?view=tasks`, `?view=mood&mood=patterns`), so Back, reloads and
  * links keep it, and switching the period keeps the view.
  */
@@ -736,10 +766,7 @@ const CalendarReportView: React.FC = () => {
         aria-labelledby={[segmentedTabId(GROUPS_ID, group), subTab && segmentedTabId(VIEWS_ID, subTab)].filter(Boolean).join(' ')}
         className="flex flex-col gap-3 sm:gap-4"
       >
-        {/* Events loads its own report, so it never waits on the activity and mood ones. */}
-        {view === 'events' ? (
-          <ReportEventsSection period={period} />
-        ) : error ? (
+        {error ? (
           <div className="card-glass p-6 flex flex-col items-center text-center gap-3" role="alert">
             <p className="text-sm text-text-primary">{error}</p>
             <button
@@ -774,7 +801,7 @@ const CalendarReportView: React.FC = () => {
       <p className="text-[11px] sm:text-xs text-text-muted">
         Completions count by the day a task was checked off; tasks completed before completion times were recorded aren’t counted. Habit streaks are as of today.
         {' '}Mood comes from your daily check-ins; days without one are left out of every mood number, never counted as neutral.
-        {' '}Events count once they’re on your calendar; archived events still count for the dates that have passed.
+        {' '}Events count once they’re on your calendar, and all-day events add no hours; archived events still count for the dates that have passed.
       </p>
     </section>
   );

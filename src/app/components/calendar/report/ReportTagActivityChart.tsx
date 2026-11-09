@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import type { CalendarActivity } from '@/app/types/activity';
 import type { ReportBucket, ReportPeriod } from '@/app/utils/calendarReport';
 import { formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
-import { buildTagSeries, UNTAGGED_KEY, type TagItemKind, type TagRow } from '@/app/utils/tagReport';
+import { buildTagSeries, UNTAGGED_KEY, type TagChartKind, type TagRow } from '@/app/utils/tagReport';
 import { axisTicks } from './ReportActivityChart';
 import { rowColor } from './ReportTagBreakdown';
 
@@ -22,7 +22,7 @@ interface KindCopy {
   amount: (value: number) => string;
 }
 
-const COPY: Record<TagItemKind, KindCopy> = {
+const COPY: Record<TagChartKind, KindCopy> = {
   task: {
     axis: 'Tasks completed',
     empty: 'No tasks completed in this period',
@@ -51,7 +51,7 @@ const COPY: Record<TagItemKind, KindCopy> = {
 const showLabel = (kind: ReportPeriod['kind'], index: number) =>
   kind !== 'month' || index === 0 || (index + 1) % 5 === 0;
 
-const formatTick = (value: number, itemKind: TagItemKind) => {
+const formatTick = (value: number, itemKind: TagChartKind) => {
   if (itemKind !== 'note' || value === 0) return String(value);
   return value < 3600 ? `${value / 60}m` : `${Math.round((value / 3600) * 10) / 10}h`;
 };
@@ -60,7 +60,7 @@ interface ReportTagActivityChartProps {
   period: ReportPeriod;
   buckets: ReportBucket[];
   activity: CalendarActivity;
-  itemKind: TagItemKind;
+  itemKind: TagChartKind;
 }
 
 /**
