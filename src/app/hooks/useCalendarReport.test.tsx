@@ -13,6 +13,7 @@ vi.mock('@/app/lib/backend-api', () => ({ fetchCalendarActivity: mocks.fetchCale
 vi.mock('@/app/context/HabitsContext', () => ({ useHabitsContext: () => ({ habits: [] }) }));
 
 import { useCalendarReport } from './useCalendarReport';
+import { notifyEventsChanged } from './useEventsVersion';
 
 const emptyActivity = (start: string, end: string): CalendarActivity => ({
   start_date: start,
@@ -23,8 +24,14 @@ const emptyActivity = (start: string, end: string): CalendarActivity => ({
   habit_completions: [],
 });
 
-const Probe: React.FC = () => {
-  useCalendarReport(periodContaining('month', new Date(2026, 9, 21)));
+let result: ReturnType<typeof useCalendarReport>;
+
+const capture = (value: ReturnType<typeof useCalendarReport>) => {
+  result = value;
+};
+
+const Probe: React.FC<{ onResult: typeof capture }> = ({ onResult }) => {
+  onResult(useCalendarReport(periodContaining('month', new Date(2026, 9, 21))));
   return null;
 };
 
@@ -45,7 +52,26 @@ afterEach(() => {
 
 describe('useCalendarReport', () => {
   it('asks for archived items too, so reports count them', async () => {
-    await act(async () => root.render(<Probe />));
+    await act(async () => root.render(<Probe onResult={capture} />));
     expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-01', '2026-10-31', { includeArchived: true });
+  });
+
+  it('shows the reloaded activity after an event changes, without going back to loading', async () => {
+    await act(async () => root.render(<Probe onResult={capture} />));
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(1);
+    expect(result.activity?.events).toBeUndefined();
+
+    const events = [{ event_id: 1, title: 'Lecture' }] as unknown as CalendarActivity['events'];
+    let finishReload: (activity: CalendarActivity) => void = () => {};
+    mocks.fetchCalendarActivity.mockImplementation(
+      () => new Promise<CalendarActivity>(resolve => { finishReload = resolve; }),
+    );
+
+    await act(async () => notifyEventsChanged());
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(2);
+    expect(result.loading).toBe(false);
+
+    await act(async () => finishReload({ ...emptyActivity('2026-10-01', '2026-10-31'), events }));
+    expect(result.activity?.events).toEqual(events);
   });
 });

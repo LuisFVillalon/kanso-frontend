@@ -33,7 +33,7 @@ export const MetricButton: React.FC<{ active: boolean; onClick: () => void; chil
   </button>
 );
 
-export const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
+const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
   <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
     <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
     {label}

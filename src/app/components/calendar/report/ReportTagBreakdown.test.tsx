@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
+import type { EventOccurrence } from '@/app/types/event';
 import { periodContaining } from '@/app/utils/calendarReport';
 
 const api = vi.hoisted(() => ({ fetchCalendarActivity: vi.fn() }));
@@ -42,6 +43,24 @@ const weekActivity = empty({
   ],
   notes: [{ id: 7, title: 'Lecture notes', tags: [cs] }],
   habits: [{ id: 4, title: 'Run', estimated_time: 0.5, tags: [health] }],
+});
+
+const occurrence = (id: number, title: string, day: number, startHour: number, endHour: number, tags: EventOccurrence['tags'] = [cs], overrides: Partial<EventOccurrence> = {}) => ({
+  event_id: id, occurrence_date: `2026-10-${day}`, title, tags, all_day: false,
+  date: `2026-10-${day}`, end_date: `2026-10-${day}`, start_time: `${startHour}:00:00`, end_time: `${endHour}:00:00`,
+  starts_at: new Date(2026, 9, day, startHour).toISOString(), ends_at: new Date(2026, 9, day, endHour).toISOString(),
+  past: true, archived: false,
+  ...overrides,
+} as EventOccurrence);
+
+const withEvents = empty({
+  completed_tasks: [task(2, 'Lab writeup', 2, 21)],
+  events: [
+    occurrence(1, 'Lecture', 19, 9, 10),
+    occurrence(1, 'Lecture', 20, 9, 10),
+    occurrence(1, 'Lecture', 21, 9, 10),
+    occurrence(2, 'Doctor', 22, 14, 15, []),
+  ],
 });
 
 let container: HTMLDivElement;
@@ -87,7 +106,7 @@ describe('ReportTagBreakdown', () => {
       'Health, 1h, 13%. Show its items',
       'Untagged, 1h, 13%. Show its items',
     ]);
-    expect(text()).toContain('Tap a tag to see its tasks, notes and habits.');
+    expect(text()).toContain('Tap a tag to see its tasks, notes, habits and events.');
     expect(text()).not.toMatch(/vs last|new vs|same as last/);
     expect(api.fetchCalendarActivity).not.toHaveBeenCalled();
   });
@@ -112,6 +131,49 @@ describe('ReportTagBreakdown', () => {
     await click(button(/^All tags$/));
     expect(container.querySelector('h3')).toBeNull();
     expect(rowNames()).toHaveLength(4);
+  });
+
+  describe('events', () => {
+    it('adds events to the total, the split text and the wording, on by default', async () => {
+      await render('week', withEvents);
+      expect(button(/^Events$/).getAttribute('aria-pressed')).toBe('true');
+      expect(text()).toContain('6h');
+      expect(text()).toContain('estimated, tracked and scheduled this week');
+      expect(rowNames()).toEqual(['CS 460, 5h, 83%. Show its items', 'Untagged, 1h, 17%. Show its items']);
+      expect(text()).toContain('3h · 3 events');
+    });
+
+    it('counts each occurrence, and drops events and their wording when switched off', async () => {
+      await render('week', withEvents);
+      await click(button(/^Count$/));
+      expect(text()).toContain('things done or scheduled this week');
+      expect(rowNames()[0]).toBe('CS 460, 4, 80%. Show its items');
+      expect(text()).toContain('3 events');
+      await click(button(/^Events$/));
+      expect(text()).toContain('things done this week');
+      expect(rowNames()).toEqual(['CS 460, 1, 100%. Show its items']);
+      await click(button(/^Time$/));
+      expect(text()).toContain('estimated and tracked this week');
+    });
+
+    it('lists a tag’s events in its detail view', async () => {
+      await render('week', withEvents);
+      await click(button(/^CS 460, /));
+      const section = container.querySelector('section[aria-label="Events"]')!;
+      expect(section.textContent).toContain('Lecture');
+      expect(section.textContent).toContain('3 times · 3h');
+    });
+
+    it('dates a one-time event, and says when one is all day', async () => {
+      await render('week', empty({
+        events: [occurrence(3, 'Fair', 22, 0, 0, [cs], { all_day: true, start_time: null, end_time: null }), occurrence(4, 'Review', 20, 9, 10)],
+      }));
+      await click(button(/^Count$/));
+      await click(button(/^CS 460, /));
+      const section = container.querySelector('section[aria-label="Events"]')!;
+      expect(section.textContent).toContain('Oct 22 · all day');
+      expect(section.textContent).toContain('Oct 20 · 1h');
+    });
   });
 
   it('shows a month without loading or comparing to last month', async () => {
