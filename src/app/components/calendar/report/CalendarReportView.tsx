@@ -447,16 +447,16 @@ const NotesReport: React.FC<{ period: ReportPeriod; report: CalendarReport; acti
   const selection = useTagSelection(period, activity, 'note');
   const { selected } = selection;
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <CardShell icon={<Clock className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header={`Note time ${byUnit}`}>
+        <TagActivityChart period={period} buckets={report.buckets} itemKind="note" selection={selection} />
+      </CardShell>
       <CardShell
         icon={<FileText className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />}
         header="Top notes by time"
         headerAction={selected && <TagFilterLabel tag={selected} />}
       >
         <TopNotes report={report} tag={selected} />
-      </CardShell>
-      <CardShell icon={<Clock className="w-4 h-4" style={{ color: 'var(--tm-accent-2)' }} />} header={`Note time ${byUnit}`}>
-        <TagActivityChart period={period} buckets={report.buckets} itemKind="note" selection={selection} />
       </CardShell>
     </div>
   );

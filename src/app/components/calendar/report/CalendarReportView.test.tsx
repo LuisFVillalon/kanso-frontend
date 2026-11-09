@@ -1128,6 +1128,7 @@ describe('CalendarReportView tag charts', () => {
     it('narrows to a tag with each note’s full time, and restores on deselect', async () => {
       await render();
       await openTab('Notes');
+      expect([...container.querySelectorAll('.card-glass')].map(c => c.firstElementChild?.textContent)).toEqual(['Note time by day', 'Top notes by time']);
       expect(rows()).toEqual(['Loose 50m', 'Both 40m', 'Calc 20m']);
       expect(topNotesCard().textContent).not.toContain('Showing');
 
