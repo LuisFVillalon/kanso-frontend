@@ -578,9 +578,17 @@ function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: R
       style={{ backgroundColor: 'var(--tm-surface-raised)', border: '1px solid var(--tm-border)' }}
     >
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 mb-2">
-        <div className="flex items-center gap-1.5" style={{ color: overCap ? 'var(--tm-danger)' : 'var(--tm-text-primary)' }}>
-          <Gauge className="w-4 h-4" />
-          <span className="text-xs font-semibold uppercase tracking-wide">Today&apos;s Activity Log</span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <div className="flex items-center gap-1.5" style={{ color: overCap ? 'var(--tm-danger)' : 'var(--tm-text-primary)' }}>
+            <Gauge className="w-4 h-4" />
+            <span className="text-xs font-semibold uppercase tracking-wide">Today&apos;s Activity Log</span>
+          </div>
+          {workload.is_rest_day && (
+            <span className="flex items-center gap-1.5 text-[11px] text-text-secondary whitespace-nowrap">
+              <Moon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />
+              Today is a rest day.
+            </span>
+          )}
         </div>
         {(overCap || mood) && (
           <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
@@ -646,12 +654,6 @@ function WorkloadCard({ debrief, mood }: { debrief: DailyDebriefReport; mood?: R
           {availableMinutes != null && ` / ${formatMinutes(availableMinutes)}`}
         </span>
       </div>
-      {workload.is_rest_day && (
-        <p className="flex items-center gap-1.5 text-[11px] text-text-secondary mt-1.5">
-          <Moon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />
-          Today is a rest day. Take it easy; anything you do still shows here.
-        </p>
-      )}
       {pct == null && completedItems.length === 0 && (
         <p className="text-[11px] text-text-muted mt-1.5">
           Nothing completed with tracked time yet today.
