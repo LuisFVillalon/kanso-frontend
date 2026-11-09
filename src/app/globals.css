@@ -1051,7 +1051,10 @@ html[data-page-style="blank"] body {
     position: fixed;
     inset-block: 0;
     left: 0;
-    z-index: 30;
+    /* The rail is its own stacking context, so this is also the level of its
+       menus: above page content (the week calendar's sticky header is z-30),
+       below modals (MODAL_LAYER.base). */
+    z-index: 40;
     width: var(--tm-rail-w);
     flex-direction: column;
     gap: 0.25rem;
