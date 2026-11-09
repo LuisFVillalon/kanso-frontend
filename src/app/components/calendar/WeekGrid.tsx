@@ -71,8 +71,8 @@ const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
 
 /** Hours outside the work window: a flat wash of the muted text color. */
 const OFF_HOURS_BG = 'color-mix(in srgb, var(--tm-text-muted) 9%, transparent)';
-/** Rest days: the same wash, hatched, so a day off reads differently from an evening. */
-const REST_DAY_BG = 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--tm-text-muted) 14%, transparent) 0 5px, transparent 5px 10px)';
+/** Rest days: the same wash a step deeper and down the whole column, header included, so a day off reads differently from an evening. */
+const REST_DAY_BG = 'color-mix(in srgb, var(--tm-text-muted) 14%, transparent)';
 /** The lines where the work window opens and closes. */
 const WINDOW_EDGE = 'color-mix(in srgb, var(--tm-accent) 55%, transparent)';
 
@@ -171,7 +171,7 @@ interface WeekGridProps {
  * completions and note sessions sit on top as blocks, side by side where they
  * overlap, and all-day events, undated-time tasks and habit completions fill
  * the all-day row. Hours outside the user's work window are washed out and rest
- * days hatched, with dashed lines where the window opens and closes. Scrolls
+ * days shaded deeper, with dashed lines where the window opens and closes. Scrolls
  * both ways inside its own box, with the day headers and hour gutter pinned,
  * so it stays usable at phone width.
  */
@@ -252,7 +252,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                   aria-current={isToday ? 'date' : undefined}
                   title={rest ? 'Rest day' : undefined}
                   className="flex flex-col items-center py-2 border-l border-border-subtle"
-                  style={rest ? { backgroundImage: REST_DAY_BG } : undefined}
+                  style={rest ? { backgroundColor: REST_DAY_BG } : undefined}
                 >
                   <span
                     className="text-[11px] font-semibold uppercase tracking-wide"
@@ -285,7 +285,7 @@ const WeekGrid: React.FC<WeekGridProps> = ({
               <div
                 key={i}
                 className="relative min-h-9 border-l border-border-subtle"
-                style={workDays[i].rest ? { backgroundImage: REST_DAY_BG } : undefined}
+                style={workDays[i].rest ? { backgroundColor: REST_DAY_BG } : undefined}
               >
                 <button
                   type="button"

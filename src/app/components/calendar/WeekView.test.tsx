@@ -56,6 +56,7 @@ vi.mock('@/app/context/NotificationsContextValue', async importOriginal => ({
 }));
 
 import WeekView from './WeekView';
+import { WEEK_LEGEND } from './WeekGrid';
 import type { CalendarEvent, EventOccurrence } from '@/app/types/event';
 
 let container: HTMLDivElement;
@@ -217,6 +218,9 @@ describe('WeekView', { timeout: 30_000 }, () => {
     expect([...container.querySelectorAll('[data-window-edge]')].slice(0, 2).map(e => e.textContent)).toEqual(['Opens 8:00 AM', 'Closes 10:00 PM']);
     const legend = [...container.querySelectorAll('ul[aria-label="Legend"] li')].map(li => li.textContent);
     expect(legend.slice(4)).toEqual(['Event (tag color)', 'Past', 'Archived', 'Clash', 'Outside work hours', 'Rest day']);
+    const swatch = (label: string) => String(WEEK_LEGEND.find(l => l.label === label)?.swatch.background);
+    expect(swatch('Rest day')).not.toContain('gradient');
+    expect(swatch('Rest day')).not.toBe(swatch('Outside work hours'));
 
     await renderWithSchedule({ dayStartTime: '09:30', shutoffTime: '17:00', restDays: [3] });
     expect(daySchedules()[3]).toBe('Rest day');
