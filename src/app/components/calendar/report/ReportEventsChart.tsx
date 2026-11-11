@@ -7,14 +7,14 @@ import { toLocalDateStr } from '@/app/utils/dateUtils';
 import type { WorkDaySettings } from '@/app/utils/dayReport';
 import { formatEventMinutes } from '@/app/utils/eventOccurrences';
 import {
-  bucketInWindow, bucketTotal, buildEventTimeSeries, type EventTimeBucket, type EventTimeTag,
+  bucketInWindow, bucketTotal, buildEventTimeSeries, type EventTimeBucket, type EventTimeSeries, type EventTimeTag,
 } from '@/app/utils/eventTime';
 import { UNTAGGED_KEY, type TagRow } from '@/app/utils/tagReport';
 import { axisTicks } from './activityAxis';
 import { rowColor } from './ReportTagBreakdown';
 
-/** The Events stat tile's color, so the tab matches the tile. */
-const IN_COLOR = 'var(--tm-week-note)';
+/** The Events stat tile's color, so the chart matches the tile. */
+export const IN_COLOR = 'var(--tm-week-note)';
 const OUT_COLOR = 'color-mix(in srgb, var(--tm-week-note) 45%, transparent)';
 const REST_COLOR = 'color-mix(in srgb, var(--tm-text-muted) 38%, transparent)';
 
@@ -22,7 +22,7 @@ const REST_COLOR = 'color-mix(in srgb, var(--tm-text-muted) 38%, transparent)';
 const spotColor = (row: TagRow) => (row.key === UNTAGGED_KEY ? 'var(--tm-text-secondary)' : rowColor(row));
 
 /** Upcoming time: stripes of the part's own color. */
-const hatch = (color: string) =>
+export const hatch = (color: string) =>
   `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 70%, transparent) 0 3px, color-mix(in srgb, ${color} 38%, transparent) 3px 6px)`;
 
 const fillOf = (color: string, upcoming: boolean): React.CSSProperties =>
@@ -42,7 +42,7 @@ const showLabel = (kind: ReportPeriod['kind'], index: number) =>
   kind !== 'month' || index === 0 || (index + 1) % 5 === 0;
 
 /** "Wed", "Wed 11" or "Apr": how the peak line names a bucket. */
-const shortName = (kind: ReportPeriod['kind'], b: ReportBucket) => {
+export const shortName = (kind: ReportPeriod['kind'], b: ReportBucket) => {
   const [y, m, d = 1] = b.dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   if (kind === 'year') return date.toLocaleDateString('en-US', { month: 'short' });
@@ -73,35 +73,63 @@ interface Part {
 
 const EMPTY_TAG: EventTimeTag = { past: 0, upcoming: 0, inWindow: 0 };
 
+/** A minute-stable "now", so a series stays memoized between renders. */
+export const useNowMinute = (): number => Math.floor(Date.now() / 60000);
+
+const periodKeyOf = (period: ReportPeriod) => `${period.kind}:${toLocalDateStr(period.start)}`;
+
+/** The period's time in events, per day or (with `byMonth`) per month. */
+export const useEventTimeSeries = (
+  period: ReportPeriod,
+  activity: CalendarActivity,
+  workDays: WorkDaySettings,
+  byMonth: boolean,
+): EventTimeSeries => {
+  const periodKey = periodKeyOf(period);
+  const nowMinute = useNowMinute();
+  return useMemo(
+    () => buildEventTimeSeries(activity, period.start, period.end, workDays, byMonth, new Date(nowMinute * 60000)),
+    // `periodKey` identifies the period; its Date objects change identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activity, periodKey, workDays, byMonth, nowMinute],
+  );
+};
+
+export interface EventSelection {
+  /** Per day, or per month for a year. */
+  series: EventTimeSeries;
+  /** The picked tag. A pick only holds for the period it was made in. */
+  selected: TagRow | null;
+  /** Picks a tag row by key, or all events with null. */
+  pick: (key: string | null) => void;
+}
+
+/** The Events chart's data and picked tag, for a view whose other cards follow the tag too. */
+export const useEventSelection = (period: ReportPeriod, activity: CalendarActivity, workDays: WorkDaySettings): EventSelection => {
+  const periodKey = periodKeyOf(period);
+  const series = useEventTimeSeries(period, activity, workDays, period.kind === 'year');
+  const [picked, setPicked] = useState<{ periodKey: string; key: string } | null>(null);
+  const selected = picked?.periodKey === periodKey ? series.rows.find(r => r.key === picked.key) ?? null : null;
+  const pick = (key: string | null) => setPicked(key ? { periodKey, key } : null);
+  return { series, selected, pick };
+};
+
 interface ReportEventsChartProps {
   period: ReportPeriod;
   buckets: ReportBucket[];
-  activity: CalendarActivity;
-  workDays: WorkDaySettings;
-  /** The tab buttons, which share the row with this tab's legend. */
-  tabs: React.ReactNode;
-  now?: Date;
+  selection: EventSelection;
+  /** Buttons that share the row with the legend. */
+  tabs?: React.ReactNode;
 }
 
 /**
- * The Activity card's Events tab: time in events per day (per month for a
- * year). Each workday's work hours are a dashed outline the day's events
- * fill, with time outside them lighter on top; time still to come is
- * hatched. Picking a tag recolors the bars by it, keeping the outline.
+ * The Events view's chart: time in events per day (per month for a year).
+ * Each workday's work hours are a dashed outline the day's events fill,
+ * with time outside them lighter on top; time still to come is hatched.
+ * Picking a tag recolors the bars by it, keeping the outline.
  */
-const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, activity, workDays, tabs, now: nowProp }) => {
-  const periodKey = `${period.kind}:${toLocalDateStr(period.start)}`;
-  // A minute-stable "now" keeps the series memoized between renders.
-  const nowMinute = Math.floor((nowProp ?? new Date()).getTime() / 60000);
-  const { rows, buckets: byKey } = useMemo(
-    () => buildEventTimeSeries(activity, period.start, period.end, workDays, period.kind === 'year', new Date(nowMinute * 60000)),
-    // `periodKey` identifies the period; its Date objects change identity every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activity, periodKey, workDays, nowMinute],
-  );
-  // A pick only holds for the period it was made in.
-  const [picked, setPicked] = useState<{ periodKey: string; key: string } | null>(null);
-  const selected: TagRow | null = picked?.periodKey === periodKey ? rows.find(r => r.key === picked.key) ?? null : null;
+const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, selection, tabs }) => {
+  const { series: { rows, buckets: byKey }, selected, pick } = selection;
 
   const unit = period.kind === 'year' ? 'month' : 'day';
   const dataOf = (b: ReportBucket): EventTimeBucket | undefined => byKey.get(b.key);
@@ -113,7 +141,7 @@ const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, 
 
   const max = Math.max(...buckets.map(totalOf), 0);
   const scaleMax = Math.max(max, ...buckets.map(windowOf));
-  const ticks = axisTicks(scaleMax * 60, 'events').map(t => t / 60);
+  const ticks = axisTicks(scaleMax * 60, 'notes').map(t => t / 60);
   const scaleTop = ticks[ticks.length - 1];
   const grand = buckets.reduce((s, b) => s + totalOf(b), 0);
 
@@ -176,7 +204,7 @@ const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, 
     <button
       key={key ?? 'all'}
       type="button"
-      onClick={() => setPicked(key ? { periodKey, key } : null)}
+      onClick={() => pick(key)}
       aria-pressed={isSelected}
       className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-xs whitespace-nowrap transition-colors ${
         isSelected ? 'border-border-strong bg-surface-raised text-text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'

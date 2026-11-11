@@ -49,12 +49,14 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
-import { completedTasksOf, rowHasTags, topNotesOfRow, UNTAGGED_KEY, type TagRow } from '@/app/utils/tagReport';
+import { completedTasksOf, rowHasTags, topNotesOfRow, type TagRow } from '@/app/utils/tagReport';
 import ReportActivityChart from './ReportActivityChart';
+import EventsReport from './ReportEventsSection';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
 import { TagActivityChart, useTagSelection } from './ReportTagActivityChart';
-import ReportTagBreakdown, { ReportTagShareBar, rowColor } from './ReportTagBreakdown';
+import { EmptyLine, plural, ProgressRow, TagFilterLabel } from './ReportParts';
+import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
 
 const KINDS: { kind: ReportPeriodKind; label: string }[] = [
   { kind: 'week', label: 'Week' },
@@ -65,7 +67,7 @@ const KINDS: { kind: ReportPeriodKind; label: string }[] = [
 const iconClass = 'w-3.5 h-3.5 sm:w-4 sm:h-4';
 
 /** The report's views; the open one is the URL's `view` (none for Overview). */
-export type ReportView = 'overview' | 'tasks' | 'notes' | 'habits' | 'mood' | 'time';
+export type ReportView = 'overview' | 'tasks' | 'notes' | 'habits' | 'events' | 'mood' | 'time';
 
 /** The report's three tabs, each holding one or more views. */
 type ReportGroup = 'productivity' | 'mood' | 'time';
@@ -81,6 +83,7 @@ const PRODUCTIVITY_VIEWS: readonly SegmentedTab<ReportView>[] = [
   { value: 'tasks', label: 'Tasks' },
   { value: 'notes', label: 'Notes' },
   { value: 'habits', label: 'Habits' },
+  { value: 'events', label: 'Events' },
 ];
 
 const MOOD_VIEWS: readonly SegmentedTab<MoodView>[] = [
@@ -92,11 +95,9 @@ const GROUPS_ID = 'report-groups';
 const VIEWS_ID = 'report-views';
 const VIEW_PANEL_ID = 'report-views-tabpanel';
 
-const VIEW_VALUES: readonly ReportView[] = ['overview', 'tasks', 'notes', 'habits', 'mood', 'time'];
+const VIEW_VALUES: readonly ReportView[] = ['overview', 'tasks', 'notes', 'habits', 'events', 'mood', 'time'];
 
-// Events used to be a tab of its own; links and bookmarks to it land where its time now shows.
-const parseView = (value: string | null): ReportView =>
-  (value === 'events' ? 'time' : VIEW_VALUES.find(v => v === value) ?? 'overview');
+const parseView = (value: string | null): ReportView => VIEW_VALUES.find(v => v === value) ?? 'overview';
 const parseMoodView = (value: string | null): MoodView => (value === 'patterns' ? 'patterns' : 'time');
 const groupOf = (view: ReportView): ReportGroup =>
   (view === 'mood' || view === 'time' ? view : 'productivity');
@@ -141,8 +142,6 @@ const StatTile: React.FC<StatTileProps> = ({ icon, title, value, detail, color, 
     </button>
   );
 };
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 // Seven tiles: rows of three on a phone and four on a tablet, with the last
 // tile filling what's left of the final row, then one row on a wide screen.
@@ -234,7 +233,7 @@ const StatTiles: React.FC<StatTilesProps> = ({ period, report, mood, current, on
       color="var(--tm-warning)"
       bg="var(--tm-warning-subtle)"
     />
-    <EventsTile period={period} onClick={() => onOpen('time')} />
+    <EventsTile period={period} onClick={() => onOpen('events')} />
     <StatTile
       icon={<Clock className={iconClass} />}
       title="In notes"
@@ -258,10 +257,6 @@ const StatTiles: React.FC<StatTilesProps> = ({ period, report, mood, current, on
 );
 
 // ── Lists ───────────────────────────────────────────────────────────────────
-
-const EmptyLine: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p className="text-xs sm:text-sm text-text-muted italic py-2">{children}</p>
-);
 
 const BusiestDays: React.FC<{ report: CalendarReport }> = ({ report }) => {
   if (report.busiestDays.length === 0) return <EmptyLine>No activity recorded yet.</EmptyLine>;
@@ -404,18 +399,6 @@ const HabitList: React.FC<HabitListProps> = ({ report, days, cells, tag }) => {
   );
 };
 
-const ProgressRow: React.FC<{ label: string; detail: string; share: number; color: string }> = ({ label, detail, share, color }) => (
-  <div className="flex flex-col gap-1.5">
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="text-xs sm:text-sm text-text-secondary">{label}</span>
-      <span className="text-xs sm:text-sm font-semibold text-text-primary whitespace-nowrap">{detail}</span>
-    </div>
-    <span className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--tm-surface-raised)' }} aria-hidden="true">
-      <span className="block h-full rounded-full" style={{ width: `${Math.min(share, 1) * 100}%`, backgroundColor: color }} />
-    </span>
-  </div>
-);
-
 const PlannedVsDone: React.FC<{ report: CalendarReport }> = ({ report }) => (
   <div className="flex flex-col gap-3">
     <ProgressRow
@@ -498,16 +481,6 @@ const TasksReport: React.FC<{ period: ReportPeriod; report: CalendarReport; acti
 
 // ── Notes view ──────────────────────────────────────────────────────────────
 
-const TagFilterLabel: React.FC<{ tag: TagRow }> = ({ tag }) => (
-  <span className="inline-flex items-center gap-1.5 min-w-0 text-xs text-text-muted">
-    Showing
-    <span className="inline-flex items-center gap-1.5 min-w-0 px-2 py-0.5 rounded-full border border-border-strong bg-surface-raised text-text-primary">
-      <span className="w-2.5 h-2.5 rounded-[3px] flex-shrink-0" style={{ backgroundColor: rowColor(tag) }} aria-hidden="true" />
-      <span className={`truncate ${tag.key === UNTAGGED_KEY ? 'italic' : ''}`}>{tag.name}</span>
-    </span>
-  </span>
-);
-
 /** The Notes tab's two cards: a tag tapped in the chart narrows the top notes to it. */
 const NotesReport: React.FC<{ period: ReportPeriod; report: CalendarReport; activity: CalendarActivity; byUnit: string }> = ({ period, report, activity, byUnit }) => {
   const selection = useTagSelection(period, activity, 'note');
@@ -583,7 +556,7 @@ interface ReportBodyProps {
   mood: ReportMood;
   /** The profile's rest days, which "Your task & note tags" compares apart from work days. */
   restDays: number[];
-  /** The profile's work days and hours, the Events chart's outline. */
+  /** The profile's work days and hours, which time in events is counted against. */
   workDays: WorkDaySettings;
   view: ReportView;
   moodView: MoodView;
@@ -650,6 +623,8 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
       return <NotesReport period={period} report={report} activity={activity} byUnit={byUnit} />;
     case 'habits':
       return <HabitsReport period={period} report={report} activity={activity} days={days} cells={cells} byUnit={byUnit} />;
+    case 'events':
+      return <EventsReport period={period} buckets={report.buckets} activity={activity} workDays={workDays} current={current} byUnit={byUnit} />;
     case 'mood':
       return mood.error ? (
         <div className="card-glass p-4 flex flex-wrap items-center gap-3" role="alert">
@@ -668,7 +643,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
             <div className="lg:col-span-2">
               <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Activity ${byUnit}`}>
-                <ReportActivityChart period={period} buckets={report.buckets} activity={activity} workDays={workDays} />
+                <ReportActivityChart period={period} buckets={report.buckets} activity={activity} workDays={workDays} onOpenEvents={() => onOpen('events')} />
               </CardShell>
             </div>
             <ReportHighlights
@@ -707,8 +682,8 @@ const ReportSkeleton: React.FC = () => (
 /**
  * Weekly / monthly / yearly report on the /reports page, in three tabs whose
  * views each fit one screen: Productivity (Overview — the stat tiles, the
- * activity chart, highlights and how the time split by tag — then Tasks, Notes
- * and Habits), Mood (Over time or Patterns) and Time. The open view lives in
+ * activity chart, highlights and how the time split by tag — then Tasks, Notes,
+ * Habits and Events), Mood (Over time or Patterns) and Time. The open view lives in
  * the URL (`?view=tasks`, `?view=mood&mood=patterns`), so Back, reloads and
  * links keep it, and switching the period keeps the view.
  */
@@ -892,6 +867,7 @@ const CalendarReportView: React.FC = () => {
         Completions count by the day a task was checked off; tasks completed before completion times were recorded aren’t counted. Habit streaks are as of today.
         {' '}Mood comes from your daily check-ins; days without one are left out of every mood number, never counted as neutral.
         {' '}Events count once they’re on your calendar, and all-day events add no hours; archived events still count for the dates that have passed.
+        {' '}Events of 24 hours or more add no hours, and overlapping events count once.
       </p>
     </section>
   );

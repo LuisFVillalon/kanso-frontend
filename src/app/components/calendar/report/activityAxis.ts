@@ -1,5 +1,5 @@
-/** The Activity card's tabs. */
-export type ActivityMetric = 'completions' | 'notes' | 'events';
+/** The Activity card's tabs; 'notes' also counts any other time, such as events. */
+export type ActivityMetric = 'completions' | 'notes';
 
 // Steps the y axis can count in: whole numbers of things done, or round
 // stretches of time (in seconds) for note and event time — up to 100h, for a

@@ -6,17 +6,19 @@
  *
  * Time is the estimate of each completed task, the editing time in each note
  * (clipped to the range), a habit's estimate per check-in and each event's
- * length (clipped to the range; an all-day event adds none). Count is one per
- * completed task, one per note worked on, one per habit check-in and one per
- * event starting in the range. Events follow GET /get-event-report: what the
- * calendar shows, so past archived occurrences count and upcoming archived
- * ones never arrive. Tags are the ones items carry now, so re-tagging
+ * length (clipped to the range; an all-day event, or a timed one 24 hours or
+ * longer, adds none). Count is one per completed task, one per note worked
+ * on, one per habit check-in and one per event starting in the range. Events
+ * follow GET /get-event-report: what the calendar shows, so past archived
+ * occurrences count and upcoming archived ones never arrive, and a declined
+ * or "Show as free" imported event doesn't count. Tags are the ones items carry now, so re-tagging
  * something moves its past time too.
  */
 
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import { addSecondsByLocalDay, TOP_NOTES, type NoteTime } from '@/app/utils/calendarReport';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { addsHours } from '@/app/utils/eventOccurrences';
 
 export type TagMeasure = 'time' | 'count';
 
@@ -143,10 +145,12 @@ export const collectTagItems = (activity: CalendarActivity, start: Date, end: Da
 
   const events = new Map<string, TagReportItem>();
   for (const occurrence of activity.events ?? []) {
+    // A declined or "Show as free" imported event leaves the time free.
+    if (occurrence.busy === false) continue;
     const startsInRange = inRange(occurrence.date);
     const startMs = Math.max(new Date(occurrence.starts_at).getTime(), rangeStartMs);
     const endMs = Math.min(new Date(occurrence.ends_at).getTime(), rangeEndMs);
-    const hours = occurrence.all_day ? 0 : Math.max(endMs - startMs, 0) / 3600000;
+    const hours = addsHours(occurrence) ? Math.max(endMs - startMs, 0) / 3600000 : 0;
     if (!startsInRange && hours === 0) continue;
     // A repeating event is one item, but an occurrence retitled or re-tagged on its own stands apart.
     const key = `${occurrence.event_id}|${occurrence.title}|${occurrence.tags.map(t => t.id).sort((a, b) => a - b).join(',')}`;

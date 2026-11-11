@@ -850,7 +850,7 @@ describe('CalendarReportView tabs', () => {
     withHabits();
     await render();
     expect(tabs('Report sections')).toEqual(['Productivity', 'Mood', 'Time']);
-    expect(tabs('Productivity view')).toEqual(['Overview', 'Tasks', 'Notes', 'Habits']);
+    expect(tabs('Productivity view')).toEqual(['Overview', 'Tasks', 'Notes', 'Habits', 'Events']);
     expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
     expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
     const panel = document.getElementById('report-views-tabpanel')!;
@@ -954,12 +954,12 @@ describe('CalendarReportView tabs', () => {
     expect(window.location.search).toBe('?view=tasks');
     expect(document.activeElement).toBe(tab('Tasks'));
     await key(tab('Tasks'), 'End');
-    expect(window.location.search).toBe('?view=habits');
+    expect(window.location.search).toBe('?view=events');
     await key(tab('Productivity'), 'ArrowLeft');
     expect(window.location.search).toBe('?view=time');
     expect(document.activeElement).toBe(tab('Time'));
     await key(tab('Time'), 'Home');
-    expect(window.location.search).toBe('?view=habits');
+    expect(window.location.search).toBe('?view=events');
   });
 
   describe('Events', () => {
@@ -983,12 +983,14 @@ describe('CalendarReportView tabs', () => {
       expect(text()).not.toContain('Est. hours');
     });
 
-    it('opens the Time tab from the tile', async () => {
+    it('opens the Events view from the tile', async () => {
       withHabits();
       await render();
       await click(buttonLabelled(/^Events/));
-      expect(window.location.search).toBe('?view=time');
-      expect(tab('Time').getAttribute('aria-selected')).toBe('true');
+      expect(window.location.search).toBe('?view=events');
+      expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
+      expect(tab('Events').getAttribute('aria-selected')).toBe('true');
+      expect(text()).toContain('Time in events by day');
     });
 
     it('shows a dash when the event report fails, and the rest of the report still renders', async () => {
@@ -1000,13 +1002,23 @@ describe('CalendarReportView tabs', () => {
       expect(text()).toContain('Activity by day');
     });
 
-    it('sends a link to the old Events view to the Time tab', async () => {
+    it('opens the Events view a link names', async () => {
       withEvent();
       window.history.replaceState(null, '', '/reports?view=events');
       await render();
-      expect(tab('Time').getAttribute('aria-selected')).toBe('true');
-      expect(text()).toContain('Where your time went');
-      expect(text()).toContain('1h · 1 event');
+      expect(tab('Events').getAttribute('aria-selected')).toBe('true');
+      expect(text()).toContain('Top events by time');
+    });
+
+    it('opens Events from the Activity card’s strip', async () => {
+      withEvent();
+      await render();
+      expect(container.querySelectorAll('[data-testid="events-cell"]')).toHaveLength(7);
+      await click(buttonLabelled(/^Open Events ›$/));
+      expect(window.location.search).toBe('?view=events');
+      await openTab('Overview');
+      await click(buttonLabelled(/^Open Events$/));
+      expect(window.location.search).toBe('?view=events');
     });
 
     it('shows a period that holds only events instead of calling it empty', async () => {
@@ -1058,6 +1070,141 @@ describe('CalendarReportView tabs', () => {
     await render();
     expect(tab('Productivity').getAttribute('aria-selected')).toBe('true');
     expect(tab('Overview').getAttribute('aria-selected')).toBe('true');
+  });
+});
+
+describe('CalendarReportView Events view', () => {
+  const cs = { id: 1, name: 'CS 460', color: '#2F6FD6' };
+  const math = { id: 2, name: 'MATH 254', color: '#7A5AD0' };
+  /** A timed occurrence in October 2026, from [day, hour, minute] to [day, hour, minute]. */
+  const ev = (event_id: number, title: string, from: [number, number, number?], to: [number, number, number?], extra: object = {}) => {
+    const starts = new Date(2026, 9, from[0], from[1], from[2] ?? 0);
+    const ends = new Date(2026, 9, to[0], to[1], to[2] ?? 0);
+    const ymd = (d: Date) => `2026-10-${String(d.getDate()).padStart(2, '0')}`;
+    return {
+      event_id, occurrence_date: ymd(starts), title, description: null, tags: [], all_day: false,
+      date: ymd(starts), end_date: ymd(ends), start_time: null, end_time: null,
+      starts_at: starts.toISOString(), ends_at: ends.toISOString(), time_zone: 'America/Los_Angeles',
+      repeat_days: [], repeat_interval: 1, reminder_minutes: null, edited: false, past: ends.getTime() < Date.now(), archived: false,
+      ...extra,
+    };
+  };
+  const google = (repeating = false) => ({ source: 'google', repeating });
+  // The week of Mon Oct 19; now is Wednesday 8 PM.
+  const weekEvents = () => [
+    ev(1, 'Lecture', [19, 9], [19, 11], { tags: [cs], repeat_days: [1, 3] }),
+    ev(1, 'Lecture', [21, 9], [21, 11], { tags: [cs], repeat_days: [1, 3] }),
+    ev(-10, 'Standup', [20, 10], [20, 10, 30], google(true)),
+    ev(-11, 'Standup', [22, 10], [22, 10, 30], google(true)),
+    ev(-12, 'Standup', [23, 10], [23, 10, 30], google(true)),
+    ev(-20, 'Dentist', [22, 14], [22, 15], { ...google(), tags: [math] }),
+    ev(-30, 'Trip', [24, 8], [25, 20], google()),
+    ev(-40, 'Skipped', [20, 13], [20, 14], { ...google(), busy: false }),
+  ];
+  const respond = (events: object[]) => api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+    start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [],
+    habit_completions: [{ habit_id: 1, habit_title: 'Walk', date: '2026-10-20', estimated_time: null }],
+    // Every range gets them all; the report clips them to its period.
+    events,
+  }));
+  beforeEach(() => {
+    // Weekdays, 9 AM to 5 PM.
+    api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: {}, day_start_time: '09:00', shutoff_time: '17:00', rest_days: [0, 6], day_windows: {} });
+    respond(weekEvents());
+    window.history.replaceState(null, '', '/reports?view=events');
+  });
+
+  const card = (header: string) => [...container.querySelectorAll('.card-glass')].find(c => c.firstElementChild?.textContent?.startsWith(header))!;
+  const topRows = () => [...card('Top events by time').querySelectorAll('li')].map(li => li.textContent);
+  const chip = (name: string) => [...document.querySelectorAll('[aria-label="Show a tag"] button')].find(b => b.textContent === name)!;
+
+  it('lays out like Tasks: the chart, Work hours and Busiest days, then Top events', async () => {
+    await render();
+    expect([...container.querySelectorAll('.card-glass')].map(c => c.firstElementChild?.textContent))
+      .toEqual(['Time in events by day', 'Work hours', 'Busiest days', 'Top events by time7 events']);
+    // The chart is the Events chart alone, with no Completions / Note time switch.
+    expect(container.querySelector('[aria-label="Chart metric"]')).toBeNull();
+    expect(container.querySelectorAll('[data-testid="work-hours"]')).toHaveLength(5);
+  });
+
+  it('shows booked, free and outside work hours from the series, and what’s still free', async () => {
+    await render();
+    const text = card('Work hours').textContent;
+    expect(text).toContain('Booked by events6h 30m of 40h');
+    expect(text).toContain('Free for focus33h 30m · 84%');
+    expect(text).toContain('Outside work hours0m');
+    expect(text).toContain('14h of work hours still free from now');
+  });
+
+  it('drops the free-from-now line for a past week, and the rows with no work hours', async () => {
+    await render();
+    await click(buttonLabelled(/^Previous week$/));
+    expect(card('Work hours').textContent).not.toContain('still free from now');
+    api.fetchProfile.mockResolvedValue({ name: 'Sam', mood_checkins: {}, rest_days: [0, 1, 2, 3, 4, 5, 6] });
+    act(() => root.unmount());
+    root = createRoot(container);
+    await render();
+    expect(card('Work hours').textContent).toBe('Work hoursNo work hours in this period');
+  });
+
+  it('ranks the busiest days and marks the ones still to come', async () => {
+    await render();
+    const days = [...card('Busiest days').querySelectorAll('li')].map(li => li.textContent);
+    expect(days).toEqual([
+      '1Mon, Oct 192h · 1 event · 25% of work hours',
+      '2Wed, Oct 212h · 1 event · 25% of work hours',
+      '3Thu, Oct 22scheduled1h 30m · 2 events · 19% of work hours',
+    ]);
+  });
+
+  it('groups a repeating kanso series and repeating Google instances into one row each', async () => {
+    await render();
+    expect(topRows()).toEqual([
+      'LectureRepeats4h · 2× · 2h each',
+      'StandupRepeatsGFrom Google Calendar1h 30m · 3× · 30m each',
+      'DentistGFrom Google Calendar1h · 1× · 1h each',
+    ]);
+    expect(card('Top events by time').textContent).toContain('Not counted in hours: Trip (all-day or 24h+).');
+    expect(card('Top events by time').textContent).not.toContain('Skipped');
+  });
+
+  it('narrows Top events to the tag picked in the chart, and clears it with the period', async () => {
+    await render();
+    await click(chip('Untagged'));
+    expect(topRows()).toEqual(['StandupRepeatsGFrom Google Calendar1h 30m · 3× · 30m each']);
+    expect(card('Top events by time').textContent).toContain('ShowingUntagged');
+    expect(card('Top events by time').textContent).toContain('Not counted in hours: Trip');
+
+    await click(chip('CS 460'));
+    expect(topRows()).toEqual(['LectureRepeats4h · 2× · 2h each']);
+    expect(card('Top events by time').textContent).not.toContain('Not counted');
+
+    await click(buttonLabelled(/^Previous week$/));
+    await click(buttonLabelled(/^Next week$/));
+    expect(chip('All events').getAttribute('aria-pressed')).toBe('true');
+    expect(card('Top events by time').textContent).not.toContain('Showing');
+    expect(topRows()).toHaveLength(3);
+  });
+
+  it('shows all of a long list on request', async () => {
+    respond(Array.from({ length: 10 }, (_, i) => ev(100 + i, `Meeting ${i + 1}`, [20, 9 + i], [20, 9 + i, 10 + i])));
+    await render();
+    expect(topRows()).toHaveLength(8);
+    await click(buttonLabelled(/^Show all 10$/));
+    expect(topRows()).toHaveLength(10);
+    await click(buttonLabelled(/^Show fewer$/));
+    expect(topRows()).toHaveLength(8);
+  });
+
+  it('shows each card’s empty state, and no strip on Overview, with no events', async () => {
+    respond([]);
+    await render();
+    expect(text()).toContain('No time in events in this period');
+    expect(card('Busiest days').textContent).toContain('No event time in this period.');
+    expect(card('Top events by time').textContent).toContain('No events in this period.');
+    await openTab('Overview');
+    expect(container.querySelector('[data-testid="events-cell"]')).toBeNull();
+    expect(text()).not.toContain('Open Events');
   });
 });
 
