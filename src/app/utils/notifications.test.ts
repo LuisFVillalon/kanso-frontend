@@ -6,6 +6,7 @@ import {
   formatLeadTime,
   formatRelativeTime,
   moodCheckinDates,
+  moodReminderSendTime,
   startVisiblePolling,
   summarizeFresh,
 } from './notifications';
@@ -59,6 +60,23 @@ describe('formatLeadTime', () => {
     [10080, '7 days'],
   ])('%i minutes reads as %s', (minutes, label) => {
     expect(formatLeadTime(minutes)).toBe(label);
+  });
+});
+
+describe('moodReminderSendTime', () => {
+  it('counts back from "Call it a day"', () => {
+    expect(moodReminderSendTime('08:00', '18:00', 60)).toBe('17:00');
+    expect(moodReminderSendTime('08:00', '18:00', 15)).toBe('17:45');
+  });
+
+  it('never sends before the day starts', () => {
+    expect(moodReminderSendTime('09:00', '17:00', 600)).toBe('09:00');
+    expect(moodReminderSendTime('09:00', '17:00', 480)).toBe('09:00');
+  });
+
+  it('counts back across midnight for a day that ends past it', () => {
+    expect(moodReminderSendTime('10:00', '01:00', 120)).toBe('23:00');
+    expect(moodReminderSendTime('10:00', '01:00', 30)).toBe('00:30');
   });
 });
 

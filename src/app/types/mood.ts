@@ -50,7 +50,7 @@ export interface MoodTags {
 /**
  * The profile's `mood_checkins` settings, which `/get-profile` returns with
  * defaults filled in. Daily check-ins aren't here: they follow the
- * Notifications "Mood check-in reminder" switch (hooks/useDailyMood.ts).
+ * Notifications "Daily check-in" switch (hooks/useDailyMood.ts).
  */
 export interface MoodCheckinSettings {
   weekly: boolean;
