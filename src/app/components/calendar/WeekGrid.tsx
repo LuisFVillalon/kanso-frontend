@@ -603,8 +603,14 @@ const WindowEdge: React.FC<{ minutes: number; edge: 'opens' | 'closes' }> = ({ m
   </div>
 );
 
-/** A timed open task's deadline: a 2 px line at its due time with a "Due · title" pill. */
+/**
+ * A timed open task's deadline: a 2 px line at its due time with a "Due ·
+ * title" pill sitting just above it, so it never covers the title of a block
+ * that starts at the due time (block titles sit at their tops).
+ */
 const DeadlineLine: React.FC<{ flag: DeadlineFlag; openable: boolean; onOpen: () => void }> = ({ flag, openable, onOpen }) => {
+  // Too near the top of the day for room above: the pill goes under the line.
+  const place = flag.minutes < 20 ? 'top-1' : 'bottom-0.5';
   const label = `Due: ${flag.title}, at ${formatMinutes(flag.minutes)}`;
   const pill = (
     <span className="inline-flex max-w-full items-center rounded-full px-1.5 py-px text-[10px] font-bold leading-tight truncate"
@@ -619,14 +625,14 @@ const DeadlineLine: React.FC<{ flag: DeadlineFlag; openable: boolean; onOpen: ()
       className="absolute left-0 right-0 z-[15] pointer-events-none"
       style={{ top: Math.min(minutesToPx(flag.minutes), minutesToPx(MINUTES_PER_DAY) - 2) }}
     >
-      <div aria-hidden className="h-0.5" style={{ backgroundColor: 'var(--tm-due)' }} />
+      <div aria-hidden className="absolute left-0 right-0 top-0 h-0.5" style={{ backgroundColor: 'var(--tm-due)' }} />
       {openable ? (
         <button type="button" onClick={onOpen} aria-label={label} title={label}
-          className="pointer-events-auto absolute left-0.5 -top-2 max-w-[calc(100%-4px)] flex hover:brightness-95">
+          className={`pointer-events-auto absolute left-0.5 ${place} max-w-[70%] flex hover:brightness-95`}>
           {pill}
         </button>
       ) : (
-        <span role="note" aria-label={label} title={label} className="absolute left-0.5 -top-2 max-w-[calc(100%-4px)] flex">{pill}</span>
+        <span role="note" aria-label={label} title={label} className={`absolute left-0.5 ${place} max-w-[70%] flex`}>{pill}</span>
       )}
     </div>
   );
@@ -710,7 +716,8 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
       ...position,
       ...tagTint(isHabitBlock ? HABIT_BLOCK_COLOR : eventColor(event.tags ?? [])),
       opacity: event.kind === 'task' && event.completed ? 0.7 : 1,
-      ...(event.clashWith ? { outline: CLASH_RING, outlineOffset: -1 } : {}),
+      // Room on the right for the clash badge, so it never sits on the label or title.
+      ...(event.clashWith ? { outline: CLASH_RING, outlineOffset: -1, paddingRight: 18 } : {}),
     };
     Icon = event.kind === 'note' ? FileText : event.kind === 'completed' ? CheckCircle2
       : event.kind === 'work' ? Clock : event.completed ? Check : null;
@@ -727,7 +734,7 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
   const content = (
     <>
       {event.kind === 'work' && (
-        <span className="text-[9.5px] font-bold uppercase tracking-wide text-text-secondary leading-none">
+        <span data-work-label className="max-w-full truncate text-[9.5px] font-bold uppercase tracking-wide text-text-secondary leading-none">
           {event.habitId != null ? 'Habit' : 'Work on'}
         </span>
       )}

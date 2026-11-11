@@ -575,6 +575,23 @@ describe('WeekView', { timeout: 30_000 }, () => {
       expect(ghost()).toBeNull();
     });
 
+    it("keeps labels off each other: a Due pill sits above its line, and a clashing block leaves room for its badge", async () => {
+      mocks.tasks = [task({ id: 3, title: 'Lab report', due_date: '2026-10-21', due_time: '14:00' })];
+      mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+        ...activityFor(start, end),
+        events: [occurrence()],
+        work_blocks: [workBlock({ id: 8, task_id: 3, title: 'Lab report', start_time: '14:30', end_time: '15:30' })],
+      }));
+      await render();
+      // The lecture starts at the due time, its title at its top: the pill goes above the line, not over it.
+      const pill = button('Due: Lab report, at 2:00 PM');
+      expect(pill.className).toContain('bottom-0.5');
+      expect(pill.className).not.toContain('-top-');
+      const clashing = button('Work on: Lab report, 2:30 PM – 3:30 PM, during CS 460 Lecture');
+      expect(clashing.style.paddingRight).toBe('18px');
+      expect(clashing.querySelector('[data-work-label]')!.className).toContain('truncate');
+    });
+
     it('draws a habit block in the habit color with its label', async () => {
       mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
         ...activityFor(start, end),
@@ -806,6 +823,41 @@ describe('WeekView', { timeout: 30_000 }, () => {
         const handle = button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM').querySelector<HTMLElement>('[data-resize-handle]')!;
         await drag(handle, [350, 14 * 48 + 40], [350, 15.5 * 48 + 2]);
         expect(mocks.updateEvent).toHaveBeenCalledWith(30, { end_time: '15:30' }, 'all', '2026-10-21');
+      });
+
+      describe('work blocks', () => {
+        const blockLabel = 'Work on: Task, 5:00 PM – 6:00 PM';
+        beforeEach(() => {
+          mocks.tasks = [task({ id: 1, due_date: '2026-10-23', due_time: '17:00' })];
+          mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+            ...activityFor(start, end), work_blocks: [workBlock()],
+          }));
+          mocks.updateWorkBlock.mockReset().mockResolvedValue(workBlock());
+        });
+
+        it('moves a block to another day and time on the 15-minute grid, and the click that ends the drag opens nothing', async () => {
+          await render();
+          // Grab Wed (column 3) at 5:10 PM; drop on Thu (column 4) 1 h 17 min later, which snaps to 6:15 PM.
+          await drag(button(blockLabel), [350, 17 * 48 + 8], [450, (18 + 17 / 60) * 48 + 8]);
+          expect(mocks.updateWorkBlock).toHaveBeenCalledWith(1, { date: '2026-10-22', start_time: '18:15', end_time: '19:15' });
+          expect(document.querySelector('.modal-panel')).toBeNull();
+        });
+
+        it('changes when a block ends by dragging its bottom edge, in 15-minute steps', async () => {
+          await render();
+          const handle = button(blockLabel).querySelector<HTMLElement>('[data-resize-handle]')!;
+          await drag(handle, [350, 17 * 48 + 46], [350, (18 + 38 / 60) * 48]);
+          expect(mocks.updateWorkBlock).toHaveBeenCalledWith(1, { date: '2026-10-21', start_time: '17:00', end_time: '18:45' });
+        });
+
+        it('keeps the block where it was when the move fails', async () => {
+          mocks.updateWorkBlock.mockReset().mockRejectedValue(new Error('offline'));
+          await render();
+          await drag(button(blockLabel), [350, 17 * 48 + 8], [350, 19 * 48 + 8]);
+          expect(mocks.updateWorkBlock).toHaveBeenCalledWith(1, { date: '2026-10-21', start_time: '19:00', end_time: '20:00' });
+          expect(container.querySelector('[data-moving-event]')).toBeNull();
+          expect(button(blockLabel).closest('[data-day-column]')!.getAttribute('data-day-column')).toBe('3');
+        });
       });
 
       it('drags an imported Google event the same way', async () => {
