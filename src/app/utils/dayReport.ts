@@ -1,4 +1,6 @@
+import { DEFAULT_DAY_END, DEFAULT_DAY_START, dayWindowOn, isValidDayWindow } from '@/app/lib/restDays';
 import type { EventOccurrence } from '@/app/types/event';
+import type { DayWindow, DayWindows } from '@/app/types/profile';
 import type { Task } from '@/app/types/task';
 import { ENERGY_LABELS, STRESS_LABELS, moodLabel } from '@/app/types/mood';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
@@ -122,6 +124,43 @@ export function workWindowFrom(start: string, end: string): WorkWindow {
   const opens = toMin(start);
   const closesAt = toMin(end) === 0 && opens > 0 ? 1440 : toMin(end);
   return { opens, closes: closesAt > opens ? closesAt : null };
+}
+
+/** The profile fields that set a day's work hours (Settings → Work day and rest). */
+export interface WorkDaySettings {
+  restDays: number[];
+  dayStartTime: string;
+  shutoffTime: string;
+  dayWindows: DayWindows;
+}
+
+/** `date`'s work hours as "HH:MM" times, or null on a rest day. Times that aren't valid fall back to 8 AM – 10 PM. */
+export function workHoursOn(settings: WorkDaySettings, date: Date): DayWindow | null {
+  const weekday = date.getDay();
+  if (settings.restDays.includes(weekday)) return null;
+  const own = dayWindowOn(weekday, settings.dayStartTime, settings.shutoffTime, settings.dayWindows);
+  return isValidDayWindow(own) ? own : { start: DEFAULT_DAY_START, end: DEFAULT_DAY_END };
+}
+
+/** The work day on `date`: whether it's a rest day, and its work window if not. */
+export function workDayOn(settings: WorkDaySettings, date: Date): { rest: boolean; window: WorkWindow | null } {
+  const hours = workHoursOn(settings, date);
+  return hours ? { rest: false, window: workWindowFrom(hours.start, hours.end) } : { rest: true, window: null };
+}
+
+/**
+ * Work hours as minutes from the day's midnight: `closes` passes 1440 when
+ * they end at or before they start, on the next day — as the backend's
+ * get-event-report places a day's window.
+ */
+export function workHoursSpan({ start, end }: DayWindow): { opens: number; closes: number } {
+  const toMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+  const opens = toMin(start);
+  const closes = toMin(end);
+  return { opens, closes: closes <= opens ? closes + 1440 : closes };
 }
 
 /** "8 AM", "6:30 PM" or "midnight" for minutes since midnight. */

@@ -34,6 +34,7 @@ import { useReportMood } from '@/app/hooks/useReportMood';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import { moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
 import { formatDurationShort, parseLocalDate } from '@/app/utils/dateUtils';
+import type { WorkDaySettings } from '@/app/utils/dayReport';
 import { formatEventMinutes } from '@/app/utils/eventOccurrences';
 import {
   describePeriod,
@@ -582,13 +583,15 @@ interface ReportBodyProps {
   mood: ReportMood;
   /** The profile's rest days, which "Your task & note tags" compares apart from work days. */
   restDays: number[];
+  /** The profile's work days and hours, the Events chart's outline. */
+  workDays: WorkDaySettings;
   view: ReportView;
   moodView: MoodView;
   onOpen: (view: ReportView, moodView?: MoodView) => void;
   onSelectPeriod: (period: ReportPeriod) => void;
 }
 
-const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, restDays, view, moodView, onOpen, onSelectPeriod }) => {
+const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, restDays, workDays, view, moodView, onOpen, onSelectPeriod }) => {
   const days = elapsedDays(period);
   const checkins = mood.checkins;
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
@@ -665,7 +668,7 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
             <div className="lg:col-span-2">
               <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Activity ${byUnit}`}>
-                <ReportActivityChart buckets={report.buckets} kind={period.kind} />
+                <ReportActivityChart period={period} buckets={report.buckets} activity={activity} workDays={workDays} />
               </CardShell>
             </div>
             <ReportHighlights
@@ -876,6 +879,7 @@ const CalendarReportView: React.FC = () => {
             activity={activity}
             mood={{ ...mood, settings: profile.moodCheckins }}
             restDays={profile.restDays}
+            workDays={profile}
             view={view}
             moodView={moodView}
             onOpen={navigate}
