@@ -1,22 +1,31 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Calendar, History, Moon, Smile, SquareCheck } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import ReminderLeadPicker from '@/app/components/notifications/ReminderLeadPicker';
-import SettingsGroup from '@/app/components/settings/SettingsGroup';
+import { SettingsCard, SettingsRow, SettingsSubRow, SettingsValueRow } from '@/app/components/settings/SettingsCard';
 import { MOOD_GROUP } from '@/app/components/settings/MoodCheckinSettingsSection';
 import { AUTOSAVE_DEBOUNCE_MS, type TrackSave } from '@/app/components/settings/autosave';
 import type { NotificationPreferences, NotificationPreferencesUpdate } from '@/app/types/notification';
-import { MOOD_REMINDER_MINUTES_MAX, MOOD_REMINDER_PRESETS } from '@/app/utils/notifications';
+import type { DayWindow } from '@/app/types/profile';
+import {
+  MOOD_REMINDER_MINUTES_MAX, MOOD_REMINDER_PRESETS, formatLeadTime, moodReminderSendTime,
+} from '@/app/utils/notifications';
+import { formatTime12Hour } from '@/app/utils/taskUtils';
 
-/** Switch labels, in the order the day runs within each group. Other types the server lists aren't offered. */
-const TYPE_LABELS: Record<string, { label: string; hint: string }> = {
-  task_reminder:  { label: 'Reminder before a task is due', hint: "At each task's reminder time." },
-  event_reminder: { label: 'Reminder before an event starts', hint: "At each event's reminder time, for events that set one." },
-  mood_reminder:  { label: 'Mood check-in reminder', hint: "Log your mood each day; reminds you before you call it a day if it isn't logged yet." },
-  mood_missed:    { label: 'Missed mood check-ins', hint: 'When days go by without a mood check-in.' },
+/** Switch labels, in the order the day runs within each card. Other types the server lists aren't offered. */
+const TYPE_ROWS: Record<string, { label: string; icon: LucideIcon; trailing?: string }> = {
+  task_reminder:  { label: 'Tasks', icon: SquareCheck },
+  event_reminder: { label: 'Events', icon: Calendar, trailing: 'Set per event' },
+  mood_reminder:  { label: 'Daily check-in', icon: Smile },
+  mood_missed:    { label: 'Missed days', icon: History },
 };
 const REMINDER_TYPES = ['task_reminder', 'event_reminder'];
 const MOOD_TYPES = ['mood_reminder', 'mood_missed'];
+
+/** The times quiet hours turn on with when none were set before. */
+const DEFAULT_QUIET_HOURS = { start: '22:00', end: '07:00' };
 
 /** The fields of `draft` that differ from `saved`, as a PATCH body. */
 export function preferenceChanges(
@@ -58,24 +67,33 @@ interface Props {
   track: TrackSave;
   /** Offers an Undo for a switch that was just flipped. */
   onUndoableChange?: (message: string, undo: () => void) => void;
-  /** The mood check-in settings, shown at the top of the Mood check-ins group. */
+  /** The weekly and monthly check-in rows, shown after the mood alerts in the Mood check-ins card. */
   moodCheckins?: React.ReactNode;
+  /** Today's work day ("HH:MM" each), for when the daily check-in reminder goes out. */
+  workDay?: DayWindow;
 }
 
 /**
- * Settings → Notifications, in headed groups: Reminders (task reminders and
- * the default reminder lead), Mood check-ins (with the mood alerts and their
- * lead) and Quiet hours (which may run past midnight). Every
- * change saves itself, sending only what changed: switches at once, times
- * after a pause in typing, and quiet hours only once they're valid.
+ * Settings → Notifications, as three cards of one-line rows: Reminders
+ * (tasks, with their default lead, and events), Mood check-ins (the daily
+ * check-in and its lead, missed days, weekly and monthly) and Quiet hours
+ * (which may run past midnight). Every change saves itself, sending only
+ * what changed: switches at once, times after a pause in typing, and quiet
+ * hours only once they're valid.
  */
 const NotificationPreferencesForm: React.FC<Props> = ({
-  preferences, onSave, track, onUndoableChange, moodCheckins,
+  preferences, onSave, track, onUndoableChange, moodCheckins, workDay,
 }) => {
   const [draft, setDraft] = useState(preferences);
   const draftRef = useRef(preferences);
   const savedRef = useRef(preferences);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The times quiet hours come back with when switched on again.
+  const lastQuietHours = useRef(
+    preferences.quiet_hours_start && preferences.quiet_hours_end
+      ? { start: preferences.quiet_hours_start, end: preferences.quiet_hours_end }
+      : DEFAULT_QUIET_HOURS,
+  );
   // Read at save time, so a parent passing new callbacks never resets a pending save.
   const callbacks = useRef({ onSave, track });
   useEffect(() => { callbacks.current = { onSave, track }; }, [onSave, track]);
@@ -119,135 +137,135 @@ const NotificationPreferencesForm: React.FC<Props> = ({
     });
   };
 
+  const quietOn = !!(draft.quiet_hours_start || draft.quiet_hours_end);
+  const toggleQuietHours = () => {
+    const { quiet_hours_start: start, quiet_hours_end: end } = draftRef.current;
+    if (start || end) {
+      if (start && end) lastQuietHours.current = { start, end };
+      edit({ quiet_hours_start: null, quiet_hours_end: null });
+    } else {
+      edit({ quiet_hours_start: lastQuietHours.current.start, quiet_hours_end: lastQuietHours.current.end });
+    }
+  };
+
   const listed = (group: string[]) => group.filter(t => t in draft.types);
   const reminderTypes = listed(REMINDER_TYPES);
   const moodTypes = listed(MOOD_TYPES);
   const quietError = quietHoursError(draft.quiet_hours_start, draft.quiet_hours_end);
-  const moodLeadChoice = draft.mood_reminder_minutes !== undefined && (
-    <div className="pl-4 border-l-2 border-border-subtle">
-      <label id="mood-reminder-lead-label" className="block text-xs font-medium text-text-muted mb-1">
-        Send it before &ldquo;Call it a day&rdquo;
-      </label>
+
+  const taskLead = (
+    <SettingsValueRow label="Remind me" value={`${formatLeadTime(draft.default_reminder_minutes)} before`}>
+      <p id="default-reminder-label" className="sr-only">Default task reminder time</p>
       <ReminderLeadPicker
-        aria-labelledby="mood-reminder-lead-label"
-        value={draft.mood_reminder_minutes}
-        onChange={minutes => { if (minutes !== null) edit({ mood_reminder_minutes: minutes }, { debounce: true }); }}
-        disabled={draft.types.mood_reminder === false}
-        presets={MOOD_REMINDER_PRESETS}
-        maxMinutes={MOOD_REMINDER_MINUTES_MAX}
-      />
-      <p className="text-xs text-text-muted mt-1">
-        Counts back from that day&rsquo;s &ldquo;Call it a day&rdquo; time, not from a task&rsquo;s due time. A lead longer than your working day sends it at the start of the day.
-      </p>
-    </div>
-  );
-  const defaultReminderChoice = (
-    <div className="pl-4 border-l-2 border-border-subtle">
-      <label id="default-reminder-label" className="block text-xs font-medium text-text-muted mb-1">
-        Default reminder time
-      </label>
-      <ReminderLeadPicker
+        variant="chips"
         aria-labelledby="default-reminder-label"
         value={draft.default_reminder_minutes}
         onChange={minutes => { if (minutes !== null) edit({ default_reminder_minutes: minutes }, { debounce: true }); }}
       />
-      <p className="text-xs text-text-muted mt-1">
-        How long before a task&rsquo;s due time its reminder arrives. You can pick another time on any task when you edit it.
-      </p>
-    </div>
+    </SettingsValueRow>
   );
 
-  const typeSwitch = (type: string) => {
-    const { label, hint } = TYPE_LABELS[type];
-    const on = draft.types[type];
-    const followsOffReminder = type === 'mood_missed' && draft.types.mood_reminder === false;
-    const labelId = `notif-type-${type}`;
+  const moodLead = draft.mood_reminder_minutes !== undefined && (() => {
+    const lead = draft.mood_reminder_minutes;
+    const sendAt = workDay && formatTime12Hour(moodReminderSendTime(workDay.start, workDay.end, lead));
     return (
-      <React.Fragment key={type}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p id={labelId} className="text-sm font-medium text-text-primary">{label}</p>
-            <p className="text-xs text-text-muted">
-              {followsOffReminder ? 'Follows the Mood check-in reminder, which is off.' : hint}
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={on}
-            aria-labelledby={labelId}
-            onClick={() => toggleType(type, label)}
-            disabled={followsOffReminder}
-            className="relative shrink-0 w-10 h-6 rounded-full transition-colors disabled:opacity-40"
-            style={{ backgroundColor: on ? 'var(--tm-accent)' : 'var(--tm-border)' }}
-          >
-            <span
-              aria-hidden="true"
-              className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform"
-              style={{ transform: on ? 'translateX(1rem)' : 'none', boxShadow: 'var(--tm-shadow-sm)' }}
-            />
-          </button>
-        </div>
-        {type === 'task_reminder' && defaultReminderChoice}
-        {type === 'mood_reminder' && moodLeadChoice}
-      </React.Fragment>
+      <SettingsValueRow
+        label="Remind me"
+        value={[`${formatLeadTime(lead)} before`, sendAt].filter(Boolean).join(' · ')}
+      >
+        <p id="mood-reminder-lead-label" className="sr-only">Daily check-in reminder time</p>
+        <ReminderLeadPicker
+          variant="chips"
+          aria-labelledby="mood-reminder-lead-label"
+          value={lead}
+          onChange={minutes => { if (minutes !== null) edit({ mood_reminder_minutes: minutes }, { debounce: true }); }}
+          presets={MOOD_REMINDER_PRESETS}
+          maxMinutes={MOOD_REMINDER_MINUTES_MAX}
+        />
+        {workDay && (
+          <p className="text-xs text-text-muted">
+            Before &ldquo;Call it a day&rdquo; ({formatTime12Hour(workDay.end)}).
+          </p>
+        )}
+      </SettingsValueRow>
     );
+  })();
+
+  const typeRow = (type: string) => {
+    const { label, icon, trailing } = TYPE_ROWS[type];
+    const on = draft.types[type];
+    const needsDaily = type === 'mood_missed' && draft.types.mood_reminder === false;
+    const row = (
+      <SettingsRow
+        icon={icon}
+        label={label}
+        labelId={`notif-type-${type}`}
+        trailing={trailing}
+        sub={needsDaily ? 'Needs Daily check-in' : undefined}
+        toggle={{ on, onToggle: () => toggleType(type, label), disabled: needsDaily }}
+      />
+    );
+    // A switch and the lead it sets stay together, with no divider between them.
+    if (type === 'task_reminder' && on) return <div key={type}>{row}{taskLead}</div>;
+    if (type === 'mood_reminder' && on && moodLead) return <div key={type}>{row}{moodLead}</div>;
+    return <React.Fragment key={type}>{row}</React.Fragment>;
   };
 
   return (
-    <div className="space-y-8">
-      <SettingsGroup id="notif-group-reminders" title="Reminders" description="For tasks with a due time, and events with a reminder.">
-        {reminderTypes.map(typeSwitch)}
+    <div className="space-y-3.5">
+      <SettingsCard id="notif-group-reminders" title="Reminders">
+        {reminderTypes.map(typeRow)}
         {/* The default lead still applies to new tasks when the server lists no reminder switch. */}
-        {!reminderTypes.includes('task_reminder') && defaultReminderChoice}
-      </SettingsGroup>
+        {!reminderTypes.includes('task_reminder') && taskLead}
+      </SettingsCard>
 
       {(moodCheckins || moodTypes.length > 0) && (
-        <SettingsGroup {...MOOD_GROUP}>
+        <SettingsCard {...MOOD_GROUP}>
+          {moodTypes.map(typeRow)}
           {moodCheckins}
-          {moodTypes.map(typeSwitch)}
-        </SettingsGroup>
+        </SettingsCard>
       )}
 
-      <SettingsGroup
-        id="notif-group-quiet"
-        title="Quiet hours"
-        description="Alerts that fire in this window wait until it ends. It can run past midnight, e.g. 22:00 to 07:00."
-      >
+      <SettingsCard id="notif-group-quiet" title="Quiet hours">
         <div>
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 sm:gap-3 items-end">
-            <div>
-              <label htmlFor="quiet-start" className="block text-xs font-medium text-text-muted mb-1">From</label>
-              <input
-                id="quiet-start"
-                type="time"
-                value={draft.quiet_hours_start ?? ''}
-                onChange={e => edit({ quiet_hours_start: e.target.value || null }, { debounce: true })}
-                className="input-field w-full min-w-0 text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="quiet-end" className="block text-xs font-medium text-text-muted mb-1">Until</label>
-              <input
-                id="quiet-end"
-                type="time"
-                value={draft.quiet_hours_end ?? ''}
-                onChange={e => edit({ quiet_hours_end: e.target.value || null }, { debounce: true })}
-                className="input-field w-full min-w-0 text-sm"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => edit({ quiet_hours_start: null, quiet_hours_end: null })}
-              disabled={!draft.quiet_hours_start && !draft.quiet_hours_end}
-              className="btn btn-outline text-xs py-2.5 disabled:opacity-40"
-            >
-              Clear
-            </button>
-          </div>
-          {quietError && <p className="text-xs mt-1" style={{ color: 'var(--tm-danger)' }}>{quietError}</p>}
+          <SettingsRow
+            icon={Moon}
+            label="Quiet hours"
+            labelId="notif-quiet-hours"
+            sub="Alerts wait until it ends"
+            trailing={quietOn && !quietError
+              ? `${formatTime12Hour(draft.quiet_hours_start)} – ${formatTime12Hour(draft.quiet_hours_end)}`
+              : undefined}
+            // On a phone the times just below say the same.
+            trailingFromSm
+            toggle={{ on: quietOn, onToggle: toggleQuietHours }}
+          />
+          {quietOn && (
+            <SettingsSubRow>
+              <div className="flex items-center gap-1.5 sm:gap-2 text-sm text-text-secondary">
+                <input
+                  id="quiet-start"
+                  type="time"
+                  aria-label="Quiet hours from"
+                  value={draft.quiet_hours_start ?? ''}
+                  onChange={e => edit({ quiet_hours_start: e.target.value || null }, { debounce: true })}
+                  className="input-field min-w-0 flex-1 text-[0.8125rem] sm:text-sm py-1.5 px-2 sm:px-2.5"
+                />
+                <span>to</span>
+                <input
+                  id="quiet-end"
+                  type="time"
+                  aria-label="Quiet hours until"
+                  value={draft.quiet_hours_end ?? ''}
+                  onChange={e => edit({ quiet_hours_end: e.target.value || null }, { debounce: true })}
+                  className="input-field min-w-0 flex-1 text-[0.8125rem] sm:text-sm py-1.5 px-2 sm:px-2.5"
+                />
+              </div>
+              {quietError && <p className="text-xs mt-1" style={{ color: 'var(--tm-danger)' }}>{quietError}</p>}
+            </SettingsSubRow>
+          )}
         </div>
-      </SettingsGroup>
+      </SettingsCard>
     </div>
   );
 };

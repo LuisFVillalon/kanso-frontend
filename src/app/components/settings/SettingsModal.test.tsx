@@ -649,7 +649,7 @@ describe('SettingsModal autosave', () => {
     const monthly = document.querySelector<HTMLButtonElement>('[role="switch"][aria-labelledby="mood-setting-monthly"]')!;
     await click(monthly);
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: { ...DEFAULT_MOOD_SETTINGS, monthly: !DEFAULT_MOOD_SETTINGS.monthly } });
-    expect(document.body.textContent).toContain('Monthly check-in turned on.');
+    expect(document.body.textContent).toContain('Monthly turned on.');
     await click(button('Undo'));
     expect(onSaveProfileField).toHaveBeenLastCalledWith({ moodCheckins: DEFAULT_MOOD_SETTINGS });
   });
@@ -670,15 +670,20 @@ describe('SettingsModal notifications page', () => {
   it('groups reminders, mood check-ins and quiet hours on one page, with no other alerts or mood nudge settings', async () => {
     notifications.value = { status: 'ready', preferences, preferencesError: null, savePreferences, loadPreferences };
     render('notifications');
-    expect(groupTitles()).toEqual(['Reminders', 'Mood check-ins', 'Quiet hours']);
+    expect(groupTitles()).toEqual(['Reminders', 'Mood check-ins · private to you', 'Quiet hours']);
     const mood = document.querySelector('section[aria-labelledby="notif-group-mood"]')!;
     // Daily check-ins follow the mood check-in reminder switch; only weekly and monthly have their own.
     expect(mood.querySelector('[aria-labelledby="mood-setting-daily"]')).toBeNull();
     expect([...mood.querySelectorAll('[aria-labelledby^="mood-setting-"]')].map(s => s.getAttribute('aria-labelledby')))
       .toEqual(['mood-setting-weekly', 'mood-setting-monthly']);
     expect(mood.querySelector('[aria-labelledby="notif-type-mood_reminder"]')).toBeTruthy();
-    expect(mood.textContent).toContain("Log your mood each day; reminds you before you call it a day if it isn't logged yet.");
-    expect(mood.querySelector('select[aria-labelledby="mood-reminder-lead-label"]')).toBeTruthy();
+    // In row order: Daily check-in, Missed days, Weekly, Monthly.
+    expect([...mood.querySelectorAll('[role="switch"]')].map(s => document.getElementById(s.getAttribute('aria-labelledby')!)!.textContent))
+      .toEqual(['Daily check-in', 'Missed days', 'Weekly', 'Monthly']);
+    // The daily reminder's send time counts back from today's "Call it a day" (18:00 here).
+    expect(mood.querySelector('button[aria-expanded]')!.textContent).toContain('1 h before · 5:00 PM');
+    expect(mood.textContent).toContain('private to you');
+    expect(document.body.textContent).toContain('Reminders, check-ins and quiet time.');
     expect(document.body.textContent).not.toMatch(/Dashboard nudge|Show mood in reports|Morning summary/);
 
     // Mood check-ins still save on the profile, and report on this page's indicator.
@@ -692,7 +697,7 @@ describe('SettingsModal notifications page', () => {
     notifications.value = { status: 'loading', preferences: null, preferencesError: null, savePreferences, loadPreferences };
     render('notifications');
     expect(document.querySelector('[aria-label="Loading notification settings"]')).toBeTruthy();
-    expect(groupTitles()).toEqual(['Mood check-ins']);
+    expect(groupTitles()).toEqual(['Mood check-ins · private to you']);
     expect(loadPreferences).toHaveBeenCalled();
   });
 
@@ -701,7 +706,7 @@ describe('SettingsModal notifications page', () => {
     render();
     expect(navItem('Notifications')).toBeTruthy();
     render('notifications');
-    expect(groupTitles()).toEqual(['Mood check-ins']);
+    expect(groupTitles()).toEqual(['Mood check-ins · private to you']);
     expect(document.querySelector('[aria-label="Loading notification settings"]')).toBeNull();
   });
 });

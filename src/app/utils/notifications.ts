@@ -15,6 +15,24 @@ export const MOOD_REMINDER_PRESETS = [15, 30, 60, 120];
 /** The backend's cap on the mood reminder's lead: under a day, so it stays on the same day. */
 export const MOOD_REMINDER_MINUTES_MAX = 24 * 60 - 1;
 
+const toMinutes = (hm: string): number => {
+  const [h, m] = hm.split(':').map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * When the mood reminder goes out on a day running `dayStart` to
+ * `callItADay` ("HH:MM", ending past midnight when at or before the start):
+ * `leadMinutes` before "Call it a day", but never before the day starts.
+ */
+export function moodReminderSendTime(dayStart: string, callItADay: string, leadMinutes: number): string {
+  const start = toMinutes(dayStart);
+  let end = toMinutes(callItADay);
+  if (end <= start) end += 24 * 60;
+  const at = Math.max(start, end - leadMinutes) % (24 * 60);
+  return `${String(Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}`;
+}
+
 export const isMoodType = (type: string) => type === 'mood_reminder' || type === 'mood_missed';
 
 /** The days a mood notification offers to check in for, newest first. Empty for every other type. */

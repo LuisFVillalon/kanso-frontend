@@ -31,19 +31,23 @@ interface ReminderLeadPickerProps {
   presets?: number[];
   /** The largest lead the API accepts; one week unless given. */
   maxMinutes?: number;
-  /** Labels the select, e.g. the id of a visible <label>. */
+  /** Labels the select (or the chips), e.g. the id of a visible <label>. */
   'aria-labelledby'?: string;
+  /** A dropdown (the default), or a row of one-tap chips. */
+  variant?: 'select' | 'chips';
 }
 
 /**
  * One-click lead times (15 min to 1 day by default) plus a custom amount,
  * bounded by the backend's 1 minute to `maxMinutes` (1 week by default). An invalid custom amount is never sent
  * up: `onChange` only fires with a lead the API accepts, and the amount
- * input stays invalid so the enclosing form won't submit.
+ * input stays invalid so the enclosing form won't submit. Shown as a
+ * dropdown, or (`variant="chips"`) as a row of chips.
  */
 const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
   value, onChange, defaultMinutes, disabled,
   presets = REMINDER_PRESETS, maxMinutes = REMINDER_MINUTES_MAX, 'aria-labelledby': labelledBy,
+  variant = 'select',
 }) => {
   const allowDefault = defaultMinutes !== undefined;
   const customError = `Pick a whole amount from 1 minute up to ${formatLeadTime(maxMinutes)}.`;
@@ -51,6 +55,9 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
   const [amount, setAmount] = useState(() => (value !== null ? splitLead(value).amount : ''));
   const [unit, setUnit] = useState<Unit>(() => (value !== null ? splitLead(value).unit : 'hours'));
   const errorId = useId();
+  const chips = variant === 'chips';
+  // Next to the chips the custom amount stays as small as they are.
+  const compact = chips ? 'text-sm py-1.5' : '';
   const amountRef = useRef<HTMLInputElement>(null);
 
   const selected = custom
@@ -89,19 +96,47 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
 
   return (
     <div className="space-y-2">
-      <select
-        value={selected}
-        onChange={e => pickOption(e.target.value)}
-        disabled={disabled}
-        aria-labelledby={labelledBy}
-        className="input-field disabled:opacity-60"
-      >
-        {allowDefault && <option value={DEFAULT_OPTION}>Default ({formatLeadTime(defaultMinutes)} before)</option>}
-        {presets.map(m => (
-          <option key={m} value={m}>{formatLeadTime(m)} before</option>
-        ))}
-        <option value={CUSTOM_OPTION}>Custom…</option>
-      </select>
+      {chips ? (
+        <div role="radiogroup" aria-labelledby={labelledBy} className="flex flex-wrap gap-1.5">
+          {[
+            ...(allowDefault ? [{ option: DEFAULT_OPTION, label: `Default (${formatLeadTime(defaultMinutes)})` }] : []),
+            ...presets.map(m => ({ option: String(m), label: formatLeadTime(m) })),
+            { option: CUSTOM_OPTION, label: 'Custom' },
+          ].map(({ option, label }) => {
+            const checked = selected === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                disabled={disabled}
+                onClick={() => pickOption(option)}
+                className="px-3 py-1 rounded-full border text-xs font-medium transition-colors disabled:opacity-60"
+                style={checked
+                  ? { backgroundColor: 'var(--tm-accent-subtle)', borderColor: 'var(--tm-accent)', color: 'var(--tm-accent)' }
+                  : { borderColor: 'var(--tm-border)', color: 'var(--tm-text-secondary)' }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <select
+          value={selected}
+          onChange={e => pickOption(e.target.value)}
+          disabled={disabled}
+          aria-labelledby={labelledBy}
+          className="input-field disabled:opacity-60"
+        >
+          {allowDefault && <option value={DEFAULT_OPTION}>Default ({formatLeadTime(defaultMinutes)} before)</option>}
+          {presets.map(m => (
+            <option key={m} value={m}>{formatLeadTime(m)} before</option>
+          ))}
+          <option value={CUSTOM_OPTION}>Custom…</option>
+        </select>
+      )}
 
       {custom && !disabled && (
         <div className="flex gap-2">
@@ -116,13 +151,13 @@ const ReminderLeadPicker: React.FC<ReminderLeadPickerProps> = ({
             aria-label="Custom reminder amount"
             aria-invalid={!customValid}
             aria-describedby={customValid ? undefined : errorId}
-            className="input-field w-24"
+            className={`input-field w-24 ${compact}`}
           />
           <select
             value={unit}
             onChange={e => editCustom(amount, e.target.value as Unit)}
             aria-label="Custom reminder unit"
-            className="input-field flex-1"
+            className={`input-field ${chips ? 'w-auto' : 'flex-1'} ${compact}`}
           >
             <option value="minutes">minutes before</option>
             <option value="hours">hours before</option>

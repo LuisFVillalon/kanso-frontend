@@ -41,7 +41,8 @@ import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import BigPictureSettingsSection, { type TermTrackerDraft } from '@/app/components/settings/BigPictureSettingsSection';
 import MoodCheckinSettingsSection, { MOOD_GROUP, MOOD_TOGGLES } from '@/app/components/settings/MoodCheckinSettingsSection';
 import NotificationPreferencesForm from '@/app/components/settings/NotificationPreferencesForm';
-import SettingsGroup from '@/app/components/settings/SettingsGroup';
+import { SettingsCard } from '@/app/components/settings/SettingsCard';
+import { dayWindowOn } from '@/app/lib/restDays';
 import CanvasIntegrationSection from '@/app/components/settings/CanvasIntegrationSection';
 import GoogleCalendarSection from '@/app/components/settings/GoogleCalendarSection';
 import { useCanvasTabHidden } from '@/app/hooks/useCanvasTabHidden';
@@ -124,7 +125,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: 'App',
     items: [
-      { page: 'notifications', label: 'Notifications', icon: Bell, lede: 'Task reminders, mood check-ins and when to keep quiet.' },
+      { page: 'notifications', label: 'Notifications', icon: Bell, lede: 'Reminders, check-ins and quiet time.' },
       { page: 'appearance', label: 'Appearance', icon: Palette, lede: 'Theme, accent color and page ruling.' },
       { page: 'canvas', label: 'Canvas', icon: GraduationCap, lede: 'Your classes and due dates from Canvas.' },
       { page: 'google-calendar', label: 'Google Calendar', icon: CalendarSync, lede: 'Your Google events on your kanso calendars.' },
@@ -470,12 +471,13 @@ export default function SettingsModal({
               track={on.notifications}
               onUndoableChange={offerUndo}
               moodCheckins={moodCheckins}
+              workDay={dayWindowOn(new Date().getDay(), draft.dayStartTime, draft.shutoffTime, draft.dayWindows)}
             />
           );
         }
         // Until the alert settings load (or where there are none), the mood check-ins stand alone.
         return (
-          <div className="space-y-8">
+          <div className="space-y-3.5">
             {showNotifications && (notifications.preferencesError ? (
               <div className="text-sm" style={{ color: 'var(--tm-text-secondary)' }}>
                 <p>Couldn&apos;t load your notification settings.</p>
@@ -493,7 +495,7 @@ export default function SettingsModal({
                 <Loader2 className="w-5 h-5 animate-spin" aria-label="Loading notification settings" />
               </div>
             ))}
-            <SettingsGroup {...MOOD_GROUP}>{moodCheckins}</SettingsGroup>
+            <SettingsCard {...MOOD_GROUP}>{moodCheckins}</SettingsCard>
           </div>
         );
       }
