@@ -343,6 +343,32 @@ export function habitsToday(S: SlotState): HabitToday[] {
   return open.map(h => slots.get(h.id)!);
 }
 
+/**
+ * Today only, for a habit whose usual time something took: the free time
+ * today nearest `near` (earlier on ties) that fits it, once the other open
+ * habits' times today and open tasks due today are held. Null when none fits.
+ */
+export function habitNearestToday(S: SlotState, habitId: number, near: number): Span | null {
+  const h = S.habits.find(x => x.id === habitId);
+  if (!h) return null;
+  const today = S.now.date;
+  let gaps = rawGaps(S, today);
+  for (const o of habitsToday({ ...S, habits: S.habits.filter(x => x.id !== habitId) })) {
+    if (o.slot) gaps = keep(subtract(gaps, o.slot));
+  }
+  const dueToday = S.tasks.filter(t => !t.planned && t.due.date === today).sort((a, b) => a.due.min - b.due.min);
+  for (const t of dueToday) gaps = holdEarly(gaps, t.len, t.due.min).spans;
+  let best: Span | null = null;
+  for (const [s, e] of gaps) {
+    const lo = ceilStep(s);
+    const hi = Math.floor((e - h.len) / SLOT_STEP) * SLOT_STEP;
+    if (hi < lo) continue;
+    const start = Math.min(hi, Math.max(lo, Math.round(near / SLOT_STEP) * SLOT_STEP));
+    if (!best || Math.abs(start - near) < Math.abs(best[0] - near)) best = [start, start + h.len];
+  }
+  return best;
+}
+
 /** A usual-time option for a habit, and on how many of the next work days it's free. */
 export interface HabitTimeOption {
   start: number;

@@ -12,7 +12,7 @@ import { blockSpan, dueMinutesOf, minutesOf, planMinutes } from '@/app/hooks/use
 import { occurrenceKey, occurrenceSpanOn, takesTime } from './eventOccurrences';
 import { toLocalDateStr } from './dateUtils';
 import { blockIsOpen } from './weekLayout';
-import { habitsToday, planRange, resuggest, subtract, type Slot, type SlotState } from './slotSuggest';
+import { habitNearestToday, planRange, resuggest, type Slot, type SlotState } from './slotSuggest';
 
 /** The first live, busy event overlapping `span` on `date`. */
 function clashingEvent(events: EventOccurrence[], date: string, span: { start: number; end: number }): EventOccurrence | null {
@@ -81,7 +81,7 @@ export function blockConflicts(state: SlotState, workBlocks: WorkBlock[], events
 
 /**
  * Today's open habits whose usual time a busy event takes (and that aren't
- * planned elsewhere today), each with today's first free time that fits.
+ * planned elsewhere today), each with the free time today nearest its usual time.
  */
 export function habitConflicts(state: SlotState, habits: Habit[], events: EventOccurrence[], workBlocks: WorkBlock[]): HabitConflict[] {
   const today = state.now.date;
@@ -94,13 +94,11 @@ export function habitConflicts(state: SlotState, habits: Habit[], events: EventO
     if (usual + len <= state.now.min) continue;
     const event = clashingEvent(events, today, { start: usual, end: usual + len });
     if (!event) continue;
-    // Today only: the habit without its usual time, placed among today's other habits as the brief's card places it.
-    const moved = habitsToday({
+    // Today only: the free time nearest its usual time, among today's other habits as the brief's card places them.
+    const slot = habitNearestToday({
       ...state,
-      habits: state.habits.filter(x => !workBlocks.some(b => b.habit_id === x.id && b.date === today))
-        .map(x => (x.id === h.id ? { ...x, time: null } : x)),
-    }).find(x => x.habit.id === h.id);
-    const slot = moved?.slot && subtract([moved.slot], [usual, usual + len]).length ? moved.slot : null;
+      habits: state.habits.filter(x => !workBlocks.some(b => b.habit_id === x.id && b.date === today)),
+    }, h.id, usual);
     out.push({
       kind: 'habit', key: `habit|${h.id}|${today}|${h.planned_time}|${occurrenceKey(event)}|${event.start_time}|${event.end_time}`,
       habit: h, event, usual, suggestion: slot && { start: slot[0], end: slot[1] },
