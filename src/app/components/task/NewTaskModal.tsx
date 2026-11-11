@@ -9,7 +9,7 @@ import Callout from './Callout';
 import Modal from '@/app/components/common/Modal';
 import { LinkedDraft, LinkedTasksSaveError, linkedSaveMessage, toLinkedRefs } from '@/app/utils/linkedTasks';
 import { useSlotPlanner, planMinutes, minutesOf, type SlotPlanner } from '@/app/hooks/useSlotPlanner';
-import { earlierRange, planRange, spread, suggest, withHeld, type PlanRange } from '@/app/utils/slotSuggest';
+import { earlierRange, planRange, spread, suggest, withHeld, type PlanRange, type SpreadItem } from '@/app/utils/slotSuggest';
 import { clock, dayShort } from '@/app/utils/slotLabels';
 import { WorkBlocksSaveError, savePlans, samePick, togglePicks, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
@@ -257,9 +257,10 @@ function rowInputs(d: LinkedDraft, byId: Map<number, Task>) {
 
 /**
  * The Linked tasks section's slot pills: each open row's time from spreading
- * the rows not planned yet in list order, before the parent and the row are
- * due ("Plan all" picks those), and when a pill is opened, that row's own 3
- * suggestions. The parent's picks and the other rows' picks count as taken.
+ * the rows in list order, before the parent and the row are due, where a
+ * picked row keeps its pick and the rows after it follow it ("Plan all"
+ * picks the rest), and when a pill is opened, that row's own 3 suggestions.
+ * The parent's picks and the other rows' picks count as taken.
  */
 function useLinkedPlan(
   planner: SlotPlanner | null,
@@ -292,8 +293,12 @@ function useLinkedPlan(
 
   const spreadOut = useMemo(() => {
     if (!planner || !parentInputs || rows.length === 0) return new Map<string, PlanPick | null>();
-    const items = rows.flatMap(r => {
-      if (linkedPicks[r.key]?.length) return [];
+    const items = rows.flatMap((r): SpreadItem<string>[] => {
+      const own = linkedPicks[r.key] ?? [];
+      if (own.length) {
+        const fixed = own.reduce((a, b) => (b.date > a.date || (b.date === a.date && b.end > a.end) ? b : a));
+        return [{ key: r.key, len: r.len, fixed }];
+      }
       const range = rangeFor(r);
       return range ? [{ key: r.key, len: r.len, range }] : [];
     });
@@ -326,7 +331,7 @@ function useLinkedPlan(
       const state = heldFor(key);
       const own = suggest(state, r.len, range).slots;
       const spreadSlot = spreadOut.get(key);
-      const lead = spreadSlot ? [spreadSlot] : linkedPicks[key] ?? [];
+      const lead = linkedPicks[key]?.length ? linkedPicks[key] : spreadSlot ? [spreadSlot] : [];
       const slots = [
         ...lead.map(p => ({ ...p, gap: p.end - p.start })),
         ...own.filter(s => !lead.some(p => samePick(s, p))),

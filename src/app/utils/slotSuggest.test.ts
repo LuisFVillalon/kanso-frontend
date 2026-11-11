@@ -142,6 +142,23 @@ describe('spread (linked tasks)', () => {
     expect(unbounded[1].slot).not.toBeNull();
   });
 
+  it('keeps a picked row at its pick and spreads the rows after it from there', () => {
+    const parent = range('2026-11-17', H(23, 59));
+    const pick = { date: '2026-11-13', start: H(13), end: H(14) };
+    const items = [{ key: 'a', len: 60, fixed: pick }, { key: 'b', len: 30 }, { key: 'c', len: 60 }];
+    const out = spread(withHeld(sample(), [pick]), items, parent);
+    expect(out[0].slot && at(out[0].slot)).toBe('2026-11-13 780-840');
+    expect(out.slice(1).every(x => x.slot && x.slot.date > pick.date)).toBe(true);
+    expect(out[2].slot!.date >= out[1].slot!.date).toBe(true);
+  });
+
+  it('spreads rows after a picked middle row from its pick, not from now', () => {
+    const parent = range('2026-11-17', H(23, 59));
+    const pick = { date: '2026-11-13', start: H(13), end: H(14) };
+    const out = spread(withHeld(sample(), [pick]), [{ key: 'a', len: 60 }, { key: 'b', len: 60, fixed: pick }, { key: 'c', len: 30 }], parent);
+    expect(out.map(x => x.slot?.date)).toEqual(['2026-11-11', '2026-11-13', '2026-11-16']);
+  });
+
   it('keeps off times already picked for the parent or other linked tasks', () => {
     const parent = range('2026-11-17', H(23, 59));
     const picked = suggest(sample(), 60, parent).slots[0];

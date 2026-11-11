@@ -287,23 +287,30 @@ export interface SpreadItem<K> {
   key: K;
   len: number;
   range?: PlanRange;
+  /** A time already picked for it: its slot, which the ones after it follow. */
+  fixed?: { date: string; start: number; end: number };
 }
 
 /**
  * Linked tasks in list order, each after the previous one's slot (on a later
- * day when one fits), all before the parent's due and their own. Each slot
- * counts as kept for the ones after it.
+ * day when one fits), all before the parent's due and their own. A task with
+ * a picked time keeps it. Each slot counts as kept for the ones after it.
  */
 export function spread<K>(S: SlotState, items: SpreadItem<K>[], range: PlanRange): { key: K; slot: Slot | null }[] {
   const S2: SlotState = { ...S, blocks: [...S.blocks] };
   const out: { key: K; slot: Slot | null }[] = [];
   let after: DayMinute = { date: S.now.date, min: 0 };
   for (const it of items) {
-    const r = it.range ? earlierRange(it.range, range) : range;
-    const days = freeTime(S2, r.until, r.due);
-    const c = candidates(days, it.len).filter(x => x.date > after.date || (x.date === after.date && x.start >= after.min));
-    const nextDay = out.length > 0 ? c.find(x => x.date > after.date) : undefined;
-    const pick = nextDay ?? c[0] ?? null;
+    let pick: Slot | null;
+    if (it.fixed) {
+      pick = { ...it.fixed, gap: it.fixed.end - it.fixed.start };
+    } else {
+      const r = it.range ? earlierRange(it.range, range) : range;
+      const days = freeTime(S2, r.until, r.due);
+      const c = candidates(days, it.len).filter(x => x.date > after.date || (x.date === after.date && x.start >= after.min));
+      const nextDay = out.length > 0 ? c.find(x => x.date > after.date) : undefined;
+      pick = nextDay ?? c[0] ?? null;
+    }
     out.push({ key: it.key, slot: pick });
     if (pick) {
       S2.blocks.push({ date: pick.date, start: pick.start, end: pick.end });
