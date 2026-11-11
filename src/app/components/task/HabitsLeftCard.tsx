@@ -29,9 +29,10 @@ const listPlans = (items: { title: string; start: number }[]) => {
 
 /**
  * Today's habits in the Daily brief: each one done, planned (a block on the
- * calendar today) or with a suggested time (its usual time, or the first free
- * gap after now that fits once today's events and tasks due today are held),
- * and a Plan button that blocks that time. "Plan my habits" plans every one
+ * calendar today) or with a suggested time (its usual time while that is
+ * still free; the free time nearest its usual time once that is taken or has
+ * passed; or, with no usual time, the first free gap after now that fits once
+ * today's events and tasks due today are held), and a Plan button that blocks that time. "Plan my habits" plans every one
  * left in one tap, with Undo.
  */
 const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onToggleHabit }) => {
