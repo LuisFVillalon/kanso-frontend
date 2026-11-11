@@ -154,8 +154,9 @@ interface WeekGridProps {
   onOpenEvent: (event: EventPlacement, anchor: DOMRect) => void;
   /**
    * An event's block was dragged to another time or day, or its bottom edge
-   * dragged to a new end: minutes from midnight on the day at `dayIndex`, the
-   * end up to 1440 (midnight). The block shows there until this resolves.
+   * dragged to a new end: minutes from midnight on the day at `dayIndex`
+   * (counted from the week's first day, so it can fall before it), the end
+   * past 1440 when it runs past midnight. The block shows there until this resolves.
    * Without it, blocks don't drag.
    */
   onMoveEvent?: (event: EventPlacement, dayIndex: number, startMin: number, endMin: number) => Promise<boolean>;
@@ -174,8 +175,8 @@ interface WeekGridProps {
  * click to add something there); dragging down a day with a mouse or pen picks
  * a range, in 15-minute steps, for a new event. Dragging an event's block
  * moves it to another time or day, and dragging its bottom edge changes when
- * it ends, in the same steps (a mouse or pen again; one past midnight, all day
- * or archived stays put). Events, planned tasks,
+ * it ends, in the same steps (a mouse or pen again; an all-day or archived one
+ * stays put, and one running past midnight resizes from its last day). Events, planned tasks,
  * completions and note sessions sit on top as blocks, side by side where they
  * overlap, and all-day events, undated-time tasks and habit completions fill
  * the all-day row. Hours outside the user's work window and whole rest days share
@@ -426,12 +427,12 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                         else onOpenTask(e.taskId!);
                       }}
                       onDragStart={onMoveEvent && canMove(e) ? (ev, mode) => startMove(ev, e, mode) : undefined}
-                      lifted={moving?.key === e.key}
+                      lifted={!!e.event && moving?.event.occurrence === e.event.occurrence}
                     />
                   ))}
                 </div>
 
-                {moving?.dayIndex === dayIndex && <MovingEvent moving={moving} />}
+                {moving && <MovingEvent moving={moving} dayIndex={dayIndex} />}
 
                 {picked && (
                   <div
@@ -458,13 +459,32 @@ const WeekGrid: React.FC<WeekGridProps> = ({
   );
 };
 
-/** Whether an event's block can be dragged: a live, timed one that starts and ends on its day. */
-const canMove = (e: TimedEvent): boolean =>
-  e.kind === 'event' && !!e.event && !e.event.archived && !e.event.occurrence.all_day
-  && !e.event.intoNextDay && !e.event.fromPreviousDay;
+/**
+ * A timed occurrence's start (minutes from midnight on its first day) and
+ * length, which runs past midnight when it ends on a later day.
+ */
+const occurrenceSpan = (o: EventPlacement['occurrence']): { start: number; length: number } => {
+  const start = parseTimeToMinutes(o.start_time ?? '') ?? 0;
+  const end = parseTimeToMinutes(o.end_time ?? '') ?? start;
+  const days = o.end_date && o.end_date > o.date
+    ? Math.round((new Date(`${o.end_date}T00:00`).getTime() - new Date(`${o.date}T00:00`).getTime()) / 86_400_000)
+    : 0;
+  return { start, length: days * MINUTES_PER_DAY + end - start };
+};
 
-/** Where a dragged event block would land, drawn over its day column. */
-const MovingEvent: React.FC<{ moving: EventMoveState }> = ({ moving }) => {
+/** Whether an event's block can be dragged: a live, timed one shorter than a day. */
+const canMove = (e: TimedEvent): boolean => {
+  if (e.kind !== 'event' || !e.event || e.event.archived || e.event.occurrence.all_day) return false;
+  const { length } = occurrenceSpan(e.event.occurrence);
+  return length > 0 && length < MINUTES_PER_DAY;
+};
+
+/** The piece of a dragged event block that would land on the column at `dayIndex`, if any. */
+const MovingEvent: React.FC<{ moving: EventMoveState; dayIndex: number }> = ({ moving, dayIndex }) => {
+  const offset = (dayIndex - moving.dayIndex) * MINUTES_PER_DAY;
+  const top = Math.max(0, moving.startMin - offset);
+  const bottom = Math.min(MINUTES_PER_DAY, moving.endMin - offset);
+  if (bottom <= top) return null;
   const color = eventColor(moving.event.occurrence.tags);
   return (
     <div
@@ -472,8 +492,8 @@ const MovingEvent: React.FC<{ moving: EventMoveState }> = ({ moving }) => {
       data-moving-event
       className="absolute left-0.5 right-0.5 z-[25] pointer-events-none flex flex-col overflow-hidden rounded-md px-1.5 py-0.5 text-[11px] leading-tight text-text-primary"
       style={{
-        top: minutesToPx(moving.startMin),
-        height: minutesToPx(Math.max(DRAG_SNAP_MINUTES, moving.endMin - moving.startMin)),
+        top: minutesToPx(top),
+        height: minutesToPx(Math.max(DRAG_SNAP_MINUTES, bottom - top)),
         ...eventStyle(color, { past: false, archived: false }),
         boxShadow: 'var(--tm-shadow-lg)',
       }}
@@ -486,8 +506,8 @@ const MovingEvent: React.FC<{ moving: EventMoveState }> = ({ moving }) => {
   );
 };
 
-/** "10:00 PM", or "midnight" for the bottom of the day. */
-const edgeTime = (minutes: number) => (minutes >= MINUTES_PER_DAY ? 'midnight' : formatMinutes(minutes));
+/** "10:00 PM", or "midnight" for the bottom of the day; a time past it reads on the next day's clock. */
+const edgeTime = (minutes: number) => (minutes === MINUTES_PER_DAY ? 'midnight' : formatMinutes(minutes % MINUTES_PER_DAY));
 
 /** "Work day, opens at 8:00 AM, closes at 10:00 PM" or "Rest day" for a day header's screen-reader text. */
 const workDayText = ({ rest, opensAt, closesAt }: WorkDayMarks): string => {
@@ -535,7 +555,7 @@ interface EventBlockProps {
   event: PositionedEvent;
   openable: boolean;
   onOpen: (anchor: DOMRect) => void;
-  /** Set when the block can be dragged: a press on it starts a move, one on its bottom edge a resize. */
+  /** Set when the block can be dragged: a press on it starts a move, one on its bottom edge (on the day it ends) a resize. */
   onDragStart?: (e: React.PointerEvent<HTMLElement>, mode: EventMoveMode) => void;
   /** It's being dragged: it fades where it was while the moved copy follows the pointer. */
   lifted?: boolean;
@@ -600,7 +620,7 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
           !
         </span>
       )}
-      {onDragStart && (
+      {onDragStart && !event.event?.intoNextDay && (
         <span
           aria-hidden
           data-resize-handle
@@ -759,9 +779,8 @@ function useDragSelect(onDragCreate: WeekGridProps['onDragCreate'], days: Date[]
 /** Dragging a whole event block, or only its bottom edge. */
 type EventMoveMode = 'move' | 'resize';
 
-/** An event block being dragged, and where it would land. */
+/** An event being dragged, and where it would land: its start day, and minutes from that midnight (the end past 1440 when it runs past midnight). */
 interface EventMoveState {
-  key: string;
   event: EventPlacement;
   dayIndex: number;
   startMin: number;
@@ -770,8 +789,9 @@ interface EventMoveState {
 
 /**
  * Drag an event's block with a mouse or pen to move it to another time or
- * day, keeping its length, or drag its bottom edge to change when it ends,
- * in DRAG_SNAP_MINUTES steps. Letting go somewhere new calls `onMoveEvent`,
+ * day, keeping its length (it may then end on the next day), or drag its
+ * bottom edge to change when it ends, in DRAG_SNAP_MINUTES steps. A block
+ * carrying on from the day before moves the whole event with it. Letting go somewhere new calls `onMoveEvent`,
  * and the moved copy stays put until that settles. Touch is left alone so a
  * finger still scrolls the grid. A press that barely moves is a plain click,
  * and `clickWasMove` tells the block to ignore the click that ends a real drag.
@@ -788,7 +808,10 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
     const columns = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>('[data-day-column]') ?? []);
     if (columns.length === 0) return;
     const placement = block.event;
-    const length = block.endMin - block.startMin;
+    const { start, length } = occurrenceSpan(placement.occurrence);
+    const startDay = block.dayIndex - (placement.fromPreviousDay ? 1 : 0);
+    // The block's column, in minutes from its midnight, and where the event starts in it.
+    const columnOffset = (block.dayIndex - startDay) * MINUTES_PER_DAY;
     const snap = (minutes: number) => Math.round(minutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
     // Minutes from midnight under the pointer, read fresh so a scroll mid-drag is followed.
     const minutesAt = (clientY: number) => ((clientY - columns[0].getBoundingClientRect().top) / HOUR_PX) * 60;
@@ -798,8 +821,11 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
     };
     const x0 = e.clientX;
     const y0 = e.clientY;
-    const grab = minutesAt(y0) - block.startMin;
-    let current: EventMoveState = { key: block.key, event: placement, dayIndex: block.dayIndex, startMin: block.startMin, endMin: block.endMin };
+    const grab = minutesAt(y0) - (start - columnOffset);
+    const initial: EventMoveState = { event: placement, dayIndex: startDay, startMin: start, endMin: start + length };
+    const lowest = Math.min(0, startDay * MINUTES_PER_DAY + start);
+    const highest = columns.length * MINUTES_PER_DAY - DRAG_SNAP_MINUTES;
+    let current = initial;
     let moved = false;
 
     const onMove = (ev: PointerEvent) => {
@@ -807,10 +833,13 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
       moved = true;
       const at = minutesAt(ev.clientY);
       if (mode === 'move') {
-        const startMin = Math.min(MINUTES_PER_DAY - length, Math.max(0, snap(at - grab)));
-        current = { ...current, dayIndex: dayAt(ev.clientX), startMin, endMin: startMin + length };
+        const from = Math.min(highest, Math.max(lowest, dayAt(ev.clientX) * MINUTES_PER_DAY + snap(at - grab)));
+        const dayIndex = Math.floor(from / MINUTES_PER_DAY);
+        const startMin = from - dayIndex * MINUTES_PER_DAY;
+        current = { ...current, dayIndex, startMin, endMin: startMin + length };
       } else {
-        const endMin = Math.min(MINUTES_PER_DAY, Math.max(block.startMin + DRAG_SNAP_MINUTES, snap(at)));
+        const latest = Math.min(columnOffset + MINUTES_PER_DAY, start + MINUTES_PER_DAY - DRAG_SNAP_MINUTES);
+        const endMin = Math.min(latest, Math.max(start + DRAG_SNAP_MINUTES, columnOffset + snap(at)));
         current = { ...current, endMin };
       }
       setMoving(current);
@@ -820,7 +849,7 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
       if (!moved) return;
       movedRef.current = true;
       setTimeout(() => { movedRef.current = false; });
-      const unchanged = current.dayIndex === block.dayIndex && current.startMin === block.startMin && current.endMin === block.endMin;
+      const unchanged = current.dayIndex === initial.dayIndex && current.startMin === initial.startMin && current.endMin === initial.endMin;
       if (ev.type === 'pointercancel' || unchanged) {
         setMoving(null);
         return;

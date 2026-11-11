@@ -299,6 +299,11 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
 
   const archiveOccurrence = (o: EventOccurrence) => withScope('archive', o, scope => { void eventActions.archive(o, scope); });
   const deleteOccurrence = (o: EventOccurrence) => withScope('delete', o, scope => { void eventActions.remove(o, scope); });
+  /** A repeating imported event's instances each archive on their own, so Restore asks which ones. */
+  const restoreOccurrence = (o: EventOccurrence) => {
+    if (!isImportedEvent(o) || !repeatsOccurrence(o)) return void eventActions.restore(o);
+    setScopeQuestion({ action: 'restore', occurrence: o, repeating: true, onConfirm: scope => { void eventActions.restore(o, scope); } });
+  };
 
   const openEditForm = async (o: EventOccurrence) => {
     if (isImportedEvent(o)) {
@@ -365,10 +370,10 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     });
   };
 
-  /** A drag or resize on the grid moved an event to `dayIndex`, from `startMin` to `endMin`. */
+  /** A drag or resize on the grid moved an event to `dayIndex` (from the week's first day), from `startMin` to `endMin`, which may run past midnight. */
   const handleMoveEvent = (placement: EventPlacement, dayIndex: number, startMin: number, endMin: number): Promise<boolean> => {
     const o = placement.occurrence;
-    const date = toLocalDateStr(days[dayIndex]);
+    const date = toLocalDateStr(addDays(days[0], dayIndex));
     const edit = moveEdit(o, date, minutesToTimeStr(startMin), minutesToTimeStr(endMin % (24 * 60)));
     setCard(null);
     return saveEdit(o, edit, repeatsOccurrence(o), { date, tags: o.tags });
@@ -564,7 +569,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
           onClose={() => setCard(null)}
           onEdit={() => { void openEditForm(cardOccurrence); }}
           onArchive={() => { setCard(null); archiveOccurrence(cardOccurrence); }}
-          onRestore={() => { setCard(null); void eventActions.restore(cardOccurrence); }}
+          onRestore={() => { setCard(null); restoreOccurrence(cardOccurrence); }}
           onDelete={() => { setCard(null); deleteOccurrence(cardOccurrence); }}
         />
       )}

@@ -769,6 +769,59 @@ describe('WeekView', { timeout: 30_000 }, () => {
         expect(mocks.updateEvent).toHaveBeenCalledWith(-30, { start_time: '16:00', end_time: '16:50' }, 'this', '2026-10-21');
       });
 
+      describe('one that runs past midnight', () => {
+        const nightShift = (overrides: Partial<EventOccurrence> = {}) => occurrence({
+          event_id: 31, title: 'Night shift', repeat_days: [], date: '2026-10-22', end_date: '2026-10-23',
+          occurrence_date: '2026-10-22', start_time: '22:00:00', end_time: '02:00:00', ...overrides,
+        });
+        const first = 'Event: Night shift, 10:00 PM – 2:00 AM, runs past midnight';
+        const second = 'Event: Night shift, 10:00 PM – 2:00 AM, from the day before';
+
+        it('moves the whole event from its first piece, keeping its length past midnight', async () => {
+          withEvents([nightShift()]);
+          await render();
+          // Thu is column 4; grab at 10:10 PM and drop an hour later.
+          await drag(button(first), [450, 22 * 48 + 8], [450, 23 * 48 + 8]);
+          expect(mocks.updateEvent).toHaveBeenCalledWith(31, { start_time: '23:00', end_time: '03:00' }, 'all', '2026-10-22');
+        });
+
+        it('moves the whole event from its piece on the next day', async () => {
+          withEvents([nightShift()]);
+          await render();
+          // Fri is column 5; grab at 1:00 AM and drop two hours earlier, so it starts at 8 PM Thursday.
+          await drag(button(second), [550, 1 * 48], [550, -1 * 48]);
+          expect(mocks.updateEvent).toHaveBeenCalledWith(31, { start_time: '20:00', end_time: '00:00' }, 'all', '2026-10-22');
+        });
+
+        it('draws the moved copy on both days while a repeating one asks which occurrences', async () => {
+          withEvents([nightShift({ repeat_days: [4] })]);
+          await render();
+          await drag(button(first), [450, 22 * 48 + 8], [450, 23 * 48 + 8]);
+          expect(document.body.textContent).toContain('Save repeating event');
+          const copies = [...container.querySelectorAll('[data-moving-event]')];
+          expect(copies.map(c => c.closest('[data-day-column]')!.getAttribute('data-day-column'))).toEqual(['4', '5']);
+          expect(copies[0].textContent).toContain('11:00 PM – 3:00 AM');
+          await act(async () => scopeButton('Save').click());
+          expect(mocks.updateEvent).toHaveBeenCalledWith(31, { start_time: '23:00', end_time: '03:00' }, 'this', '2026-10-22');
+        });
+
+        it('moves a same-day event so that it ends on the next day', async () => {
+          withEvents([occurrence({ repeat_days: [] })]);
+          await render();
+          await drag(button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM'), [350, 14 * 48 + 8], [350, 23.5 * 48 + 8]);
+          expect(mocks.updateEvent).toHaveBeenCalledWith(30, { start_time: '23:30', end_time: '00:20' }, 'all', '2026-10-21');
+        });
+
+        it('changes when it ends from the bottom edge of its last piece only', async () => {
+          withEvents([nightShift()]);
+          await render();
+          expect(button(first).querySelector('[data-resize-handle]')).toBeNull();
+          const handle = button(second).querySelector<HTMLElement>('[data-resize-handle]')!;
+          await drag(handle, [550, 2 * 48], [550, 3.5 * 48]);
+          expect(mocks.updateEvent).toHaveBeenCalledWith(31, { end_time: '03:30' }, 'all', '2026-10-22');
+        });
+      });
+
       it('leaves archived events alone', async () => {
         withEvents([occurrence({ repeat_days: [], past: true, archived: true })]);
         await render();
@@ -865,7 +918,7 @@ describe('WeekView', { timeout: 30_000 }, () => {
         expect(mocks.updateEvent).toHaveBeenCalledWith(-30, { date: '2026-10-22' }, 'this', '2026-10-21');
       });
 
-      it('archives and deletes a repeating one asking which instances, and restores one on its own', async () => {
+      it('archives and deletes a repeating one asking which instances', async () => {
         withEvents([imported({ repeating: true })]);
         await render();
         await act(async () => button(label).click());
@@ -880,6 +933,29 @@ describe('WeekView', { timeout: 30_000 }, () => {
         expect(document.body.textContent).toContain('Delete repeating event');
         await act(async () => scopeButton('Delete').click());
         expect(mocks.deleteEvent).toHaveBeenCalledWith(-30, 'this', '2026-10-21');
+      });
+
+      it('asks which instances a Restore of a repeating one brings back, defaulting to this one', async () => {
+        withEvents([imported({ repeating: true, past: true, archived: true })]);
+        await render();
+        await act(async () => button(`${label}, archived`).click());
+        await act(async () => buttonByText('Restore').click());
+        expect(document.body.textContent).toContain('Restore repeating event');
+        expect(document.querySelector<HTMLInputElement>('input[value="this"]')!.checked).toBe(true);
+        expect(mocks.setEventArchived).not.toHaveBeenCalled();
+        await act(async () => document.querySelector<HTMLInputElement>('input[value="all"]')!.click());
+        await act(async () => scopeButton('Restore').click());
+        expect(mocks.fetchEvent).not.toHaveBeenCalled();
+        expect(mocks.setEventArchived).toHaveBeenCalledWith(-30, false, 'all', '2026-10-21');
+      });
+
+      it('restores nothing when the Restore question is cancelled', async () => {
+        withEvents([imported({ repeating: true, past: true, archived: true })]);
+        await render();
+        await act(async () => button(`${label}, archived`).click());
+        await act(async () => buttonByText('Restore').click());
+        await act(async () => scopeButton('Cancel').click());
+        expect(mocks.setEventArchived).not.toHaveBeenCalled();
       });
 
       it('restores an archived one on its own, without loading a series', async () => {

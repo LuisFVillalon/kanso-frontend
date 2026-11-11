@@ -121,17 +121,24 @@ export function useEventActions(onChanged: () => void) {
 
   /**
    * Unarchives an archived occurrence: its whole series when that's what was
-   * archived, else just the occurrence. An imported event's instance is its
-   * own, so it unarchives on its own.
+   * archived, else just the occurrence. An imported event's instances
+   * unarchive in `scope` (asked for a repeating one), else just this one.
    */
-  const restore = useCallback(async (o: EventOccurrence): Promise<boolean> => {
+  const restore = useCallback(async (o: EventOccurrence, scope?: EditScope): Promise<boolean> => {
     const ok = await run(async () => {
-      if (isImportedEvent(o)) return setEventArchived(o.event_id, false, 'this', o.occurrence_date);
+      if (isImportedEvent(o)) return setEventArchived(o.event_id, false, scope ?? 'this', o.occurrence_date);
       const series = await fetchEvent(o.event_id);
       if (series.archived_at) await setEventArchived(o.event_id, false, 'all');
       else await setEventArchived(o.event_id, false, 'this', o.occurrence_date);
     }, "Couldn't restore the event. Please try again.");
-    if (ok) showToast(`Restored ${o.title}.`, 'success');
+    if (ok) {
+      const message = scope === 'this'
+        ? `Restored ${o.title} for ${occurrenceDayLabel(o)}.`
+        : scope === 'following'
+        ? `Restored ${o.title} from ${occurrenceDayLabel(o)} on.`
+        : scope === 'all' ? `Restored all ${o.title} events.` : `Restored ${o.title}.`;
+      showToast(message, 'success');
+    }
     return ok;
   }, [run, showToast]);
 

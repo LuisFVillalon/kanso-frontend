@@ -81,6 +81,29 @@ describe('useEventActions', () => {
     expect(api.restoreEvent).toHaveBeenCalledWith(-7, '2026-10-23', 'following');
   });
 
+  it('restores the instances of an imported event picked, naming them in the toast', async () => {
+    api.setEventArchived.mockResolvedValue({ id: -7 });
+    const restored: [string, string][] = [['this', 'Restored CS 460 Lecture for Fri, Oct 23.'], ['following', 'Restored CS 460 Lecture from Fri, Oct 23 on.'], ['all', 'Restored all CS 460 Lecture events.']];
+    for (const [scope, message] of restored) {
+      await act(async () => { await actions.restore(imported, scope as 'this' | 'following' | 'all'); });
+      expect(api.setEventArchived).toHaveBeenLastCalledWith(-7, false, scope, '2026-10-23');
+      expect(showToast).toHaveBeenLastCalledWith(message, 'success');
+    }
+    expect(api.fetchEvent).not.toHaveBeenCalled();
+  });
+
+  it('restores a one-off imported event on its own, and a kanso series whole, as before', async () => {
+    api.setEventArchived.mockResolvedValue({ id: -7 });
+    await act(async () => { await actions.restore({ ...imported, repeating: false }); });
+    expect(api.setEventArchived).toHaveBeenLastCalledWith(-7, false, 'this', '2026-10-23');
+    expect(showToast).toHaveBeenLastCalledWith('Restored CS 460 Lecture.', 'success');
+
+    api.fetchEvent.mockResolvedValue({ archived_at: '2026-10-24T00:00:00Z' });
+    await act(async () => { await actions.restore(occurrence); });
+    expect(api.setEventArchived).toHaveBeenLastCalledWith(7, false, 'all');
+    expect(showToast).toHaveBeenLastCalledWith('Restored CS 460 Lecture.', 'success');
+  });
+
   it("sends a one-off imported event's tags without a scope", async () => {
     api.updateEvent.mockResolvedValue({});
     api.updateGoogleEventTags.mockResolvedValue(undefined);

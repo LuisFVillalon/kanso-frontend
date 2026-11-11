@@ -5,11 +5,12 @@ import Modal from '@/app/components/common/Modal';
 import type { EditScope } from '@/app/types/event';
 
 /** What the dialog confirms. */
-export type EventAction = 'edit' | 'archive' | 'delete';
+export type EventAction = 'edit' | 'archive' | 'restore' | 'delete';
 
 const TITLE: Record<EventAction, { repeating: string; single: string; verb: string }> = {
   edit: { repeating: 'Save repeating event', single: 'Save event', verb: 'Save' },
   archive: { repeating: 'Archive repeating event', single: 'Archive event', verb: 'Archive' },
+  restore: { repeating: 'Restore repeating event', single: 'Restore event', verb: 'Restore' },
   delete: { repeating: 'Delete repeating event', single: 'Delete event', verb: 'Delete' },
 };
 
@@ -34,7 +35,7 @@ interface EventScopeDialogProps {
 }
 
 /**
- * Asks which occurrences of a repeating event a save, archive or delete
+ * Asks which occurrences of a repeating event a save, archive, restore or delete
  * applies to: this one, this and the following ones, or all of them, like
  * Google Calendar. A one-off event only confirms a delete.
  */
