@@ -10,11 +10,16 @@ import { useToast } from '@/app/context/ToastContext';
 import { useWeekActivity } from '@/app/hooks/useWeekActivity';
 import { browserTimeZone, useWorkWindows } from '@/app/hooks/useWorkWindows';
 import { occurrenceDayLabel, useEventActions } from '@/app/hooks/useEventActions';
-import { fetchEvent } from '@/app/lib/backend-api';
+import { describeError, fetchEvent, updateWorkBlock } from '@/app/lib/backend-api';
+import { useSlotPlanner } from '@/app/hooks/useSlotPlanner';
+import { notifyWorkBlocksChanged } from '@/app/hooks/useWorkBlocksVersion';
+import { blockConflicts, keepConflict, loadKeptConflicts } from '@/app/utils/planConflicts';
+import { clock, dayShort, hhmm } from '@/app/utils/slotLabels';
+import type { WorkBlock } from '@/app/types/workBlock';
 import type { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
 import type { CalendarEvent, EditScope, EventOccurrence } from '@/app/types/event';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
-import NewTaskModal from '@/app/components/task/NewTaskModal';
+import NewTaskModal, { type AfterTaskSave } from '@/app/components/task/NewTaskModal';
 import EditTaskModal from '@/app/components/task/EditTaskModal';
 import HabitHistoryModal from '@/app/components/habit/HabitHistoryModal';
 import EventCard from '@/app/components/event/EventCard';
@@ -49,7 +54,7 @@ import {
   weekDays,
   workDayMarks,
 } from '@/app/utils/weekLayout';
-import WeekGrid, { WEEK_LEGEND } from './WeekGrid';
+import WeekGrid, { WEEK_LEGEND, type GhostSuggestion } from './WeekGrid';
 
 // Tallest a dragged week view gets, in px.
 const MAX_HEIGHT_PX = 2400;
@@ -151,7 +156,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
   const router = useRouter();
   const showToast = useToast();
   const now = useMinuteClock();
-  const { tasks, addTask, updateTask, saveLinkedTasks } = useTasksContext();
+  const { tasks, addTask, updateTask, saveLinkedTasks, completionSyncToken } = useTasksContext();
   const { tags } = useTagsContext();
   const { habits, toggleDate: toggleHabitDate } = useHabitsContext();
 
@@ -191,7 +196,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
   // Open near the current time on this week, at the user's day start otherwise.
   const scrollToMinutes = todayIndex >= 0 ? Math.max(0, nowMinutes - 90) : dayStartMinutes;
 
-  const { timed, allDay } = useMemo(() => buildWeekEvents({
+  const { timed, allDay, deadlines } = useMemo(() => buildWeekEvents({
     weekStart,
     scheduledTasks: tasks,
     completedTasks: activity?.completed_tasks ?? [],
@@ -200,8 +205,26 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     notes: activity?.notes,
     habits: activity?.habits,
     events: activity?.events ?? [],
+    workBlocks: activity?.work_blocks ?? [],
     now,
   }), [weekStart, tasks, activity, now]);
+
+  // A kept block an event now covers gets a ghost at the nearest free time,
+  // from the same rules as the suggestions, until it's moved or kept.
+  const anyClash = timed.some(e => e.kind === 'work' && !!e.clashWith);
+  const planner = useSlotPlanner({ enabled: anyClash, tasks, habits, reloadKey: completionSyncToken });
+  const [keptConflicts, setKeptConflicts] = useState<Set<string>>(loadKeptConflicts);
+  const ghosts = useMemo((): GhostSuggestion[] => {
+    if (!planner) return [];
+    const dayIndexByDate = new Map(days.map((d, i) => [toLocalDateStr(d), i]));
+    return blockConflicts(planner.state, planner.workBlocks, planner.events, tasks).flatMap(c => {
+      const s = c.suggestion;
+      const dayIndex = s ? dayIndexByDate.get(s.date) : undefined;
+      if (!s || dayIndex === undefined || keptConflicts.has(c.key)) return [];
+      const when = s.date === c.block.date ? clock(s.start) : `${dayShort(s.date, planner.today)} ${clock(s.start)}`;
+      return [{ key: c.key, block: c.block, dayIndex, startMin: s.start, endMin: s.end, prompt: `Move to ${when}?` }];
+    });
+  }, [planner, days, tasks, keptConflicts]);
 
   const taskIds = useMemo(() => new Set(tasks.map(t => t.id)), [tasks]);
   const habitIds = useMemo(() => new Set(habits.map(h => h.id)), [habits]);
@@ -379,7 +402,20 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     return saveEdit(o, edit, repeatsOccurrence(o), { date, tags: o.tags });
   };
 
-  const handleCreateTask = async (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task) => {
+  /** Moves a work block to `dayIndex` (from the week's first day), `startMin` to `endMin`. */
+  const moveWorkBlock = async (block: WorkBlock, date: string, startMin: number, endMin: number): Promise<boolean> => {
+    try {
+      await updateWorkBlock(block.id, { date, start_time: hhmm(startMin), end_time: hhmm(endMin) });
+      notifyWorkBlocksChanged();
+      return true;
+    } catch (err) {
+      console.error('[WeekView] Failed to move the work block:', err);
+      showToast(describeError(err, "Couldn't move the block. Please try again."), 'error');
+      return false;
+    }
+  };
+
+  const handleCreateTask = async (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task, afterSave?: AfterTaskSave) => {
     e.preventDefault();
     if (!newTask.title.trim()) {
       showToast('Give the task a title first.', 'info');
@@ -389,7 +425,8 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
       ? (await updateTask(created.id, applyNewTaskForm(created, newTask))) && created
       : await addTask(newTask);
     if (task) {
-      if (linked) await saveLinkedTasks(task, linked);
+      const children = linked ? await saveLinkedTasks(task, linked) : undefined;
+      if (afterSave) await afterSave(task, children || undefined);
       setShowNewTask(false);
       setNewTask(emptyTaskForm());
     }
@@ -400,11 +437,12 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     if (task) setEditingTask(task);
   };
 
-  const handleEditTask = async (e: React.FormEvent, linked?: LinkedTaskRef[]) => {
+  const handleEditTask = async (e: React.FormEvent, linked?: LinkedTaskRef[], afterSave?: AfterTaskSave) => {
     e.preventDefault();
     if (!editingTask) return;
     if (!(await updateTask(editingTask.id, taskToEditForm(editingTask)))) return;
     if (linked) await saveLinkedTasks(editingTask, linked);
+    if (afterSave) await afterSave(editingTask);
     setEditingTask(null);
   };
 
@@ -496,6 +534,12 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
           setCard({ event, anchor });
         }}
         onMoveEvent={handleMoveEvent}
+        onMoveWorkBlock={(block, dayIndex, startMin, endMin) =>
+          moveWorkBlock(block, toLocalDateStr(addDays(days[0], dayIndex)), startMin, endMin)}
+        deadlines={deadlines}
+        ghosts={ghosts}
+        onGhostMove={g => { void moveWorkBlock(g.block, toLocalDateStr(addDays(days[0], g.dayIndex)), g.startMin, g.endMin); }}
+        onGhostKeep={g => setKeptConflicts(keepConflict(g.key))}
         selection={quickAdd ? {
           dayIndex: days.findIndex(d => d.getTime() === quickAdd.draft.day.getTime()),
           startMin: quickAdd.draft.startMin,
@@ -524,6 +568,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
         allTasks={tasks}
+        habits={habits}
       />
 
       <EditTaskModal
@@ -538,6 +583,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
         allTasks={tasks}
+        habits={habits}
       />
 
       <HabitHistoryModal

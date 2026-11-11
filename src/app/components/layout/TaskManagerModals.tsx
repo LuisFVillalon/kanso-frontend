@@ -4,6 +4,7 @@ import React from 'react';
 import NewTaskModal from '@/app/components/task/NewTaskModal';
 import EditTaskModal from '@/app/components/task/EditTaskModal';
 import type { TaskFormData } from '@/app/components/task/TaskFormFields';
+import type { AfterTaskSave } from '@/app/components/task/NewTaskModal';
 import CreateTagModal from '@/app/components/tag/CreateTagModal';
 import EditTagModal from '@/app/components/tag/EditTagListModal';
 import CreateHabitModal from '@/app/components/habit/CreateHabitModal';
@@ -23,7 +24,7 @@ interface TaskManagerModalsProps {
   newTask: BaseTaskForm;
   onTaskChange: (task: BaseTaskForm) => void;
   onToggleTag: (tag: Tag) => void;
-  onSubmitTask: (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task) => void | Promise<void>;
+  onSubmitTask: (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task, afterSave?: AfterTaskSave) => void | Promise<void>;
   activeTaskCount: number;
   occupiedPriorityLevels: number[];
   tags: Tag[];
@@ -36,7 +37,7 @@ interface TaskManagerModalsProps {
   onCloseEditTaskModal: () => void;
   onEditTaskChange: (task: TaskFormData) => void;
   onToggleEditTag: (tag: Tag) => void;
-  onSubmitEditTask: (e: React.FormEvent, linked?: LinkedTaskRef[]) => void | Promise<void>;
+  onSubmitEditTask: (e: React.FormEvent, linked?: LinkedTaskRef[], afterSave?: AfterTaskSave) => void | Promise<void>;
   /** Saves a linked task opened inside the edit modal (see EditTaskModal). */
   onSaveLinkedTask: (task: Task, linked?: LinkedTaskRef[]) => Promise<boolean>;
 
@@ -70,7 +71,7 @@ interface TaskManagerModalsProps {
   onCreateHabitFromManage: () => void;
   onDeleteHabit: (habit: Habit) => Promise<boolean>;
   onArchiveHabit: (habit: Habit) => Promise<boolean>;
-  onUpdateHabit: (id: number, title: string, tags: Tag[], estimatedTime?: number | null) => Promise<void>;
+  onUpdateHabit: (id: number, title: string, tags: Tag[], estimatedTime?: number | null, plannedTime?: string | null) => Promise<void>;
   onViewHabitHistory: (id: number) => void;
 
   // Habit history
@@ -125,6 +126,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
         allTasks={allTasks}
+        habits={habits}
       />
 
       <EditTaskModal
@@ -139,6 +141,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         activeTaskCount={activeTaskCount}
         usedPriorityLevels={occupiedPriorityLevels}
         allTasks={allTasks}
+        habits={habits}
       />
 
       <CreateTagModal
@@ -168,6 +171,8 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         onHabitChange={onHabitChange}
         onSubmit={onSubmitHabit}
         availableTags={tags}
+        allTasks={allTasks}
+        habits={habits}
       />
 
       <ManageHabitsModal
@@ -180,6 +185,7 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         onArchiveHabit={onArchiveHabit}
         onUpdateHabit={onUpdateHabit}
         onViewHistory={onViewHabitHistory}
+        allTasks={allTasks}
       />
 
       <HabitHistoryModal

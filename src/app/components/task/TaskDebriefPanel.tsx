@@ -27,6 +27,9 @@ import { occurrenceKey, occurrenceMinutesOn, occurrencesStartingOn, takesTime } 
 import { useEventsVersion } from '@/app/hooks/useEventsVersion';
 import type { EventOccurrence } from '@/app/types/event';
 import BriefSchedule from './BriefSchedule';
+import HabitsLeftCard from './HabitsLeftCard';
+import PlanConflictCallouts from './PlanConflictCallout';
+import { useSlotPlanner } from '@/app/hooks/useSlotPlanner';
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
 
@@ -60,13 +63,15 @@ interface TaskDebriefPanelProps {
   onArchiveTask?: (task: Task, linked?: LinkedRemoveMode) => Promise<boolean>;
   onDeleteTask?: (task: Task, linked?: LinkedRemoveMode) => Promise<boolean>;
   onUpdateTask?: (id: number, form: EditTaskForm) => Promise<boolean>;
+  /** Logs a habit for today from the "Habits left today" card. */
+  onToggleHabit?: (id: number) => void;
 }
 
 const isBoolean = (c: unknown): c is boolean => typeof c === 'boolean';
 
 const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
   profile, profileLoaded, onSaveProfile, tasks, habits, completionSyncToken,
-  onArchiveTask, onDeleteTask, onUpdateTask,
+  onArchiveTask, onDeleteTask, onUpdateTask, onToggleHabit,
 }) => {
   const [status, setStatus] = useState<Status>('idle');
   const [debrief, setDebrief] = useState<DailyDebriefReport | null>(null);
@@ -191,6 +196,11 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
     run();
   };
 
+  // Suggested habit times and plans that lost their time, from the same rules as the task form.
+  const planner = useSlotPlanner({ enabled: open && !!debrief, tasks, habits, profile, reloadKey: completionSyncToken });
+  // The live habit list (so a check-off shows at once), or the brief's own when it's all there is.
+  const briefHabits: Habit[] = habits.length > 0 ? habits : (debrief?.habit_status ?? []).map(h => ({ ...h, tags: h.tags }));
+
   const canAct = (item: DebriefTaskItem) =>
     !!(onArchiveTask && onDeleteTask && onUpdateTask) && tasks.some(t => t.id === item.id);
   const slipped = debrief?.overdue_tasks.filter(t => !hiddenIds.has(t.id)) ?? [];
@@ -257,7 +267,11 @@ const TaskDebriefPanel: React.FC<TaskDebriefPanelProps> = ({
             <div className="space-y-3">
               <WorkloadCard debrief={debrief} mood={mood} />
 
+              <PlanConflictCallouts planner={planner} tasks={tasks} habits={habits} />
+
               <BriefSchedule debrief={debrief} profile={profile} />
+
+              <HabitsLeftCard habits={briefHabits} planner={planner} onToggleHabit={onToggleHabit} />
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <SectionCard

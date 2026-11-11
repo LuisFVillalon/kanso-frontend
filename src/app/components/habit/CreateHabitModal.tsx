@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { Tag, NewHabit } from '@/app/types/task';
+import { Tag, NewHabit, Task } from '@/app/types/task';
+import type { Habit } from '@/app/types/habit';
 import Modal from '@/app/components/common/Modal';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
 import HabitTimeGoalField from './HabitTimeGoalField';
+import UsualTimeField from './UsualTimeField';
 
 interface CreateHabitModalProps {
   isOpen: boolean;
@@ -12,6 +14,9 @@ interface CreateHabitModalProps {
   onHabitChange: (habit: NewHabit) => void;
   onSubmit: (e: React.FormEvent) => void | Promise<void>;
   availableTags: Tag[];
+  /** Every loaded task and habit. When given, the form suggests usual times that keep clear of them. */
+  allTasks?: Task[];
+  habits?: Habit[];
 }
 
 
@@ -22,6 +27,8 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({
   onHabitChange,
   onSubmit,
   availableTags,
+  allTasks,
+  habits = [],
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -78,6 +85,16 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({
           value={newHabit.estimated_time}
           onChange={hours => onHabitChange({ ...newHabit, estimated_time: hours })}
         />
+
+        {allTasks && (
+          <UsualTimeField
+            value={newHabit.planned_time}
+            onChange={time => onHabitChange({ ...newHabit, planned_time: time })}
+            goalHours={newHabit.estimated_time}
+            tasks={allTasks}
+            habits={habits}
+          />
+        )}
 
         {/* Tags */}
         {availableTags.length > 0 && (

@@ -5,6 +5,7 @@ import { useTagsContext } from '@/app/context/TagsContext';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useNotesContext } from '@/app/context/NotesContext';
 import { useEventsVersion } from '@/app/hooks/useEventsVersion';
+import { useWorkBlocksVersion } from '@/app/hooks/useWorkBlocksVersion';
 import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { addDays } from '@/app/utils/weekLayout';
@@ -34,12 +35,13 @@ export function useWeekActivity(weekStart: Date) {
   const { editSyncToken: habitEditSyncToken } = useHabitsContext();
   const { tagSyncToken: noteTagSyncToken } = useNotesContext();
   const eventsVersion = useEventsVersion();
+  const blocksVersion = useWorkBlocksVersion();
   const [result, setResult] = useState<ActivityResult | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const startStr = toLocalDateStr(weekStart);
   const endStr = toLocalDateStr(addDays(weekStart, 6));
-  const requestKey = `${startStr}|${completionSyncToken}|${taskEditSyncToken}|${tagSyncToken}|${habitEditSyncToken}|${noteTagSyncToken}|${eventsVersion}|${reloadToken}`;
+  const requestKey = `${startStr}|${completionSyncToken}|${taskEditSyncToken}|${tagSyncToken}|${habitEditSyncToken}|${noteTagSyncToken}|${eventsVersion}|${blocksVersion}|${reloadToken}`;
 
   useEffect(() => {
     let cancelled = false;

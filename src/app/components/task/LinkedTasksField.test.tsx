@@ -4,6 +4,17 @@ import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
 import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
+
+// The forms' suggested work times read the calendar; these tests leave it empty.
+vi.mock('@/app/lib/backend-api', () => ({
+  fetchCalendarActivity: vi.fn(async (start: string, end: string) => ({
+    start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [], habit_completions: [],
+  })),
+  createWorkBlock: vi.fn(),
+  deleteWorkBlock: vi.fn(),
+  describeError: (_: unknown, fallback: string) => fallback,
+}));
+
 import EditTaskModal from './EditTaskModal';
 import NewTaskModal from './NewTaskModal';
 import type { TaskFormData } from './TaskFormFields';
@@ -63,7 +74,7 @@ function EditHarness({ initial, onSubmit, onChange = () => {}, tasks = allTasks,
   return (
     <EditTaskModal
       isOpen task={t} onClose={onClose} onTaskChange={next => { onChange(next); setT({ ...t, ...next } as Task); }}
-      tags={tags} onToggleTag={() => {}} onSubmit={onSubmit} activeTaskCount={1} usedPriorityLevels={[]}
+      tags={tags} onToggleTag={() => {}} onSubmit={(e, linked) => onSubmit(e, linked)} activeTaskCount={1} usedPriorityLevels={[]}
       allTasks={tasks} onSaveLinkedTask={onSaveLinkedTask}
     />
   );

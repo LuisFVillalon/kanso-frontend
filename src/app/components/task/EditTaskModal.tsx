@@ -1,7 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, X, Loader2 } from 'lucide-react';
 import { LinkedTaskRef, Task, Tag } from '@/app/types/task';
+import type { Habit } from '@/app/types/habit';
 import TaskFormFields, { TaskFormData } from './TaskFormFields';
+import WhenToWorkSection from './WhenToWorkSection';
+import Callout from './Callout';
+import type { AfterTaskSave } from './NewTaskModal';
+import { useSlotPlanner, blockSpan } from '@/app/hooks/useSlotPlanner';
+import { WorkBlocksSaveError, savePlans, type PlanPick } from '@/app/utils/workBlockPlans';
 import LinkedTasksField, { LeadsUpToField } from './LinkedTasksField';
 import Modal from '@/app/components/common/Modal';
 import {
@@ -17,12 +23,17 @@ interface EditTaskModalProps {
   onTaskChange: (task: TaskFormData) => void;
   tags: Tag[];
   onToggleTag: (tag: Tag) => void;
-  /** Saves the task, then saves `linked` as its linked tasks when given (only when they changed). */
-  onSubmit: (e: React.FormEvent, linked?: LinkedTaskRef[]) => void | Promise<void>;
+  /**
+   * Saves the task, then saves `linked` as its linked tasks when given (only
+   * when they changed), then runs `afterSave` (its work block changes).
+   */
+  onSubmit: (e: React.FormEvent, linked?: LinkedTaskRef[], afterSave?: AfterTaskSave) => void | Promise<void>;
   activeTaskCount: number;
   usedPriorityLevels: number[];
-  /** Every loaded task. When given, the form gets a Linked tasks section. */
+  /** Every loaded task. When given, the form gets a Linked tasks section and suggested work times. */
   allTasks?: Task[];
+  /** The habits, whose time today's suggestions keep free. */
+  habits?: Habit[];
   /**
    * Saves a linked task opened from the Linked tasks section, then `linked`
    * as its linked tasks when given. Resolves to false when the task didn't
@@ -72,9 +83,11 @@ const EditTaskStack: React.FC<EditTaskModalProps & { task: Task }> = ({
               onTaskChange={nested ? next => change(i - 1, next as Partial<Task>) : onTaskChange}
               onToggleTag={nested ? tag => change(i - 1, { tags: toggleById(t.tags, tag) }) : onToggleTag}
               onSubmit={nested
-                ? async (e, linked) => {
+                ? async (e, linked, afterSave) => {
                   e.preventDefault();
-                  if (await onSaveLinkedTask!(t, linked)) back();
+                  if (!(await onSaveLinkedTask!(t, linked))) return;
+                  await afterSave?.(t);
+                  back();
                 }
                 : onSubmit}
               onOpenTask={onSaveLinkedTask && open}
@@ -97,9 +110,39 @@ interface EditTaskFormProps extends Omit<EditTaskModalProps, 'isOpen' | 'task' |
 /** One task's form in the editor, mounted fresh for each task so its linked-task rows start from that task's. */
 const EditTaskForm: React.FC<EditTaskFormProps> = ({
   task, backTo, onBack, onOpenTask, onClose, onTaskChange, tags, onToggleTag,
-  onSubmit, activeTaskCount, usedPriorityLevels, allTasks,
+  onSubmit, activeTaskCount, usedPriorityLevels, allTasks, habits,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [picks, setPicks] = useState<PlanPick[]>([]);
+  const [removedKept, setRemovedKept] = useState<Set<number>>(() => new Set());
+  const [planError, setPlanError] = useState<string | null>(null);
+  const planner = useSlotPlanner({
+    enabled: !!allTasks && !task.completed && !!task.title.trim(),
+    tasks: allTasks ?? [],
+    habits: habits ?? [],
+    excludeTaskIds: [task.id],
+  });
+  // This task's blocks from now on; past ones stay as a record and aren't listed.
+  const kept = useMemo(() => {
+    if (!planner) return [];
+    const nowMin = planner.state.now.min;
+    return planner.workBlocks.filter(b => b.task_id === task.id
+      && (b.date > planner.today || (b.date === planner.today && blockSpan(b).end > nowMin)));
+  }, [planner, task.id]);
+  const toggleKept = (id: number) => setRemovedKept(prev => {
+    const next = new Set(prev);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
+  const removals = kept.filter(b => removedKept.has(b.id)).map(b => b.id);
+
+  const afterSave: AfterTaskSave = async saved => {
+    const { failed, failedRemoves, reason } = await savePlans(picks.map(pick => ({ taskId: saved.id, pick })), removals);
+    setPicks(failed.map(f => f.pick));
+    setRemovedKept(new Set(failedRemoves));
+    const count = failed.length + failedRemoves.length;
+    if (count) throw new WorkBlocksSaveError(saved, count, reason ?? 'Something went wrong.');
+  };
   const [savedLinked] = useState<LinkedDraft[]>(() => linkedDraftsFor(allTasks ?? [], task.id));
   const [linked, setLinked] = useState<LinkedDraft[]>(savedLinked);
   const [linkedError, setLinkedError] = useState<string | null>(null);
@@ -131,10 +174,16 @@ const EditTaskForm: React.FC<EditTaskFormProps> = ({
     const refs = showLinkedField && linkedDraftsChanged(saved, rows)
       ? toLinkedRefs(rows, allTasks!)
       : undefined;
+    setPlanError(null);
     setIsLoading(true);
     try {
-      await onSubmit(e, refs);
+      if (picks.length || removals.length) await onSubmit(e, refs, afterSave);
+      else await onSubmit(e, refs);
     } catch (err) {
+      if (err instanceof WorkBlocksSaveError) {
+        setPlanError(`The task was saved, but ${err.failed === 1 ? 'one planned time' : `${err.failed} planned times`} didn't change on your calendar: ${err.reason}`);
+        return;
+      }
       if (!(err instanceof LinkedTasksSaveError)) throw err;
       setLinkedError(linkedSaveMessage(err, allTasks ?? [], "The task was saved, but its linked tasks weren't"));
     } finally {
@@ -175,6 +224,20 @@ const EditTaskForm: React.FC<EditTaskFormProps> = ({
           onToggleTag={onToggleTag}
           activeTaskCount={activeTaskCount}
           usedPriorityLevels={usedPriorityLevels}
+          afterDuration={!task.completed && (
+            <WhenToWorkSection
+              planner={planner}
+              dueDate={task.due_date}
+              dueTime={task.due_time}
+              estimatedHours={task.estimated_time}
+              picks={picks}
+              onPicksChange={setPicks}
+              kept={kept}
+              removedKept={removedKept}
+              onToggleKept={toggleKept}
+              error={planError && <Callout tone="danger" role="alert">{planError}</Callout>}
+            />
+          )}
           afterTitle={allTasks && originalParentId != null && (
             <LeadsUpToField
               chain={parents}

@@ -28,7 +28,11 @@ export interface ProfileFields {
   notesViewMode: string | null;
   homePanels: string | null;
   moodCheckins: MoodCheckinSettings;
+  /** False while the work day (hours and rest days) has never been saved, so the defaults stand in. Absent counts as saved. */
+  workHoursSet?: boolean;
 }
+
+const WORK_DAY_KEYS = ['tm_day_start_time', 'tm_call_it_a_day', 'tm_rest_days', DAY_WINDOWS_KEY];
 
 const readLocalDefaults = (): ProfileFields => ({
   name: (typeof window !== 'undefined' ? localStorage.getItem('tm_profile_name') : null) ?? ' ',
@@ -51,6 +55,7 @@ const readLocalDefaults = (): ProfileFields => ({
   notesViewMode: null,
   homePanels: null,
   moodCheckins: DEFAULT_MOOD_SETTINGS,
+  workHoursSet: typeof window === 'undefined' || WORK_DAY_KEYS.some(key => localStorage.getItem(key) !== null),
 });
 
 /**
@@ -103,6 +108,7 @@ export function useProfile(user: User | null) {
           notesViewMode: p.notes_view_mode ?? prev.notesViewMode,
           homePanels: p.home_panels ?? prev.homePanels,
           moodCheckins: moodSettings(p.mood_checkins),
+          workHoursSet: prev.workHoursSet || p.day_start_time != null || p.shutoff_time != null || p.rest_days != null,
         }));
         localStorage.setItem('tm_profile_name', p.name);
         if (p.shutoff_time) localStorage.setItem('tm_call_it_a_day', p.shutoff_time);
@@ -199,7 +205,9 @@ export function useProfile(user: User | null) {
       if (patch.pageStyle === DEFAULT_PAGE_STYLE) resetPageStyle();
       else setStoredPageStyle(patch.pageStyle);
     }
-    setProfile(prev => ({ ...prev, ...patch }));
+    const workDay = patch.dayStartTime !== undefined || patch.shutoffTime !== undefined
+      || patch.restDays !== undefined || patch.dayWindows !== undefined;
+    setProfile(prev => ({ ...prev, ...patch, ...(workDay ? { workHoursSet: true } : {}) }));
   }, []);
 
   return { profile, loading, loaded, saveProfile, saveProfileField };

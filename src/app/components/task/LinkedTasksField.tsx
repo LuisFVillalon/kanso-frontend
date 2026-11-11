@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ChevronRight, GripVertical, Plus, Search, SquarePen, Timer, X,
+  AlertTriangle, ArrowDown, ArrowUp, CalendarClock, Check, ChevronDown, ChevronRight, GripVertical, Plus, Search, SquarePen, Timer, X,
 } from 'lucide-react';
 import { ParentSummary, Tag, Task } from '@/app/types/task';
 import { formatDueDate, formatDueDateShort, formatTime12Hour, getDueStatus } from '@/app/utils/taskUtils';
@@ -41,6 +41,19 @@ interface LinkedTasksFieldProps {
   mode: 'create' | 'edit';
   /** Why saving the list failed, shown under it. */
   error?: string | null;
+  /** Suggested work times for the rows (creating a task): a slot pill on each, and "Plan all". */
+  plan?: LinkedPlan;
+}
+
+/** Suggested work times for the Linked tasks rows. */
+export interface LinkedPlan {
+  /** Each plannable row's pill by row key ("task-<id>" or a new row's key), null when nothing fits. */
+  pills: Record<string, { label: string; planned: boolean } | null>;
+  /** How many rows "Plan all" would plan. */
+  planAllCount: number;
+  onPlanAll: () => void;
+  /** An opened pill's choices: that row's suggested times. */
+  renderOptions: (key: string) => React.ReactNode;
 }
 
 let nextDraftKey = 0;
@@ -77,8 +90,10 @@ const newSummary = (f: TaskFormData) => [
  */
 const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
   allTasks, parentId, parentOfParent = null, parentDueDate, parentTitle, parentTags, parentPriority = null,
-  tags, activeTaskCount, usedPriorityLevels, onOpenTask, drafts, onChange, mode, error,
+  tags, activeTaskCount, usedPriorityLevels, onOpenTask, drafts, onChange, mode, error, plan,
 }) => {
+  // The row whose slot pill is open, by key.
+  const [planKey, setPlanKey] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -272,11 +287,22 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
           <span id="linked-tasks-label" className="block text-sm font-medium text-text-secondary">
             Linked tasks <span className="font-normal text-text-muted">(optional)</span>
           </span>
-          {total > 0 && (
-            <span className="text-[13px] font-semibold text-text-secondary whitespace-nowrap">
-              {done} of {total} done
-            </span>
-          )}
+          <span className="flex items-baseline gap-3">
+            {plan && plan.planAllCount > 0 && (
+              <button
+                type="button"
+                onClick={plan.onPlanAll}
+                className="inline-flex items-center gap-1 text-[13px] font-semibold text-accent hover:underline whitespace-nowrap"
+              >
+                <CalendarClock className="w-3.5 h-3.5" aria-hidden /> Plan all {plan.planAllCount}
+              </button>
+            )}
+            {total > 0 && (
+              <span className="text-[13px] font-semibold text-text-secondary whitespace-nowrap">
+                {done} of {total} done
+              </span>
+            )}
+          </span>
         </div>
         <p className="text-xs text-text-muted mt-1">
           Tasks that need to happen before this one is finished. Each one is a full task in your list.
@@ -385,6 +411,22 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
                     +{ownLinked}
                   </span>
                 )}
+                {plan?.pills[key] && (
+                  <button
+                    type="button"
+                    onClick={() => setPlanKey(planKey === key ? null : key)}
+                    aria-expanded={planKey === key}
+                    aria-label={`${plan.pills[key]!.planned ? 'Planned' : 'Suggested'} ${plan.pills[key]!.label} for ${name}: choose a time`}
+                    data-slot-pill
+                    className="flex-shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
+                    style={plan.pills[key]!.planned
+                      ? { backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)', border: '1px solid var(--tm-accent)' }
+                      : { color: 'var(--tm-accent)', border: '1px dashed var(--tm-accent)' }}
+                  >
+                    <CalendarClock className="w-3 h-3" aria-hidden />
+                    {plan.pills[key]!.label}
+                  </button>
+                )}
                 <span className="flex items-center flex-shrink-0">
                   {d.kind === 'new' && (
                     <button
@@ -438,6 +480,11 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
                   </button>
                 </span>
               </div>
+              {plan && planKey === key && plan.pills[key] !== undefined && (
+                <div className="px-2.5 pt-2 pb-2.5 border-t border-dashed border-border" data-slot-options>
+                  {plan.renderOptions(key)}
+                </div>
+              )}
               {d.kind === 'new' && isOpen && (
                 <div className="space-y-4 px-2.5 pt-3 pb-3 border-t border-dashed border-border">
                   <NewLinkedTaskFields

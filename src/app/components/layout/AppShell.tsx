@@ -147,9 +147,12 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return true;
   };
 
-  const handleUpdateHabit = async (id: number, title: string, habitTags: Tag[], estimatedTime?: number | null) => {
+  const handleUpdateHabit = async (id: number, title: string, habitTags: Tag[], estimatedTime?: number | null, plannedTime?: string | null) => {
     try {
-      await updateHabit(id, { title, tags: habitTags, estimated_time: estimatedTime ?? null });
+      await updateHabit(id, {
+        title, tags: habitTags, estimated_time: estimatedTime ?? null,
+        ...(plannedTime !== undefined ? { planned_time: plannedTime } : {}),
+      });
       reloadEditedHabits();
     } catch (err) {
       console.error('Failed to update habit:', err);
@@ -161,7 +164,10 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     e.preventDefault();
     if (!state.newHabit.title.trim()) return;
     try {
-      await createHabit({ title: state.newHabit.title.trim(), tags: state.newHabit.tags, estimated_time: state.newHabit.estimated_time ?? null });
+      await createHabit({
+        title: state.newHabit.title.trim(), tags: state.newHabit.tags, estimated_time: state.newHabit.estimated_time ?? null,
+        planned_time: state.newHabit.planned_time ?? null,
+      });
       state.setNewHabit({ title: '', tags: [], estimated_time: null });
       state.setShowCreateHabitModal(false);
       if (state.createHabitFromManage) {

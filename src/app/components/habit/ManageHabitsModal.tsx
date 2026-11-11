@@ -5,6 +5,8 @@ import { Tag } from '@/app/types/task';
 import Modal from '@/app/components/common/Modal';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
 import HabitTimeGoalField from './HabitTimeGoalField';
+import UsualTimeField from './UsualTimeField';
+import type { Task } from '@/app/types/task';
 import {
   BEST_STREAK_HINT,
   CURRENT_STREAK_HINT,
@@ -21,8 +23,10 @@ interface ManageHabitsModalProps {
   onCreateHabit?: () => void;
   onDeleteHabit?: (habit: Habit) => Promise<boolean>;
   onArchiveHabit?: (habit: Habit) => Promise<boolean>;
-  onUpdateHabit?: (id: number, title: string, tags: Tag[], estimatedTime?: number | null) => Promise<void>;
+  onUpdateHabit?: (id: number, title: string, tags: Tag[], estimatedTime?: number | null, plannedTime?: string | null) => Promise<void>;
   onViewHistory?: (id: number) => void;
+  /** Every loaded task. When given, editing a habit offers usual times that keep clear of them. */
+  allTasks?: Task[];
 }
 
 const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
@@ -35,11 +39,13 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
   onArchiveHabit,
   onUpdateHabit,
   onViewHistory,
+  allTasks,
 }) => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editTags, setEditTags] = useState<Tag[]>([]);
   const [editEstimatedTime, setEditEstimatedTime] = useState<number | null>(null);
+  const [editPlannedTime, setEditPlannedTime] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deletingHabit, setDeletingHabit] = useState<Habit | null>(null);
@@ -51,6 +57,7 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
     setEditTitle(habit.title);
     setEditTags(habit.tags.map(t => ({ id: t.id, name: t.name, color: t.color ?? '#6B7280' })));
     setEditEstimatedTime(habit.estimated_time ?? null);
+    setEditPlannedTime(habit.planned_time ?? null);
   };
 
   const cancelEdit = () => {
@@ -70,7 +77,7 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
     if (!editTitle.trim() || !onUpdateHabit) return;
     setSaving(true);
     try {
-      await onUpdateHabit(id, editTitle.trim(), editTags, editEstimatedTime);
+      await onUpdateHabit(id, editTitle.trim(), editTags, editEstimatedTime, editPlannedTime);
       cancelEdit();
     } finally {
       setSaving(false);
@@ -141,6 +148,15 @@ const ManageHabitsModal: React.FC<ManageHabitsModalProps> = ({
                       labelClassName="block text-xs font-medium text-text-muted mb-1"
                       inputClassName="input-field text-sm"
                     />
+                    {allTasks && (
+                      <UsualTimeField
+                        value={editPlannedTime}
+                        onChange={setEditPlannedTime}
+                        goalHours={editEstimatedTime}
+                        tasks={allTasks}
+                        habits={habits.filter(h => h.id !== habit.id)}
+                      />
+                    )}
                     {availableTags.length > 0 && (
                       <TagMultiSelect
                         tags={availableTags}

@@ -14,6 +14,7 @@ import { ArchivedTerm, CalendarSettings, TermDates, TermRollover } from "../type
 import { CalendarActivity } from "../types/activity";
 import { CalendarEvent, CalendarEventCreate, CalendarEventUpdate, EditScope, EventOccurrence, EventReport } from "../types/event";
 import { Habit, HabitHistoryEntry } from "../types/habit";
+import { WorkBlock, WorkBlockCreate, WorkBlockUpdate } from "../types/workBlock";
 import { DayWindows, Profile } from "../types/profile";
 import { MoodCheckin, MoodCheckinSave, MoodCheckinSettings, MoodPeriodKind, MoodTags } from "../types/mood";
 import { Drawing } from "../types/drawing";
@@ -682,6 +683,46 @@ export async function fetchCalendarActivity(
   return res.json();
 }
 
+// ── Work blocks ───────────────────────────────────────────────────────────────
+//
+// Time set aside on the calendar to work on a task, or to do a habit on one
+// day. They reach the calendars through fetchCalendarActivity's `work_blocks`
+// and the brief's; these calls make, move and remove them.
+
+/** Sets aside time for a task or a habit and returns the block. */
+export async function createWorkBlock(block: WorkBlockCreate): Promise<WorkBlock> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/create-work-block`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(block),
+  });
+  await assertOk(res, "createWorkBlock");
+  return res.json();
+}
+
+/** Moves a block to another day or time, or changes when it ends. */
+export async function updateWorkBlock(id: number, changes: WorkBlockUpdate): Promise<WorkBlock> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/update-work-block/${id}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(changes),
+  });
+  await assertOk(res, "updateWorkBlock");
+  return res.json();
+}
+
+/** Removes a block; the task or habit stays. */
+export async function deleteWorkBlock(id: number): Promise<void> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/delete-work-block/${id}`, {
+    method: "DELETE",
+    headers,
+  });
+  await assertOk(res, "deleteWorkBlock");
+}
+
 // ── Events ────────────────────────────────────────────────────────────────────
 //
 // Occurrences reach the calendars through fetchCalendarActivity's `events`;
@@ -866,6 +907,8 @@ export async function createHabit(habit: {
   title: string;
   tags?: { id: number; name: string; color?: string | null }[];
   estimated_time?: number | null;
+  /** Its usual time of day ("HH:MM"), or null for none. */
+  planned_time?: string | null;
 }): Promise<Habit> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE_URL}/create-habit`, {
@@ -877,13 +920,14 @@ export async function createHabit(habit: {
   return res.json();
 }
 
-/** Updates a habit's title and tags. Returns the updated record. */
+/** Updates a habit's title, tags, time goal and usual time. Returns the updated record. */
 export async function updateHabit(
   id: number,
   habit: {
     title: string;
     tags?: { id: number; name: string; color?: string | null }[];
     estimated_time?: number | null;
+    planned_time?: string | null;
   },
 ): Promise<Habit> {
   const headers = await getAuthHeaders();
