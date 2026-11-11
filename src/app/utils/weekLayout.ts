@@ -281,7 +281,7 @@ export function buildWeekEvents({
     });
   }
 
-  markClashes(timed);
+  markClashes(timed, now);
   return { timed, allDay, deadlines };
 }
 
@@ -337,17 +337,22 @@ export function buildEventBlocks(events: EventOccurrence[], days: Date[], now: D
 }
 
 /**
- * Marks each open planned task's or work block's block that meets a live
- * event's block on its day with the event's title. An event that leaves its time free (busy: false)
- * clashes with nothing.
+ * Marks each open planned task's or work block's block that a live event
+ * overlaps on its day (real times, not the drawn extents) with the event's
+ * title. A work block that has ended isn't marked. An event that leaves its
+ * time free (busy: false) clashes with nothing.
  */
-function markClashes(timed: TimedEvent[]) {
+function markClashes(timed: TimedEvent[], now: Date) {
   const live = timed.filter(e => e.kind === 'event' && !!e.event && !e.event.archived && e.event.occurrence.busy !== false);
   if (live.length === 0) return;
+  const today = toLocalDateStr(now);
+  const nowMin = minutesOfDay(now);
   for (const block of timed) {
     if ((block.kind !== 'task' && block.kind !== 'work') || block.completed) continue;
+    const day = block.workBlock?.date;
+    if (day && (day < today || (day === today && block.endMin <= nowMin))) continue;
     const hit = live.find(e => e.dayIndex === block.dayIndex
-      && e.drawStartMin < block.drawEndMin && block.drawStartMin < e.drawEndMin);
+      && e.startMin < block.endMin && block.startMin < e.endMin);
     if (hit) block.clashWith = hit.title;
   }
 }

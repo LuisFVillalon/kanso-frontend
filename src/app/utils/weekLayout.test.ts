@@ -460,7 +460,7 @@ describe('events on the week', () => {
       time_zone: 'UTC', starts_at: '', ends_at: '',
     });
     const { timed } = buildWeekEvents({
-      weekStart, completedTasks: [], noteSessions: [], habitCompletions: [], now,
+      weekStart, completedTasks: [], noteSessions: [], habitCompletions: [], now: new Date(2026, 9, 20, 9, 0),
       scheduledTasks: [
         { id: 1, title: 'Open', due_date: null, due_time: null, estimated_time: null, completed: false, tags: [] },
         { id: 2, title: 'Done already', due_date: '2026-10-21', due_time: '14:00', estimated_time: 0.5, completed: true, tags: [] },
@@ -485,5 +485,29 @@ describe('events on the week', () => {
     const clash = (key: string) => timed.find(e => e.key === key)!.clashWith;
     expect([clash('work-1'), clash('task-2'), clash('work-3'), clash('work-4'), clash('work-5'), clash('work-6'), clash('work-7')])
       .toEqual(['ART 157 Studio', undefined, undefined, undefined, undefined, undefined, undefined]);
+  });
+
+  it('rings a work block only where an event really overlaps it, and not once the block has ended', () => {
+    const block = (id: number, date: string, start: string, end: string) => ({
+      id, task_id: 1, habit_id: null, title: `Block ${id}`, tags: [], date, start_time: start, end_time: end,
+      time_zone: 'UTC', starts_at: '', ends_at: '',
+    });
+    const { timed } = buildWeekEvents({
+      weekStart, completedTasks: [], noteSessions: [], habitCompletions: [], now,
+      scheduledTasks: [{ id: 1, title: 'Open', due_date: null, due_time: null, estimated_time: null, completed: false, tags: [] }],
+      workBlocks: [
+        // Right after a 15-minute event, which is drawn 20 minutes tall.
+        block(1, '2026-10-23', '10:15', '10:45'),
+        block(2, '2026-10-23', '10:10', '10:40'),
+        // Yesterday, during ART 157 Studio.
+        block(3, '2026-10-21', '13:00', '13:30'),
+      ],
+      events: [
+        event({ title: 'ART 157 Studio' }),
+        event({ event_id: 2, title: 'Stand-up', date: '2026-10-23', end_date: '2026-10-23', occurrence_date: '2026-10-23', start_time: '10:00:00', end_time: '10:15:00' }),
+      ],
+    });
+    const clash = (key: string) => timed.find(e => e.key === key)!.clashWith;
+    expect([clash('work-1'), clash('work-2'), clash('work-3')]).toEqual([undefined, 'Stand-up', undefined]);
   });
 });

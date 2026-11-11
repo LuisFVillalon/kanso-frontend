@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   afterWorkHours, freeMinutesOn, freeTime, habitTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
-  splitFill, spread, suggest, type BusyItem, type HabitInput, type SlotState, type Span, type TaskInput,
+  splitFill, spread, suggest, withHeld, type BusyItem, type HabitInput, type SlotState, type Span, type TaskInput,
 } from './slotSuggest';
 
 // The prototype board's sample week. "Now" is Wed Nov 11 2026, 11:20 AM.
@@ -131,6 +131,24 @@ describe('spread (linked tasks)', () => {
   it('gives null when nothing fits', () => {
     const out = spread(sample(), [{ key: 'a', len: 600 }], range('2026-11-12', H(10)));
     expect(out[0].slot).toBeNull();
+  });
+
+  it('keeps each one before its own due as well as the parent\'s', () => {
+    const parent = range('2026-11-17', H(23, 59));
+    // b is due Thu 10:00 AM; only 9:00–9:30 is free that morning, so an hour doesn't fit before it.
+    const out = spread(sample(), [{ key: 'a', len: 60 }, { key: 'b', len: 60, range: range('2026-11-12', H(10)) }], parent);
+    expect(out.map(x => at(x.slot))).toEqual(['2026-11-11 1020-1080', null]);
+    const unbounded = spread(sample(), [{ key: 'a', len: 60 }, { key: 'b', len: 60 }], parent);
+    expect(unbounded[1].slot).not.toBeNull();
+  });
+
+  it('keeps off times already picked for the parent or other linked tasks', () => {
+    const parent = range('2026-11-17', H(23, 59));
+    const picked = suggest(sample(), 60, parent).slots[0];
+    const held = withHeld(sample(), [picked]);
+    const [first] = spread(held, [{ key: 'a', len: 60 }], parent);
+    expect(first.slot && first.slot.date === picked.date && first.slot.start < picked.end && picked.start < first.slot.end).toBe(false);
+    expect(suggest(held, 60, parent).slots.map(at)).not.toContain(at(picked));
   });
 });
 

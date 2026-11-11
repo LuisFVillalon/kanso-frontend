@@ -9,7 +9,7 @@ import Callout from './Callout';
 import Modal from '@/app/components/common/Modal';
 import { LinkedDraft, LinkedTasksSaveError, linkedSaveMessage, toLinkedRefs } from '@/app/utils/linkedTasks';
 import { useSlotPlanner, planMinutes, minutesOf, type SlotPlanner } from '@/app/hooks/useSlotPlanner';
-import { planRange, spread, suggest, type PlanRange } from '@/app/utils/slotSuggest';
+import { earlierRange, planRange, spread, suggest, withHeld, type PlanRange } from '@/app/utils/slotSuggest';
 import { clock, dayShort } from '@/app/utils/slotLabels';
 import { WorkBlocksSaveError, savePlans, samePick, togglePicks, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
@@ -92,7 +92,13 @@ const NewTaskForm: React.FC<NewTaskModalProps> = ({
     excludeTaskIds: created ? [created.id] : undefined,
   });
 
-  const linkedPlan = useLinkedPlan(planner, linked, allTasks ?? [], newTask, linkedPicks, setLinkedPicks);
+  const linkedPlan = useLinkedPlan(planner, linked, allTasks ?? [], newTask, picks, linkedPicks, setLinkedPicks);
+  // The parent's rows keep off the times picked for its linked tasks.
+  const heldForParent = useMemo(() => linked.flatMap(d => linkedPicks[draftKey(d)] ?? []), [linked, linkedPicks]);
+  const parentPlanner = useMemo(
+    () => planner && { ...planner, state: withHeld(planner.state, heldForParent) },
+    [planner, heldForParent],
+  );
 
   const handleFieldChange = (next: TaskFormData) => {
     onTaskChange({ ...newTask, ...next } as BaseTaskForm);
@@ -185,7 +191,7 @@ const NewTaskForm: React.FC<NewTaskModalProps> = ({
           usedPriorityLevels={usedPriorityLevels}
           afterDuration={(
             <WhenToWorkSection
-              planner={planner}
+              planner={parentPlanner}
               dueDate={newTask.due_date}
               dueTime={newTask.due_time}
               estimatedHours={newTask.estimated_time}
@@ -251,14 +257,16 @@ function rowInputs(d: LinkedDraft, byId: Map<number, Task>) {
 
 /**
  * The Linked tasks section's slot pills: each open row's time from spreading
- * them in list order before the parent is due ("Plan all" picks those), and
- * when a pill is opened, that row's own 3 suggestions.
+ * the rows not planned yet in list order, before the parent and the row are
+ * due ("Plan all" picks those), and when a pill is opened, that row's own 3
+ * suggestions. The parent's picks and the other rows' picks count as taken.
  */
 function useLinkedPlan(
   planner: SlotPlanner | null,
   drafts: LinkedDraft[],
   allTasks: Task[],
   parent: BaseTaskForm,
+  parentPicks: PlanPick[],
   linkedPicks: Record<string, PlanPick[]>,
   setLinkedPicks: React.Dispatch<React.SetStateAction<Record<string, PlanPick[]>>>,
 ): LinkedPlan | undefined {
@@ -269,16 +277,29 @@ function useLinkedPlan(
     return r && !r.done ? [{ key: draftKey(d), ...r, len: planMinutes(r.hours) }] : [];
   }), [drafts, byId]);
 
+  const rangeFor = useCallback((r: (typeof rows)[number]): PlanRange | null => {
+    if (!planner || !parentInputs) return null;
+    if (!r.due) return parentInputs.range;
+    const own = planRange(planner.state.now, r.due, minutesOf(r.time));
+    return own && earlierRange(own, parentInputs.range);
+  }, [planner, parentInputs]);
+
+  // What's taken for a row: the parent's picks and every other row's.
+  const heldFor = useCallback((key: string | null) => withHeld(planner!.state, [
+    ...parentPicks,
+    ...rows.flatMap(r => (r.key === key ? [] : linkedPicks[r.key] ?? [])),
+  ]), [planner, parentPicks, rows, linkedPicks]);
+
   const spreadOut = useMemo(() => {
     if (!planner || !parentInputs || rows.length === 0) return new Map<string, PlanPick | null>();
-    const out = spread(planner.state, rows.map(r => ({ key: r.key, len: r.len })), parentInputs.range);
+    const items = rows.flatMap(r => {
+      if (linkedPicks[r.key]?.length) return [];
+      const range = rangeFor(r);
+      return range ? [{ key: r.key, len: r.len, range }] : [];
+    });
+    const out = spread(heldFor(null), items, parentInputs.range);
     return new Map(out.map(o => [o.key, o.slot && { date: o.slot.date, start: o.slot.start, end: o.slot.end }]));
-  }, [planner, parentInputs, rows]);
-
-  const rangeFor = useCallback((r: (typeof rows)[number]): PlanRange | null => {
-    if (!planner) return null;
-    return r.due ? planRange(planner.state.now, r.due, minutesOf(r.time)) : parentInputs?.range ?? null;
-  }, [planner, parentInputs]);
+  }, [planner, parentInputs, rows, linkedPicks, rangeFor, heldFor]);
 
   if (!planner || !parentInputs || rows.length === 0) return undefined;
   const today = planner.today;
@@ -302,18 +323,21 @@ function useLinkedPlan(
       const r = rows.find(x => x.key === key);
       const range = r && rangeFor(r);
       if (!r || !range) return <p className="text-xs text-text-muted">It&apos;s past due, so there&apos;s nothing to plan.</p>;
-      const own = suggest(planner.state, r.len, range).slots;
+      const state = heldFor(key);
+      const own = suggest(state, r.len, range).slots;
       const spreadSlot = spreadOut.get(key);
-      const slots = spreadSlot
-        ? [{ ...spreadSlot, gap: spreadSlot.end - spreadSlot.start }, ...own.filter(s => !samePick(s, spreadSlot))].slice(0, 3)
-        : own;
+      const lead = spreadSlot ? [spreadSlot] : linkedPicks[key] ?? [];
+      const slots = [
+        ...lead.map(p => ({ ...p, gap: p.end - p.start })),
+        ...own.filter(s => !lead.some(p => samePick(s, p))),
+      ].slice(0, Math.max(3, lead.length));
       if (slots.length === 0) return <p className="text-xs text-text-muted">No free time fits it before it&apos;s due.</p>;
       return (
         <SlotRows
           slots={slots}
           picks={linkedPicks[key] ?? []}
           onToggle={s => setLinkedPicks(prev => ({ ...prev, [key]: togglePicks(prev[key] ?? [], [s]) }))}
-          state={planner.state}
+          state={state}
           range={range}
           today={today}
           soonest={false}

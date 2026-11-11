@@ -274,23 +274,33 @@ export function suggest(S: SlotState, len: number, range: PlanRange): { slots: S
 export const freeMinutesOn = (days: FreeDay[], date: string): number =>
   (days.find(d => d.date === date)?.gaps ?? []).reduce((n, [s, e]) => n + e - s, 0);
 
-/** A linked task to spread: its key and length. */
+/** `S` with `spans` (times picked but not saved yet) held like kept blocks. */
+export const withHeld = (S: SlotState, spans: { date: string; start: number; end: number }[]): SlotState =>
+  spans.length ? { ...S, blocks: [...S.blocks, ...spans.map(p => ({ date: p.date, start: p.start, end: p.end }))] } : S;
+
+/** Whichever of two ranges is due first. */
+export const earlierRange = (a: PlanRange, b: PlanRange): PlanRange =>
+  a.due.date < b.due.date || (a.due.date === b.due.date && a.due.min <= b.due.min) ? a : b;
+
+/** A linked task to spread: its key, length, and its own range when it has a due date. */
 export interface SpreadItem<K> {
   key: K;
   len: number;
+  range?: PlanRange;
 }
 
 /**
  * Linked tasks in list order, each after the previous one's slot (on a later
- * day when one fits), all before the parent's due. Each slot counts as kept
- * for the ones after it.
+ * day when one fits), all before the parent's due and their own. Each slot
+ * counts as kept for the ones after it.
  */
 export function spread<K>(S: SlotState, items: SpreadItem<K>[], range: PlanRange): { key: K; slot: Slot | null }[] {
   const S2: SlotState = { ...S, blocks: [...S.blocks] };
   const out: { key: K; slot: Slot | null }[] = [];
   let after: DayMinute = { date: S.now.date, min: 0 };
   for (const it of items) {
-    const days = freeTime(S2, range.until, range.due);
+    const r = it.range ? earlierRange(it.range, range) : range;
+    const days = freeTime(S2, r.until, r.due);
     const c = candidates(days, it.len).filter(x => x.date > after.date || (x.date === after.date && x.start >= after.min));
     const nextDay = out.length > 0 ? c.find(x => x.date > after.date) : undefined;
     const pick = nextDay ?? c[0] ?? null;
