@@ -149,6 +149,8 @@ export interface NewHabit {
   title: string;
   tags: Tag[];
   estimated_time?: number | null;
+  /** Its usual time of day ("HH:MM"), or null for none. */
+  planned_time?: string | null;
 }
 
 export interface TagStats {

@@ -427,6 +427,7 @@ const TaskManager: React.FC = () => {
                   onArchiveTask={archiveTask}
                   onDeleteTask={deleteTask}
                   onUpdateTask={updateTask}
+                  onToggleHabit={toggleHabit}
                 />
 
                 <WidgetsArea

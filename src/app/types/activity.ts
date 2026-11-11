@@ -1,4 +1,5 @@
 import type { EventOccurrence } from './event';
+import type { WorkBlock } from './workBlock';
 import { Tag } from './task';
 
 // Types matching the backend's CalendarActivity response
@@ -72,4 +73,6 @@ export interface CalendarActivity {
    * flagged), upcoming ones unless archived. Older backends leave it out.
    */
   events?: EventOccurrence[];
+  /** Work blocks in the range, by start. Older backends leave it out, which counts as none. */
+  work_blocks?: WorkBlock[];
 }

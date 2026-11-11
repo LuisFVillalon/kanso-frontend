@@ -37,19 +37,23 @@ describe('googleEventLink', () => {
 });
 
 describe('imported events count like kanso events', () => {
-  it('rings a planned task that falls during one', () => {
+  it('rings a work block that falls during one', () => {
     const weekStart = startOfWeek(new Date(2026, 10, 11));
-    const task = { id: 1, title: 'Essay', completed: false, due_date: '2026-11-11', due_time: '10:30:00', estimated_time: 1, tags: [] };
+    const block = {
+      id: 1, task_id: 1, habit_id: null, title: 'Essay', tags: [], date: '2026-11-11', start_time: '10:30', end_time: '11:30',
+      time_zone: 'UTC', starts_at: '', ends_at: '',
+    };
     const { timed } = buildWeekEvents({
       weekStart,
-      scheduledTasks: [task] as never,
+      scheduledTasks: [],
       completedTasks: [],
       noteSessions: [],
       habitCompletions: [],
+      workBlocks: [block],
       events: [google({ title: 'Team sync' })],
       now: new Date(2026, 10, 9),
     });
-    expect(timed.find(e => e.kind === 'task')?.clashWith).toBe('Team sync');
+    expect(timed.find(e => e.kind === 'work')?.clashWith).toBe('Team sync');
   });
 
   it("warns about overlapping one in the event form", () => {

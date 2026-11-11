@@ -10,6 +10,7 @@
 import type { ActivityHabit, ActivityHabitCompletion, ActivityNote, ActivityNoteSession, ActivityTask } from '@/app/types/activity';
 import type { EventOccurrence } from '@/app/types/event';
 import type { Tag, Task } from '@/app/types/task';
+import type { WorkBlock } from '@/app/types/workBlock';
 import { parseLocalDate, toLocalDateStr, toLocalTimeStr } from './dateUtils';
 
 export const MINUTES_PER_DAY = 24 * 60;
@@ -26,7 +27,7 @@ export const MIN_BLOCK_MINUTES = 20;
 /** Sessions of one note on one day closer together than this merge into one block. */
 export const NOTE_MERGE_GAP_MINUTES = 30;
 
-export type TimedEventKind = 'task' | 'completed' | 'note' | 'event';
+export type TimedEventKind = 'task' | 'completed' | 'note' | 'event' | 'work';
 export type AllDayItemKind = 'task' | 'habit' | 'event';
 /** The tags behind a task, note or habit's block, which take its color. */
 export type BlockTags = Pick<Tag, 'color'>[];
@@ -65,8 +66,22 @@ export interface TimedEvent {
   tags?: BlockTags;
   /** Events only. */
   event?: EventPlacement;
-  /** Open planned tasks only: the title of a live event the block falls during. */
+  /** Work blocks only: the block, for moving it. */
+  workBlock?: WorkBlock;
+  /** Habit work blocks only. */
+  habitId?: number;
+  /** Open planned tasks and work blocks only: the title of a live event the block falls during. */
   clashWith?: string;
+}
+
+/** A timed open task's deadline: a line at its due time, not a block. */
+export interface DeadlineFlag {
+  key: string;
+  taskId: number;
+  title: string;
+  dayIndex: number;
+  minutes: number;
+  tags?: BlockTags;
 }
 
 export interface AllDayItem {
@@ -154,14 +169,19 @@ interface BuildWeekEventsInput {
   habits?: Pick<ActivityHabit, 'id' | 'tags'>[];
   /** Event occurrences, as GET /get-calendar-activity places them on our calendar. */
   events?: EventOccurrence[];
+  /** Kept work blocks, for tasks and habits. */
+  workBlocks?: WorkBlock[];
   /** Occurrences that ended before this count as past, even if they hadn't when fetched. */
   now?: Date;
 }
 
 /**
  * Places everything for one week into day columns:
- * - planned tasks at their due time, sized by estimated_time (hours), or in
- *   the all-day row when they have a date but no time;
+ * - an open task due at a time as a deadline flag at that time (the work on
+ *   it is its work blocks), a done one as a block at its due time sized by
+ *   estimated_time (hours), and either in the all-day row when it has a date
+ *   but no time;
+ * - work blocks from their start to their end;
  * - completed tasks as a marker at their completion instant;
  * - note sessions as blocks from start to end, split at midnight when a
  *   session runs into the next day, with each note's sessions on a day
@@ -169,8 +189,8 @@ interface BuildWeekEventsInput {
  * - habit completions in the all-day row, since they carry no time;
  * - events from start to end, split at midnight when one runs into the next
  *   day, or in the all-day row (first) when they're all-day;
- * and marks each open planned task whose block falls during a live (not
- * archived) event that day as a clash.
+ * and marks each open planned task's or work block's block that falls
+ * during a live (not archived) event that day as a clash.
  */
 export function buildWeekEvents({
   weekStart,
@@ -181,12 +201,14 @@ export function buildWeekEvents({
   notes = [],
   habits = [],
   events = [],
+  workBlocks = [],
   now = new Date(),
-}: BuildWeekEventsInput): { timed: TimedEvent[]; allDay: AllDayItem[] } {
+}: BuildWeekEventsInput): { timed: TimedEvent[]; allDay: AllDayItem[]; deadlines: DeadlineFlag[] } {
   const days = weekDays(weekStart);
   const dayIndexByDate = new Map(days.map((d, i) => [toLocalDateStr(d), i]));
   const timed: TimedEvent[] = [];
   const allDay: AllDayItem[] = [];
+  const deadlines: DeadlineFlag[] = [];
 
   const eventBlocks = buildEventBlocks(events, days, now);
   timed.push(...eventBlocks.timed);
@@ -200,6 +222,10 @@ export function buildWeekEvents({
     const startMin = timeStr ? parseTimeToMinutes(timeStr) : null;
     if (startMin === null) {
       allDay.push({ key: `task-${task.id}`, kind: 'task', title: task.title, dayIndex, taskId: task.id, completed: task.completed, tags: task.tags });
+      continue;
+    }
+    if (!task.completed) {
+      deadlines.push({ key: `due-${task.id}`, taskId: task.id, title: task.title, dayIndex, minutes: startMin, tags: task.tags });
       continue;
     }
     const estimate = task.estimated_time ? Math.round(task.estimated_time * 60) : DEFAULT_TASK_MINUTES;
@@ -235,8 +261,21 @@ export function buildWeekEvents({
     });
   }
 
+  for (const block of workBlocks) {
+    const dayIndex = dayIndexByDate.get(block.date);
+    const startMin = parseTimeToMinutes(block.start_time);
+    const endTime = parseTimeToMinutes(block.end_time);
+    if (dayIndex === undefined || startMin === null || endTime === null) continue;
+    const endMin = endTime > startMin ? endTime : MINUTES_PER_DAY;
+    timed.push({
+      key: `work-${block.id}`, kind: 'work', title: block.title, dayIndex, startMin, endMin,
+      ...drawExtent(startMin, endMin), taskId: block.task_id ?? undefined, habitId: block.habit_id ?? undefined,
+      tags: block.tags, workBlock: block,
+    });
+  }
+
   markClashes(timed);
-  return { timed, allDay };
+  return { timed, allDay, deadlines };
 }
 
 /**
@@ -291,15 +330,15 @@ export function buildEventBlocks(events: EventOccurrence[], days: Date[], now: D
 }
 
 /**
- * Marks each open planned task's block that meets a live event's block on its
- * day with the event's title. An event that leaves its time free (busy: false)
+ * Marks each open planned task's or work block's block that meets a live
+ * event's block on its day with the event's title. An event that leaves its time free (busy: false)
  * clashes with nothing.
  */
 function markClashes(timed: TimedEvent[]) {
   const live = timed.filter(e => e.kind === 'event' && !!e.event && !e.event.archived && e.event.occurrence.busy !== false);
   if (live.length === 0) return;
   for (const block of timed) {
-    if (block.kind !== 'task' || block.completed) continue;
+    if ((block.kind !== 'task' && block.kind !== 'work') || block.completed) continue;
     const hit = live.find(e => e.dayIndex === block.dayIndex
       && e.drawStartMin < block.drawEndMin && block.drawStartMin < e.drawEndMin);
     if (hit) block.clashWith = hit.title;

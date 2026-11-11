@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Archive, CalendarDays, Check, CheckCircle2, Circle, FileText, Flame, Repeat } from 'lucide-react';
+import { Archive, CalendarDays, Check, CheckCircle2, Circle, Clock, FileText, Flame, Repeat } from 'lucide-react';
 import {
   AllDayItem,
+  DeadlineFlag,
   DRAG_SNAP_MINUTES,
   EventPlacement,
   formatMinutes,
@@ -18,6 +19,7 @@ import {
 import { eventColor } from '@/app/utils/events';
 import { isImportedEvent } from '@/app/utils/importedEvents';
 import GoogleMark from '@/app/components/event/GoogleMark';
+import type { WorkBlock } from '@/app/types/workBlock';
 
 const HOUR_PX = 48;
 const SLOT_PX = (HOUR_PX * SLOT_MINUTES) / 60;
@@ -64,8 +66,17 @@ export const eventStyle = (color: string, { past, archived }: Pick<EventPlacemen
   return { backgroundColor: mix(20), border: `1px solid ${mix(45, 'transparent')}`, borderLeft: `3px solid ${color}` };
 };
 
-/** The amber ring on a planned task that falls during an event. */
+/** The amber ring on a planned task or work block that falls during an event. */
 const CLASH_RING = '2px solid var(--tm-warning)';
+
+/** A habit's work block: the week view's habit color, with the same tint and edge as a task's. */
+const HABIT_BLOCK_COLOR = 'var(--tm-week-habit)';
+
+/** A dashed accent box where a work block that lost its time could go instead. */
+const GHOST_STYLE: React.CSSProperties = {
+  border: '1.5px dashed var(--tm-accent)',
+  backgroundColor: 'color-mix(in srgb, var(--tm-accent) 10%, transparent)',
+};
 
 /** The grid's own height; it scrolls the hours inside. A taller box (a dragged week view) stretches it. */
 const WEEK_GRID_HEIGHT = 'max(420px, min(72vh, 760px))';
@@ -84,6 +95,7 @@ export const WEEK_LEGEND: { label: string; swatch: React.CSSProperties }[] = [
   { label: 'Past event', swatch: { ...eventStyle(LEGEND_TAG_COLOR, { past: true, archived: false }), opacity: 1 } },
   { label: 'Archived', swatch: eventStyle(LEGEND_TAG_COLOR, { past: true, archived: true }) },
   { label: 'Clash', swatch: { outline: CLASH_RING, outlineOffset: -2 } },
+  { label: 'Due', swatch: { borderTop: '2px solid var(--tm-due)', borderRadius: 0, height: 0, marginTop: 6 } },
   { label: 'Outside work hours or rest day', swatch: { background: OFF_HOURS_BG, border: '1px solid var(--tm-border-subtle)' } },
 ];
 
@@ -120,8 +132,20 @@ const timedLabel = (e: TimedEvent): string => {
     return `${eventNoun(e.event)}: ${e.title}, ${eventRange(e.event)}${runs}${eventState(e.event)}`;
   }
   const clash = e.clashWith ? `, during ${e.clashWith}` : '';
+  if (e.kind === 'work') return `${e.habitId != null ? 'Habit block' : 'Work on'}: ${e.title}, ${range}${clash}`;
   return `${e.completed ? 'Planned task (done)' : 'Planned task'}: ${e.title}, ${range}${clash}`;
 };
+
+/** A re-suggested time for a work block an event now covers. */
+export interface GhostSuggestion {
+  key: string;
+  block: WorkBlock;
+  dayIndex: number;
+  startMin: number;
+  endMin: number;
+  /** "Move to 4:00 PM?" or "Move to Thu 4:00 PM?" */
+  prompt: string;
+}
 
 /** A range of one day picked on the grid, as minutes from midnight. */
 export interface GridSelection {
@@ -160,6 +184,18 @@ interface WeekGridProps {
    * Without it, blocks don't drag.
    */
   onMoveEvent?: (event: EventPlacement, dayIndex: number, startMin: number, endMin: number) => Promise<boolean>;
+  /**
+   * A work block was dragged to another time or day, or its bottom edge to a
+   * new end, as minutes from midnight on the day at `dayIndex`. Without it,
+   * work blocks don't drag.
+   */
+  onMoveWorkBlock?: (block: WorkBlock, dayIndex: number, startMin: number, endMin: number) => Promise<boolean>;
+  /** Timed open tasks' deadlines, drawn as a line at the due time. */
+  deadlines?: DeadlineFlag[];
+  /** Where work blocks that lost their time to an event could move, with Move and Keep. */
+  ghosts?: GhostSuggestion[];
+  onGhostMove?: (ghost: GhostSuggestion) => void;
+  onGhostKeep?: (ghost: GhostSuggestion) => void;
   /** A range to keep highlighted, e.g. while a quick-add for it is open. */
   selection?: GridSelection | null;
   onOpenTask: (taskId: number) => void;
@@ -187,14 +223,15 @@ interface WeekGridProps {
  */
 const WeekGrid: React.FC<WeekGridProps> = ({
   days, timed, allDay, workDays, todayIndex, nowMinutes, scrollToMinutes, scrollKey,
-  canOpenTask, canOpenHabit, onSlotClick, onAllDayClick, onDragCreate, onOpenEvent, onMoveEvent, selection = null,
+  canOpenTask, canOpenHabit, onSlotClick, onAllDayClick, onDragCreate, onOpenEvent, onMoveEvent, onMoveWorkBlock,
+  deadlines = [], ghosts = [], onGhostMove, onGhostKeep, selection = null,
   onOpenTask, onOpenNote, onOpenHabit, fill = false,
 }) => {
   const hintId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const { drag, startDrag, clickWasDrag } = useDragSelect(onDragCreate, days);
-  const { moving, startMove, clickWasMove } = useEventMove(onMoveEvent, scrollRef);
+  const { moving, startMove, clickWasMove } = useEventMove(onMoveEvent, onMoveWorkBlock, scrollRef);
   const [focusedSlot, setFocusedSlot] = useState(() => ({
     day: todayIndex ?? 0,
     slot: Math.floor(scrollToMinutes / SLOT_MINUTES),
@@ -419,16 +456,29 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                     <EventBlock
                       key={e.key}
                       event={e}
-                      openable={e.kind === 'note' || e.kind === 'event' || canOpenTask(e.taskId!)}
+                      openable={e.kind === 'note' || e.kind === 'event'
+                        || (e.kind === 'work' && e.habitId != null ? canOpenHabit(e.habitId) : canOpenTask(e.taskId!))}
                       onOpen={anchor => {
                         if (clickWasMove()) return;
                         if (e.kind === 'event') onOpenEvent(e.event!, anchor);
                         else if (e.kind === 'note') onOpenNote(e.noteId!);
+                        else if (e.kind === 'work' && e.habitId != null) onOpenHabit(e.habitId);
                         else onOpenTask(e.taskId!);
                       }}
-                      onDragStart={onMoveEvent && canMove(e) ? (ev, mode) => startMove(ev, e, mode) : undefined}
-                      lifted={!!e.event && moving?.event.occurrence === e.event.occurrence}
+                      onDragStart={canMove(e, !!onMoveEvent, !!onMoveWorkBlock) ? (ev, mode) => startMove(ev, e, mode) : undefined}
+                      lifted={isLifted(moving, e)}
                     />
+                  ))}
+                  {deadlines.filter(d => d.dayIndex === dayIndex).map(d => (
+                    <DeadlineLine
+                      key={d.key}
+                      flag={d}
+                      openable={canOpenTask(d.taskId)}
+                      onOpen={() => onOpenTask(d.taskId)}
+                    />
+                  ))}
+                  {ghosts.filter(g => g.dayIndex === dayIndex).map(g => (
+                    <GhostBlock key={g.key} ghost={g} onMove={() => onGhostMove?.(g)} onKeep={() => onGhostKeep?.(g)} />
                   ))}
                 </div>
 
@@ -472,20 +522,37 @@ const occurrenceSpan = (o: EventPlacement['occurrence']): { start: number; lengt
   return { start, length: days * MINUTES_PER_DAY + end - start };
 };
 
-/** Whether an event's block can be dragged: a live, timed one shorter than a day. */
-const canMove = (e: TimedEvent): boolean => {
-  if (e.kind !== 'event' || !e.event || e.event.archived || e.event.occurrence.all_day) return false;
+/** Whether a block can be dragged: a live, timed event shorter than a day, or a work block. */
+const canMove = (e: TimedEvent, eventsMove: boolean, blocksMove: boolean): boolean => {
+  if (e.kind === 'work') return blocksMove && !!e.workBlock;
+  if (!eventsMove || e.kind !== 'event' || !e.event || e.event.archived || e.event.occurrence.all_day) return false;
   const { length } = occurrenceSpan(e.event.occurrence);
   return length > 0 && length < MINUTES_PER_DAY;
 };
 
-/** The piece of a dragged event block that would land on the column at `dayIndex`, if any. */
+/** Whether `e` is the block being dragged, which fades where it was. */
+const isLifted = (moving: EventMoveState | null, e: TimedEvent): boolean => {
+  if (!moving) return false;
+  if (moving.target.kind === 'event') return !!e.event && moving.target.event.occurrence === e.event.occurrence;
+  return !!e.workBlock && moving.target.block.id === e.workBlock.id;
+};
+
+/** A dragged block's title and look. */
+const movingLook = (target: MoveTarget): { title: string; style: React.CSSProperties } => {
+  if (target.kind === 'event') {
+    return { title: target.event.occurrence.title, style: eventStyle(eventColor(target.event.occurrence.tags), { past: false, archived: false }) };
+  }
+  const color = target.block.habit_id != null ? HABIT_BLOCK_COLOR : eventColor(target.block.tags ?? []);
+  return { title: target.block.title, style: tagTint(color) };
+};
+
+/** The piece of a dragged block that would land on the column at `dayIndex`, if any. */
 const MovingEvent: React.FC<{ moving: EventMoveState; dayIndex: number }> = ({ moving, dayIndex }) => {
   const offset = (dayIndex - moving.dayIndex) * MINUTES_PER_DAY;
   const top = Math.max(0, moving.startMin - offset);
   const bottom = Math.min(MINUTES_PER_DAY, moving.endMin - offset);
   if (bottom <= top) return null;
-  const color = eventColor(moving.event.occurrence.tags);
+  const look = movingLook(moving.target);
   return (
     <div
       aria-hidden
@@ -494,11 +561,11 @@ const MovingEvent: React.FC<{ moving: EventMoveState; dayIndex: number }> = ({ m
       style={{
         top: minutesToPx(top),
         height: minutesToPx(Math.max(DRAG_SNAP_MINUTES, bottom - top)),
-        ...eventStyle(color, { past: false, archived: false }),
+        ...look.style,
         boxShadow: 'var(--tm-shadow-lg)',
       }}
     >
-      <span className="truncate font-semibold">{moving.event.occurrence.title}</span>
+      <span className="truncate font-semibold">{look.title}</span>
       <span className="truncate" style={{ color: 'var(--tm-text-secondary)' }}>
         {formatMinutes(moving.startMin)} – {edgeTime(moving.endMin)}
       </span>
@@ -532,6 +599,58 @@ const WindowEdge: React.FC<{ minutes: number; edge: 'opens' | 'closes' }> = ({ m
       style={{ color: 'var(--tm-accent)', ...(edge === 'opens' ? { top: 2 } : { bottom: 2 }) }}
     >
       {edge === 'opens' ? 'Opens' : 'Closes'} {edgeTime(minutes)}
+    </span>
+  </div>
+);
+
+/** A timed open task's deadline: a 2 px line at its due time with a "Due · title" pill. */
+const DeadlineLine: React.FC<{ flag: DeadlineFlag; openable: boolean; onOpen: () => void }> = ({ flag, openable, onOpen }) => {
+  const label = `Due: ${flag.title}, at ${formatMinutes(flag.minutes)}`;
+  const pill = (
+    <span className="inline-flex max-w-full items-center rounded-full px-1.5 py-px text-[10px] font-bold leading-tight truncate"
+      style={{ backgroundColor: 'var(--tm-due)', color: '#fff' }}>
+      Due · {flag.title}
+    </span>
+  );
+  return (
+    <div
+      data-deadline-flag
+      data-week-block
+      className="absolute left-0 right-0 z-[15] pointer-events-none"
+      style={{ top: Math.min(minutesToPx(flag.minutes), minutesToPx(MINUTES_PER_DAY) - 2) }}
+    >
+      <div aria-hidden className="h-0.5" style={{ backgroundColor: 'var(--tm-due)' }} />
+      {openable ? (
+        <button type="button" onClick={onOpen} aria-label={label} title={label}
+          className="pointer-events-auto absolute left-0.5 -top-2 max-w-[calc(100%-4px)] flex hover:brightness-95">
+          {pill}
+        </button>
+      ) : (
+        <span role="note" aria-label={label} title={label} className="absolute left-0.5 -top-2 max-w-[calc(100%-4px)] flex">{pill}</span>
+      )}
+    </div>
+  );
+};
+
+/** Where a work block that lost its time could go: a dashed box with "Move to …?" and Move / Keep. */
+const GhostBlock: React.FC<{ ghost: GhostSuggestion; onMove: () => void; onKeep: () => void }> = ({ ghost, onMove, onKeep }) => (
+  <div
+    data-ghost-block
+    data-week-block
+    role="group"
+    aria-label={`Suggested new time for ${ghost.block.title}: ${formatMinutes(ghost.startMin)} – ${formatMinutes(ghost.endMin)}`}
+    className="absolute left-0.5 right-0.5 z-[22] pointer-events-auto rounded-md px-1.5 py-0.5 text-[10.5px] leading-tight"
+    style={{ top: minutesToPx(ghost.startMin), minHeight: minutesToPx(Math.max(DRAG_SNAP_MINUTES, ghost.endMin - ghost.startMin)), ...GHOST_STYLE }}
+  >
+    <span className="block font-semibold truncate" style={{ color: 'var(--tm-accent)' }}>{ghost.prompt}</span>
+    <span className="mt-0.5 flex flex-wrap gap-1">
+      <button type="button" onClick={onMove} className="rounded px-1.5 py-px font-bold"
+        style={{ backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)' }}>
+        Move
+      </button>
+      <button type="button" onClick={onKeep} className="rounded px-1.5 py-px font-semibold text-text-secondary hover:bg-[var(--tm-surface-raised)]">
+        Keep
+      </button>
     </span>
   </div>
 );
@@ -586,13 +705,15 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
     timeText = eventTimeText(event);
     struck = event.event!.archived;
   } else {
+    const isHabitBlock = event.kind === 'work' && event.habitId != null;
     style = {
       ...position,
-      ...tagTint(eventColor(event.tags ?? [])),
+      ...tagTint(isHabitBlock ? HABIT_BLOCK_COLOR : eventColor(event.tags ?? [])),
       opacity: event.kind === 'task' && event.completed ? 0.7 : 1,
       ...(event.clashWith ? { outline: CLASH_RING, outlineOffset: -1 } : {}),
     };
-    Icon = event.kind === 'note' ? FileText : event.kind === 'completed' ? CheckCircle2 : event.completed ? Check : null;
+    Icon = event.kind === 'note' ? FileText : event.kind === 'completed' ? CheckCircle2
+      : event.kind === 'work' ? Clock : event.completed ? Check : null;
     iconColor = KIND_ICON_COLOR;
     const range = `${formatMinutes(event.startMin)} – ${formatMinutes(event.endMin)}`;
     timeText = event.kind === 'completed'
@@ -605,6 +726,11 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
   const title = onDragStart ? `${baseTitle}. Drag to move it, or drag its bottom edge to change when it ends.` : baseTitle;
   const content = (
     <>
+      {event.kind === 'work' && (
+        <span className="text-[9.5px] font-bold uppercase tracking-wide text-text-secondary leading-none">
+          {event.habitId != null ? 'Habit' : 'Work on'}
+        </span>
+      )}
       <span className="flex items-center gap-1 min-w-0 max-w-full">
         {isEvent && <EventIcon event={event.event!} color={iconColor} />}
         {Icon && <Icon className="w-3 h-3 flex-shrink-0" style={{ color: iconColor }} />}
@@ -624,9 +750,11 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
         <span
           aria-hidden
           data-resize-handle
-          className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
+          className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize flex justify-center items-end"
           onPointerDown={e => { e.stopPropagation(); onDragStart(e, 'resize'); }}
-        />
+        >
+          {event.kind === 'work' && <span className="mb-px w-5 h-0.5 rounded-full" style={{ backgroundColor: 'var(--tm-text-muted)' }} />}
+        </span>
       )}
     </>
   );
@@ -779,9 +907,12 @@ function useDragSelect(onDragCreate: WeekGridProps['onDragCreate'], days: Date[]
 /** Dragging a whole event block, or only its bottom edge. */
 type EventMoveMode = 'move' | 'resize';
 
-/** An event being dragged, and where it would land: its start day, and minutes from that midnight (the end past 1440 when it runs past midnight). */
+/** What's being dragged: an event's occurrence, or a work block. */
+type MoveTarget = { kind: 'event'; event: EventPlacement } | { kind: 'work'; block: WorkBlock };
+
+/** A block being dragged, and where it would land: its start day, and minutes from that midnight (the end past 1440 when it runs past midnight). */
 interface EventMoveState {
-  event: EventPlacement;
+  target: MoveTarget;
   dayIndex: number;
   startMin: number;
   endMin: number;
@@ -796,7 +927,11 @@ interface EventMoveState {
  * finger still scrolls the grid. A press that barely moves is a plain click,
  * and `clickWasMove` tells the block to ignore the click that ends a real drag.
  */
-function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: React.RefObject<HTMLDivElement | null>) {
+function useEventMove(
+  onMoveEvent: WeekGridProps['onMoveEvent'],
+  onMoveWorkBlock: WeekGridProps['onMoveWorkBlock'],
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+) {
   const [moving, setMoving] = useState<EventMoveState | null>(null);
   const movedRef = useRef(false);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -804,12 +939,17 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
 
   const startMove = (e: React.PointerEvent<HTMLElement>, block: PositionedEvent, mode: EventMoveMode) => {
     movedRef.current = false;
-    if (!onMoveEvent || !block.event || e.button !== 0 || e.pointerType === 'touch') return;
+    if (e.button !== 0 || e.pointerType === 'touch') return;
+    const target: MoveTarget | null = block.event && onMoveEvent ? { kind: 'event', event: block.event }
+      : block.workBlock && onMoveWorkBlock ? { kind: 'work', block: block.workBlock } : null;
+    if (!target) return;
     const columns = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>('[data-day-column]') ?? []);
     if (columns.length === 0) return;
-    const placement = block.event;
-    const { start, length } = occurrenceSpan(placement.occurrence);
-    const startDay = block.dayIndex - (placement.fromPreviousDay ? 1 : 0);
+    const isWork = target.kind === 'work';
+    const { start, length } = target.kind === 'event'
+      ? occurrenceSpan(target.event.occurrence)
+      : { start: block.startMin, length: block.endMin - block.startMin };
+    const startDay = block.dayIndex - (target.kind === 'event' && target.event.fromPreviousDay ? 1 : 0);
     // The block's column, in minutes from its midnight, and where the event starts in it.
     const columnOffset = (block.dayIndex - startDay) * MINUTES_PER_DAY;
     const snap = (minutes: number) => Math.round(minutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
@@ -822,7 +962,7 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
     const x0 = e.clientX;
     const y0 = e.clientY;
     const grab = minutesAt(y0) - (start - columnOffset);
-    const initial: EventMoveState = { event: placement, dayIndex: startDay, startMin: start, endMin: start + length };
+    const initial: EventMoveState = { target, dayIndex: startDay, startMin: start, endMin: start + length };
     const lowest = Math.min(0, startDay * MINUTES_PER_DAY + start);
     const highest = columns.length * MINUTES_PER_DAY - DRAG_SNAP_MINUTES;
     let current = initial;
@@ -835,7 +975,8 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
       if (mode === 'move') {
         const from = Math.min(highest, Math.max(lowest, dayAt(ev.clientX) * MINUTES_PER_DAY + snap(at - grab)));
         const dayIndex = Math.floor(from / MINUTES_PER_DAY);
-        const startMin = from - dayIndex * MINUTES_PER_DAY;
+        // A work block stays inside one day.
+        const startMin = isWork ? Math.min(from - dayIndex * MINUTES_PER_DAY, MINUTES_PER_DAY - length) : from - dayIndex * MINUTES_PER_DAY;
         current = { ...current, dayIndex, startMin, endMin: startMin + length };
       } else {
         const latest = Math.min(columnOffset + MINUTES_PER_DAY, start + MINUTES_PER_DAY - DRAG_SNAP_MINUTES);
@@ -855,7 +996,10 @@ function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: Reac
         return;
       }
       setMoving(current);
-      void onMoveEvent(placement, current.dayIndex, current.startMin, current.endMin).finally(() => setMoving(null));
+      const done = target.kind === 'event'
+        ? onMoveEvent!(target.event, current.dayIndex, current.startMin, current.endMin)
+        : onMoveWorkBlock!(target.block, current.dayIndex, current.startMin, current.endMin);
+      void done.finally(() => setMoving(null));
     };
     const cleanup = () => {
       window.removeEventListener('pointermove', onMove);

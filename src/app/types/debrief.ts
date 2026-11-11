@@ -1,4 +1,5 @@
 import type { EventOccurrence, EventTagMinutes } from './event';
+import type { WorkBlock } from './workBlock';
 
 export interface DebriefTag {
   id: number;
@@ -17,7 +18,7 @@ export interface DebriefTaskItem {
   tags: DebriefTag[];
 }
 
-interface HabitDebriefStatus {
+export interface HabitDebriefStatus {
   id: number;
   title: string;
   current_streak: number;
@@ -25,6 +26,8 @@ interface HabitDebriefStatus {
   logged_today: boolean;
   estimated_time: number | null;
   tags: DebriefTag[];
+  /** Its usual time ("HH:MM"), or null. Absent from older servers. */
+  planned_time?: string | null;
 }
 
 interface DebriefNoteItem {
@@ -76,4 +79,6 @@ export interface DailyDebriefReport {
   /** Today's event minutes per tag, archived ones left out, for the time allocation bar. */
   event_minutes_by_tag?: EventTagMinutes[];
   passed_event_minutes_by_tag?: EventTagMinutes[];
+  /** Today's work blocks. Absent from older servers, which counts as none. */
+  work_blocks?: WorkBlock[];
 }

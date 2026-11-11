@@ -32,6 +32,8 @@ interface TaskFormFieldsProps {
   dueDateExtra?: React.ReactNode;
   /** Shown under the tags (e.g. where a new linked task's tags came from). */
   tagsHint?: React.ReactNode;
+  /** Shown right after "How long?" (the task form's "When to work on it"). */
+  afterDuration?: React.ReactNode;
 }
 
 const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
@@ -44,6 +46,7 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
   afterTitle,
   dueDateExtra,
   tagsHint,
+  afterDuration,
 }) => {
   // Several of these forms can be on screen at once (a new linked task's, say), so label ids are unique.
   const labelId = React.useId();
@@ -144,6 +147,21 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
       </div>
       {dueDateExtra}
 
+      {/* How long: the planned length of its work blocks, 30 min when skipped */}
+      <div>
+        <label id={durationId} className="block text-sm font-medium text-text-secondary mb-2">
+          How long? <span className="font-normal text-text-muted">(optional)</span>
+        </label>
+        <DurationPicker
+          labelledBy={durationId}
+          value={values.estimated_time}
+          onChange={hours => set({ estimated_time: hours })}
+        />
+        <p className="text-xs text-text-muted mt-1">30 min if you skip it. Suggested times use this length.</p>
+      </div>
+
+      {afterDuration}
+
       {/* Reminder lead */}
       {showReminder && (
         <div>
@@ -170,18 +188,6 @@ const TaskFormFields: React.FC<TaskFormFieldsProps> = ({
           placeholder="Add task details…"
           rows={3}
           className="input-field resize-y min-h-[72px] max-h-[400px]"
-        />
-      </div>
-
-      {/* Estimated Duration */}
-      <div>
-        <label id={durationId} className="block text-sm font-medium text-text-secondary mb-2">
-          Estimated Duration
-        </label>
-        <DurationPicker
-          labelledBy={durationId}
-          value={values.estimated_time}
-          onChange={hours => set({ estimated_time: hours })}
         />
       </div>
 

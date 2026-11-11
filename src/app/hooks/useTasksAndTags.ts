@@ -21,7 +21,7 @@ import { useToast } from '@/app/context/ToastContext';
 import { Task, Tag, BaseTaskForm, EditTaskForm, NewTag, LinkedTaskRef, LinkedRemoveMode } from '@/app/types/task';
 import { toLocalISOString, toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 import { subtaskTreeIds } from '@/app/utils/taskUtils';
-import { LinkedTasksSaveError } from '@/app/utils/linkedTasks';
+import { LinkedTasksSaveError, compareLinkedOrder } from '@/app/utils/linkedTasks';
 
 /**
  * Manages task state and CRUD operations.
@@ -340,9 +340,9 @@ export const useTasks = (enabled: boolean) => {
 
   // Saves a task's whole linked-task list (order included) and merges the
   // result: the parent and its linked tasks as saved, new ones added, and the
-  // ones left out unlinked. Throws a LinkedTasksSaveError without a toast,
+  // ones left out unlinked. Returns the linked tasks as saved, in order. Throws a LinkedTasksSaveError without a toast,
   // so the form can show the reason next to the list.
-  const saveLinkedTasks = async (parent: Task, children: LinkedTaskRef[]): Promise<void> => {
+  const saveLinkedTasks = async (parent: Task, children: LinkedTaskRef[]): Promise<Task[]> => {
     const parentId = parent.id;
     let saved: Awaited<ReturnType<typeof updateLinkedTasks>>;
     try {
@@ -362,6 +362,7 @@ export const useTasks = (enabled: boolean) => {
       const created = saved.children.filter(t => !known.has(t.id));
       return created.length ? [...created.reverse(), ...next] : next;
     });
+    return [...saved.children].sort(compareLinkedOrder);
   };
 
   return {

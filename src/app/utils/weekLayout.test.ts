@@ -59,25 +59,44 @@ describe('week arithmetic', () => {
 });
 
 describe('buildWeekEvents', () => {
-  it('places a timed task at its due time, sized by its estimate in hours', () => {
-    const { timed, allDay } = buildWeekEvents({
+  it('draws an open timed task as a deadline flag at its due time, not a block', () => {
+    const { timed, allDay, deadlines } = buildWeekEvents({
       ...empty, weekStart,
       scheduledTasks: [{ id: 1, title: 'Essay', due_date: '2026-10-21', due_time: '14:00:00', estimated_time: 1.5, completed: false, tags: [] }],
     });
     expect(allDay).toEqual([]);
-    expect(timed).toMatchObject([{ kind: 'task', taskId: 1, dayIndex: 2, startMin: 840, endMin: 930, drawStartMin: 840, drawEndMin: 930 }]);
+    expect(timed).toEqual([]);
+    expect(deadlines).toEqual([{ key: 'due-1', taskId: 1, title: 'Essay', dayIndex: 2, minutes: 840, tags: [] }]);
   });
 
-  it('gives an unestimated task the default height and clamps long tasks to midnight', () => {
-    const { timed } = buildWeekEvents({
+  it('keeps a done timed task as a block, the default height without an estimate and clamped to midnight', () => {
+    const { timed, deadlines } = buildWeekEvents({
       ...empty, weekStart,
       scheduledTasks: [
-        { id: 1, title: 'A', due_date: '2026-10-19', due_time: '08:00', estimated_time: null, completed: false, tags: [] },
-        { id: 2, title: 'B', due_date: '2026-10-19', due_time: '23:00', estimated_time: 3, completed: false, tags: [] },
+        { id: 1, title: 'A', due_date: '2026-10-19', due_time: '08:00', estimated_time: null, completed: true, tags: [] },
+        { id: 2, title: 'B', due_date: '2026-10-19', due_time: '23:00', estimated_time: 3, completed: true, tags: [] },
       ],
     });
-    expect(timed.find(e => e.taskId === 1)).toMatchObject({ startMin: 480, endMin: 510 });
+    expect(deadlines).toEqual([]);
+    expect(timed.find(e => e.taskId === 1)).toMatchObject({ kind: 'task', completed: true, startMin: 480, endMin: 510 });
     expect(timed.find(e => e.taskId === 2)).toMatchObject({ startMin: 1380, endMin: 1440 });
+  });
+
+  it('places work blocks from their start to their end, for tasks and habits, and skips other weeks', () => {
+    const tags = [{ id: 1, name: 'red', color: '#ef4444' }];
+    const block = (id: number, date: string, extra = {}) => ({
+      id, task_id: 7, habit_id: null, title: 'Essay', tags, date, start_time: '17:00', end_time: '18:00',
+      time_zone: 'UTC', starts_at: '', ends_at: '', ...extra,
+    });
+    const { timed } = buildWeekEvents({
+      ...empty, weekStart,
+      workBlocks: [block(1, '2026-10-20'), block(2, '2026-10-21', { task_id: null, habit_id: 5, title: 'Run', start_time: '23:30', end_time: '00:00' }), block(3, '2026-10-26')],
+    });
+    expect(timed).toMatchObject([
+      { key: 'work-1', kind: 'work', taskId: 7, dayIndex: 1, startMin: 1020, endMin: 1080, tags },
+      { key: 'work-2', kind: 'work', habitId: 5, dayIndex: 2, startMin: 1410, endMin: 1440 },
+    ]);
+    expect(timed).toHaveLength(2);
   });
 
   it('puts tasks with a date but no time in the all-day row and skips other weeks', () => {
@@ -106,7 +125,7 @@ describe('buildWeekEvents', () => {
     const { timed, allDay } = buildWeekEvents({
       ...empty, weekStart,
       scheduledTasks: [
-        { id: 1, title: 'Timed', due_date: '2026-10-21', due_time: '14:00', estimated_time: 1, completed: false, tags: red },
+        { id: 1, title: 'Timed', due_date: '2026-10-21', due_time: '14:00', estimated_time: 1, completed: true, tags: red },
         { id: 2, title: 'Anytime', due_date: '2026-10-21', due_time: null, estimated_time: null, completed: false, tags: green },
       ],
       completedTasks: [{ id: 3, title: 'Done', completed_date: new Date(2026, 9, 20, 16).toISOString(), tags: blue }],
@@ -435,21 +454,25 @@ describe('events on the week', () => {
     expect(allDay.map(i => [i.kind, i.dayIndex, i.event?.archived])).toEqual([['event', 4, true], ['task', 4, undefined]]);
   });
 
-  it('marks an open planned task during a live event as a clash, but not during an archived one', () => {
-    const tasks = [
-      { id: 1, title: 'Pick up prescription', due_date: '2026-10-21', due_time: '13:00', estimated_time: 0.5, completed: false, tags: [] },
-      { id: 2, title: 'Done already', due_date: '2026-10-21', due_time: '14:00', estimated_time: 0.5, completed: true, tags: [] },
-      { id: 3, title: 'Later', due_date: '2026-10-21', due_time: '16:00', estimated_time: 0.5, completed: false, tags: [] },
-      { id: 4, title: 'During archived', due_date: '2026-10-20', due_time: '13:00', estimated_time: 0.5, completed: false, tags: [] },
-    ];
+  it('marks a work block during a live event as a clash, but not during an archived one or on a done task', () => {
+    const block = (id: number, date: string, start: string, end: string) => ({
+      id, task_id: id, habit_id: null, title: `Block ${id}`, tags: [], date, start_time: start, end_time: end,
+      time_zone: 'UTC', starts_at: '', ends_at: '',
+    });
     const { timed } = buildWeekEvents({
-      weekStart, scheduledTasks: tasks, completedTasks: [], noteSessions: [], habitCompletions: [], now,
+      weekStart, completedTasks: [], noteSessions: [], habitCompletions: [], now,
+      scheduledTasks: [{ id: 2, title: 'Done already', due_date: '2026-10-21', due_time: '14:00', estimated_time: 0.5, completed: true, tags: [] }],
+      workBlocks: [
+        block(1, '2026-10-21', '13:00', '13:30'),
+        block(3, '2026-10-21', '16:00', '16:30'),
+        block(4, '2026-10-20', '13:00', '13:30'),
+      ],
       events: [
         event({ title: 'ART 157 Studio' }),
         event({ event_id: 2, title: 'Yoga', date: '2026-10-20', end_date: '2026-10-20', occurrence_date: '2026-10-20', archived: true }),
       ],
     });
-    const clash = (id: number) => timed.find(e => e.kind === 'task' && e.taskId === id)!.clashWith;
-    expect([clash(1), clash(2), clash(3), clash(4)]).toEqual(['ART 157 Studio', undefined, undefined, undefined]);
+    const clash = (key: string) => timed.find(e => e.key === key)!.clashWith;
+    expect([clash('work-1'), clash('task-2'), clash('work-3'), clash('work-4')]).toEqual(['ART 157 Studio', undefined, undefined, undefined]);
   });
 });

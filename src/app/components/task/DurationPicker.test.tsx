@@ -2,6 +2,15 @@
 import React, { act, useState } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The forms' suggested work times read the calendar; these tests leave it empty.
+vi.mock('@/app/lib/backend-api', () => ({
+  fetchCalendarActivity: vi.fn(async (start: string, end: string) => ({
+    start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [], habit_completions: [],
+  })),
+  describeError: (_: unknown, fallback: string) => fallback,
+}));
+
 import EditTaskModal from './EditTaskModal';
 import NewTaskModal from './NewTaskModal';
 import type { TaskFormData } from './TaskFormFields';
