@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  afterWorkHours, freeMinutesOn, freeTime, habitNearestToday, habitTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
+  afterWorkHours, freeMinutesOn, freeTime, habitTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
   splitFill, spread, suggest, type BusyItem, type HabitInput, type SlotState, type Span, type TaskInput,
 } from './slotSuggest';
 
@@ -186,23 +186,30 @@ describe('habitsToday', () => {
   });
 });
 
-describe('habitNearestToday (an event took its usual time)', () => {
+describe('habitsToday: an event took its usual time', () => {
   const spanish: HabitInput = { id: 3, title: 'Spanish practice', len: 30, time: H(15), done: false };
   const at10 = { date: '2026-11-11', min: H(10) };
   const office = [ev('2026-11-11', 'Office hours', H(15), H(16))];
+  const slotOf = (S: SlotState, id: number) => habitsToday(S).find(x => x.habit.id === id)!.slot;
 
   it('offers the free time nearest the usual time, not the first free time after now', () => {
-    expect(habitNearestToday(sample({ now: at10, events: office, tasks: [], habits: [spanish] }), 3, H(15))).toEqual([H(14, 30), H(15)]);
+    expect(slotOf(sample({ now: at10, events: office, tasks: [], habits: [spanish] }), 3)).toEqual([H(14, 30), H(15)]);
   });
 
   it('leaves the other habits their times, earlier on ties', () => {
     const read: HabitInput = { id: 2, title: 'Read 20 pages', len: 30, time: H(14, 30), done: false };
-    expect(habitNearestToday(sample({ now: at10, events: office, tasks: [], habits: [read, spanish] }), 3, H(15))).toEqual([H(14), H(14, 30)]);
+    expect(slotOf(sample({ now: at10, events: office, tasks: [], habits: [read, spanish] }), 3)).toEqual([H(14), H(14, 30)]);
+  });
+
+  it('places it before habits with no usual time', () => {
+    const run: HabitInput = { id: 4, title: 'Run', len: 30, time: null, done: false };
+    const out = habitsToday(sample({ now: { date: '2026-11-11', min: H(14) }, events: office, tasks: [], habits: [run, spanish] }));
+    expect(out.map(x => [x.habit.id, x.slot])).toEqual([[4, [H(14), H(14, 30)]], [3, [H(14, 30), H(15)]]]);
   });
 
   it('is null when nothing fits today', () => {
     const allDay = [ev('2026-11-11', 'Conference', H(9), H(19))];
-    expect(habitNearestToday(sample({ now: at10, events: allDay, tasks: [], habits: [spanish] }), 3, H(15))).toBeNull();
+    expect(slotOf(sample({ now: at10, events: allDay, tasks: [], habits: [spanish] }), 3)).toBeNull();
   });
 });
 

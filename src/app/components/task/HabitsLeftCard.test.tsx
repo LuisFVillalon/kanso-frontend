@@ -135,6 +135,20 @@ describe('Plans that lost their time', () => {
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 3, date: '2026-11-11', start_time: '11:30', end_time: '12:00' }));
   });
 
+  it('gives a habit whose usual time is taken the same time on the card and in the callout', async () => {
+    const habits = [habit(3, 'Spanish practice', { planned_time: '18:00' })];
+    const club = ev('Club meeting', '2026-11-11', '18:00:00', '18:30:00');
+    const planner = plannerWith({ habits, events: [...EVENTS, club] });
+    await act(async () => root.render(<>
+      <HabitsLeftCard habits={habits} planner={planner} />
+      <PlanConflictCallouts planner={planner} tasks={[]} habits={habits} />
+    </>));
+    expect(container.querySelector('li')!.textContent).toContain('5:30 PM');
+    expect(container.textContent).toContain('Today only: 5:30 – 6:00 PM?');
+    await act(async () => buttonByText('Plan my habits')!.click());
+    expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 3, start_time: '17:30', end_time: '18:00' }));
+  });
+
   it('offers the nearest free time that day for a habit block an event now covers', async () => {
     const office = ev('Office hours', '2026-11-11', '13:00:00', '13:45:00');
     const workBlocks = [block({ id: 61, habit_id: 3, title: 'Spanish practice', start_time: '13:00', end_time: '13:30' })];

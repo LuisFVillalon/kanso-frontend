@@ -12,7 +12,7 @@ import { blockSpan, dueMinutesOf, minutesOf, planMinutes } from '@/app/hooks/use
 import { occurrenceKey, occurrenceSpanOn, takesTime } from './eventOccurrences';
 import { toLocalDateStr } from './dateUtils';
 import { blockIsOpen } from './weekLayout';
-import { habitNearestToday, planRange, resuggest, type Slot, type SlotState } from './slotSuggest';
+import { habitsToday, planRange, resuggest, type Slot, type SlotState } from './slotSuggest';
 
 /** The first live, busy event overlapping `span` on `date`. */
 function clashingEvent(events: EventOccurrence[], date: string, span: { start: number; end: number }): EventOccurrence | null {
@@ -94,11 +94,11 @@ export function habitConflicts(state: SlotState, habits: Habit[], events: EventO
     if (usual + len <= state.now.min) continue;
     const event = clashingEvent(events, today, { start: usual, end: usual + len });
     if (!event) continue;
-    // Today only: the free time nearest its usual time, among today's other habits as the brief's card places them.
-    const slot = habitNearestToday({
+    // Today only: the time the brief's card gives it, among today's other habits.
+    const slot = habitsToday({
       ...state,
       habits: state.habits.filter(x => !workBlocks.some(b => b.habit_id === x.id && b.date === today)),
-    }, h.id, usual);
+    }).find(x => x.habit.id === h.id)?.slot ?? null;
     out.push({
       kind: 'habit', key: `habit|${h.id}|${today}|${h.planned_time}|${occurrenceKey(event)}|${event.start_time}|${event.end_time}`,
       habit: h, event, usual, suggestion: slot && { start: slot[0], end: slot[1] },
