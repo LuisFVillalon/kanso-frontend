@@ -5,7 +5,7 @@ import type { CalendarActivity } from '@/app/types/activity';
 import type { ReportBucket, ReportPeriod } from '@/app/utils/calendarReport';
 import { formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
 import { buildTagSeries, UNTAGGED_KEY, type TagChartKind, type TagRow, type TagSeries } from '@/app/utils/tagReport';
-import { axisTicks } from './ReportActivityChart';
+import { axisTicks } from './activityAxis';
 import { rowColor } from './ReportTagBreakdown';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

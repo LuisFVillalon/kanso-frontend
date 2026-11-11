@@ -1,18 +1,24 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { ReportBucket, ReportPeriodKind } from '@/app/utils/calendarReport';
+import type { CalendarActivity } from '@/app/types/activity';
+import type { ReportBucket, ReportPeriod, ReportPeriodKind } from '@/app/utils/calendarReport';
 import { formatDurationShort } from '@/app/utils/dateUtils';
-
-export type ActivityMetric = 'completions' | 'notes';
+import type { WorkDaySettings } from '@/app/utils/dayReport';
+import { axisTicks, type ActivityMetric } from './activityAxis';
+import ReportEventsChart from './ReportEventsChart';
 
 const TASK_COLOR = 'var(--tm-accent)';
 const HABIT_COLOR = 'var(--tm-success)';
 const NOTE_COLOR = 'var(--tm-accent-2)';
 
 interface ReportActivityChartProps {
+  period: ReportPeriod;
   buckets: ReportBucket[];
-  kind: ReportPeriodKind;
+  /** The period's activity, for the Events tab. */
+  activity: CalendarActivity;
+  /** The user's work days and hours, the Events tab's outline. */
+  workDays: WorkDaySettings;
 }
 
 // A month has up to 31 bars; labelling every one crowds a phone screen, so
@@ -40,20 +46,6 @@ const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label })
   </span>
 );
 
-// Steps the y axis can count in: whole numbers of things done, or round
-// stretches of time (in seconds) for note time.
-const COUNT_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
-const TIME_STEPS = [5, 10, 15, 30, 60, 120, 180, 300, 600, 1200].map(m => m * 60);
-const MAX_GRIDLINES = 4;
-
-/** The y axis ticks from 0 up to a round number at or above `max`, at most MAX_GRIDLINES above 0. */
-export const axisTicks = (max: number, metric: ActivityMetric): number[] => {
-  const steps = metric === 'completions' ? COUNT_STEPS : TIME_STEPS;
-  const step = steps.find(st => Math.ceil(max / st) <= MAX_GRIDLINES) ?? Math.ceil(max / MAX_GRIDLINES);
-  const top = Math.max(Math.ceil(max / step), 1);
-  return Array.from({ length: top + 1 }, (_, i) => i * step);
-};
-
 /** "30m" under an hour, "1.5h" from there, so a label fits the narrow axis. */
 const formatTick = (value: number, metric: ActivityMetric) => {
   if (metric === 'completions' || value === 0) return String(value);
@@ -68,11 +60,23 @@ const describeBucket = (b: ReportBucket): string =>
 /**
  * Bar chart of a report period — per day for a week or month, per month for
  * a year. "Completions" stacks completed tasks under habit check-ins;
- * "Note time" plots time spent in notes. Bars are plain flex boxes rather
+ * "Note time" plots time spent in notes; "Events" (ReportEventsChart) plots
+ * time in events against work hours. Bars are plain flex boxes rather
  * than SVG so the axis labels never stretch at narrow widths.
  */
-const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind }) => {
+const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ period, buckets, activity, workDays }) => {
+  const kind: ReportPeriodKind = period.kind;
   const [metric, setMetric] = useState<ActivityMetric>('completions');
+  const tabs = (
+    <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart metric">
+      <MetricButton active={metric === 'completions'} onClick={() => setMetric('completions')}>Completions</MetricButton>
+      <MetricButton active={metric === 'notes'} onClick={() => setMetric('notes')}>Note time</MetricButton>
+      <MetricButton active={metric === 'events'} onClick={() => setMetric('events')}>Events</MetricButton>
+    </div>
+  );
+  if (metric === 'events') {
+    return <ReportEventsChart period={period} buckets={buckets} activity={activity} workDays={workDays} tabs={tabs} />;
+  }
 
   const valueOf = (b: ReportBucket) => (metric === 'completions' ? b.tasksCompleted + b.habitsCompleted : b.noteSeconds);
   const max = Math.max(...buckets.map(valueOf), 0);
@@ -86,10 +90,7 @@ const ReportActivityChart: React.FC<ReportActivityChartProps> = ({ buckets, kind
   return (
     <div className="flex-1 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 p-0.5 rounded-lg bg-surface border border-border" role="group" aria-label="Chart metric">
-          <MetricButton active={metric === 'completions'} onClick={() => setMetric('completions')}>Completions</MetricButton>
-          <MetricButton active={metric === 'notes'} onClick={() => setMetric('notes')}>Note time</MetricButton>
-        </div>
+        {tabs}
         <div className="ml-auto flex items-center gap-3">
           {metric === 'completions' ? (
             <>

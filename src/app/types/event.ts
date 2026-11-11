@@ -102,6 +102,8 @@ export interface EventOccurrence {
   source?: 'kanso' | 'google';
   /** Imported only: the event's page in Google Calendar, when Google gave one. */
   html_link?: string | null;
+  /** False for an imported event the user declined or marked "Show as free": it shows, but adds no event time. Absent counts as true. */
+  busy?: boolean;
 }
 
 /** Event minutes under one tag; an event with several tags counts in full under each. */
