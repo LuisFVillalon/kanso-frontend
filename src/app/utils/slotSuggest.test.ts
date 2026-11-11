@@ -161,6 +161,24 @@ describe('habitsToday', () => {
     expect(out[0]).toMatchObject({ slot: [H(14), H(14, 30)], fixed: false });
   });
 
+  it('keeps a usual time before the work window', () => {
+    const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(6, 30), done: false }];
+    const out = habitsToday(sample({ now: { date: '2026-11-11', min: H(6) }, events: [], tasks: [], habits }));
+    expect(out[0]).toMatchObject({ slot: [H(6, 30), H(7)], fixed: true });
+  });
+
+  it('keeps a usual time that has started but not ended', () => {
+    const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(9), done: false }];
+    const out = habitsToday(sample({ now: { date: '2026-11-11', min: H(9, 10) }, events: [], tasks: [], habits }));
+    expect(out[0]).toMatchObject({ slot: [H(9), H(9, 30)], fixed: true });
+  });
+
+  it('keeps a usual time on a rest day', () => {
+    const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(10), done: false }];
+    const out = habitsToday(sample({ now: { date: '2026-11-14', min: H(8) }, events: [], tasks: [], habits }));
+    expect(out[0]).toMatchObject({ slot: [H(10), H(10, 30)], fixed: true });
+  });
+
   it('moves a habit whose usual time an event takes', () => {
     const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(12), done: false }];
     const out = habitsToday(sample({ habits, tasks: [] }));

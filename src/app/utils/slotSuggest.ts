@@ -314,19 +314,22 @@ export interface HabitToday {
 
 /**
  * Today's open habits. A habit keeps its usual time while that time is still
- * free after now; the rest each go in the first free gap after now that fits,
+ * free after now (no busy event or kept block on it, inside work hours or
+ * not, rest days included); the rest each go in the first free gap after now that fits,
  * once the kept usual times and open tasks due today are held.
  */
 export function habitsToday(S: SlotState): HabitToday[] {
   const today = S.now.date;
   let gaps = rawGaps(S, today);
+  let wholeDay = rawGaps({ ...S, windowOn: () => [0, 24 * 60] }, today, { ignoreNow: true });
   const open = S.habits.filter(x => !x.done);
   const slots = new Map<number, HabitToday>();
   for (const h of open) {
     if (h.time == null) continue;
     const span: Span = [h.time, h.time + h.len];
-    if (!gaps.some(([s, e]) => s <= span[0] && span[1] <= e)) continue;
+    if (span[1] <= ceilStep(S.now.min) || !wholeDay.some(([s, e]) => s <= span[0] && span[1] <= e)) continue;
     slots.set(h.id, { habit: h, slot: span, fixed: true });
+    wholeDay = subtract(wholeDay, span);
     gaps = keep(subtract(gaps, span));
   }
   const dueToday = S.tasks.filter(t => !t.planned && t.due.date === today).sort((a, b) => a.due.min - b.due.min);
