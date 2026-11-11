@@ -13,7 +13,7 @@ import { useToast } from '@/app/context/ToastContext';
 import { notifyEventsChanged } from '@/app/hooks/useEventsVersion';
 import type { CalendarEventCreate, CalendarEventUpdate, EditScope, EventOccurrence } from '@/app/types/event';
 import { parseLocalDate } from '@/app/utils/dateUtils';
-import { isImportedEvent } from '@/app/utils/importedEvents';
+import { isImportedEvent, repeatsOccurrence } from '@/app/utils/importedEvents';
 
 /** "Fri, Oct 23" for an occurrence's day. */
 export const occurrenceDayLabel = (o: Pick<EventOccurrence, 'date'>) =>
@@ -62,8 +62,15 @@ export function useEventActions(onChanged: () => void) {
     const ok = await run(async () => {
       if (!isImportedEvent(o)) return updateEvent(o.event_id, body, scope, o.occurrence_date);
       const { tags, ...fields } = body;
-      if (Object.keys(fields).length > 0) await updateEvent(o.event_id, fields, scope, o.occurrence_date);
-      if (tags !== undefined) await updateGoogleEventTags(o.event_id, tagIds, false, scope);
+      const savesFields = Object.keys(fields).length > 0;
+      if (savesFields) await updateEvent(o.event_id, fields, scope, o.occurrence_date);
+      if (tags === undefined) return;
+      try {
+        await (repeatsOccurrence(o) ? updateGoogleEventTags(o.event_id, tagIds, false, scope) : updateGoogleEventTags(o.event_id, tagIds));
+      } catch (err) {
+        if (savesFields) { onChanged(); notifyEventsChanged(); }
+        throw err;
+      }
     }, "Couldn't save the event. Please try again.");
     if (ok) {
       const title = body.title ?? o.title;
@@ -71,7 +78,7 @@ export function useEventActions(onChanged: () => void) {
       showToast(`Saved ${title}${which}.`, 'success');
     }
     return ok;
-  }, [run, showToast]);
+  }, [onChanged, run, showToast]);
 
   const archive = useCallback(async (o: EventOccurrence, scope: EditScope): Promise<boolean> => {
     const saved = await runFor(() => setEventArchived(o.event_id, true, scope, o.occurrence_date), "Couldn't archive the event. Please try again.");
@@ -102,7 +109,9 @@ export function useEventActions(onChanged: () => void) {
       label: 'Undo',
       onClick: () => {
         void run(
-          () => (scope === 'this' ? restoreEvent(o.event_id, o.occurrence_date) : restoreEvent(saved.id)),
+          () => (scope === 'this'
+            ? restoreEvent(o.event_id, o.occurrence_date)
+            : isImportedEvent(o) ? restoreEvent(o.event_id, o.occurrence_date, scope) : restoreEvent(saved.id)),
           "Couldn't restore the event.",
         );
       },

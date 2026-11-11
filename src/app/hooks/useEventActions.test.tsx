@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   restoreEvent: vi.fn(),
   setEventArchived: vi.fn(),
   updateEvent: vi.fn(),
+  updateGoogleEventTags: vi.fn(),
 }));
 const showToast = vi.hoisted(() => vi.fn());
 
@@ -67,5 +68,38 @@ describe('useEventActions', () => {
     expect(onChanged).not.toHaveBeenCalled();
     expect(version).toBe(before);
     expect(showToast).toHaveBeenCalledWith("Couldn't delete the event. Please try again.", 'error');
+  });
+
+  const imported = { ...occurrence, event_id: -7, source: 'google', repeating: true } as EventOccurrence;
+  const undo = () => showToast.mock.calls.at(-1)![2].onClick();
+
+  it('undoes a scoped delete of an imported event with the same scope', async () => {
+    api.deleteEvent.mockResolvedValue({ id: -7 });
+    api.restoreEvent.mockResolvedValue({ id: -7 });
+    await act(async () => { await actions.remove(imported, 'following'); });
+    await act(async () => { undo(); });
+    expect(api.restoreEvent).toHaveBeenCalledWith(-7, '2026-10-23', 'following');
+  });
+
+  it("sends a one-off imported event's tags without a scope", async () => {
+    api.updateEvent.mockResolvedValue({});
+    api.updateGoogleEventTags.mockResolvedValue(undefined);
+    await act(async () => { await actions.update({ ...imported, repeating: false }, { title: 'Lecture', tags: [] }, 'all', [3]); });
+    expect(api.updateGoogleEventTags).toHaveBeenCalledWith(-7, [3]);
+
+    await act(async () => { await actions.update(imported, { tags: [] }, 'following', [3]); });
+    expect(api.updateGoogleEventTags).toHaveBeenLastCalledWith(-7, [3], false, 'following');
+  });
+
+  it('refreshes when an imported event saved its details but not its tags', async () => {
+    api.updateEvent.mockResolvedValue({});
+    api.updateGoogleEventTags.mockRejectedValue(new Error('offline'));
+    const before = version;
+    let ok = true;
+    await act(async () => { ok = await actions.update(imported, { title: 'Lecture', tags: [] }, 'this', [3]); });
+    expect(ok).toBe(false);
+    expect(onChanged).toHaveBeenCalledTimes(1);
+    expect(version).toBe(before + 1);
+    expect(showToast).toHaveBeenCalledWith("Couldn't save the event. Please try again.", 'error');
   });
 });

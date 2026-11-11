@@ -796,10 +796,15 @@ export async function deleteEvent(id: number, scope: EditScope = "all", occurren
 const trashedOccurrenceQuery = (occurrenceDate?: string | null) =>
   occurrenceDate ? `?${new URLSearchParams({ occurrence_date: occurrenceDate })}` : "";
 
-/** Brings a deleted event series, or one deleted occurrence of it, back from the trash. */
-export async function restoreEvent(id: number, occurrenceDate?: string | null): Promise<CalendarEvent> {
+/**
+ * Brings a deleted event series, or one deleted occurrence of it, back from
+ * the trash. An imported Google event's instances are each their own, so
+ * `scope` brings back the ones a scoped delete took with it.
+ */
+export async function restoreEvent(id: number, occurrenceDate?: string | null, scope?: EditScope): Promise<CalendarEvent> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/restore-event/${id}${trashedOccurrenceQuery(occurrenceDate)}`, {
+  const query = scope ? eventScopeQuery(scope, occurrenceDate ?? undefined) : trashedOccurrenceQuery(occurrenceDate);
+  const res = await fetch(`${API_BASE_URL}/restore-event/${id}${query}`, {
     method: "PATCH",
     headers,
   });

@@ -112,6 +112,11 @@ describe('events', () => {
     expect(requestedParams().has('occurrence_date')).toBe(false);
 
     fetchMock.mockClear();
+    await restoreEvent(-30, '2026-10-21', 'following');
+    expect(requestedUrl().pathname).toMatch(/\/restore-event\/-30$/);
+    expect(Object.fromEntries(requestedParams())).toEqual({ scope: 'following', occurrence_date: '2026-10-21' });
+
+    fetchMock.mockClear();
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     await purgeEvent(30, '2026-10-21');
     expect(requestedUrl().pathname).toMatch(/\/purge-event\/30$/);
