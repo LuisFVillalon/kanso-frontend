@@ -91,7 +91,7 @@ export const summarizeMood = (
   return { average: logged > 0 ? total / logged : null, logged, days: days.length, distribution };
 };
 
-/** Moments on fewer days than this are left off the Moments & mood card. */
+/** moodByTag's default: moments on fewer days than this are left out. */
 export const TAG_MIN_DAYS = 3;
 
 export interface TagMood {
