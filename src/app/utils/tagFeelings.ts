@@ -1,8 +1,8 @@
 /**
- * The Mood › Patterns "Your task & note tags" side of the Tags & moments card: how
- * mood, energy and stress went on days carrying each of the user's own tags
- * (the ones on tasks, notes and habits) compared with their other days, and
- * "By kind of activity", one tag's tasks, notes, habits and events apart.
+ * The tag side of Mood › Patterns (utils/patterns.ts): which of the user's
+ * own tags (the ones on tasks, notes and habits) each day carries, and how
+ * mood, energy and stress went on one set of check-in days compared with
+ * another.
  *
  * A tag's day is a day with a daily check-in on which a task carrying the
  * tag was completed or a note carrying it was edited. Tags are the ones items
@@ -34,8 +34,6 @@ export const FEELING_WORDS: Record<Feeling, readonly string[]> = { mood: MOOD_LA
 
 /** Which way is easier on you: higher mood and energy, lower stress. */
 const GOOD_UP: Record<Feeling, boolean> = { mood: true, energy: true, stress: false };
-const UP: Record<Feeling, string> = { mood: 'better mood', energy: 'more energy', stress: 'more stress' };
-const DOWN: Record<Feeling, string> = { mood: 'lower mood', energy: 'less energy', stress: 'calmer' };
 
 /** Days a tag needs, and its other days need, before anything is said. */
 export const TAG_MIN_SIDE = 5;
@@ -99,33 +97,12 @@ export interface FeelingComparison {
   mixWarn: boolean;
 }
 
-export interface TagFeelings {
-  tag: FeelingTag;
-  /** Check-in days carrying the tag, and the rest. */
-  days: number;
-  otherDays: number;
-  feel: Record<Feeling, FeelingComparison>;
-}
-
-export interface TagFeelingsAnalysis {
-  /** Daily check-ins in the period, oldest first. */
-  days: TagDay[];
-  /** Tags on at least one of them, those on the most days first. */
-  tags: TagFeelings[];
-}
-
-const dayWord = (n: number) => `${n} ${n === 1 ? 'day' : 'days'}`;
-
 const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 const tagKey = (id: number) => `tag:${id}`;
 
-/** The kinds of activity a tag's day can come from, as graph 2 ("By kind of activity") lists them. */
+/** The kinds of activity a tag's day can come from. */
 export type ActivityKind = 'tasks' | 'notes' | 'habits' | 'events';
-
-export const ACTIVITY_KINDS: ActivityKind[] = ['tasks', 'notes', 'habits', 'events'];
-
-export const KIND_NAME: Record<ActivityKind, string> = { tasks: 'Tasks', notes: 'Notes', habits: 'Habits', events: 'Events' };
 
 /** How many tasks completed, notes edited, habits checked off and events had with a tag on one day. */
 export type KindCounts = Record<ActivityKind, number>;
@@ -354,221 +331,8 @@ export const settleVerdicts = (comparisons: FeelingComparison[]) => {
   }
 };
 
-/**
- * Every tag on the period's check-in days, each feeling compared on its days
- * against the other days. `seedKey` names the period, so the chance check is
- * the same every time the same days are shown.
- */
-export const analyseTagFeelings = (days: TagDay[], tags: Map<string, FeelingTag>, seedKey: string): TagFeelingsAnalysis => {
-  const counts = new Map<string, number>();
-  for (const d of days) for (const t of d.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
-
-  const out: TagFeelings[] = [...counts.keys()].flatMap(key => {
-    const tag = tags.get(key);
-    if (!tag) return [];
-    const on = days.filter(d => d.tags.has(key));
-    const off = days.filter(d => !d.tags.has(key));
-    const feel = Object.fromEntries(FEELINGS.map(f => [f, compareFeeling(on, off, f, hash(`${key}|${f}|${seedKey}`))])) as Record<Feeling, FeelingComparison>;
-    return [{ tag, days: on.length, otherDays: off.length, feel }];
-  });
-
-  for (const f of FEELINGS) settleVerdicts(out.map(t => t.feel[f]));
-  out.sort((a, b) => b.days - a.days || a.tag.name.localeCompare(b.tag.name));
-  return { days, tags: out };
-};
-
-export interface KindComparison {
-  kind: ActivityKind;
-  /** No day in the period had this kind of activity with the tag. */
-  none: boolean;
-  /** "More" days had at least this many; the rest are "fewer". Null when `none`. */
-  threshold: number | null;
-  /** Check-in days with at least `threshold`, and the rest. */
-  moreDays: number;
-  lessDays: number;
-  feel: Record<Feeling, FeelingComparison> | null;
-}
-
-/** A tag's check-in days by kind of activity, for graph 2's tag picker. */
-export interface KindTag {
-  tag: FeelingTag;
-  /** Check-in days with any kind of activity carrying it. */
-  days: number;
-}
-
-/** Tags on any kind of activity on the period's check-in days, those on the most days first. */
-export const kindTags = (days: TagDay[], counts: Map<string, Map<string, KindCounts>>, tags: Map<string, FeelingTag>): KindTag[] => {
-  const n = new Map<string, number>();
-  for (const d of days) for (const key of counts.get(d.day)?.keys() ?? []) n.set(key, (n.get(key) ?? 0) + 1);
-  return [...n]
-    .flatMap(([key, count]) => (tags.has(key) ? [{ tag: tags.get(key)!, days: count }] : []))
-    .sort((a, b) => b.days - a.days || a.tag.name.localeCompare(b.tag.name));
-};
-
-/**
- * For one tag, each kind of activity: how the user felt on check-in days
- * with more of it against days with less. The split is the middle of the
- * days' counts, raised past the lowest, so it's usually "did it at least
- * once" against "didn't". The same honesty rules as a tag's days apply, with
- * the chance bar split across the kinds compared for each feeling.
- */
-export const analyseTagKinds = (days: TagDay[], counts: Map<string, Map<string, KindCounts>>, key: string, seedKey: string): KindComparison[] => {
-  const out = ACTIVITY_KINDS.map((kind): KindComparison => {
-    const values = days.map(d => counts.get(d.day)?.get(key)?.[kind] ?? 0);
-    if (!values.some(v => v > 0)) return { kind, none: true, threshold: null, moreDays: 0, lessDays: 0, feel: null };
-    const sorted = [...values].sort((a, b) => a - b);
-    let threshold = sorted[Math.floor(sorted.length / 2)];
-    // Every day had the same count: all of them are "more", and there's nothing to compare with.
-    if (threshold === sorted[0]) threshold = sorted.find(v => v > threshold) ?? Math.max(1, threshold);
-    const more = days.filter((_, i) => values[i] >= threshold);
-    const less = days.filter((_, i) => values[i] < threshold);
-    const feel = Object.fromEntries(FEELINGS.map(f => [f, compareFeeling(more, less, f, hash(`${key}|${kind}|${f}|${seedKey}`))])) as Record<Feeling, FeelingComparison>;
-    return { kind, none: false, threshold, moreDays: more.length, lessDays: less.length, feel };
-  });
-  for (const f of FEELINGS) settleVerdicts(out.flatMap(o => (o.feel ? [o.feel[f]] : [])));
-  return out;
-};
-
-/** The tag to open graph 2 on: the first with a clear difference, else the one on the most days. */
-export const defaultKindTag = (tags: KindTag[], findings: (key: string) => KindComparison[]): string | null => {
-  for (const t of tags) if (findings(t.tag.key).some(o => FEELINGS.some(f => o.feel?.[f].verdict === 'clear'))) return t.tag.key;
-  return tags[0]?.tag.key ?? null;
-};
-
-const KIND_VERB: Record<ActivityKind, string> = { tasks: 'Doing', notes: 'Editing', habits: 'Checking off', events: 'Having' };
-const KIND_NOUN: Record<ActivityKind, [string, string]> = { tasks: ['task', 'tasks'], notes: ['note', 'notes'], habits: ['habit', 'habits'], events: ['event', 'events'] };
-const KIND_DID: Record<ActivityKind, string> = { tasks: 'finished', notes: 'edited', habits: 'checked off', events: 'had' };
-const EFFECT_UP: Record<Feeling, string> = { mood: 'a better mood', energy: 'more energy', stress: 'more stress' };
-const EFFECT_DOWN: Record<Feeling, string> = { mood: 'a lower mood', energy: 'less energy', stress: 'less stress' };
-
-/** "a", or "an" before a vowel: "an ART 157 task". */
-const article = (word: string) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
-
-const joinAnd = (parts: string[]) => (parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`);
-
-export interface KindEffect {
-  feeling: Feeling;
-  /** "more stress", "a better mood". */
-  words: string;
-  /** Easier on you. */
-  good: boolean;
-}
-
-/**
- * What went with one kind of a tag's activity, in one line: only clear
- * differences are stated, as "Doing more COMM 103 tasks is linked to more
- * stress"; otherwise why nothing is said.
- */
-export type KindLine =
-  | { tone: 'clear'; lead: string; effects: KindEffect[] }
-  | { tone: 'none' | 'thin' | 'same'; text: string };
-
-export const describeKind = (o: KindComparison, tagName: string, scope: string): KindLine => {
-  if (o.none || !o.feel) return { tone: 'none', text: `No ${tagName} ${KIND_NOUN[o.kind][1]} ${scope}` };
-  const feel = o.feel;
-  const clear = FEELINGS.filter(f => feel[f].verdict === 'clear');
-  if (!clear.length) {
-    return FEELINGS.every(f => feel[f].verdict === 'thin') ? { tone: 'thin', text: 'Too few days to tell' } : { tone: 'same', text: 'No clear difference' };
-  }
-  return {
-    tone: 'clear',
-    lead: `${KIND_VERB[o.kind]} more ${tagName} ${KIND_NOUN[o.kind][1]} is linked to`,
-    effects: clear.map(f => ({ feeling: f, words: feel[f].gap! > 0 ? EFFECT_UP[f] : EFFECT_DOWN[f], good: feel[f].good! })),
-  };
-};
-
-/** The line as plain text: "Doing more COMM 103 tasks is linked to more stress and less energy". */
-export const kindLineText = (line: KindLine): string =>
-  line.tone === 'clear' ? `${line.lead} ${joinAnd(line.effects.map(e => e.words))}` : line.text;
-
-/**
- * The two sides of a kind's comparison in words: ["Days you finished a COMM
- * 103 task", "Days you didn’t"], or without the tag's name when it's
- * already picked.
- */
-export const kindSides = (o: KindComparison, tagName: string | null): [string, string] => {
-  const [one, many] = KIND_NOUN[o.kind];
-  const named = tagName ? `${tagName} ` : '';
-  if (o.threshold != null && o.threshold > 1) {
-    return o.kind === 'events'
-      ? [`Days with ${o.threshold} or more ${named}${many}`, 'Days with fewer']
-      : [`Days you ${KIND_DID[o.kind]} ${o.threshold} or more ${named}${many}`, 'Days with fewer'];
-  }
-  const a = article(tagName ?? one);
-  return o.kind === 'events' ? [`Days with ${a} ${named}${one}`, 'Days without one'] : [`Days you ${KIND_DID[o.kind]} ${a} ${named}${one}`, 'Days you didn’t'];
-};
-
 /** A 1–5 average as the check-in word it rounds to: mood 3.9 is "Good", stress 2.2 is "Mild". */
 export const feelingWord = (f: Feeling, x: number): string => FEELING_WORDS[f][Math.min(5, Math.max(1, Math.round(x))) - 1];
 
-const FELT_UP: Record<Feeling, string> = { mood: 'your mood was better', energy: 'you had more energy', stress: 'you were more stressed' };
-const FELT_DOWN: Record<Feeling, string> = { mood: 'your mood was lower', energy: 'you had less energy', stress: 'you were calmer' };
-
-/** One kind and feeling in words, for hover, taps and screen readers. */
-export const describeKindFeeling = (o: KindComparison, f: Feeling, tagName: string): string => {
-  const c = o.feel![f];
-  const [did, didnt] = kindSides(o, tagName);
-  if (c.verdict === 'thin') {
-    return `${FEELING_NAME[f]}: ${did.toLowerCase()}: ${dayWord(c.nAll)}; ${didnt.toLowerCase()}: ${dayWord(c.nOtherAll)}. Too few days to tell: each side needs ${TAG_MIN_SIDE}.`;
-  }
-  const base = `${FEELING_NAME[f]}: usually ${feelingWord(f, c.avg!)} on the ${dayWord(c.n)} ${did.replace(/^Days /, '')}, usually ${feelingWord(f, c.other!)} on the other ${dayWord(c.nOther)}.`;
-  if (c.verdict === 'clear') return `${base} That’s a clear difference: on those days ${c.gap! > 0 ? FELT_UP[f] : FELT_DOWN[f]}.`;
-  return `${base} ${Math.abs(c.gap!) >= 0.3 ? 'A small difference, but not big enough to rule out luck.' : 'About the same.'}`;
-};
-
 /** A 1–5 average as shown: to one decimal. */
 export const formatAverage = (x: number | null): string => (x == null ? '–' : (Math.round(x * 10) / 10).toFixed(1));
-
-/** "better mood", "calmer": which way the tag's days went. */
-export const differenceWords = (f: Feeling, gap: number): string => (gap > 0 ? UP[f] : DOWN[f]);
-
-/** One plain sentence for a tag and feeling, for hover, taps and screen readers. */
-export const describeTagFeeling = (name: string, f: Feeling, c: FeelingComparison): string => {
-  if (c.verdict === 'thin') {
-    const why = c.nAll < TAG_MIN_SIDE
-      ? `is on only ${dayWord(c.nAll)} with ${f} logged`
-      : c.nOtherAll < TAG_MIN_SIDE
-        ? `is on almost every day, so there are only ${dayWord(c.nOtherAll)} without it to compare with`
-        : `is on ${dayWord(c.nAll)}, but too few of them line up with other days of the same kind (work day or day off)`;
-    return `“${name}” ${why}. Too few days to tell: it needs ${TAG_MIN_SIDE} on each side.`;
-  }
-  const word = FEELING_WORDS[f][Math.round(c.avg!) - 1];
-  const base = `${FEELING_NAME[f]} averaged ${formatAverage(c.avg)} (${word}) on your ${dayWord(c.n)} with “${name}”; your usual on ${c.nOther} other days was ${formatAverage(c.other)}.`;
-  const mix = c.mixWarn ? ` (Mixing work days and days off would have made it look like ${formatAverage(c.rawAvg)} vs ${formatAverage(c.rawOther)}.)` : '';
-  if (c.verdict === 'clear') return `${base} That’s a clear difference: ${differenceWords(f, c.gap!)}.`;
-  if (Math.abs(c.gap!) >= 0.3) return `${base} A little ${c.gap! > 0 ? 'higher' : 'lower'}, but not by enough to tell from chance.${mix}`;
-  return `${base} About the same.${mix}`;
-};
-
-/** The clearest findings in one or two plain sentences; empty when no tag has enough days. */
-export const summarizeTagFeelings = (analysis: TagFeelingsAnalysis, scope: string): string => {
-  const found = analysis.tags.flatMap(t => FEELINGS.filter(f => t.feel[f].verdict === 'clear').map(f => ({ t, f, c: t.feel[f] })));
-  if (!found.length) {
-    return analysis.tags.some(t => FEELINGS.some(f => t.feel[f].verdict !== 'thin'))
-      ? `Nothing stands out ${scope}: every gap is small enough to be chance.`
-      : '';
-  }
-  found.sort((a, b) => Math.abs(b.c.gap!) - Math.abs(a.c.gap!));
-  return `Clearest ${scope}: ${found
-    .slice(0, 2)
-    .map(({ t, f, c }) => `on “${t.tag.name}” days (${c.n}), ${differenceWords(f, c.gap!)} than usual (${formatAverage(c.avg)} vs ${formatAverage(c.other)})`)
-    .join('; ')}.`;
-};
-
-/** The feeling to open a tag's timeline on: its biggest clear difference, else mood. */
-export const timelineFeeling = (t: TagFeelings): Feeling => {
-  let best: Feeling = 'mood';
-  let size = 0;
-  for (const f of FEELINGS) {
-    const c = t.feel[f];
-    if (c.verdict === 'clear' && Math.abs(c.gap!) > size) {
-      best = f;
-      size = Math.abs(c.gap!);
-    }
-  }
-  return best;
-};
-
-/** Whether any tag shows a clear difference. */
-export const hasClearDifference = (analysis: TagFeelingsAnalysis): boolean =>
-  analysis.tags.some(t => FEELINGS.some(f => t.feel[f].verdict === 'clear'));

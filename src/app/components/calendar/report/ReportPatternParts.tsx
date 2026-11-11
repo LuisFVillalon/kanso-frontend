@@ -6,7 +6,13 @@ import { moodColor } from '@/app/components/mood/MoodFacePicker';
 import { rowHas, patternNumbers, type AnswerKind, type PatternDay, type PatternRow } from '@/app/utils/patterns';
 import { FEELING_WORDS, hash, type Feeling } from '@/app/utils/tagFeelings';
 import { useMeasuredWidth, useShortWindow } from './useChartSize';
-import { FEELING_COLOR } from './ReportTagFeelingsChart';
+
+/** Series colors as on Mood › Over time: mood in ink, energy accent, stress accent-2. */
+export const FEELING_COLOR: Record<Feeling, string> = {
+  mood: 'var(--tm-text-secondary)',
+  energy: 'var(--tm-accent)',
+  stress: 'var(--tm-accent-2)',
+};
 
 /** Each answer's colour, from the mood palette: "lower" is the Low mood's amber, never a warning red. */
 export const ANSWER_COLOR: Record<AnswerKind, string> = {

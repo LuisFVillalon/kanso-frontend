@@ -21,9 +21,9 @@ import {
   type MoodSummary,
 } from '@/app/utils/moodReport';
 import ReportMoodChart from './ReportMoodChart';
-import ReportPatterns, { PatternsHeading } from './ReportPatterns';
+import ReportPatterns from './ReportPatterns';
 import ReportPeriodCheckins from './ReportPeriodCheckins';
-import ReportTagsCard from './ReportTagsCard';
+import ReportWeekGlance from './ReportWeekGlance';
 
 /** Which part of the Mood tab shows: the chart and check-ins, or what tends to go with your mood, energy and stress. */
 export type MoodView = 'time' | 'patterns';
@@ -107,7 +107,7 @@ interface ReportMoodSectionProps {
   onSelectPeriod: (monthStart: Date) => void;
   /** Opens the Year report holding `date`. */
   onSelectYear: (date: Date) => void;
-  /** The profile's rest days, which the Tags & moments card compares apart from work days. */
+  /** The profile's rest days, which Patterns compares apart from work days. */
   restDays: number[];
   view: MoodView;
   /** Opens Mood › Patterns, from "About this chart". */
@@ -123,8 +123,8 @@ interface ReportMoodSectionProps {
  * Any day dot opens its check-in to edit, and a hollow one logs that day;
  * weekly and monthly check-ins open from their spans, ◇ and the Check-ins
  * list, which also logs a past week or month without one. A week is too
- * short for mood patterns, so its Patterns show the Tags & moments card alone, hatched,
- * pointing to its Month report.
+ * short for mood patterns, so its Patterns show "Week at a glance"
+ * (ReportWeekGlance): how the week went, day by day, pointing to its Month report.
  */
 const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, activity, byDay, checkins, settings, replaceDay, onSelectPeriod, onSelectYear, restDays, view, onSeePatterns }) => {
   const showToast = useToast();
@@ -258,20 +258,18 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
             </CheckinsCard>
           </div>
         ) : period.kind === 'week' ? (
-          <div className="flex flex-col gap-3 sm:gap-4">
-            <PatternsHeading />
-            <ReportTagsCard
-              activity={activity}
-              byDay={byDay}
-              period={period}
-              scopeLabel={scopeName(period)}
-              restDays={restDays}
-              average={summary.average}
-              logged={summary.logged}
-              widen={{ label: `See ${weekMonth.toLocaleDateString('en-US', { month: 'long' })}`, onClick: () => onSelectPeriod(weekMonth) }}
-              wide
-            />
-          </div>
+          <ReportWeekGlance
+            period={period}
+            byDay={byDay}
+            weeks={weeks}
+            activity={activity}
+            settings={settings}
+            scopeLabel={scopeName(period)}
+            month={weekMonth}
+            onDay={(date, existing) => setModal({ kind: 'day', date, existing })}
+            onWeek={(date, existing) => setModal({ kind: 'week', date, existing })}
+            onMonth={onSelectPeriod}
+          />
         ) : summary.average != null ? (
           <ReportPatterns
             // Each period opens on its own clearest finding.

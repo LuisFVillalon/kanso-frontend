@@ -106,8 +106,8 @@ const openPatterns = () => click([...document.querySelectorAll('[aria-label="Moo
 describe('CalendarReportView mood', () => {
   it('adds the Mood tile and keeps the week summary to the week', async () => {
     await render();
-    // The week before too, which the Mood over time summary compares with.
-    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-10-12', '2026-10-25');
+    // The week before too, which the Mood over time summary compares with, inside its month and the one before.
+    expect(api.fetchMoodCheckins).toHaveBeenCalledWith('2026-09-01', '2026-10-31');
     expect(text()).toContain('1 of 3 days logged');
     expect(container.querySelector('.xl\\:grid-cols-7')).not.toBeNull();
     await openTab('Mood');
@@ -171,10 +171,22 @@ describe('CalendarReportView mood', () => {
     expect(text()).not.toContain('Patterns in your mood show up');
     await openPatterns();
     expect(text()).not.toContain('Mood & your activity');
-    expect(text()).toContain('What tends to go with your mood, energy and stress');
-    expect(text()).toContain('Your task & note tags');
-    expect(text()).toContain('A week is too short to tell anything from chance');
-    await click(buttonLabelled(/^See October$/));
+    expect(text()).not.toContain('What tends to go with your mood, energy and stress');
+    expect(text()).toContain('How your week felt');
+    expect(text()).toContain('1 day with a check-in this week');
+    expect(text()).toContain('Good 4.0average · 1 of 3 days logged');
+    // October has 2 days with a check-in and September none, so only October is linked.
+    expect(text()).toContain('A week is too short to say what goes with your mood. October has 2 days with a check-in so far; its patterns fill in after about 10.');
+    expect(buttonLabelled(/^September’s patterns$/)).toBeUndefined();
+    // A day opens its check-in, and an empty one logs it.
+    await click(buttonLabelled(/^Tue Oct 20: Good\. Open check-in$/));
+    expect(text()).toContain('Edit check-in · Tue, Oct 20');
+    await click(buttonLabelled(/^Cancel$/));
+    await click(buttonLabelled(/^Mon Oct 19: no check-in\. Log this day$/));
+    expect(text()).toContain('Monday, October 19');
+    await click(buttonLabelled(/^Cancel$/));
+    expect(buttonLabelled(/^Thu Oct 22/)).toBeUndefined();
+    await click(buttonLabelled(/^See October/));
     expect(container.querySelector('#calendar-report-heading')?.textContent).toBe('October 2026');
     expect(text()).toContain('Mood & your activity');
   });
@@ -876,7 +888,7 @@ describe('CalendarReportView tabs', () => {
     window.history.replaceState(null, '', '/reports?view=mood&mood=patterns');
     await render();
     expect(tab('Mood').getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('A week is too short to tell anything from chance');
+    expect(text()).toContain('How your week felt');
     await click(buttonLabelled(/^Month$/));
     expect(text()).toContain('Mood & your activity');
     expect(text()).not.toContain('Mood over time');
