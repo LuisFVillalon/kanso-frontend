@@ -8,6 +8,7 @@ import { occurrenceSpanOn, takesTime } from '@/app/utils/eventOccurrences';
 import { rawGaps, subtract, SLOT_STEP, type FreeDay, type PlanRange, type Slot, type SlotState, type Span } from '@/app/utils/slotSuggest';
 import { blockSpan } from '@/app/hooks/useSlotPlanner';
 import { clock, dayShort, timeRange } from '@/app/utils/slotLabels';
+import { parseLocalDate } from '@/app/utils/dateUtils';
 import { samePick, type PlanPick } from '@/app/utils/workBlockPlans';
 
 /** Free time on the strip: a soft green. */
@@ -73,7 +74,9 @@ const FreeTimeStrip: React.FC<FreeTimeStripProps> = ({
 
         return (
           <div key={day.date} className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-2">
-            <span className="text-[11px] font-semibold text-text-secondary truncate">{dayShort(day.date, today)}</span>
+            <span className="text-[11px] font-semibold text-text-secondary truncate">
+              {day.date === today ? 'Today' : parseLocalDate(day.date).toLocaleDateString('en-US', { weekday: 'short' })}
+            </span>
             <div
               className="relative h-7 rounded-md overflow-hidden border border-border-subtle"
               style={{ backgroundColor: 'var(--tm-surface)' }}

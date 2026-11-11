@@ -85,10 +85,11 @@ export function habitConflicts(state: SlotState, habits: Habit[], events: EventO
     if (usual + len <= state.now.min) continue;
     const event = clashingEvent(events, today, { start: usual, end: usual + len });
     if (!event) continue;
-    // Today only: the habit without its usual time, after the event is held.
+    // Today only: the habit without its usual time, placed among today's other habits as the brief's card places it.
     const moved = habitsToday({
       ...state,
-      habits: state.habits.map(x => (x.id === h.id ? { ...x, time: null } : x)).filter(x => x.id === h.id || x.time != null),
+      habits: state.habits.filter(x => !workBlocks.some(b => b.habit_id === x.id && b.date === today))
+        .map(x => (x.id === h.id ? { ...x, time: null } : x)),
     }).find(x => x.habit.id === h.id);
     const slot = moved?.slot && subtract([moved.slot], [usual, usual + len]).length ? moved.slot : null;
     out.push({

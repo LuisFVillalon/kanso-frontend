@@ -188,11 +188,11 @@ const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
 
   return (
     <div data-when-to-work>
-      <div className="flex items-baseline justify-between gap-2 mb-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 mb-1">
         <span id="when-to-work-label" className="block text-sm font-medium text-text-secondary">
           When to work on it <span className="font-normal text-text-muted">(optional)</span>
         </span>
-        <span className="flex items-baseline gap-3 text-xs">
+        <span className="flex flex-wrap items-baseline gap-x-3 text-xs ml-auto">
           {dueToday && (
             <span className="text-text-muted whitespace-nowrap">Due today · {lengthText(freeMinutesOn(days, today))} free left</span>
           )}
