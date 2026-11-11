@@ -43,9 +43,11 @@ describe('imported events count like kanso events', () => {
       id: 1, task_id: 1, habit_id: null, title: 'Essay', tags: [], date: '2026-11-11', start_time: '10:30', end_time: '11:30',
       time_zone: 'UTC', starts_at: '', ends_at: '',
     };
+    // A block only clashes while its task is open, so the task it's for is loaded (open, no due date).
+    const task = { id: 1, title: 'Essay', completed: false, archived_at: null, due_date: null, due_time: null, estimated_time: 1, tags: [] };
     const { timed } = buildWeekEvents({
       weekStart,
-      scheduledTasks: [],
+      scheduledTasks: [task],
       completedTasks: [],
       noteSessions: [],
       habitCompletions: [],
