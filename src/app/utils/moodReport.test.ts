@@ -48,7 +48,12 @@ describe('moodFetchRanges', () => {
 
   it('fetches the period and the whole one before it, and a month’s last week', () => {
     const now = new Date(2026, 9, 21);
-    expect(days(moodFetchRanges(periodContaining('week', now)))).toEqual([['2026-10-12', '2026-10-25']]);
+    // A week asks for its month and the one before, which hold the week before it and both months the week links to.
+    expect(days(moodFetchRanges(periodContaining('week', now)))).toEqual([['2026-09-01', '2026-10-31']]);
+    // A week running into November also covers November.
+    expect(days(moodFetchRanges(periodContaining('week', new Date(2026, 9, 28))))).toEqual([['2026-09-01', '2026-11-30']]);
+    // The week of Jan 1 reaches back into the year before.
+    expect(days(moodFetchRanges(periodContaining('week', new Date(2026, 0, 1))))).toEqual([['2025-11-01', '2026-01-31']]);
     // October ends on a Saturday, so its last week runs to Sunday Nov 1.
     expect(days(moodFetchRanges(periodContaining('month', now)))).toEqual([['2026-09-01', '2026-11-01']]);
     const may = moodFetchRanges(periodContaining('month', new Date(2026, 4, 10))); // ends on a Sunday
