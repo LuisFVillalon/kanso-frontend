@@ -47,6 +47,20 @@ export function occurrenceDays(o: EventOccurrence): string[] {
   return occurrenceSpanOn(o, o.end_date) ? [o.date, o.end_date] : [o.date];
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A timed event 24 hours or longer: a trip, a conference or an "Out of
+ * office" block. It counts like an all-day event, showing on its days but
+ * adding no hours, as Google Calendar puts it in its all-day row.
+ */
+export const spansDays = (o: Pick<EventOccurrence, 'all_day' | 'starts_at' | 'ends_at'>): boolean =>
+  !o.all_day && new Date(o.ends_at).getTime() - new Date(o.starts_at).getTime() >= DAY_MS;
+
+/** Whether an occurrence adds hours: a timed event under 24 hours. */
+export const addsHours = (o: Pick<EventOccurrence, 'all_day' | 'starts_at' | 'ends_at'>): boolean =>
+  !o.all_day && !spansDays(o);
+
 /** A stable key for one occurrence. */
 export const occurrenceKey = (o: Pick<EventOccurrence, 'event_id' | 'occurrence_date'>) => `${o.event_id}:${o.occurrence_date}`;
 

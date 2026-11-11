@@ -132,11 +132,43 @@ describe('buildEventTimeSeries', () => {
     expect(series.rows.map(r => r.key)).toEqual(['tag:1', 'tag:2', UNTAGGED_KEY]);
   });
 
-  it('counts overlapping events once in work hours but twice in the total', () => {
-    const b = day(week([event([9, 10], [9, 11]), event([9, 10], [9, 11], { event_id: 2 })]), '2026-11-09');
-    expect(b.inWindow.past).toBe(60);
-    expect(b.outside.past).toBe(60);
-    expect(bucketTotal(b)).toBe(120);
+  it('counts overlapping events once, splitting the shared time between their tags', () => {
+    // 10–12 under CS 460 and 11–13 at Work share 11–12: a 3h day, not 4h.
+    const b = day(week([event([9, 10], [9, 12], { tags: [cs] }), event([9, 11], [9, 13], { event_id: 2, tags: [work] })]), '2026-11-09');
+    expect(b.inWindow.past).toBe(180);
+    expect(b.outside.past).toBe(0);
+    expect(bucketTotal(b)).toBe(180);
+    expect(b.byTag.get('tag:1')?.past).toBe(90);
+    expect(b.byTag.get('tag:2')?.past).toBe(90);
+    expect(b.eventCount).toBe(2);
+  });
+
+  it('never puts a day past 24 hours, however many events overlap', () => {
+    const allDayLong = [1, 2, 3].map(id => event([9, 0], [9, 23, 59], { event_id: id }));
+    expect(bucketTotal(day(week(allDayLong), '2026-11-09'))).toBe(1439);
+  });
+
+  it('adds nothing for a timed event 24 hours or longer, and leaves the work hours free', () => {
+    // The repro's trip: Wed 3 PM to Sun 6 PM, beside a 1h class on Thursday.
+    const trip = event([11, 15], [15, 18], { source: 'google', event_id: -9, tags: [work] });
+    const series = week([trip, event([12, 10], [12, 11], { tags: [cs] })]);
+    expect(day(series, '2026-11-11').inWindow).toEqual({ past: 0, upcoming: 0 });
+    expect(bucketTotal(day(series, '2026-11-11'))).toBe(0);
+    expect(bucketTotal(day(series, '2026-11-12'))).toBe(60);
+    expect(series.buckets.get('2026-11-14')).toBeUndefined();
+    expect(series.rows.map(r => r.key)).toEqual(['tag:1']);
+    // Exactly a day counts as 24h+.
+    expect(bucketTotal(day(week([event([9, 9], [10, 9])]), '2026-11-09'))).toBe(0);
+  });
+
+  it('splits an overlap in progress at now', () => {
+    // 12–14 and 12:30–13:30 on Tuesday, now 1 PM.
+    const b = day(week([event([10, 12], [10, 14], { tags: [cs] }), event([10, 12, 30], [10, 13, 30], { event_id: 2 })]), '2026-11-10');
+    expect(b.inWindow).toEqual({ past: 60, upcoming: 60 });
+    expect(b.byTag.get('tag:1')).toEqual({ past: 45, upcoming: 45, inWindow: 90 });
+    expect(b.byTag.get(UNTAGGED_KEY)).toEqual({ past: 15, upcoming: 15, inWindow: 30 });
+    // Of Tuesday's 9–5 work hours, 1–5 PM is still to come.
+    expect(b.upcomingWindowMinutes).toBe(240);
   });
 
   it('puts all of a rest day’s time outside work hours', () => {

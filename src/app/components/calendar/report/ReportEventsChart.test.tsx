@@ -7,6 +7,7 @@ import type { EventOccurrence } from '@/app/types/event';
 import { buildCalendarReport, periodContaining, shiftPeriod, type ReportPeriod } from '@/app/utils/calendarReport';
 import type { WorkDaySettings } from '@/app/utils/dayReport';
 import ReportActivityChart from './ReportActivityChart';
+import ReportEventsChart, { useEventSelection } from './ReportEventsChart';
 
 vi.hoisted(() => {
   process.env.TZ = 'America/Los_Angeles';
@@ -59,10 +60,22 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const EventsChart: React.FC<{ period: ReportPeriod; activity: CalendarActivity }> = ({ period, activity }) => {
+  const selection = useEventSelection(period, activity, workDays);
+  const { buckets } = buildCalendarReport(activity, period, []);
+  return <ReportEventsChart period={period} buckets={buckets} selection={selection} />;
+};
+
 const render = async (period: ReportPeriod, activity: CalendarActivity) => {
+  await act(async () => {
+    root.render(<EventsChart period={period} activity={activity} />);
+  });
+};
+
+const renderActivity = async (period: ReportPeriod, activity: CalendarActivity, onOpenEvents?: () => void) => {
   const { buckets } = buildCalendarReport(activity, period, []);
   await act(async () => {
-    root.render(<ReportActivityChart period={period} buckets={buckets} activity={activity} workDays={workDays} />);
+    root.render(<ReportActivityChart period={period} buckets={buckets} activity={activity} workDays={workDays} onOpenEvents={onOpenEvents} />);
   });
 };
 
@@ -79,11 +92,9 @@ const click = async (name: string) => {
 const text = () => container.textContent ?? '';
 const legend = () => [...container.querySelectorAll('.ml-auto span.inline-flex')].map(s => s.textContent);
 
-describe('Activity card › Events', () => {
+describe('Events chart', () => {
   it('outlines each workday’s hours and offers a chip per tag', async () => {
     await render(periodContaining('week', new Date()), activityWith(weekEvents));
-    await click('Events');
-    expect(button('Events').getAttribute('aria-pressed')).toBe('true');
     expect(container.querySelectorAll('[data-testid="work-hours"]')).toHaveLength(5);
     const chips = [...container.querySelectorAll('[aria-label="Show a tag"] button')].map(b => b.textContent);
     expect(chips).toEqual(['All events', 'CS 460', 'Work', 'Untagged']);
@@ -97,13 +108,11 @@ describe('Activity card › Events', () => {
 
   it('names the most booked day', async () => {
     await render(periodContaining('week', new Date()), activityWith(weekEvents));
-    await click('Events');
     expect(text()).toContain('Most booked: Mon, 3h of 8h work hours (38%)');
   });
 
   it('recolors the bars by a picked tag and clears it with All events', async () => {
     await render(periodContaining('week', new Date()), activityWith(weekEvents));
-    await click('Events');
     await click('CS 460');
     expect(legend()).toEqual(['CS 460', 'Other events', 'Work hours']);
     expect(text()).toContain('CS 460: 3h · 60% of event time · 3h in work hours');
@@ -117,7 +126,6 @@ describe('Activity card › Events', () => {
     const week = periodContaining('week', new Date());
     const activity = activityWith([...weekEvents, occurrence(4, 10, 3, 10, 11, [work])], '2026-11-02', '2026-11-15');
     await render(week, activity);
-    await click('Events');
     await click('Work');
     expect(text()).toContain('Work: 1h');
     await render(shiftPeriod(week, -1), activity);
@@ -127,7 +135,6 @@ describe('Activity card › Events', () => {
 
   it('says so when a period has no event time', async () => {
     await render(periodContaining('week', new Date()), activityWith([]));
-    await click('Events');
     expect(text()).toContain('No time in events in this period');
     expect(legend()).toEqual(['In work hours', 'Outside', 'Work hours']);
     expect(container.querySelector('[aria-label="Show a tag"]')).toBeNull();
@@ -137,8 +144,53 @@ describe('Activity card › Events', () => {
     // 130 hours of events in March, under months of ~170 work hours.
     const events = Array.from({ length: 13 }, (_, i) => occurrence(10 + i, 2, i + 2, 8, 18));
     await render(periodContaining('year', new Date()), activityWith(events, '2026-01-01', '2026-12-31'));
-    await click('Events');
     const ticks = [...container.querySelectorAll('.tabular-nums')].map(t => t.textContent);
     expect(ticks).toEqual(['0', '50h', '100h', '150h', '200h']);
+  });
+});
+
+describe('Activity card › Events strip', () => {
+  const cells = () => [...container.querySelectorAll<HTMLElement>('[data-testid="events-cell"]')];
+
+  it('has no Events tab, and shades one cell per bar by its time in events', async () => {
+    await renderActivity(periodContaining('week', new Date()), activityWith(weekEvents));
+    const metrics = [...container.querySelectorAll('[aria-label="Chart metric"] button')].map(b => b.textContent);
+    expect(metrics).toEqual(['Completions', 'Note time']);
+    expect(cells()).toHaveLength(7);
+    expect(cells()[0].getAttribute('title')).toBe('Monday, November 9: 3h in events');
+    // Monday has the most, so the darkest shade; Wednesday has none; Thursday is still to come.
+    expect(cells()[0].style.backgroundColor).toContain('94%');
+    expect(cells()[2].style.backgroundColor).toContain('8%');
+    expect(cells()[3].style.backgroundImage).toContain('repeating-linear-gradient');
+    expect(legend()).toContain('Events');
+    expect(container.querySelector('th:last-child')?.textContent).toBe('Time in events');
+  });
+
+  it('stays under Note time too', async () => {
+    await renderActivity(periodContaining('week', new Date()), activityWith(weekEvents));
+    await click('Note time');
+    expect(cells()).toHaveLength(7);
+  });
+
+  it('names the busiest day and opens Events from the line and from the strip', async () => {
+    const onOpen = vi.fn();
+    await renderActivity(periodContaining('week', new Date()), activityWith(weekEvents), onOpen);
+    expect(text()).toContain('Events: 5h, most on Mon');
+    await click('Open Events ›');
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Open Events"]')!.click());
+    expect(onOpen).toHaveBeenCalledTimes(2);
+  });
+
+  it('counts overlapping events once in the strip', async () => {
+    const overlap = [occurrence(1, 10, 9, 9, 12), occurrence(2, 10, 9, 10, 13)];
+    await renderActivity(periodContaining('week', new Date()), activityWith(overlap));
+    expect(cells()[0].getAttribute('title')).toBe('Monday, November 9: 4h in events');
+  });
+
+  it('hides the strip when the period has no event time', async () => {
+    await renderActivity(periodContaining('week', new Date()), activityWith([]));
+    expect(cells()).toHaveLength(0);
+    expect(legend()).not.toContain('Events');
+    expect(text()).not.toContain('Open Events');
   });
 });

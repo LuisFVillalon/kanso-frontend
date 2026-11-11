@@ -142,6 +142,19 @@ describe('collectTagItems events', () => {
     expect(buildTagBreakdown([item], 'count', all).total).toBe(1);
   });
 
+  it('counts a timed event 24 hours or longer without adding time', () => {
+    const [item] = eventItems([occurrence(8, 'Trip', 21, 15, 18, { end_date: '2026-10-25', ends_at: at(25, 18) })]);
+    expect(item).toMatchObject({ hours: 0, occurrences: 1 });
+  });
+
+  it('leaves out a declined or “Show as free” imported event', () => {
+    const items = eventItems([
+      occurrence(-4, 'Standup', 20, 9, 10, { source: 'google' }),
+      occurrence(-5, 'Declined', 20, 11, 12, { source: 'google', busy: false }),
+    ]);
+    expect(items.map(i => i.title)).toEqual(['Standup']);
+  });
+
   it('clips an event at the range, counting it only in the period it starts in', () => {
     const fromLastWeek = occurrence(3, 'Night shift', 18, 22, 2, { end_date: '2026-10-19', ends_at: at(19, 2) });
     const intoNextWeek = occurrence(4, 'Late show', 25, 23, 1, { end_date: '2026-10-26', ends_at: at(26, 1) });
