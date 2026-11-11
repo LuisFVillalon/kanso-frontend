@@ -188,11 +188,9 @@ export function freeTime(S: SlotState, untilDate: string, beforeDue: DayMinute):
   // Habits are daily: one with a usual time holds it; one without holds its length at the end of the day.
   for (const day of days) {
     if (!S.windowOn(day.date)) continue;
-    for (const h of S.habits) {
-      if (day.date === S.now.date && h.done) continue;
-      if (habitPlannedOn(S, h.id, day.date)) continue;
-      day.gaps = h.time != null ? keep(subtract(day.gaps, [h.time, h.time + h.len])) : holdLate(day.gaps, h.len);
-    }
+    const open = S.habits.filter(h => !(day.date === S.now.date && h.done) && !habitPlannedOn(S, h.id, day.date));
+    for (const h of open) if (h.time != null) day.gaps = keep(subtract(day.gaps, [h.time, h.time + h.len]));
+    for (const h of open) if (h.time == null) day.gaps = holdLate(day.gaps, h.len);
   }
 
   const dueBefore = (t: TaskInput) => t.due.date < beforeDue.date || (t.due.date === beforeDue.date && t.due.min < beforeDue.min);
@@ -227,9 +225,10 @@ export function candidates(days: FreeDay[], len: number): Slot[] {
 }
 
 /**
- * Soonest, one per day, avoiding the due day: slots on days before the due
- * date first, soonest first, at most one per day; then due-day slots
- * (soonest first), then second slots on days already used. Up to `count`.
+ * Soonest, one per day, avoiding the due day: the first slot of each day,
+ * days before the due date first, soonest first (so the due day's first slot
+ * comes after them); then the remaining slots in the same order, so second
+ * slots on earlier days come before extra due-day slots. Up to `count`.
  */
 export function rankSlots(c: Slot[], due: DayMinute, count = SLOT_COUNT): Slot[] {
   const early = (x: Slot) => x.date < due.date;
@@ -314,26 +313,31 @@ export interface HabitToday {
 }
 
 /**
- * Today's open habits, each in the first free gap after now that fits, once
- * open tasks due today are held; a habit with a usual time keeps it.
+ * Today's open habits. A habit keeps its usual time while that time is still
+ * free after now; the rest each go in the first free gap after now that fits,
+ * once the kept usual times and open tasks due today are held.
  */
 export function habitsToday(S: SlotState): HabitToday[] {
   const today = S.now.date;
   let gaps = rawGaps(S, today);
+  const open = S.habits.filter(x => !x.done);
+  const slots = new Map<number, HabitToday>();
+  for (const h of open) {
+    if (h.time == null) continue;
+    const span: Span = [h.time, h.time + h.len];
+    if (!gaps.some(([s, e]) => s <= span[0] && span[1] <= e)) continue;
+    slots.set(h.id, { habit: h, slot: span, fixed: true });
+    gaps = keep(subtract(gaps, span));
+  }
   const dueToday = S.tasks.filter(t => !t.planned && t.due.date === today).sort((a, b) => a.due.min - b.due.min);
   for (const t of dueToday) gaps = holdEarly(gaps, t.len, t.due.min).spans;
-  const out: HabitToday[] = [];
-  for (const h of S.habits.filter(x => !x.done)) {
-    if (h.time != null) {
-      out.push({ habit: h, slot: [h.time, h.time + h.len], fixed: true });
-      gaps = keep(subtract(gaps, [h.time, h.time + h.len]));
-      continue;
-    }
+  for (const h of open) {
+    if (slots.has(h.id)) continue;
     const r = holdEarly(gaps, h.len);
     gaps = r.spans;
-    out.push({ habit: h, slot: r.placed, fixed: false });
+    slots.set(h.id, { habit: h, slot: r.placed, fixed: false });
   }
-  return out;
+  return open.map(h => slots.get(h.id)!);
 }
 
 /** A usual-time option for a habit, and on how many of the next work days it's free. */
@@ -348,8 +352,9 @@ export interface HabitTimeOption {
 
 /**
  * Usual times for a new habit of `len` minutes: the half-hour starts free on
- * the most of the next `n` work days (from tomorrow), earliest first on ties,
- * up to 3 options at least two hours apart.
+ * the most of the next `n` work days (from tomorrow), outside the usual times
+ * of the habits in `S`, earliest first on ties, up to 3 options at least two
+ * hours apart.
  */
 export function habitTime(S: SlotState, len: number, n = 5): { picks: HabitTimeOption[]; dates: string[] } {
   const dates: string[] = [];
@@ -359,7 +364,10 @@ export function habitTime(S: SlotState, len: number, n = 5): { picks: HabitTimeO
   if (dates.length === 0) return { picks: [], dates };
   const lo = Math.min(...dates.map(d => S.windowOn(d)![0]));
   const hi = Math.max(...dates.map(d => S.windowOn(d)![1]));
-  const gapsByDate = new Map(dates.map(d => [d, rawGaps(S, d, { ignoreNow: true })]));
+  const gapsByDate = new Map(dates.map(d => [d, S.habits.reduce(
+    (g, h) => (h.time == null || habitPlannedOn(S, h.id, d) ? g : keep(subtract(g, [h.time, h.time + h.len]))),
+    rawGaps(S, d, { ignoreNow: true }),
+  )]));
   const scores: HabitTimeOption[] = [];
   for (let t = Math.ceil(lo / 30) * 30; t + len <= hi; t += 30) {
     let free = 0;

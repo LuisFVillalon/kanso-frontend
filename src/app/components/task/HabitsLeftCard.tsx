@@ -10,7 +10,6 @@ import type { Habit } from '@/app/types/habit';
 import type { WorkBlock } from '@/app/types/workBlock';
 import { formatHabitGoal } from '@/app/utils/habitLabels';
 import { habitsToday, type Span } from '@/app/utils/slotSuggest';
-import { habitConflicts } from '@/app/utils/planConflicts';
 import { clock } from '@/app/utils/slotLabels';
 import { workBlockBody } from '@/app/utils/workBlockPlans';
 import Callout from './Callout';
@@ -38,21 +37,16 @@ const listPlans = (items: { title: string; start: number }[]) => {
 const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onToggleHabit }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [justPlanned, setJustPlanned] = useState<{ blocks: WorkBlock[]; items: { title: string; start: number }[] } | null>(null);
+  const [justPlanned, setJustPlanned] = useState<{ block: WorkBlock; title: string; start: number }[] | null>(null);
   const live = habits.filter(h => !h.archived_at);
   if (live.length === 0) return null;
 
   const today = planner?.today ?? null;
   const planned = new Map<number, WorkBlock>();
   for (const b of planner?.workBlocks ?? []) if (b.habit_id != null && b.date === today) planned.set(b.habit_id, b);
-  // A habit whose usual time an event takes today is suggested elsewhere today, like the brief's callout.
-  const taken = new Set(planner ? habitConflicts(planner.state, live, planner.events, planner.workBlocks).map(c => c.habit.id) : []);
   const suggested = new Map<number, Span | null>(
     planner
-      ? habitsToday({
-        ...planner.state,
-        habits: planner.state.habits.filter(h => !planned.has(h.id)).map(h => (taken.has(h.id) ? { ...h, time: null } : h)),
-      }).map(x => [x.habit.id, x.slot])
+      ? habitsToday({ ...planner.state, habits: planner.state.habits.filter(h => !planned.has(h.id)) }).map(x => [x.habit.id, x.slot])
       : live.map(h => {
         const t = minutesOf(h.planned_time);
         return [h.id, t === null ? null : [t, t + planMinutes(h.estimated_time)] as Span];
@@ -64,19 +58,18 @@ const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onTogg
     if (!today || list.length === 0) return;
     setBusy(true);
     setError(null);
-    const made: WorkBlock[] = [];
-    const items: { title: string; start: number }[] = [];
+    const made: { block: WorkBlock; title: string; start: number }[] = [];
     try {
       for (const h of list) {
         const slot = suggested.get(h.id)!;
-        made.push(await createWorkBlock(workBlockBody({ habitId: h.id }, { date: today, start: slot[0], end: slot[1] })));
-        items.push({ title: h.title, start: slot[0] });
+        const block = await createWorkBlock(workBlockBody({ habitId: h.id }, { date: today, start: slot[0], end: slot[1] }));
+        made.push({ block, title: h.title, start: slot[0] });
       }
-      if (list.length > 1) setJustPlanned({ blocks: made, items });
+      if (list.length > 1) setJustPlanned(made);
     } catch (err) {
       console.error('Planning habits failed:', err);
       setError(describeError(err, "Couldn't put that on your calendar. Please try again."));
-      if (made.length > 1) setJustPlanned({ blocks: made, items });
+      if (made.length > 1) setJustPlanned(made);
     } finally {
       if (made.length) notifyWorkBlocksChanged();
       setBusy(false);
@@ -87,12 +80,17 @@ const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onTogg
     if (!justPlanned) return;
     setBusy(true);
     setError(null);
+    let left = justPlanned;
     try {
-      for (const b of justPlanned.blocks) await deleteWorkBlock(b.id);
+      for (const p of justPlanned) {
+        await deleteWorkBlock(p.block.id);
+        left = left.filter(x => x !== p);
+      }
       setJustPlanned(null);
     } catch (err) {
       console.error('Undoing the habit plans failed:', err);
       setError(describeError(err, "Couldn't undo that. Please try again."));
+      setJustPlanned(left.length ? left : null);
     } finally {
       notifyWorkBlocksChanged();
       setBusy(false);
@@ -126,7 +124,7 @@ const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onTogg
       {justPlanned && (
         <div className="mb-2">
           <Callout tone="info" role="status">
-            Planned {listPlans(justPlanned.items)}. They&apos;re on your calendar.
+            Planned {listPlans(justPlanned)}. They&apos;re on your calendar.
             <span className="mt-1.5 flex flex-wrap gap-2">
               <button type="button" onClick={undo} disabled={busy} className="font-semibold text-accent hover:underline">Undo</button>
               <a href="/calendar" className="font-semibold text-accent hover:underline">Change times</a>

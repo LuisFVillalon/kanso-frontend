@@ -93,6 +93,26 @@ describe('Habits left today', () => {
     expect(container.textContent).not.toContain('Planned Read 20 pages');
   });
 
+  it('Undo after a failed delete only retries the blocks still there', async () => {
+    await act(async () => root.render(<HabitsLeftCard habits={HABITS} planner={plannerWith()} />));
+    await act(async () => buttonByText('Plan my habits')!.click());
+    api.deleteWorkBlock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => buttonByText('Undo')!.click());
+    expect(container.textContent).toContain("Couldn't undo that.");
+    expect(container.textContent).toContain('Planned Spanish practice at 1:00 PM.');
+    await act(async () => buttonByText('Undo')!.click());
+    expect(api.deleteWorkBlock.mock.calls.map(c => c[0])).toEqual([101, 102, 102]);
+    expect(container.textContent).not.toContain('Planned Spanish practice');
+  });
+
+  it('suggests a free time after now for a habit whose usual time has passed', async () => {
+    const habits = [habit(2, 'Read 20 pages', { planned_time: '09:00' })];
+    await act(async () => root.render(<HabitsLeftCard habits={habits} planner={plannerWith({ habits })} />));
+    expect(container.querySelector('li')!.textContent).toContain('11:30 AM');
+    await act(async () => buttonByText('Plan my habits')!.click());
+    expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 2, start_time: '11:30', end_time: '12:00' }));
+  });
+
   it('shows a planned habit as planned, and a usual time as its chip', async () => {
     const habits = [habit(2, 'Read 20 pages', { planned_time: '18:00' }), habit(3, 'Spanish practice')];
     const planner = plannerWith({ habits, workBlocks: [block({ id: 7, habit_id: 3, title: 'Spanish practice', start_time: '17:00', end_time: '17:30' })] });
@@ -113,6 +133,30 @@ describe('Plans that lost their time', () => {
     expect(container.textContent).toContain('Office hours takes 1:00 PM today, your usual time for Spanish practice. Today only: 11:30 AM – 12:00 PM?');
     await act(async () => buttonByText('Do it at 11:30 AM')!.click());
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 3, date: '2026-11-11', start_time: '11:30', end_time: '12:00' }));
+  });
+
+  it('offers the nearest free time that day for a habit block an event now covers', async () => {
+    const office = ev('Office hours', '2026-11-11', '13:00:00', '13:45:00');
+    const workBlocks = [block({ id: 61, habit_id: 3, title: 'Spanish practice', start_time: '13:00', end_time: '13:30' })];
+    const planner = plannerWith({ events: [...EVENTS, office], workBlocks });
+    await act(async () => root.render(<PlanConflictCallouts planner={planner} tasks={[]} habits={HABITS} />));
+    expect(container.textContent).toContain('Office hours takes 1:00 PM today, your plan for Spanish practice. Today only: 11:30 AM – 12:00 PM?');
+    await act(async () => buttonByText('Do it at 11:30 AM')!.click());
+    expect(api.updateWorkBlock).toHaveBeenCalledWith(61, { date: '2026-11-11', start_time: '11:30', end_time: '12:00' });
+    await act(async () => buttonByText('Skip')!.click());
+    expect(container.textContent).not.toContain('Office hours takes');
+  });
+
+  it("doesn't ask about a completed task's block", async () => {
+    const tasks = [{
+      id: 9, title: 'Read ch. 7', description: '', completed: true, priority: null, due_date: '2026-11-16', due_time: '10:00',
+      tags: [], created_date: '', completed_date: null, estimated_time: 1,
+    } as Task];
+    const advisor = ev('Advisor meeting', '2026-11-12', '12:00:00', '12:30:00');
+    const workBlocks = [block({ id: 60, task_id: 9, title: 'Read ch. 7', date: '2026-11-12', start_time: '12:00', end_time: '13:00' })];
+    const planner = plannerWith({ habits: [], tasks, events: [...EVENTS, advisor], workBlocks });
+    await act(async () => root.render(<PlanConflictCallouts planner={planner} tasks={tasks} habits={[]} />));
+    expect(container.querySelector('[data-plan-conflicts]')).toBeNull();
   });
 
   it('offers the nearest free time for a task block an event now covers, and Keep it stops asking', async () => {

@@ -575,6 +575,34 @@ describe('WeekView', { timeout: 30_000 }, () => {
       expect(ghost()).toBeNull();
     });
 
+    it('offers a ghost on the same day for a habit block an event now covers', async () => {
+      mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+        ...activityFor(start, end),
+        events: [occurrence()],
+        work_blocks: [workBlock({ id: 9, task_id: null, habit_id: 5, title: 'Run', date: '2026-10-21', start_time: '14:00', end_time: '14:30' })],
+      }));
+      mocks.updateWorkBlock.mockReset().mockResolvedValue(workBlock());
+      await render();
+      expect(button('Habit block: Run, 2:00 PM – 2:30 PM, during CS 460 Lecture')).toBeTruthy();
+      const ghost = container.querySelector<HTMLElement>('[data-ghost-block]')!;
+      expect(ghost.textContent).toContain('Move to 3:00 PM?');
+      expect(ghost.closest('[data-day-column]')!.getAttribute('data-day-column')).toBe('3');
+      await act(async () => [...ghost.querySelectorAll('button')].find(b => b.textContent === 'Move')!.click());
+      expect(mocks.updateWorkBlock).toHaveBeenCalledWith(9, { date: '2026-10-21', start_time: '15:00', end_time: '15:30' });
+    });
+
+    it('neither rings nor re-suggests a block of a completed task', async () => {
+      mocks.tasks = [task({ id: 3, title: 'Review notes', due_date: '2026-10-23', due_time: '14:30', estimated_time: 1, completed: true })];
+      mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+        ...activityFor(start, end),
+        events: [occurrence()],
+        work_blocks: [workBlock({ id: 8, task_id: 3, title: 'Review notes', date: '2026-10-21', start_time: '14:30', end_time: '15:30' })],
+      }));
+      await render();
+      expect(container.querySelector('button[aria-label^="Work on: Review notes"]')!.getAttribute('aria-label')).not.toContain('during');
+      expect(container.querySelector('[data-ghost-block]')).toBeNull();
+    });
+
     it("keeps labels off each other: a Due pill sits above its line, and a clashing block leaves room for its badge", async () => {
       mocks.tasks = [task({ id: 3, title: 'Lab report', due_date: '2026-10-21', due_time: '14:00' })];
       mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({

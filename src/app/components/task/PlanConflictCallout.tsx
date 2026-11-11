@@ -26,7 +26,8 @@ interface PlanConflictCalloutsProps {
  * In the Daily brief: one warning per plan a busy event now covers. A task's
  * kept block offers the nearest free time (Move), the free-time strip (Other
  * times) or Keep it; a habit whose usual time is taken today offers today's
- * first free time (a block for today only, its usual time unchanged) or Skip.
+ * first free time (a block for today only, its usual time unchanged) or Skip,
+ * and a habit's block offers the nearest free time that day or Skip.
  * Nothing moves without a tap.
  */
 const PlanConflictCallouts: React.FC<PlanConflictCalloutsProps> = ({ planner, tasks, habits }) => {
@@ -91,6 +92,25 @@ const PlanConflictCallouts: React.FC<PlanConflictCalloutsProps> = ({ planner, ta
         }
         const span = blockSpan(c.block);
         const s = c.suggestion;
+        if (c.kind === 'habitBlock') {
+          const day = c.block.date === today ? 'today' : dayName(c.block.date, today);
+          return (
+            <Callout key={c.key} tone="warning">
+              <b>{c.event.title}</b> takes {clock(span.start)} {day}, your plan for <b>{c.block.title}</b>.
+              {s
+                ? <> {c.block.date === today ? 'Today' : day} only: <b>{timeRange(s.start, s.end)}</b>?</>
+                : ' Nothing else is free that day.'}
+              <span className="mt-1.5 flex flex-wrap gap-2">
+                {s && (
+                  <button type="button" disabled={busy === c.key} onClick={() => moveBlock(c, s)} className="btn btn-primary text-xs px-2 py-1">
+                    Do it at {clock(s.start)}
+                  </button>
+                )}
+                <button type="button" onClick={() => keep(c.key)} className="btn btn-ghost text-xs px-2 py-1">Skip</button>
+              </span>
+            </Callout>
+          );
+        }
         return (
           <Callout key={c.key} tone="warning">
             <b>{c.event.title}</b> now covers part of your plan for <b>{c.block.title}</b> ({dayName(c.block.date, today)}, {timeRange(span.start, span.end)}).

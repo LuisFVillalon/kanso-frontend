@@ -11,6 +11,7 @@ import type { WorkBlock } from '@/app/types/workBlock';
 import { blockSpan, dueMinutesOf, minutesOf, planMinutes } from '@/app/hooks/useSlotPlanner';
 import { occurrenceKey, occurrenceSpanOn, takesTime } from './eventOccurrences';
 import { toLocalDateStr } from './dateUtils';
+import { blockIsOpen } from './weekLayout';
 import { habitsToday, planRange, resuggest, subtract, type Slot, type SlotState } from './slotSuggest';
 
 /** The first live, busy event overlapping `span` on `date`. */
@@ -25,11 +26,12 @@ function clashingEvent(events: EventOccurrence[], date: string, span: { start: n
 
 /** A kept block a busy event now covers, and where it could go instead. */
 export interface BlockConflict {
-  kind: 'task';
+  /** A task's block, or a habit's (which only moves within its day). */
+  kind: 'task' | 'habitBlock';
   key: string;
   block: WorkBlock;
   event: EventOccurrence;
-  /** The nearest free slot before the deadline; null when none. */
+  /** The nearest free slot: before the task's deadline, or on the habit block's day. Null when none. */
   suggestion: Slot | null;
 }
 
@@ -48,24 +50,31 @@ const blockKey = (b: WorkBlock, e: EventOccurrence) =>
   `block|${b.id}|${b.date}|${b.start_time}|${b.end_time}|${occurrenceKey(e)}|${e.start_time}|${e.end_time}`;
 
 /**
- * Each task work block from now on that a busy event overlaps, with the free
- * slot nearest its time (same day first) before its task is due.
+ * Each work block from now on that a busy event overlaps, with the free slot
+ * nearest its time: for a task's block, same day first and before the task
+ * is due; for a habit's block, on the same day. Blocks of completed or
+ * archived tasks are left alone.
  */
 export function blockConflicts(state: SlotState, workBlocks: WorkBlock[], events: EventOccurrence[], tasks: Task[]): BlockConflict[] {
   const out: BlockConflict[] = [];
-  const byId = new Map(tasks.map(t => [t.id, t]));
   for (const b of workBlocks) {
-    if (b.task_id == null) continue;
+    if (!blockIsOpen(b, tasks)) continue;
     const span = blockSpan(b);
     if (b.date < state.now.date || (b.date === state.now.date && span.end <= state.now.min)) continue;
     const event = clashingEvent(events, b.date, span);
     if (!event) continue;
-    const task = byId.get(b.task_id);
-    if (task?.completed) continue;
-    const range = planRange(state.now, task?.due_date ? toLocalDateStr(task.due_date) : null, task ? dueMinutesOf(task) : null);
-    const others: SlotState = { ...state, blocks: state.blocks.filter(x => !(x.taskId === b.task_id && x.date === b.date && x.start === span.start)) };
-    const suggestion = range ? resuggest(others, span.end - span.start, range, { date: b.date, start: span.start }, 1)[0] ?? null : null;
-    out.push({ kind: 'task', key: blockKey(b, event), block: b, event, suggestion });
+    const task = tasks.find(t => t.id === b.task_id);
+    const range = task
+      ? planRange(state.now, task.due_date ? toLocalDateStr(task.due_date) : null, dueMinutesOf(task))
+      : planRange(state.now, b.date, null);
+    const others: SlotState = {
+      ...state,
+      blocks: state.blocks.filter(x => !(x.taskId === b.task_id && x.habitId === b.habit_id && x.date === b.date && x.start === span.start)),
+      habits: task ? state.habits : state.habits.filter(h => h.id !== b.habit_id),
+    };
+    const nearest = range ? resuggest(others, span.end - span.start, range, { date: b.date, start: span.start }, 1)[0] ?? null : null;
+    const suggestion = nearest && (task || nearest.date === b.date) ? nearest : null;
+    out.push({ kind: task ? 'task' : 'habitBlock', key: blockKey(b, event), block: b, event, suggestion });
   }
   return out;
 }

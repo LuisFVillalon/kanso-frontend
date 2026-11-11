@@ -145,9 +145,49 @@ describe('habitsToday', () => {
     const out = habitsToday(sample({ habits }));
     expect(out[0]).toMatchObject({ slot: [H(18), H(18, 30)], fixed: true });
   });
+
+  it("keeps a usual time out of the gap given to a habit listed before it", () => {
+    const habits: HabitInput[] = [
+      { id: 3, title: 'Spanish practice', len: 30, time: null, done: false },
+      { id: 2, title: 'Read 20 pages', len: 30, time: H(9), done: false },
+    ];
+    const out = habitsToday(sample({ now: { date: '2026-11-11', min: H(8, 50) }, events: [], tasks: [], habits }));
+    expect(out.map(h => [h.habit.id, h.slot, h.fixed])).toEqual([[3, [H(9, 30), H(10)], false], [2, [H(9), H(9, 30)], true]]);
+  });
+
+  it('moves a habit whose usual time has passed to the first free gap after now', () => {
+    const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(9), done: false }];
+    const out = habitsToday(sample({ now: { date: '2026-11-11', min: H(14) }, events: [], tasks: [], habits }));
+    expect(out[0]).toMatchObject({ slot: [H(14), H(14, 30)], fixed: false });
+  });
+
+  it('moves a habit whose usual time an event takes', () => {
+    const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(12), done: false }];
+    const out = habitsToday(sample({ habits, tasks: [] }));
+    expect(out[0]).toMatchObject({ slot: [H(11, 30), H(12)], fixed: false });
+  });
+});
+
+describe('freeTime habit holds', () => {
+  it('holds a usual time and the end of the day for a habit without one, whatever their order', () => {
+    const habits: HabitInput[] = [
+      { id: 3, title: 'Spanish practice', len: 30, time: null, done: false },
+      { id: 2, title: 'Read 20 pages', len: 30, time: H(18, 30), done: false },
+    ];
+    const days = freeTime(sample({ events: [], tasks: [], habits }), '2026-11-12', { date: '2026-11-13', min: 0 });
+    expect(days.find(d => d.date === '2026-11-12')!.gaps).toEqual([[H(9), H(18)]]);
+  });
 });
 
 describe('habitTime (usual time for a new habit)', () => {
+  it("leaves out the times other habits hold", () => {
+    const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(9), done: false }];
+    const { picks } = habitTime(sample({ habits }), 30);
+    expect(picks.length).toBeGreaterThan(0);
+    expect(picks.every(p => p.end <= H(9) || p.start >= H(9, 30))).toBe(true);
+  });
+
+
   it('picks the starts free on the most of the next 5 work days, 2 hours apart', () => {
     const { picks } = habitTime(sample(), 30);
     expect(picks.map(p => [p.start, p.free, p.of])).toEqual([[H(9), 4, 5], [H(12, 30), 4, 5], [H(16), 4, 5]]);

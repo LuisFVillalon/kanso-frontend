@@ -58,7 +58,7 @@ export interface TimedEvent {
   drawEndMin: number;
   taskId?: number;
   noteId?: number;
-  /** Planned tasks only: whether the task has since been completed. */
+  /** Planned tasks and work blocks: whether the task has since been completed (or, for a work block, archived). */
   completed?: boolean;
   /** Notes only: minutes actually spent editing within the block's range. */
   workedMin?: number;
@@ -154,11 +154,18 @@ const drawExtent = (startMin: number, endMin: number, minLength = MIN_BLOCK_MINU
   return { drawStartMin, drawEndMin };
 };
 
-type ScheduledTask = Pick<Task, 'id' | 'title' | 'due_date' | 'due_time' | 'estimated_time' | 'completed' | 'tags'>;
+type ScheduledTask = Pick<Task, 'id' | 'title' | 'due_date' | 'due_time' | 'estimated_time' | 'completed' | 'tags' | 'archived_at'>;
+
+/** Whether a work block belongs to an open task (`tasks` holds the active ones), or to a habit. */
+export const blockIsOpen = (b: Pick<WorkBlock, 'task_id'>, tasks: Pick<Task, 'id' | 'completed' | 'archived_at'>[]): boolean => {
+  if (b.task_id == null) return true;
+  const task = tasks.find(t => t.id === b.task_id);
+  return !!task && !task.completed && !task.archived_at;
+};
 
 interface BuildWeekEventsInput {
   weekStart: Date;
-  /** Tasks with a due date; those due outside the week are ignored. */
+  /** The active tasks: those due in the week are placed, and a work block only clashes while its task is open. */
   scheduledTasks: ScheduledTask[];
   completedTasks: Pick<ActivityTask, 'id' | 'title' | 'completed_date' | 'tags'>[];
   noteSessions: ActivityNoteSession[];
@@ -270,7 +277,7 @@ export function buildWeekEvents({
     timed.push({
       key: `work-${block.id}`, kind: 'work', title: block.title, dayIndex, startMin, endMin,
       ...drawExtent(startMin, endMin), taskId: block.task_id ?? undefined, habitId: block.habit_id ?? undefined,
-      tags: block.tags, workBlock: block,
+      tags: block.tags, workBlock: block, completed: !blockIsOpen(block, scheduledTasks),
     });
   }
 
