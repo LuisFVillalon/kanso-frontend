@@ -17,6 +17,7 @@ import {
   occurrencesStartingOn,
   occurrenceSpanOn,
   spansOverlap,
+  takesTime,
   timeToMinutes,
 } from '@/app/utils/eventOccurrences';
 import { eventColor } from '@/app/utils/events';
@@ -91,6 +92,8 @@ const BriefSchedule: React.FC<BriefScheduleProps> = ({ debrief, profile, now = n
   });
   const listed = [...events].sort((a, b) => Number(b.all_day) - Number(a.all_day) || a.starts_at.localeCompare(b.starts_at));
   const live = timed.filter(t => !t.event.archived);
+  // What takes up time: not an event that leaves it free (declined, or "Show as free" in Google).
+  const busy = live.filter(t => takesTime(t.event));
 
   const starts = [...timed.map(t => t.span.start), ...(workSpan ? [workSpan.start] : [])];
   const ends = [...timed.map(t => t.span.end), ...(workSpan ? [workSpan.end] : [])];
@@ -102,18 +105,18 @@ const BriefSchedule: React.FC<BriefScheduleProps> = ({ debrief, profile, now = n
   const current = live.find(t => t.span.start <= nowMinutes && nowMinutes < t.span.end);
   const next = live.find(t => t.span.start > nowMinutes);
   const tasksAtTime = debrief.due_today_tasks.filter(t => t.due_time);
-  const clashes = taskClashes(tasksAtTime, live);
+  const clashes = taskClashes(tasksAtTime, busy);
   const clashIds = new Set(clashes.map(c => c.task.id));
   const outside = workSpan
-    ? live.filter(t => t.span.start < workSpan.start || t.span.end > workSpan.end).map(t => ({
+    ? busy.filter(t => t.span.start < workSpan.start || t.span.end > workSpan.end).map(t => ({
       ...t,
       fully: t.span.end <= workSpan.start || t.span.start >= workSpan.end,
     }))
     : [];
   const overlaps: [TimedEvent, TimedEvent][] = [];
-  live.forEach((a, i) => live.slice(i + 1).forEach(b => { if (spansOverlap(a.span, b.span)) overlaps.push([a, b]); }));
+  busy.forEach((a, i) => busy.slice(i + 1).forEach(b => { if (spansOverlap(a.span, b.span)) overlaps.push([a, b]); }));
 
-  const liveMinutes = live.reduce((sum, t) => sum + t.span.end - t.span.start, 0);
+  const liveMinutes = busy.reduce((sum, t) => sum + t.span.end - t.span.start, 0);
   const liveCount = events.filter(e => !e.archived).length;
   const axis: number[] = [];
   for (let m = lo; m <= hi; m += 120) axis.push(m);

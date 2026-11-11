@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { EventOccurrence } from '@/app/types/event';
-import { eventFormWarnings, blankEventForm } from './events';
+import { eventFormWarnings, blankEventForm, importedEventForm } from './events';
+import { takesTime } from './eventOccurrences';
 import { buildWeekEvents, startOfWeek } from './weekLayout';
-import { googleEventLink, isImportedEvent, tagSignature } from './importedEvents';
+import { googleEventLink, isImportedEvent, isImportedEventId, repeatsOccurrence, tagSignature } from './importedEvents';
 
 const occurrence = (overrides: Partial<EventOccurrence> = {}): EventOccurrence => ({
   event_id: 5, occurrence_date: '2026-11-11', title: 'Dentist', description: null, tags: [], all_day: false,
@@ -58,6 +59,62 @@ describe('imported events count like kanso events', () => {
       others: [google({ title: 'Team sync' })],
     });
     expect(warnings).toContain('Overlaps Team sync.');
+  });
+});
+
+describe('repeatsOccurrence', () => {
+  it('reads a kanso event by its repeat days and an imported one by `repeating`', () => {
+    expect(repeatsOccurrence(occurrence({ repeat_days: [1, 3] }))).toBe(true);
+    expect(repeatsOccurrence(occurrence())).toBe(false);
+    expect(repeatsOccurrence(google({ repeating: true }))).toBe(true);
+    expect(repeatsOccurrence(google({ repeating: false }))).toBe(false);
+    expect(repeatsOccurrence(google())).toBe(false);
+  });
+});
+
+describe('isImportedEventId', () => {
+  it('is true for the negative ids imported events carry', () => {
+    expect(isImportedEventId(-5)).toBe(true);
+    expect(isImportedEventId(5)).toBe(false);
+  });
+});
+
+describe('importedEventForm', () => {
+  it('holds an instance as a one-off on its own day, Google keeping how it repeats', () => {
+    expect(importedEventForm(google({ repeating: true, description: 'Room 4', start_time: '10:00:00', end_time: '11:00:00' }))).toMatchObject({
+      title: 'Dentist', description: 'Room 4', date: '2026-11-11', startTime: '10:00', endTime: '11:00', repeat: 'none',
+    });
+  });
+});
+
+describe('a Google event that leaves its time free (declined, or "Show as free")', () => {
+  const free = () => google({ title: 'Team sync', busy: false });
+
+  it('takes no time, unlike a busy or kanso one', () => {
+    expect(takesTime(free())).toBe(false);
+    expect(takesTime(google({ busy: true }))).toBe(true);
+    expect(takesTime(occurrence())).toBe(true);
+    expect(takesTime(occurrence({ archived: true }))).toBe(false);
+  });
+
+  it('still shows on the week but rings no planned task', () => {
+    const weekStart = startOfWeek(new Date(2026, 10, 11));
+    const task = { id: 1, title: 'Essay', completed: false, due_date: '2026-11-11', due_time: '10:30:00', estimated_time: 1, tags: [] };
+    const { timed } = buildWeekEvents({
+      weekStart, scheduledTasks: [task] as never, completedTasks: [], noteSessions: [], habitCompletions: [],
+      events: [free()], now: new Date(2026, 10, 9),
+    });
+    expect(timed.some(e => e.kind === 'event')).toBe(true);
+    expect(timed.find(e => e.kind === 'task')?.clashWith).toBeUndefined();
+  });
+
+  it("isn't an overlap in the event form", () => {
+    const warnings = eventFormWarnings(blankEventForm({ date: '2026-11-11', startTime: '10:30' }), {
+      restDays: [],
+      windowOn: () => [0, 24 * 60],
+      others: [free()],
+    });
+    expect(warnings).not.toContain('Overlaps Team sync.');
   });
 });
 

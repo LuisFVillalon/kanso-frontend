@@ -23,7 +23,7 @@ import type { EditTaskForm, LinkedRemoveMode } from '@/app/types/task';
 import { linkedTaskIndex, taskToEditForm } from '@/app/utils/taskUtils';
 import RemoveLinkedTasksDialog, { RemovedBranch } from './RemoveLinkedTasksDialog';
 import { SlippedTaskActionButtons, ReschedulePicker, isStillAhead } from './SlippedTaskActions';
-import { occurrenceKey, occurrenceMinutesOn, occurrencesStartingOn } from '@/app/utils/eventOccurrences';
+import { occurrenceKey, occurrenceMinutesOn, occurrencesStartingOn, takesTime } from '@/app/utils/eventOccurrences';
 import { useEventsVersion } from '@/app/hooks/useEventsVersion';
 import type { EventOccurrence } from '@/app/types/event';
 import BriefSchedule from './BriefSchedule';
@@ -499,8 +499,10 @@ function collectCompletedItems(debrief: DailyDebriefReport): CompletedItem[] {
   }
 
   // Only events that started today, so last night's event past midnight
-  // isn't logged again; all-day events have no minutes to log.
+  // isn't logged again; all-day events have no minutes to log, nor do ones
+  // that left the time free (declined, or "Show as free" in Google).
   for (const event of occurrencesStartingOn(debrief.passed_events_today, debrief.report_date)) {
+    if (event.busy === false) continue;
     const minutes = occurrenceMinutesOn(event, debrief.report_date);
     if (minutes <= 0) continue;
     items.push({
@@ -762,11 +764,12 @@ function TimeByTagCard({ tasks, habits, events, today }: { tasks: Task[]; habits
   const todayStr = toLocalDateStr(new Date());
   const todayTasks = tasks.filter(t => t.due_date && toLocalDateStr(t.due_date) === todayStr);
 
-  // Today's events count in their tags' time, archived (cancelled) ones left out.
+  // Today's events count in their tags' time, archived (cancelled) ones and
+  // ones that leave the time free left out.
   const todayItems = [
     ...todayTasks.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0, title: t.title })),
     ...habits.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0, title: h.title })),
-    ...events.filter(e => !e.archived).map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, today) / 60, title: e.title })),
+    ...events.filter(takesTime).map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, today) / 60, title: e.title })),
   ];
 
   const buckets = bucketByTag(todayItems, item => item.value);

@@ -80,6 +80,12 @@ export function formatEventMinutes(minutes: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
+/**
+ * Whether an occurrence takes up time, for clashes, free time and time spent:
+ * not one archived, nor one Google says leaves the time free (see `busy`).
+ */
+export const takesTime = (o: Pick<EventOccurrence, 'archived' | 'busy'>): boolean => !o.archived && o.busy !== false;
+
 /** Whether two spans in minutes overlap (touching ends don't). */
 export const spansOverlap = (a: { start: number; end: number }, b: { start: number; end: number }) =>
   a.start < b.end && b.start < a.end;

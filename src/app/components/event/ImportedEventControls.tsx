@@ -2,13 +2,16 @@
 
 import React, { useId, useState } from 'react';
 import { ExternalLink, Loader2, Tags } from 'lucide-react';
+import { useHoldPopover } from '@/app/components/common/AnchoredPopover';
 import { useTagsContext } from '@/app/context/TagsContext';
 import { useToast } from '@/app/context/ToastContext';
+import { occurrenceDayLabel } from '@/app/hooks/useEventActions';
 import { notifyEventsChanged } from '@/app/hooks/useEventsVersion';
 import { describeError, updateGoogleEventTags } from '@/app/lib/backend-api';
-import type { EventOccurrence } from '@/app/types/event';
+import type { EditScope, EventOccurrence } from '@/app/types/event';
 import type { Tag } from '@/app/types/task';
-import { googleEventLink, tagSignature } from '@/app/utils/importedEvents';
+import { googleEventLink, IMPORTED_EDIT_NOTE, repeatsOccurrence, tagSignature } from '@/app/utils/importedEvents';
+import EventScopeDialog from './EventScopeDialog';
 import EventTagPicker, { toggleTag } from './EventTagPicker';
 
 /** A link to the event in Google Calendar, when Google gave one. */
@@ -29,10 +32,13 @@ export const OpenInGoogleLink: React.FC<{ occurrence: EventOccurrence }> = ({ oc
 };
 
 /**
- * What can be done with an imported event: pick its own kanso tags or return
- * it to its calendar's default. Every saved change tells the calendars and
- * reports to reload. Picks stay on screen until that reload brings them back,
- * and one saves at a time so they can't land out of order.
+ * An imported event's own kanso tags: pick them or return it to its
+ * calendar's default. An instance of a repeating Google event first asks which
+ * instances the change is for (this one, this and following, or all), as
+ * kanso's repeating events do; a one-off one saves straight away. Every saved
+ * change tells the calendars and reports to reload. Picks stay on screen until
+ * that reload brings them back, and one saves at a time so they can't land out
+ * of order.
  */
 export const ImportedEventTagPicker: React.FC<{ occurrence: EventOccurrence }> = ({ occurrence: o }) => {
   const labelId = useId();
@@ -40,17 +46,28 @@ export const ImportedEventTagPicker: React.FC<{ occurrence: EventOccurrence }> =
   const showToast = useToast();
   const [draft, setDraft] = useState<{ baseline: string; tags: Tag[] } | null>(null);
   const [saving, setSaving] = useState(false);
+  // The change waiting on "which events?": new tags, or null for the calendar default.
+  const [asking, setAsking] = useState<{ next: Tag[] | null } | null>(null);
+  // Keep the event card open while its question is.
+  useHoldPopover(asking !== null);
 
   const baseline = tagSignature(o.tags);
   const selected = draft?.baseline === baseline ? draft.tags : o.tags;
   // A tag archived since it was given still has to show, so it can come off.
   const options = [...tags, ...selected.filter(s => !tags.some(t => t.id === s.id))];
 
-  const save = async (next: Tag[] | null) => {
+  const change = (next: Tag[] | null) => {
+    if (repeatsOccurrence(o)) setAsking({ next });
+    else void save(next);
+  };
+
+  const save = async (next: Tag[] | null, scope?: EditScope) => {
     setDraft(next ? { baseline, tags: next } : null);
     setSaving(true);
     try {
-      await updateGoogleEventTags(o.event_id, (next ?? []).map(t => t.id), next === null);
+      const ids = (next ?? []).map(t => t.id);
+      // A one-off event's tags have no scope to send.
+      await (scope ? updateGoogleEventTags(o.event_id, ids, next === null, scope) : updateGoogleEventTags(o.event_id, ids, next === null));
       notifyEventsChanged();
     } catch (err) {
       console.error('[ImportedEventTagPicker]', err);
@@ -70,13 +87,13 @@ export const ImportedEventTagPicker: React.FC<{ occurrence: EventOccurrence }> =
           tags={options}
           selected={selected}
           disabled={saving}
-          onToggle={tag => void save(toggleTag(selected, tag))}
+          onToggle={tag => change(toggleTag(selected, tag))}
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <button
           type="button"
-          onClick={() => void save(null)}
+          onClick={() => change(null)}
           disabled={saving}
           className="text-xs font-medium hover:underline disabled:opacity-60"
           style={{ color: 'var(--tm-accent)' }}
@@ -89,13 +106,23 @@ export const ImportedEventTagPicker: React.FC<{ occurrence: EventOccurrence }> =
           </span>
         )}
       </div>
+      {asking && (
+        <EventScopeDialog
+          action="edit"
+          title={o.title}
+          dateLabel={occurrenceDayLabel(o)}
+          repeating
+          onConfirm={scope => { const { next } = asking; setAsking(null); void save(next, scope); }}
+          onClose={() => setAsking(null)}
+        />
+      )}
     </div>
   );
 };
 
 /** The note under an imported event's controls. */
 export const ImportedEventNote: React.FC = () => (
-  <p className="text-[11px] text-text-muted">Tags stay in kanso. Change the event itself in Google Calendar.</p>
+  <p className="text-[11px] text-text-muted">{IMPORTED_EDIT_NOTE}</p>
 );
 
 /** The day report's fold-out for an imported event: "Tags", which opens its picker, beside its link to Google. */

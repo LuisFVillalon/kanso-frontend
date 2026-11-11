@@ -104,8 +104,9 @@ const eventRange = ({ occurrence }: EventPlacement): string => {
   return `${time(occurrence.start_time)} – ${time(occurrence.end_time)}`;
 };
 
-/** ", past" / ", archived" for an event's screen-reader label. */
-const eventState = ({ past, archived }: EventPlacement) => (archived ? ', archived' : past ? ', past' : '');
+/** ", past" / ", archived" for an event's screen-reader label, and ", free" when it leaves the time free. */
+const eventState = ({ past, archived, occurrence }: EventPlacement) =>
+  `${archived ? ', archived' : past ? ', past' : ''}${occurrence.busy === false ? ', free' : ''}`;
 
 /** How an event's screen-reader label starts. */
 const eventNoun = ({ occurrence }: EventPlacement) => (isImportedEvent(occurrence) ? 'Google Calendar event' : 'Event');
@@ -151,6 +152,13 @@ interface WeekGridProps {
   onDragCreate: (day: Date, startMin: number, endMin: number, anchor: DOMRect) => void;
   /** An event's block or chip was clicked. */
   onOpenEvent: (event: EventPlacement, anchor: DOMRect) => void;
+  /**
+   * An event's block was dragged to another time or day, or its bottom edge
+   * dragged to a new end: minutes from midnight on the day at `dayIndex`, the
+   * end up to 1440 (midnight). The block shows there until this resolves.
+   * Without it, blocks don't drag.
+   */
+  onMoveEvent?: (event: EventPlacement, dayIndex: number, startMin: number, endMin: number) => Promise<boolean>;
   /** A range to keep highlighted, e.g. while a quick-add for it is open. */
   selection?: GridSelection | null;
   onOpenTask: (taskId: number) => void;
@@ -164,7 +172,10 @@ interface WeekGridProps {
  * Seven day columns over a 24-hour time grid. The empty grid is made of
  * half-hour slot buttons (one roving tab stop, arrow keys to move, Enter or a
  * click to add something there); dragging down a day with a mouse or pen picks
- * a range, in 15-minute steps, for a new event. Events, planned tasks,
+ * a range, in 15-minute steps, for a new event. Dragging an event's block
+ * moves it to another time or day, and dragging its bottom edge changes when
+ * it ends, in the same steps (a mouse or pen again; one past midnight, all day
+ * or archived stays put). Events, planned tasks,
  * completions and note sessions sit on top as blocks, side by side where they
  * overlap, and all-day events, undated-time tasks and habit completions fill
  * the all-day row. Hours outside the user's work window and whole rest days share
@@ -175,13 +186,14 @@ interface WeekGridProps {
  */
 const WeekGrid: React.FC<WeekGridProps> = ({
   days, timed, allDay, workDays, todayIndex, nowMinutes, scrollToMinutes, scrollKey,
-  canOpenTask, canOpenHabit, onSlotClick, onAllDayClick, onDragCreate, onOpenEvent, selection = null,
+  canOpenTask, canOpenHabit, onSlotClick, onAllDayClick, onDragCreate, onOpenEvent, onMoveEvent, selection = null,
   onOpenTask, onOpenNote, onOpenHabit, fill = false,
 }) => {
   const hintId = useId();
   const scrollRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const { drag, startDrag, clickWasDrag } = useDragSelect(onDragCreate, days);
+  const { moving, startMove, clickWasMove } = useEventMove(onMoveEvent, scrollRef);
   const [focusedSlot, setFocusedSlot] = useState(() => ({
     day: todayIndex ?? 0,
     slot: Math.floor(scrollToMinutes / SLOT_MINUTES),
@@ -408,13 +420,18 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                       event={e}
                       openable={e.kind === 'note' || e.kind === 'event' || canOpenTask(e.taskId!)}
                       onOpen={anchor => {
+                        if (clickWasMove()) return;
                         if (e.kind === 'event') onOpenEvent(e.event!, anchor);
                         else if (e.kind === 'note') onOpenNote(e.noteId!);
                         else onOpenTask(e.taskId!);
                       }}
+                      onDragStart={onMoveEvent && canMove(e) ? (ev, mode) => startMove(ev, e, mode) : undefined}
+                      lifted={moving?.key === e.key}
                     />
                   ))}
                 </div>
+
+                {moving?.dayIndex === dayIndex && <MovingEvent moving={moving} />}
 
                 {picked && (
                   <div
@@ -437,6 +454,34 @@ const WeekGrid: React.FC<WeekGridProps> = ({
           })}
         </div>
       </div>
+    </div>
+  );
+};
+
+/** Whether an event's block can be dragged: a live, timed one that starts and ends on its day. */
+const canMove = (e: TimedEvent): boolean =>
+  e.kind === 'event' && !!e.event && !e.event.archived && !e.event.occurrence.all_day
+  && !e.event.intoNextDay && !e.event.fromPreviousDay;
+
+/** Where a dragged event block would land, drawn over its day column. */
+const MovingEvent: React.FC<{ moving: EventMoveState }> = ({ moving }) => {
+  const color = eventColor(moving.event.occurrence.tags);
+  return (
+    <div
+      aria-hidden
+      data-moving-event
+      className="absolute left-0.5 right-0.5 z-[25] pointer-events-none flex flex-col overflow-hidden rounded-md px-1.5 py-0.5 text-[11px] leading-tight text-text-primary"
+      style={{
+        top: minutesToPx(moving.startMin),
+        height: minutesToPx(Math.max(DRAG_SNAP_MINUTES, moving.endMin - moving.startMin)),
+        ...eventStyle(color, { past: false, archived: false }),
+        boxShadow: 'var(--tm-shadow-lg)',
+      }}
+    >
+      <span className="truncate font-semibold">{moving.event.occurrence.title}</span>
+      <span className="truncate" style={{ color: 'var(--tm-text-secondary)' }}>
+        {formatMinutes(moving.startMin)} – {edgeTime(moving.endMin)}
+      </span>
     </div>
   );
 };
@@ -486,7 +531,17 @@ const eventTimeText = (e: TimedEvent): string => {
   return eventRange(placement);
 };
 
-const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: (anchor: DOMRect) => void }> = ({ event, openable, onOpen }) => {
+interface EventBlockProps {
+  event: PositionedEvent;
+  openable: boolean;
+  onOpen: (anchor: DOMRect) => void;
+  /** Set when the block can be dragged: a press on it starts a move, one on its bottom edge a resize. */
+  onDragStart?: (e: React.PointerEvent<HTMLElement>, mode: EventMoveMode) => void;
+  /** It's being dragged: it fades where it was while the moved copy follows the pointer. */
+  lifted?: boolean;
+}
+
+const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDragStart, lifted = false }) => {
   const isEvent = event.kind === 'event' && !!event.event;
   const height = minutesToPx(event.drawEndMin - event.drawStartMin);
   const label = timedLabel(event);
@@ -504,6 +559,8 @@ const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: 
   if (isEvent) {
     const color = eventColor(event.event!.occurrence.tags);
     style = { ...position, ...eventStyle(color, event.event!) };
+    // One that leaves the time free (declined, or "Show as free") reads a little lighter.
+    if (event.event!.occurrence.busy === false && !event.event!.archived) style.opacity = Math.min(Number(style.opacity ?? 1), 0.7);
     Icon = null;
     iconColor = color;
     timeText = eventTimeText(event);
@@ -523,7 +580,9 @@ const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: 
       : event.kind === 'note' ? `${range} · ${workedText(event.workedMin ?? 0)}` : range;
     struck = event.kind === 'task' && !!event.completed;
   }
-  const title = event.clashWith ? `${label}. Planned during ${event.clashWith}.` : label;
+  if (lifted) style = { ...style, opacity: 0.4 };
+  const baseTitle = event.clashWith ? `${label}. Planned during ${event.clashWith}.` : label;
+  const title = onDragStart ? `${baseTitle}. Drag to move it, or drag its bottom edge to change when it ends.` : baseTitle;
   const content = (
     <>
       <span className="flex items-center gap-1 min-w-0 max-w-full">
@@ -541,6 +600,14 @@ const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: 
           !
         </span>
       )}
+      {onDragStart && (
+        <span
+          aria-hidden
+          data-resize-handle
+          className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
+          onPointerDown={e => { e.stopPropagation(); onDragStart(e, 'resize'); }}
+        />
+      )}
     </>
   );
   const className = 'absolute pointer-events-auto flex flex-col items-start overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-text-primary shadow-sm';
@@ -554,6 +621,7 @@ const EventBlock: React.FC<{ event: PositionedEvent; openable: boolean; onOpen: 
       data-week-block
       data-event-key={isEvent ? event.key : undefined}
       onClick={e => onOpen(e.currentTarget.getBoundingClientRect())}
+      onPointerDown={onDragStart ? e => onDragStart(e, 'move') : undefined}
       className={`${className} hover:brightness-95 transition-[filter]`}
       style={style}
       title={title}
@@ -686,6 +754,101 @@ function useDragSelect(onDragCreate: WeekGridProps['onDragCreate'], days: Date[]
   };
 
   return { drag, startDrag, clickWasDrag };
+}
+
+/** Dragging a whole event block, or only its bottom edge. */
+type EventMoveMode = 'move' | 'resize';
+
+/** An event block being dragged, and where it would land. */
+interface EventMoveState {
+  key: string;
+  event: EventPlacement;
+  dayIndex: number;
+  startMin: number;
+  endMin: number;
+}
+
+/**
+ * Drag an event's block with a mouse or pen to move it to another time or
+ * day, keeping its length, or drag its bottom edge to change when it ends,
+ * in DRAG_SNAP_MINUTES steps. Letting go somewhere new calls `onMoveEvent`,
+ * and the moved copy stays put until that settles. Touch is left alone so a
+ * finger still scrolls the grid. A press that barely moves is a plain click,
+ * and `clickWasMove` tells the block to ignore the click that ends a real drag.
+ */
+function useEventMove(onMoveEvent: WeekGridProps['onMoveEvent'], scrollRef: React.RefObject<HTMLDivElement | null>) {
+  const [moving, setMoving] = useState<EventMoveState | null>(null);
+  const movedRef = useRef(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cleanupRef.current?.(), []);
+
+  const startMove = (e: React.PointerEvent<HTMLElement>, block: PositionedEvent, mode: EventMoveMode) => {
+    movedRef.current = false;
+    if (!onMoveEvent || !block.event || e.button !== 0 || e.pointerType === 'touch') return;
+    const columns = Array.from(scrollRef.current?.querySelectorAll<HTMLElement>('[data-day-column]') ?? []);
+    if (columns.length === 0) return;
+    const placement = block.event;
+    const length = block.endMin - block.startMin;
+    const snap = (minutes: number) => Math.round(minutes / DRAG_SNAP_MINUTES) * DRAG_SNAP_MINUTES;
+    // Minutes from midnight under the pointer, read fresh so a scroll mid-drag is followed.
+    const minutesAt = (clientY: number) => ((clientY - columns[0].getBoundingClientRect().top) / HOUR_PX) * 60;
+    const dayAt = (clientX: number) => {
+      const i = columns.findIndex(c => clientX < c.getBoundingClientRect().right);
+      return i === -1 ? columns.length - 1 : i;
+    };
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const grab = minutesAt(y0) - block.startMin;
+    let current: EventMoveState = { key: block.key, event: placement, dayIndex: block.dayIndex, startMin: block.startMin, endMin: block.endMin };
+    let moved = false;
+
+    const onMove = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
+      moved = true;
+      const at = minutesAt(ev.clientY);
+      if (mode === 'move') {
+        const startMin = Math.min(MINUTES_PER_DAY - length, Math.max(0, snap(at - grab)));
+        current = { ...current, dayIndex: dayAt(ev.clientX), startMin, endMin: startMin + length };
+      } else {
+        const endMin = Math.min(MINUTES_PER_DAY, Math.max(block.startMin + DRAG_SNAP_MINUTES, snap(at)));
+        current = { ...current, endMin };
+      }
+      setMoving(current);
+    };
+    const finish = (ev: PointerEvent) => {
+      cleanup();
+      if (!moved) return;
+      movedRef.current = true;
+      setTimeout(() => { movedRef.current = false; });
+      const unchanged = current.dayIndex === block.dayIndex && current.startMin === block.startMin && current.endMin === block.endMin;
+      if (ev.type === 'pointercancel' || unchanged) {
+        setMoving(null);
+        return;
+      }
+      setMoving(current);
+      void onMoveEvent(placement, current.dayIndex, current.startMin, current.endMin).finally(() => setMoving(null));
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      cleanupRef.current = null;
+    };
+    cleanupRef.current?.();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+    cleanupRef.current = cleanup;
+  };
+
+  /** Whether the click now arriving ends a drag; reading it clears it. */
+  const clickWasMove = () => {
+    const was = movedRef.current;
+    movedRef.current = false;
+    return was;
+  };
+
+  return { moving, startMove, clickWasMove };
 }
 
 export default WeekGrid;

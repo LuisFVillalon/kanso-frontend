@@ -693,23 +693,231 @@ describe('WeekView', { timeout: 30_000 }, () => {
       expect(mocks.updateEvent).toHaveBeenCalledWith(30, { repeat_days: [1, 2, 3, 5] }, 'following', '2026-10-21');
     });
 
+    describe('dragging an event on the grid', () => {
+      // Day columns 100 px wide side by side, Sunday first; the grid's top at 0, 48 px an hour.
+      beforeEach(() => {
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+          const day = this.dataset.dayColumn;
+          if (day === undefined) return new DOMRect(0, 0, 0, 0);
+          return new DOMRect(Number(day) * 100, 0, 100, 24 * 48);
+        });
+      });
+      afterEach(() => vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockRestore());
+
+      const lecture = 'Event: CS 460 Lecture, 2:00 PM – 2:50 PM';
+      /** Presses `el` at (x, y), moves to each point, and lets go at the last, with the click a browser fires after. */
+      const drag = (el: HTMLElement, from: [number, number], ...to: [number, number][]) => act(async () => {
+        el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse', button: 0, clientX: from[0], clientY: from[1] }));
+        for (const [clientX, clientY] of to) window.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'mouse', clientX, clientY }));
+        const [clientX, clientY] = to[to.length - 1];
+        window.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'mouse', clientX, clientY }));
+        el.click();
+      });
+      const scopeButton = (text: string) =>
+        [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === text && b.type === 'button')!;
+
+      it('moves a one-off event to a new time without asking, and the click that ends the drag opens nothing', async () => {
+        withEvents([occurrence({ repeat_days: [] })]);
+        await render();
+        // Wed is column 3; grab at 2:10 PM and drop an hour later.
+        await drag(button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM'), [350, 14 * 48 + 8], [350, 15 * 48 + 8]);
+        expect(mocks.updateEvent).toHaveBeenCalledWith(30, { start_time: '15:00', end_time: '15:50' }, 'all', '2026-10-21');
+        expect(document.body.textContent).not.toContain('Save repeating event');
+        expect(dialog('Event: CS 460 Lecture')).toBeNull();
+      });
+
+      it('asks which occurrences a moved time is for on a repeating event', async () => {
+        withEvents([occurrence()]);
+        await render();
+        await drag(button(lecture), [350, 14 * 48 + 8], [350, 13 * 48 + 8]);
+        expect(document.body.textContent).toContain('Save repeating event');
+        expect(container.querySelector('[data-moving-event]')!.textContent).toContain('1:00 PM – 1:50 PM');
+        await act(async () => document.querySelector<HTMLInputElement>('input[value="following"]')!.click());
+        await act(async () => scopeButton('Save').click());
+        expect(mocks.updateEvent).toHaveBeenCalledWith(30, { start_time: '13:00', end_time: '13:50' }, 'following', '2026-10-21');
+      });
+
+      it('moves just this occurrence to another day, and puts it back when the question is cancelled', async () => {
+        withEvents([occurrence()]);
+        await render();
+        // Over to Thursday (column 4), same time.
+        await drag(button(lecture), [350, 14 * 48 + 8], [450, 14 * 48 + 8]);
+        expect(document.querySelector<HTMLInputElement>('input[value="this"]')!.checked).toBe(true);
+        expect(document.querySelector<HTMLInputElement>('input[value="following"]')!.disabled).toBe(true);
+        await act(async () => scopeButton('Cancel').click());
+        expect(mocks.updateEvent).not.toHaveBeenCalled();
+        expect(container.querySelector('[data-moving-event]')).toBeNull();
+
+        await drag(button(lecture), [350, 14 * 48 + 8], [450, 14 * 48 + 8]);
+        await act(async () => scopeButton('Save').click());
+        expect(mocks.updateEvent).toHaveBeenCalledWith(30, { date: '2026-10-22' }, 'this', '2026-10-21');
+      });
+
+      it('changes when it ends by dragging its bottom edge', async () => {
+        withEvents([occurrence({ repeat_days: [] })]);
+        await render();
+        const handle = button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM').querySelector<HTMLElement>('[data-resize-handle]')!;
+        await drag(handle, [350, 14 * 48 + 40], [350, 15.5 * 48 + 2]);
+        expect(mocks.updateEvent).toHaveBeenCalledWith(30, { end_time: '15:30' }, 'all', '2026-10-21');
+      });
+
+      it('drags an imported Google event the same way', async () => {
+        withEvents([occurrence({ event_id: -30, title: 'Team sync', tags: [], repeat_days: [], source: 'google', repeating: true })]);
+        await render();
+        await drag(button('Google Calendar event: Team sync, 2:00 PM – 2:50 PM'), [350, 14 * 48 + 8], [350, 16 * 48 + 8]);
+        await act(async () => scopeButton('Save').click());
+        expect(mocks.updateEvent).toHaveBeenCalledWith(-30, { start_time: '16:00', end_time: '16:50' }, 'this', '2026-10-21');
+      });
+
+      it('leaves archived events alone', async () => {
+        withEvents([occurrence({ repeat_days: [], past: true, archived: true })]);
+        await render();
+        const archived = button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM, archived');
+        expect(archived.querySelector('[data-resize-handle]')).toBeNull();
+        await drag(archived, [350, 14 * 48 + 8], [350, 16 * 48 + 8]);
+        expect(mocks.updateEvent).not.toHaveBeenCalled();
+      });
+
+      it('leaves touch alone, so a finger scrolls the grid', async () => {
+        withEvents([occurrence({ repeat_days: [] })]);
+        await render();
+        await act(async () => {
+          button('Event: CS 460 Lecture, 2:00 PM – 2:50 PM').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch', button: 0, clientX: 350, clientY: 680 }));
+          window.dispatchEvent(new PointerEvent('pointermove', { pointerType: 'touch', clientX: 350, clientY: 900 }));
+          window.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'touch', clientX: 350, clientY: 900 }));
+        });
+        expect(mocks.updateEvent).not.toHaveBeenCalled();
+      });
+    });
+
     describe('imported from Google Calendar', () => {
       const imported = (overrides: Partial<EventOccurrence> = {}) => occurrence({
         event_id: -30, title: 'Team sync', tags: [], repeat_days: [], source: 'google', ...overrides,
       });
       const label = 'Google Calendar event: Team sync, 2:00 PM – 2:50 PM';
 
-      it('shows on the grid with the Google mark and opens without edit, archive or delete', async () => {
+      const scopeButton = (text: string) =>
+        [...document.querySelectorAll<HTMLButtonElement>('.modal-panel button')].find(b => b.textContent === text && b.type === 'button')!;
+      const submitForm = () => act(async () => {
+        document.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+
+      it('shows on the grid with the Google mark and opens with edit, archive and delete', async () => {
         withEvents([imported()]);
         await render();
         expect(button(label).querySelector('[data-google-mark]')).not.toBeNull();
         await act(async () => button(label).click());
         const card = dialog('Event: Team sync')!;
         const actions = [...card.querySelectorAll('button')].map(b => b.textContent?.trim());
-        expect(actions).not.toEqual(expect.arrayContaining(['Edit']));
-        expect(actions).not.toEqual(expect.arrayContaining(['Archive']));
-        expect(actions).not.toEqual(expect.arrayContaining(['Delete']));
+        expect(actions).toEqual(expect.arrayContaining(['Edit', 'Archive', 'Delete']));
+        expect(card.textContent).toContain('Changes stay in kanso');
+      });
+
+      it('edits a one-off one in the form without loading a series or asking, leaving out how it repeats', async () => {
+        withEvents([imported()]);
+        await render();
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('Edit').click());
         expect(mocks.fetchEvent).not.toHaveBeenCalled();
+        expect(document.body.textContent).toContain('From Google Calendar. Changes stay in kanso');
+        expect(document.querySelector('select[id$="-repeat"]')).toBeNull();
+        expect(document.querySelector('select[id$="-reminder"]')).toBeNull();
+
+        const title = document.querySelector<HTMLInputElement>('input[placeholder="e.g. CS 460 Lecture"]')!;
+        await setInput(title, 'Team sync (moved)');
+        await submitForm();
+        expect(document.body.textContent).not.toContain('Save repeating event');
+        expect(mocks.updateEvent).toHaveBeenCalledWith(-30, { title: 'Team sync (moved)' }, 'all', '2026-10-21');
+        expect(mocks.updateGoogleEventTags).not.toHaveBeenCalled();
+      });
+
+      it('asks which instances an edit of a repeating one is for, and saves its tags through their own endpoint', async () => {
+        mocks.updateGoogleEventTags.mockReset().mockResolvedValue(undefined);
+        withEvents([imported({ repeating: true })]);
+        await render();
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('Edit').click());
+        const form = document.querySelector('form')!;
+        await setInput(form.querySelector<HTMLInputElement>('input[placeholder="e.g. CS 460 Lecture"]')!, 'Team sync v2');
+        await act(async () => [...form.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim() === 'CS 460')!.click());
+        await submitForm();
+        expect(document.body.textContent).toContain('Save repeating event');
+        for (const scope of ['this', 'following', 'all']) {
+          expect(document.querySelector<HTMLInputElement>(`input[value="${scope}"]`)!.disabled).toBe(false);
+        }
+        await act(async () => document.querySelector<HTMLInputElement>('input[value="following"]')!.click());
+        await act(async () => scopeButton('Save').click());
+        expect(mocks.updateEvent).toHaveBeenCalledWith(-30, { title: 'Team sync v2' }, 'following', '2026-10-21');
+        expect(mocks.updateGoogleEventTags).toHaveBeenCalledWith(-30, [CLASS_TAG.id], false, 'following');
+      });
+
+      it('moves just this instance of a repeating one to a new date', async () => {
+        withEvents([imported({ repeating: true })]);
+        await render();
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('Edit').click());
+        await setInput(document.querySelector<HTMLInputElement>('input[type="date"]')!, '2026-10-22');
+        await submitForm();
+        expect(document.querySelector<HTMLInputElement>('input[value="following"]')!.disabled).toBe(true);
+        expect(document.body.textContent).toContain('A new date moves just this event.');
+        expect(document.body.textContent).not.toContain('change the days it repeats on');
+        await act(async () => scopeButton('Save').click());
+        expect(mocks.updateEvent).toHaveBeenCalledWith(-30, { date: '2026-10-22' }, 'this', '2026-10-21');
+      });
+
+      it('archives and deletes a repeating one asking which instances, and restores one on its own', async () => {
+        withEvents([imported({ repeating: true })]);
+        await render();
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('Archive').click());
+        expect(document.body.textContent).toContain('Archive repeating event');
+        await act(async () => document.querySelector<HTMLInputElement>('input[value="all"]')!.click());
+        await act(async () => scopeButton('Archive').click());
+        expect(mocks.setEventArchived).toHaveBeenCalledWith(-30, true, 'all', '2026-10-21');
+
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('Delete').click());
+        expect(document.body.textContent).toContain('Delete repeating event');
+        await act(async () => scopeButton('Delete').click());
+        expect(mocks.deleteEvent).toHaveBeenCalledWith(-30, 'this', '2026-10-21');
+      });
+
+      it('restores an archived one on its own, without loading a series', async () => {
+        withEvents([imported({ past: true, archived: true })]);
+        await render();
+        await act(async () => button(`${label}, archived`).click());
+        await act(async () => buttonByText('Restore').click());
+        expect(mocks.fetchEvent).not.toHaveBeenCalled();
+        expect(mocks.setEventArchived).toHaveBeenCalledWith(-30, false, 'this', '2026-10-21');
+      });
+
+      it('keeps the card open while its tag question is', async () => {
+        mocks.updateGoogleEventTags.mockReset().mockResolvedValue(undefined);
+        withEvents([imported({ repeating: true })]);
+        await render();
+        await act(async () => button(label).click());
+        await act(async () => buttonByText('CS 460').click());
+        const panel = document.querySelector('.modal-panel')!;
+        await act(async () => { panel.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); });
+        await act(async () => document.querySelector<HTMLInputElement>('input[value="following"]')!.click());
+        expect(dialog('Event: Team sync')).not.toBeNull();
+        await act(async () => scopeButton('Save').click());
+        expect(mocks.updateGoogleEventTags).toHaveBeenCalledWith(-30, [CLASS_TAG.id], false, 'following');
+        expect(dialog('Event: Team sync')).not.toBeNull();
+
+        // Escape on the question closes only the question.
+        await act(async () => buttonByText('CS 460').click());
+        await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+        expect(document.body.textContent).not.toContain('Save repeating event');
+        expect(dialog('Event: Team sync')).not.toBeNull();
+      });
+
+      it("doesn't mark a task during one Google leaves free as a clash", async () => {
+        mocks.tasks = [task({ id: 9, title: 'Essay', due_date: '2026-10-21', due_time: '14:15:00', estimated_time: 0.5 })];
+        withEvents([imported({ busy: false })]);
+        await render();
+        expect(container.querySelector('button[aria-label^="Planned task: Essay"]')!.getAttribute('aria-label')).not.toContain('during');
+        expect(button(`${label}, free`)).toBeTruthy();
       });
 
       it('starts the tag picks fresh when another event opens over the card', async () => {

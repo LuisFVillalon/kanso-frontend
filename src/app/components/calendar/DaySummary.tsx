@@ -20,6 +20,7 @@ import {
   occurrenceKey,
   occurrenceMinutesOn,
   occurrenceSpanOn,
+  takesTime,
   timeToMinutes,
 } from '@/app/utils/eventOccurrences';
 import { eventColor, repeatText } from '@/app/utils/events';
@@ -64,8 +65,8 @@ const normalizedTime = (t: Task): string | null =>
   typeof t.due_time === 'string' ? t.due_time : t.due_time instanceof Date ? toLocalTimeStr(t.due_time) : null;
 
 // Every event the calendar shows is planned time; only the past ones that
-// weren't archived (cancelled) count as time actually spent.
-const happened = (e: EventOccurrence) => e.past && !e.archived;
+// weren't archived (cancelled) and took up time count as time actually spent.
+const happened = (e: EventOccurrence) => e.past && takesTime(e);
 
 interface TimeCategory {
   label: string;
@@ -110,7 +111,7 @@ function eventClashes(tasks: Task[], events: EventOccurrence[], dateStr: string)
     if (task.completed || !time) continue;
     const at = timeToMinutes(time);
     const event = events.find(e => {
-      if (e.archived) return false;
+      if (!takesTime(e)) return false;
       const span = occurrenceSpanOn(e, dateStr);
       return span !== null && at >= span.start && at < span.end;
     });

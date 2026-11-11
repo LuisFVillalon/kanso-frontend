@@ -1,11 +1,28 @@
 'use client';
 
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MODAL_LAYER } from './Modal';
 
 /** Space kept between the popover, its anchor and the viewport's edges. */
 const GAP_PX = 8;
+
+/** Lets something inside a popover keep it open while it shows a dialog of its own on top. */
+const PopoverHoldContext = createContext<(held: boolean) => void>(() => {});
+
+/**
+ * Keeps the popover this is inside open while `held`: a press in a dialog it
+ * opened, or the Escape that closes that dialog, then leaves the popover be.
+ * Outside a popover it does nothing.
+ */
+export function useHoldPopover(held: boolean): void {
+  const hold = useContext(PopoverHoldContext);
+  useEffect(() => {
+    if (!held) return;
+    hold(true);
+    return () => hold(false);
+  }, [held, hold]);
+}
 
 interface AnchoredPopoverProps {
   /** The box to sit beside, in viewport coordinates (e.g. a clicked block's getBoundingClientRect()). */
@@ -30,6 +47,9 @@ const AnchoredPopover: React.FC<AnchoredPopoverProps> = ({ anchor, onClose, labe
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const onCloseRef = useRef(onClose);
   useLayoutEffect(() => { onCloseRef.current = onClose; });
+  // How many things inside are holding it open (see useHoldPopover).
+  const holdsRef = useRef(0);
+  const hold = useMemo(() => (held: boolean) => { holdsRef.current += held ? 1 : -1; }, []);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -52,10 +72,10 @@ const AnchoredPopover: React.FC<AnchoredPopoverProps> = ({ anchor, onClose, labe
     target?.focus();
 
     const onPointerDown = (e: PointerEvent) => {
-      if (!el?.contains(e.target as Node)) onCloseRef.current();
+      if (holdsRef.current === 0 && !el?.contains(e.target as Node)) onCloseRef.current();
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCloseRef.current();
+      if (e.key === 'Escape' && holdsRef.current === 0) onCloseRef.current();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);
@@ -87,7 +107,7 @@ const AnchoredPopover: React.FC<AnchoredPopoverProps> = ({ anchor, onClose, labe
         boxShadow: 'var(--tm-shadow-lg)',
       }}
     >
-      {children}
+      <PopoverHoldContext.Provider value={hold}>{children}</PopoverHoldContext.Provider>
     </div>,
     document.body,
   );

@@ -98,11 +98,24 @@ export interface EventOccurrence {
   past: boolean;
   /** Archived, on its own or with its series. */
   archived: boolean;
-  /** Where it came from; absent counts as "kanso". An imported event's event_id is negative, and nothing here can change it except its kanso tags. */
+  /**
+   * Where it came from; absent counts as "kanso". An imported event's
+   * event_id is negative; the event endpoints take that id like any other and
+   * keep the changes in kanso, never writing them to Google Calendar.
+   */
   source?: 'kanso' | 'google';
   /** Imported only: the event's page in Google Calendar, when Google gave one. */
   html_link?: string | null;
-  /** False for an imported event the user declined or marked "Show as free": it shows, but adds no event time. Absent counts as true. */
+  /**
+   * Imported only: one instance of a repeating Google event. Each instance is
+   * its own occurrence with empty repeat_days, so this is what says it repeats.
+   */
+  repeating?: boolean;
+  /**
+   * Whether it takes up time: false for a Google event the user declined or
+   * marked "Show as free", which still shows but leaves the time free. Absent
+   * counts as busy (kanso events always are).
+   */
   busy?: boolean;
 }
 
