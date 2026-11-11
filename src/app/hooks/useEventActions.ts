@@ -7,11 +7,13 @@ import {
   restoreEvent,
   setEventArchived,
   updateEvent,
+  updateGoogleEventTags,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
 import { notifyEventsChanged } from '@/app/hooks/useEventsVersion';
 import type { CalendarEventCreate, CalendarEventUpdate, EditScope, EventOccurrence } from '@/app/types/event';
 import { parseLocalDate } from '@/app/utils/dateUtils';
+import { isImportedEvent, repeatsOccurrence } from '@/app/utils/importedEvents';
 
 /** "Fri, Oct 23" for an occurrence's day. */
 export const occurrenceDayLabel = (o: Pick<EventOccurrence, 'date'>) =>
@@ -22,7 +24,8 @@ export const occurrenceDayLabel = (o: Pick<EventOccurrence, 'date'>) =>
  * calling `onChanged` once the server has it, so the caller can refetch what
  * it shows; the month calendars, daily brief and reports hear of it through
  * notifyEventsChanged. Archive and delete offer Undo. Each resolves true when
- * it saved.
+ * it saved. An event imported from Google Calendar takes the same changes,
+ * kept in kanso; only its tags save through their own endpoint.
  */
 export function useEventActions(onChanged: () => void) {
   const showToast = useToast();
@@ -51,15 +54,31 @@ export function useEventActions(onChanged: () => void) {
     return ok;
   }, [run, showToast]);
 
-  const update = useCallback(async (o: EventOccurrence, body: CalendarEventUpdate, scope: EditScope): Promise<boolean> => {
-    const ok = await run(() => updateEvent(o.event_id, body, scope, o.occurrence_date), "Couldn't save the event. Please try again.");
+  /**
+   * Saves `body` on the occurrences in `scope`. An imported event's tags go to
+   * the Google tags endpoint instead, as `tagIds` (the ids of `body.tags`).
+   */
+  const update = useCallback(async (o: EventOccurrence, body: CalendarEventUpdate, scope: EditScope, tagIds: number[] = []): Promise<boolean> => {
+    const ok = await run(async () => {
+      if (!isImportedEvent(o)) return updateEvent(o.event_id, body, scope, o.occurrence_date);
+      const { tags, ...fields } = body;
+      const savesFields = Object.keys(fields).length > 0;
+      if (savesFields) await updateEvent(o.event_id, fields, scope, o.occurrence_date);
+      if (tags === undefined) return;
+      try {
+        await (repeatsOccurrence(o) ? updateGoogleEventTags(o.event_id, tagIds, false, scope) : updateGoogleEventTags(o.event_id, tagIds));
+      } catch (err) {
+        if (savesFields) { onChanged(); notifyEventsChanged(); }
+        throw err;
+      }
+    }, "Couldn't save the event. Please try again.");
     if (ok) {
       const title = body.title ?? o.title;
       const which = scope === 'this' ? ` for ${occurrenceDayLabel(o)}` : scope === 'following' ? ` from ${occurrenceDayLabel(o)} on` : '';
       showToast(`Saved ${title}${which}.`, 'success');
     }
     return ok;
-  }, [run, showToast]);
+  }, [onChanged, run, showToast]);
 
   const archive = useCallback(async (o: EventOccurrence, scope: EditScope): Promise<boolean> => {
     const saved = await runFor(() => setEventArchived(o.event_id, true, scope, o.occurrence_date), "Couldn't archive the event. Please try again.");
@@ -70,10 +89,11 @@ export function useEventActions(onChanged: () => void) {
     showToast(message, 'success', {
       label: 'Undo',
       onClick: () => {
-        // "This" archived one occurrence; otherwise the series returned holds them all.
+        // "This" archived one occurrence; otherwise the series returned holds
+        // them all. An imported event's instances unarchive as they archived.
         void run(
-          () => (scope === 'this'
-            ? setEventArchived(o.event_id, false, 'this', o.occurrence_date)
+          () => (scope === 'this' || isImportedEvent(o)
+            ? setEventArchived(o.event_id, false, scope, o.occurrence_date)
             : setEventArchived(saved.id, false, 'all')),
           "Couldn't undo the archive.",
         );
@@ -89,7 +109,9 @@ export function useEventActions(onChanged: () => void) {
       label: 'Undo',
       onClick: () => {
         void run(
-          () => (scope === 'this' ? restoreEvent(o.event_id, o.occurrence_date) : restoreEvent(saved.id)),
+          () => (scope === 'this'
+            ? restoreEvent(o.event_id, o.occurrence_date)
+            : isImportedEvent(o) ? restoreEvent(o.event_id, o.occurrence_date, scope) : restoreEvent(saved.id)),
           "Couldn't restore the event.",
         );
       },
@@ -99,15 +121,24 @@ export function useEventActions(onChanged: () => void) {
 
   /**
    * Unarchives an archived occurrence: its whole series when that's what was
-   * archived, else just the occurrence.
+   * archived, else just the occurrence. An imported event's instances
+   * unarchive in `scope` (asked for a repeating one), else just this one.
    */
-  const restore = useCallback(async (o: EventOccurrence): Promise<boolean> => {
+  const restore = useCallback(async (o: EventOccurrence, scope?: EditScope): Promise<boolean> => {
     const ok = await run(async () => {
+      if (isImportedEvent(o)) return setEventArchived(o.event_id, false, scope ?? 'this', o.occurrence_date);
       const series = await fetchEvent(o.event_id);
       if (series.archived_at) await setEventArchived(o.event_id, false, 'all');
       else await setEventArchived(o.event_id, false, 'this', o.occurrence_date);
     }, "Couldn't restore the event. Please try again.");
-    if (ok) showToast(`Restored ${o.title}.`, 'success');
+    if (ok) {
+      const message = scope === 'this'
+        ? `Restored ${o.title} for ${occurrenceDayLabel(o)}.`
+        : scope === 'following'
+        ? `Restored ${o.title} from ${occurrenceDayLabel(o)} on.`
+        : scope === 'all' ? `Restored all ${o.title} events.` : `Restored ${o.title}.`;
+      showToast(message, 'success');
+    }
     return ok;
   }, [run, showToast]);
 

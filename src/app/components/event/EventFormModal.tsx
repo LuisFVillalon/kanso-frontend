@@ -22,7 +22,9 @@ import {
 import { formatLeadTime } from '@/app/utils/notifications';
 import { MINUTES_PER_DAY, minutesToTimeStr, parseTimeToMinutes, type WindowMinutes } from '@/app/utils/weekLayout';
 import type { EventOccurrence } from '@/app/types/event';
+import { IMPORTED_EDIT_NOTE } from '@/app/utils/importedEvents';
 import EventTagPicker, { toggleTag } from './EventTagPicker';
+import GoogleMark from './GoogleMark';
 
 /** Reminder leads offered, in minutes before the start; null is none. */
 const REMINDER_CHOICES: (number | null)[] = [null, 0, 5, 10, 15, 30, 60, 120, 1440, 10080];
@@ -67,6 +69,12 @@ interface EventFormModalProps {
   /** Edit only: archive or delete the event instead. */
   onArchive?: () => void;
   onDelete?: () => void;
+  /**
+   * Edit only: the event was imported from Google Calendar. Google keeps how
+   * it repeats and its reminders, so those fields are left out, and a note
+   * says the changes stay in kanso.
+   */
+  imported?: boolean;
 }
 
 const labelClass = 'block text-sm font-medium text-text-secondary mb-1.5';
@@ -77,15 +85,16 @@ const labelClass = 'block text-sm font-medium text-text-secondary mb-1.5';
  * weeks, or every N weeks), when the repeat ends, a reminder and a
  * description. A live line sums it up ("Every Mon, Wed and Fri · 5:00 – 6:00
  * PM · Oct 26 – Dec 11, 21 events"), and notes that don't block saving point
- * out rest days, the work window and overlaps.
+ * out rest days, the work window and overlaps. An event imported from Google
+ * Calendar edits its title, tags, day, times and description.
  */
-const EventFormModal: React.FC<EventFormModalProps> = ({ mode, initial, tags, context, onSubmit, onClose, onArchive, onDelete }) => {
+const EventFormModal: React.FC<EventFormModalProps> = ({ mode, initial, tags, context, onSubmit, onClose, onArchive, onDelete, imported = false }) => {
   const id = useId();
   const [form, setForm] = useState<EventFormValues>(initial);
   const [saving, setSaving] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const notifications = useOptionalNotifications();
-  const showReminder = !!notifications && notifications.status !== 'unavailable';
+  const showReminder = !imported && !!notifications && notifications.status !== 'unavailable';
 
   const termEnd = usableTermEnd(context.term?.endDate ?? null, formSeriesStart(form));
   const errors = eventFormErrors(form, termEnd);
@@ -156,6 +165,11 @@ const EventFormModal: React.FC<EventFormModalProps> = ({ mode, initial, tags, co
       </div>
 
       <form onSubmit={handleSubmit} className="p-6 space-y-4" noValidate>
+        {imported && (
+          <p className="flex items-center gap-1.5 text-xs text-text-muted">
+            <GoogleMark className="w-3.5 h-3.5 flex-shrink-0" /> From Google Calendar. {IMPORTED_EDIT_NOTE}
+          </p>
+        )}
         <div>
           <label htmlFor={`${id}-title`} className={labelClass}>
             Title <span style={{ color: 'var(--tm-danger)' }}>*</span>
@@ -209,14 +223,16 @@ const EventFormModal: React.FC<EventFormModalProps> = ({ mode, initial, tags, co
           All day
         </label>
 
-        <div>
-          <label htmlFor={`${id}-repeat`} className={labelClass}>Repeat</label>
-          <select id={`${id}-repeat`} value={form.repeat} onChange={e => setRepeat(e.target.value as RepeatChoice)} className="input-field">
-            {REPEAT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
+        {!imported && (
+          <div>
+            <label htmlFor={`${id}-repeat`} className={labelClass}>Repeat</label>
+            <select id={`${id}-repeat`} value={form.repeat} onChange={e => setRepeat(e.target.value as RepeatChoice)} className="input-field">
+              {REPEAT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        )}
 
-        {repeating && (
+        {repeating && !imported && (
           <>
             {form.repeat === 'custom' && (
               <div className="flex items-center gap-2 text-sm text-text-secondary">

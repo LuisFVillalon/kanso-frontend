@@ -77,12 +77,25 @@ describe('EventCard for a kanso event', () => {
 });
 
 describe('EventCard for an imported event', () => {
-  it('offers no way to edit, archive or delete it', () => {
+  it('offers edit, archive and delete like a kanso event, and says the changes stay in kanso', () => {
     render(google());
-    expect(button('Edit')).toBeUndefined();
+    expect(button('Edit')).toBeTruthy();
+    expect(button('Archive')).toBeTruthy();
+    expect(button('Delete')).toBeTruthy();
+    expect(document.body.textContent).toContain('Changes stay in kanso. Google Calendar isn\u2019t changed.');
+  });
+
+  it('offers restore once archived', () => {
+    render(google({ archived: true }));
+    expect(button('Restore')).toBeTruthy();
     expect(button('Archive')).toBeUndefined();
-    expect(button('Restore')).toBeUndefined();
-    expect(button('Delete')).toBeUndefined();
+  });
+
+  it('marks one Google leaves free (declined or "Show as free") as Free', () => {
+    render(google({ busy: false }));
+    expect(document.body.textContent).toContain('Free');
+    render(google({ busy: true }));
+    expect(document.body.textContent).not.toContain('Free');
   });
 
   it('says where it came from and links to Google', () => {
@@ -153,5 +166,57 @@ describe('EventCard for an imported event', () => {
     expect(button('Use calendar default')!.disabled).toBe(true);
     await act(async () => { finish(); });
     expect(button('Work')!.disabled).toBe(false);
+  });
+});
+
+describe('EventCard for an instance of a repeating imported event', () => {
+  const repeating = (overrides: Partial<EventOccurrence> = {}) => google({ repeating: true, ...overrides });
+  const radio = (label: string) => [...document.body.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    .find(r => r.parentElement?.textContent?.trim().startsWith(label));
+
+  it('says it repeats in Google Calendar', () => {
+    render(repeating());
+    expect(document.body.textContent).toContain('Repeats in Google Calendar');
+    render(google());
+    expect(document.body.textContent).not.toContain('Repeats in Google Calendar');
+  });
+
+  it('asks which instances before saving a tag, offering this, following and all', async () => {
+    render(repeating());
+    await click(button('School'));
+    expect(api.updateGoogleEventTags).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Save repeating event');
+    expect(radio('This event (Wed, Nov 11)')!.checked).toBe(true);
+    expect(radio('This and following events')!.disabled).toBe(false);
+    expect(radio('All events')!.disabled).toBe(false);
+
+    await click(radio('This and following events'));
+    await click(button('Save'));
+    expect(api.updateGoogleEventTags).toHaveBeenCalledWith(-5, [1, 2], false, 'following');
+    expect(notifyEventsChanged).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).not.toContain('Save repeating event');
+  });
+
+  it('saves for just this instance by default', async () => {
+    render(repeating());
+    await click(button('School'));
+    await click(button('Save'));
+    expect(api.updateGoogleEventTags).toHaveBeenCalledWith(-5, [1, 2], false, 'this');
+  });
+
+  it('asks before returning to the calendar default too', async () => {
+    render(repeating());
+    await click(button('Use calendar default'));
+    await click(radio('All events'));
+    await click(button('Save'));
+    expect(api.updateGoogleEventTags).toHaveBeenCalledWith(-5, [], true, 'all');
+  });
+
+  it('saves nothing when the question is cancelled', async () => {
+    render(repeating());
+    await click(button('School'));
+    await click(button('Cancel'));
+    expect(api.updateGoogleEventTags).not.toHaveBeenCalled();
+    expect(button('School')!.getAttribute('aria-pressed')).toBe('false');
   });
 });

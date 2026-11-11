@@ -44,6 +44,8 @@ import { collectItemTags, filterByAnyTag } from '@/app/utils/tagFilter';
 import TagChipList from '@/app/components/common/TagChipList';
 import Modal from '@/app/components/common/Modal';
 import PageSpinner from '@/app/components/common/PageSpinner';
+import GoogleMark from '@/app/components/event/GoogleMark';
+import { isImportedEventId } from '@/app/utils/importedEvents';
 import ArchiveTagFilter from './ArchiveTagFilter';
 
 type TabKey = 'tasks' | 'notes' | 'tags' | 'habits' | 'events';
@@ -594,7 +596,10 @@ const ArchiveView: React.FC = () => {
                     )}
                     <li className="card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm sm:text-base font-semibold text-text-primary truncate">{row.title}</h3>
+                        <h3 className="flex items-center gap-1.5 text-sm sm:text-base font-semibold text-text-primary min-w-0">
+                          {isImportedEventId(row.id) && <><GoogleMark className="w-3.5 h-3.5" /><span className="sr-only">From Google Calendar:</span></>}
+                          <span className="truncate">{row.title}</span>
+                        </h3>
                         {series ? (
                           <>
                             <p className="text-xs text-text-secondary mt-0.5">

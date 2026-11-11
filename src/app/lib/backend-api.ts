@@ -687,7 +687,8 @@ export async function fetchCalendarActivity(
 // Occurrences reach the calendars through fetchCalendarActivity's `events`;
 // these calls manage the series behind them. Changes to a repeating event
 // take a scope: this occurrence, this and following, or all of them, keyed by
-// the occurrence's `occurrence_date`.
+// the occurrence's `occurrence_date`. They take an imported Google event's
+// negative id too, keeping the change in kanso: nothing is written to Google.
 
 /** `?scope=&occurrence_date=` for an event change; a one-off event ignores both. */
 const eventScopeQuery = (scope: EditScope, occurrenceDate?: string) => {
@@ -795,10 +796,15 @@ export async function deleteEvent(id: number, scope: EditScope = "all", occurren
 const trashedOccurrenceQuery = (occurrenceDate?: string | null) =>
   occurrenceDate ? `?${new URLSearchParams({ occurrence_date: occurrenceDate })}` : "";
 
-/** Brings a deleted event series, or one deleted occurrence of it, back from the trash. */
-export async function restoreEvent(id: number, occurrenceDate?: string | null): Promise<CalendarEvent> {
+/**
+ * Brings a deleted event series, or one deleted occurrence of it, back from
+ * the trash. An imported Google event's instances are each their own, so
+ * `scope` brings back the ones a scoped delete took with it.
+ */
+export async function restoreEvent(id: number, occurrenceDate?: string | null, scope?: EditScope): Promise<CalendarEvent> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${API_BASE_URL}/restore-event/${id}${trashedOccurrenceQuery(occurrenceDate)}`, {
+  const query = scope ? eventScopeQuery(scope, occurrenceDate ?? undefined) : trashedOccurrenceQuery(occurrenceDate);
+  const res = await fetch(`${API_BASE_URL}/restore-event/${id}${query}`, {
     method: "PATCH",
     headers,
   });
@@ -1185,13 +1191,17 @@ export async function syncGoogleCalendar(): Promise<GoogleCalendarStatus> {
 /**
  * Replaces an imported event's own kanso tags. An empty list leaves it with
  * no tags; `useDefault` instead returns it to its calendar's default tag.
+ * For an instance of a repeating Google event, `scope` says which instances
+ * get them: this one (the server's default when left out), this and every
+ * later one, including ones a later sync imports, or all of them.
  */
-export async function updateGoogleEventTags(eventId: number, tagIds: number[], useDefault = false): Promise<void> {
+export async function updateGoogleEventTags(eventId: number, tagIds: number[], useDefault = false, scope?: EditScope): Promise<void> {
   const headers = await getAuthHeaders();
+  const body = useDefault ? { tag_ids: [], use_default: true } : { tag_ids: tagIds };
   const res = await fetch(`${API_BASE_URL}/google-calendar/events/${eventId}/tags`, {
     method: "PATCH",
     headers,
-    body: JSON.stringify(useDefault ? { tag_ids: [], use_default: true } : { tag_ids: tagIds }),
+    body: JSON.stringify(scope ? { ...body, scope } : body),
   });
   await assertOk(res, "updateGoogleEventTags");
 }

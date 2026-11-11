@@ -123,6 +123,13 @@ describe('DaySummary', () => {
       .toBe('Pick up prescription is due at 1:30 PM, during ART 157 Studio (1:00 – 3:50 PM).');
   });
 
+  it("doesn't count a task due during a Google event left free (declined, or \"Show as free\") as a clash", () => {
+    render({ ...data, events: [yoga, lecture, { ...studio, source: 'google', busy: false }] });
+    expect(container.querySelector('[data-event-clash]')).toBeNull();
+    // It still shows.
+    expect(text()).toContain('ART 157 Studio');
+  });
+
   it('lists tasks once: due this day, then the ones done from another day', () => {
     render(data);
     const rows = [...section('tasks').querySelectorAll('[data-task-row]')].map(r => r.textContent);

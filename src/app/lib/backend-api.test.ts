@@ -55,6 +55,13 @@ describe('Google Calendar', () => {
     await updateGoogleEventTags(7, [], true);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ tag_ids: [], use_default: true });
   });
+
+  it('sends which instances of a repeating event get the tags, when given', async () => {
+    await updateGoogleEventTags(-7, [1], false, 'following');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ tag_ids: [1], scope: 'following' });
+    await updateGoogleEventTags(-7, [], true, 'all');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ tag_ids: [], use_default: true, scope: 'all' });
+  });
 });
 
 describe('fetchCalendarActivity', () => {
@@ -103,6 +110,11 @@ describe('events', () => {
     await restoreEvent(30);
     expect(requestedUrl().pathname).toMatch(/\/restore-event\/30$/);
     expect(requestedParams().has('occurrence_date')).toBe(false);
+
+    fetchMock.mockClear();
+    await restoreEvent(-30, '2026-10-21', 'following');
+    expect(requestedUrl().pathname).toMatch(/\/restore-event\/-30$/);
+    expect(Object.fromEntries(requestedParams())).toEqual({ scope: 'following', occurrence_date: '2026-10-21' });
 
     fetchMock.mockClear();
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));

@@ -146,7 +146,11 @@ export function blankEventForm(
  * The form for editing `occurrence`: what it shows (its own title, times and
  * day, edits included) plus its series' repeat, end and reminder.
  */
-export function eventFormFromOccurrence(occurrence: EventOccurrence, series: CalendarEvent, termEnd: string | null = null): EventFormValues {
+export function eventFormFromOccurrence(
+  occurrence: EventOccurrence,
+  series: Pick<CalendarEvent, 'repeat_days' | 'repeat_interval' | 'start_date' | 'end_date' | 'reminder_minutes'>,
+  termEnd: string | null = null,
+): EventFormValues {
   const repeat = repeatChoiceFor(series.repeat_days, series.repeat_interval);
   const endMode: RepeatEnd = series.end_date === null ? 'never' : termEnd && series.end_date === termEnd ? 'term' : 'on';
   return {
@@ -166,6 +170,18 @@ export function eventFormFromOccurrence(occurrence: EventOccurrence, series: Cal
     reminderMinutes: series.reminder_minutes,
   };
 }
+
+/**
+ * The edit form for an occurrence imported from Google Calendar. Google keeps
+ * how it repeats, so the form holds it as a one-off on its own day.
+ */
+export const importedEventForm = (occurrence: EventOccurrence): EventFormValues => eventFormFromOccurrence(occurrence, {
+  repeat_days: [],
+  repeat_interval: 1,
+  start_date: occurrence.date,
+  end_date: null,
+  reminder_minutes: occurrence.reminder_minutes,
+});
 
 /** The last day the form's series can repeat on, or null for no end (and for a one-off event). */
 export function formEndDate(form: EventFormValues, termEnd: string | null): string | null {
@@ -277,7 +293,8 @@ export function eventFormWarnings(form: EventFormValues, { restDays, windowOn, o
 
   const clashes = new Map<string, Set<number>>();
   for (const o of others) {
-    if (o.archived || o.all_day || !o.start_time || !o.end_time) continue;
+    // An archived event, or one that leaves its time free, isn't in the way.
+    if (o.archived || o.busy === false || o.all_day || !o.start_time || !o.end_time) continue;
     const day = parseLocalDate(o.date).getDay();
     if (isRepeating(form) ? !weekdays.includes(day) : o.date !== form.date) continue;
     const oStart = parseTimeToMinutes(o.start_time)!;
@@ -338,6 +355,17 @@ export function eventFormEdit(initial: EventFormValues, next: EventFormValues, t
   };
 }
 
+/**
+ * The edit a drag or resize on the week view makes: new times, and a new day
+ * when it moved to another one. Times are "HH:MM"; an end of "00:00" is midnight.
+ */
+export function moveEdit(o: Pick<EventOccurrence, 'date' | 'start_time' | 'end_time'>, date: string, startTime: string, endTime: string): EventEdit {
+  const occurrence: CalendarEventUpdate = {};
+  if (hhmm(o.start_time) !== startTime) occurrence.start_time = startTime;
+  if (hhmm(o.end_time) !== endTime) occurrence.end_time = endTime;
+  return { occurrence, from: o.date, date: date !== o.date ? date : null, series: {}, repeatToggled: false };
+}
+
 export const editIsEmpty = (edit: EventEdit) =>
   Object.keys(edit.occurrence).length === 0 && Object.keys(edit.series).length === 0 && edit.date === null;
 
@@ -359,7 +387,7 @@ export function allowedEditScopes(edit: EventEdit): EditScope[] {
  * says whether the event repeated before: a one-off moves with `date`, and
  * one that starts or stops repeating with "all" restarts on the form's day.
  */
-export function editBody(edit: EventEdit, scope: EditScope, wasRepeating: boolean, form: EventFormValues): CalendarEventUpdate {
+export function editBody(edit: EventEdit, scope: EditScope, wasRepeating: boolean, form: Pick<EventFormValues, 'date'>): CalendarEventUpdate {
   if (scope === 'this') return { ...edit.occurrence, ...(edit.date ? { date: edit.date } : {}) };
   const body: CalendarEventUpdate = { ...edit.occurrence, ...edit.series };
   if (!wasRepeating) {

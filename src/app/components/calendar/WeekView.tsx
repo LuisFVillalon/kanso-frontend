@@ -25,6 +25,7 @@ import DragHandle from '@/app/components/common/DragHandle';
 import { useResizableSplit } from '@/app/hooks/useResizableSplit';
 import { formatDateRange, toLocalDateStr } from '@/app/utils/dateUtils';
 import { occurrenceKey } from '@/app/utils/eventOccurrences';
+import { isImportedEvent, repeatsOccurrence } from '@/app/utils/importedEvents';
 import { applyNewTaskForm, taskToEditForm } from '@/app/utils/taskUtils';
 import {
   allowedEditScopes,
@@ -34,6 +35,9 @@ import {
   eventFormEdit,
   eventFormFromOccurrence,
   eventFormToCreate,
+  importedEventForm,
+  moveEdit,
+  type EventEdit,
   type EventFormValues,
 } from '@/app/utils/events';
 import {
@@ -99,10 +103,14 @@ const weekLabel = (start: Date, end: Date): string => {
 const toggleById = (tags: Tag[], tag: Tag): Tag[] =>
   tags.some(t => t.id === tag.id) ? tags.filter(t => t.id !== tag.id) : [...tags, tag];
 
-/** The event modal: a new event from a preset form, or an edit of one occurrence of a series. */
+/**
+ * The event modal: a new event from a preset form, or an edit of one
+ * occurrence of a series. An imported event's edit has no series: Google keeps
+ * how it repeats.
+ */
 type EventFormState =
   | { mode: 'new'; initial: EventFormValues }
-  | { mode: 'edit'; initial: EventFormValues; occurrence: EventOccurrence; series: CalendarEvent };
+  | { mode: 'edit'; initial: EventFormValues; occurrence: EventOccurrence; series: CalendarEvent | null };
 
 /** The open "which events?" question, and what to do with the answer. */
 interface ScopeQuestion {
@@ -229,7 +237,8 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     others: editingId === undefined ? events : events.filter(e => e.event_id !== editingId),
     term,
   });
-  // The open card follows the latest load, so an imported event's new tags show on it.
+  // The open card follows the latest load, so new tags show on it and its
+  // Edit, Archive and Delete act on what it shows.
   const cardOccurrence = card
     ? events.find(e => occurrenceKey(e) === occurrenceKey(card.event.occurrence)) ?? card.event.occurrence
     : null;
@@ -283,15 +292,25 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
 
   /** Asks which occurrences when the event repeats (or to confirm a delete), then runs `act` with the answer. */
   const withScope = (action: EventAction, o: EventOccurrence, act: (scope: EditScope) => void) => {
-    const repeating = o.repeat_days.length > 0;
+    const repeating = repeatsOccurrence(o);
     if (!repeating && action !== 'delete') return act('all');
     setScopeQuestion({ action, occurrence: o, repeating, onConfirm: act });
   };
 
   const archiveOccurrence = (o: EventOccurrence) => withScope('archive', o, scope => { void eventActions.archive(o, scope); });
   const deleteOccurrence = (o: EventOccurrence) => withScope('delete', o, scope => { void eventActions.remove(o, scope); });
+  /** A repeating imported event's instances each archive on their own, so Restore asks which ones. */
+  const restoreOccurrence = (o: EventOccurrence) => {
+    if (!isImportedEvent(o) || !repeatsOccurrence(o)) return void eventActions.restore(o);
+    setScopeQuestion({ action: 'restore', occurrence: o, repeating: true, onConfirm: scope => { void eventActions.restore(o, scope); } });
+  };
 
   const openEditForm = async (o: EventOccurrence) => {
+    if (isImportedEvent(o)) {
+      setCard(null);
+      setEventForm({ mode: 'edit', initial: importedEventForm(o), occurrence: o, series: null });
+      return;
+    }
     setCardBusy(true);
     try {
       const series = await fetchEvent(o.event_id);
@@ -312,14 +331,25 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
 
     const { occurrence, series, initial } = eventForm;
     const edit = eventFormEdit(initial, values, termEnd);
-    if (editIsEmpty(edit)) return true;
-    const wasRepeating = series.repeat_days.length > 0;
-    if (!wasRepeating) return eventActions.update(occurrence, editBody(edit, 'all', false, values), 'all');
+    const wasRepeating = series ? series.repeat_days.length > 0 : repeatsOccurrence(occurrence);
+    return saveEdit(occurrence, edit, wasRepeating, values);
+  };
+
+  /**
+   * Saves an edit of `occurrence` (from the form, or a drag or resize on the
+   * grid), asking first which occurrences it's for when the event repeats.
+   * Resolves true once saved, or when there was nothing to save.
+   */
+  const saveEdit = (occurrence: EventOccurrence, edit: EventEdit, wasRepeating: boolean, form: Pick<EventFormValues, 'date' | 'tags'>): Promise<boolean> => {
+    if (editIsEmpty(edit)) return Promise.resolve(true);
+    const tagIds = form.tags.map(t => t.id);
+    const save = (scope: EditScope) => eventActions.update(occurrence, editBody(edit, scope, wasRepeating, form), scope, tagIds);
+    if (!wasRepeating) return save('all');
 
     const allowed = allowedEditScopes(edit);
     if (allowed.length === 0) {
       showToast('Move this date or change how it repeats, one at a time.', 'info');
-      return false;
+      return Promise.resolve(false);
     }
     return new Promise<boolean>(resolve => {
       setScopeQuestion({
@@ -328,14 +358,25 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         repeating: true,
         allowed,
         hint: allowed.length === 3 ? undefined : edit.date !== null
-          ? 'A new date moves just this event. To move them all, change the days it repeats on.'
+          ? isImportedEvent(occurrence)
+            ? 'A new date moves just this event.'
+            : 'A new date moves just this event. To move them all, change the days it repeats on.'
           : allowed.length === 1
           ? 'It would end before this date, so the change applies to all of them.'
           : 'Changes to how it repeats, when it ends or its reminder apply to this and following events, or all of them.',
-        onConfirm: scope => { void eventActions.update(occurrence, editBody(edit, scope, true, values), scope).then(resolve); },
+        onConfirm: scope => { void save(scope).then(resolve); },
         onCancel: () => resolve(false),
       });
     });
+  };
+
+  /** A drag or resize on the grid moved an event to `dayIndex` (from the week's first day), from `startMin` to `endMin`, which may run past midnight. */
+  const handleMoveEvent = (placement: EventPlacement, dayIndex: number, startMin: number, endMin: number): Promise<boolean> => {
+    const o = placement.occurrence;
+    const date = toLocalDateStr(addDays(days[0], dayIndex));
+    const edit = moveEdit(o, date, minutesToTimeStr(startMin), minutesToTimeStr(endMin % (24 * 60)));
+    setCard(null);
+    return saveEdit(o, edit, repeatsOccurrence(o), { date, tags: o.tags });
   };
 
   const handleCreateTask = async (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task) => {
@@ -454,6 +495,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
           setQuickAdd(null);
           setCard({ event, anchor });
         }}
+        onMoveEvent={handleMoveEvent}
         selection={quickAdd ? {
           dayIndex: days.findIndex(d => d.getTime() === quickAdd.draft.day.getTime()),
           startMin: quickAdd.draft.startMin,
@@ -525,10 +567,10 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
           anchor={card.anchor}
           busy={cardBusy}
           onClose={() => setCard(null)}
-          onEdit={() => { void openEditForm(card.event.occurrence); }}
-          onArchive={() => { setCard(null); archiveOccurrence(card.event.occurrence); }}
-          onRestore={() => { setCard(null); void eventActions.restore(card.event.occurrence); }}
-          onDelete={() => { setCard(null); deleteOccurrence(card.event.occurrence); }}
+          onEdit={() => { void openEditForm(cardOccurrence); }}
+          onArchive={() => { setCard(null); archiveOccurrence(cardOccurrence); }}
+          onRestore={() => { setCard(null); restoreOccurrence(cardOccurrence); }}
+          onDelete={() => { setCard(null); deleteOccurrence(cardOccurrence); }}
         />
       )}
 
@@ -542,6 +584,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
           onClose={() => setEventForm(null)}
           onArchive={eventForm.mode === 'edit' ? () => { const o = eventForm.occurrence; setEventForm(null); archiveOccurrence(o); } : undefined}
           onDelete={eventForm.mode === 'edit' ? () => { const o = eventForm.occurrence; setEventForm(null); deleteOccurrence(o); } : undefined}
+          imported={eventForm.mode === 'edit' && isImportedEvent(eventForm.occurrence)}
         />
       )}
 

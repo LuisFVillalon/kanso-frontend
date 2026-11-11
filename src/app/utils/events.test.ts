@@ -11,6 +11,7 @@ import {
   eventFormSummary,
   eventFormToCreate,
   eventFormWarnings,
+  moveEdit,
   repeatDates,
   repeatText,
   timeRangeText,
@@ -212,5 +213,24 @@ describe('saving an edit', () => {
 
     const next = { ...oneOff, repeat: 'weekly' as const, repeatDays: [3], endMode: 'never' as const };
     expect(editBody(eventFormEdit(oneOff, next, null), 'all', false, next)).toEqual({ repeat_days: [3], start_date: '2026-10-21' });
+  });
+});
+
+describe('moveEdit', () => {
+  const o = occurrence({ start_time: '10:00:00', end_time: '10:50:00' });
+
+  it('sends the times that changed', () => {
+    const edit = moveEdit(o, '2026-10-21', '11:00', '11:50');
+    expect(edit.occurrence).toEqual({ start_time: '11:00', end_time: '11:50' });
+    expect(allowedEditScopes(edit)).toEqual(['this', 'following', 'all']);
+    expect(moveEdit(o, '2026-10-21', '10:00', '11:30').occurrence).toEqual({ end_time: '11:30' });
+  });
+
+  it('moves to another day as "this" alone on a repeating event, and as a new date on a one-off', () => {
+    const edit = moveEdit(o, '2026-10-22', '10:00', '10:50');
+    expect(edit).toMatchObject({ occurrence: {}, date: '2026-10-22', from: '2026-10-21' });
+    expect(allowedEditScopes(edit)).toEqual(['this']);
+    expect(editBody(edit, 'this', true, { date: '2026-10-22' })).toEqual({ date: '2026-10-22' });
+    expect(editBody(edit, 'all', false, { date: '2026-10-22' })).toEqual({ date: '2026-10-22' });
   });
 });

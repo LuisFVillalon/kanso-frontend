@@ -14,6 +14,8 @@ import { formatUpdatedDate, parseLocalDate } from '@/app/utils/dateUtils';
 import { parentChain } from '@/app/utils/taskUtils';
 import { daysLeft, deletedWithTask, restoredWithTask, trashKey } from '@/app/utils/trashUtils';
 import Modal from '@/app/components/common/Modal';
+import GoogleMark from '@/app/components/event/GoogleMark';
+import { isImportedEventId } from '@/app/utils/importedEvents';
 import PageSpinner from '@/app/components/common/PageSpinner';
 
 type Filter = 'all' | TrashKind;
@@ -312,7 +314,10 @@ const TrashView: React.FC = () => {
                         <KindIcon className="w-3 h-3" aria-hidden="true" />
                         {label}
                       </span>
-                      <h3 className="text-sm sm:text-base font-semibold text-text-primary truncate">{title}</h3>
+                      <h3 className="flex items-center gap-1.5 text-sm sm:text-base font-semibold text-text-primary min-w-0">
+                        {item.kind === 'event' && isImportedEventId(item.id) && <><GoogleMark className="w-3.5 h-3.5" /><span className="sr-only">From Google Calendar:</span></>}
+                        <span className="truncate">{title}</span>
+                      </h3>
                     </div>
                     <p className="text-xs text-text-muted mt-1">
                       Deleted {formatUpdatedDate(item.deleted_at)}

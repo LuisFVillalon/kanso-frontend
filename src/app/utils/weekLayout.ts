@@ -290,9 +290,13 @@ export function buildEventBlocks(events: EventOccurrence[], days: Date[], now: D
   return { timed, allDay };
 }
 
-/** Marks each open planned task's block that meets a live event's block on its day with the event's title. */
+/**
+ * Marks each open planned task's block that meets a live event's block on its
+ * day with the event's title. An event that leaves its time free (busy: false)
+ * clashes with nothing.
+ */
 function markClashes(timed: TimedEvent[]) {
-  const live = timed.filter(e => e.kind === 'event' && !e.event?.archived);
+  const live = timed.filter(e => e.kind === 'event' && !!e.event && !e.event.archived && e.event.occurrence.busy !== false);
   if (live.length === 0) return;
   for (const block of timed) {
     if (block.kind !== 'task' || block.completed) continue;
