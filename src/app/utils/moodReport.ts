@@ -35,12 +35,16 @@ const eachDay = (start: Date, end: Date): string[] => {
  * before it (for "A brighter month than September", and so a month's
  * rolling average is whole from the 1st), and for a month the rest of its
  * last Mon–Sun week (so a weekly check-in running into the next month sees
- * all its days). A year asks for each year on its own, since one request
+ * all its days). A week asks for its months and the one before them
+ * instead, which holds the week before it and lets Week at a glance count
+ * the check-ins of the month it links to and of the month before. A year asks for each year on its own, since one request
  * covers at most 366 days.
  */
 export const moodFetchRanges = (period: ReportPeriod): { start: Date; end: Date }[] => {
   const { start, end } = period;
-  if (period.kind === 'week') return [{ start: addDays(start, -7), end }];
+  if (period.kind === 'week') {
+    return [{ start: new Date(start.getFullYear(), start.getMonth() - 1, 1), end: new Date(end.getFullYear(), end.getMonth() + 1, 0) }];
+  }
   if (period.kind === 'month') {
     return [{ start: new Date(start.getFullYear(), start.getMonth() - 1, 1), end: addDays(end, (7 - end.getDay()) % 7) }];
   }
@@ -87,7 +91,7 @@ export const summarizeMood = (
   return { average: logged > 0 ? total / logged : null, logged, days: days.length, distribution };
 };
 
-/** Moments on fewer days than this are left off the Moments & mood card. */
+/** moodByTag's default: moments on fewer days than this are left out. */
 export const TAG_MIN_DAYS = 3;
 
 export interface TagMood {
