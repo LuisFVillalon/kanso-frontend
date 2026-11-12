@@ -135,13 +135,13 @@ describe('Plans that lost their time', () => {
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 3, date: '2026-11-11', start_time: '11:30', end_time: '12:00' }));
   });
 
-  it('lists a habit with no time goal as "Any time today", with no time or Plan, and Plan my habits skips it', async () => {
+  it('lists a habit with no time goal as "All day", with no time or Plan, and Plan my habits skips it', async () => {
     const habits = [habit(4, 'Drink water', { estimated_time: null, planned_time: '11:30', current_streak: 6 }), habit(2, 'Read 20 pages')];
     await act(async () => root.render(<HabitsLeftCard habits={habits} planner={plannerWith({ habits })} />));
     const [water, read] = [...container.querySelectorAll('li')];
     expect(water.textContent).toContain('Drink water');
     expect(water.textContent).toContain('6');
-    expect(water.textContent).toContain('Any time today');
+    expect(water.textContent).toContain('All day');
     expect(water.textContent).not.toMatch(/AM|PM|Plan/);
     expect(water.querySelector('[aria-label="Mark done: Drink water"]')).not.toBeNull();
     // Its old usual time holds nothing, so the other habit gets 11:30.
@@ -151,12 +151,12 @@ describe('Plans that lost their time', () => {
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 2, start_time: '11:30', end_time: '12:00' }));
   });
 
-  it('has no Plan my habits when only all-day habits are left, and shows "Any time today" before the calendar loads', async () => {
+  it('has no Plan my habits when only all-day habits are left, and shows "All day" before the calendar loads', async () => {
     const habits = [habit(4, 'Drink water', { estimated_time: null, planned_time: '09:00' })];
     await act(async () => root.render(<HabitsLeftCard habits={habits} planner={plannerWith({ habits })} />));
     expect(buttonByText('Plan my habits')).toBeUndefined();
     await act(async () => root.render(<HabitsLeftCard habits={habits} planner={null} />));
-    expect(container.querySelector('li')!.textContent).toContain('Any time today');
+    expect(container.querySelector('li')!.textContent).toContain('All day');
   });
 
   it("doesn't ask about an all-day habit whose old usual time an event takes", async () => {
