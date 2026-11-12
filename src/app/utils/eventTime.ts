@@ -1,7 +1,7 @@
 /**
  * Time in events per day (per month for a year) against the user's work
  * hours, split into time before and after now, and by tag: the Reports
- * Events view's chart and cards, and the Activity by day card's Events strip.
+ * Events view's chart and cards, and the Overview's Pace card.
  *
  * Which events count follows "Where your time went" (collectTagItems): time
  * is clipped to the period, all-day events add none, past archived

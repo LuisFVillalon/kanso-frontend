@@ -1,4 +1,4 @@
-/** The Activity card's tabs; 'notes' also counts any other time, such as events. */
+/** Which kind of axis a report chart counts on: things done, or time ('notes' counts any time, such as events). */
 export type ActivityMetric = 'completions' | 'notes';
 
 // Steps the y axis can count in: whole numbers of things done, or round
