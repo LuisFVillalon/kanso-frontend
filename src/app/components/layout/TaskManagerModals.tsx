@@ -185,7 +185,6 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         onArchiveHabit={onArchiveHabit}
         onUpdateHabit={onUpdateHabit}
         onViewHistory={onViewHabitHistory}
-        allTasks={allTasks}
       />
 
       <HabitHistoryModal

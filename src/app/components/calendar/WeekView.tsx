@@ -10,7 +10,7 @@ import { useToast } from '@/app/context/ToastContext';
 import { useWeekActivity } from '@/app/hooks/useWeekActivity';
 import { browserTimeZone, useWorkWindows } from '@/app/hooks/useWorkWindows';
 import { occurrenceDayLabel, useEventActions } from '@/app/hooks/useEventActions';
-import { describeError, fetchEvent, updateWorkBlock } from '@/app/lib/backend-api';
+import { deleteWorkBlock, describeError, fetchEvent, updateWorkBlock } from '@/app/lib/backend-api';
 import { useSlotPlanner } from '@/app/hooks/useSlotPlanner';
 import { notifyWorkBlocksChanged } from '@/app/hooks/useWorkBlocksVersion';
 import { blockConflicts, keepConflict, loadKeptConflicts } from '@/app/utils/planConflicts';
@@ -415,6 +415,17 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
     }
   };
 
+  /** Takes a habit's work block off the calendar; the habit and its usual time stay. */
+  const deleteHabitBlock = async (block: WorkBlock) => {
+    try {
+      await deleteWorkBlock(block.id);
+      notifyWorkBlocksChanged();
+    } catch (err) {
+      console.error('[WeekView] Failed to delete the work block:', err);
+      showToast(describeError(err, "Couldn't remove the block. Please try again."), 'error');
+    }
+  };
+
   const handleCreateTask = async (e: React.FormEvent, linked?: LinkedTaskRef[], created?: Task, afterSave?: AfterTaskSave) => {
     e.preventDefault();
     if (!newTask.title.trim()) {
@@ -536,6 +547,7 @@ const WeekView: React.FC<WeekViewProps> = ({ fill = false, heightPx = null, onRe
         onMoveEvent={handleMoveEvent}
         onMoveWorkBlock={(block, dayIndex, startMin, endMin) =>
           moveWorkBlock(block, toLocalDateStr(addDays(days[0], dayIndex)), startMin, endMin)}
+        onDeleteWorkBlock={block => { void deleteHabitBlock(block); }}
         deadlines={deadlines}
         ghosts={ghosts}
         onGhostMove={g => { void moveWorkBlock(g.block, toLocalDateStr(addDays(days[0], g.dayIndex)), g.startMin, g.endMin); }}

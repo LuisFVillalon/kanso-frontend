@@ -8,7 +8,7 @@ import type { EventOccurrence } from '@/app/types/event';
 import type { Habit } from '@/app/types/habit';
 import type { Task } from '@/app/types/task';
 import type { WorkBlock } from '@/app/types/workBlock';
-import { blockSpan, dueMinutesOf, minutesOf, planMinutes } from '@/app/hooks/useSlotPlanner';
+import { blockSpan, dueMinutesOf, isAllDayHabit, minutesOf, planMinutes } from '@/app/hooks/useSlotPlanner';
 import { occurrenceKey, occurrenceSpanOn, takesTime } from './eventOccurrences';
 import { toLocalDateStr } from './dateUtils';
 import { blockIsOpen } from './weekLayout';
@@ -81,14 +81,14 @@ export function blockConflicts(state: SlotState, workBlocks: WorkBlock[], events
 
 /**
  * Today's open habits whose usual time a busy event takes (and that aren't
- * planned elsewhere today), each with the free time today nearest its usual time.
+ * planned elsewhere today or all-day, with no time goal), each with the free time today nearest its usual time.
  */
 export function habitConflicts(state: SlotState, habits: Habit[], events: EventOccurrence[], workBlocks: WorkBlock[]): HabitConflict[] {
   const today = state.now.date;
   const out: HabitConflict[] = [];
   for (const h of habits) {
     const usual = minutesOf(h.planned_time);
-    if (usual === null || h.logged_today || h.archived_at) continue;
+    if (usual === null || h.logged_today || h.archived_at || isAllDayHabit(h)) continue;
     if (workBlocks.some(b => b.habit_id === h.id && b.date === today)) continue;
     const len = planMinutes(h.estimated_time);
     if (usual + len <= state.now.min) continue;

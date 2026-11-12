@@ -4,16 +4,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Habit } from '@/app/types/habit';
 
-// Usual-time suggestions read the calendar: an empty Wed–Tue with one Friday shift.
 vi.mock('@/app/lib/backend-api', () => ({
-  fetchCalendarActivity: vi.fn(async (start: string, end: string) => ({
-    start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [], habit_completions: [],
-    events: [{
-      event_id: 1, occurrence_date: '2026-11-13', title: 'Shift at the library', description: null, tags: [], all_day: false,
-      date: '2026-11-13', end_date: '2026-11-13', start_time: '08:00:00', end_time: '13:00:00', starts_at: '', ends_at: '',
-      time_zone: 'UTC', repeat_days: [], repeat_interval: 1, reminder_minutes: null, edited: false, past: false, archived: false,
-    }],
-  })),
   describeError: (_: unknown, fallback: string) => fallback,
 }));
 
@@ -83,29 +74,19 @@ describe('ManageHabitsModal', () => {
 
     const save = [...document.body.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Save')!;
     await act(async () => save.click());
-    expect(onUpdateHabit).toHaveBeenCalledWith(1, 'Read', [], 1.5, null);
+    expect(onUpdateHabit).toHaveBeenCalledWith(1, 'Read', [], 1.5);
   });
 
-  it('suggests usual times free on most of the next work days, and saves the one picked', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 10, 11, 11, 20)); // Wed Nov 11 2026
-    try {
-      const onUpdateHabit = vi.fn().mockResolvedValue(undefined);
-      render({ onUpdateHabit, allTasks: [] });
-      await act(async () => (document.body.querySelector('[aria-label="Edit habit"]') as HTMLButtonElement).click());
-      const chips = () => [...document.body.querySelectorAll<HTMLButtonElement>('[role="group"] button')];
-      // The default work day is 8 AM – 10 PM; Friday's shift takes the morning.
-      expect(chips().map(c => c.textContent)).toEqual(['1:00 PM', '3:00 PM', '5:00 PM', 'Other…', 'No set time']);
-      // Editing keeps the habit's own choice (none yet) rather than picking for it.
-      expect(chips().find(c => c.getAttribute('aria-pressed') === 'true')?.textContent).toBe('No set time');
-      await act(async () => chips()[1].click());
-      expect(text()).toContain('3:00 PM is free on 5 of your next 5 work days.');
-      const save = [...document.body.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Save')!;
-      await act(async () => save.click());
-      expect(onUpdateHabit).toHaveBeenCalledWith(1, 'Read', [], 0.5, '15:00');
-    } finally {
-      vi.useRealTimers();
-    }
+  it('has no usual time field, and editing leaves the usual time as it is', async () => {
+    const onUpdateHabit = vi.fn().mockResolvedValue(undefined);
+    render({ habits: [habit({ planned_time: '09:00' })], onUpdateHabit });
+    await act(async () => (document.body.querySelector('[aria-label="Edit habit"]') as HTMLButtonElement).click());
+    expect(text()).not.toContain('Usual time');
+    expect(document.body.querySelector('[role="group"]')).toBeNull();
+    const save = [...document.body.querySelectorAll('button')].find(b => b.textContent?.trim() === 'Save')!;
+    await act(async () => save.click());
+    expect(onUpdateHabit).toHaveBeenCalledWith(1, 'Read', [], 0.5);
+    expect(onUpdateHabit.mock.calls[0]).toHaveLength(4);
   });
 
   it('shows the field hint when no time goal is set', () => {

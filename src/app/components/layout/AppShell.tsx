@@ -11,6 +11,7 @@ import { useNotesContext } from '@/app/context/NotesContext';
 import { AppShellContext, type AppShellValue } from '@/app/context/AppShellContext';
 import { createHabit, describeError, updateHabit } from '@/app/lib/backend-api';
 import { useProfile } from '@/app/hooks/useProfile';
+import { isAllDayHabit } from '@/app/hooks/useSlotPlanner';
 import { useCalendarSettings } from '@/app/hooks/useCalendarSettings';
 import { useNavExpanded } from '@/app/hooks/useNavExpanded';
 import { useAppModalState } from '@/app/hooks/useAppModalState';
@@ -166,7 +167,8 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     try {
       await createHabit({
         title: state.newHabit.title.trim(), tags: state.newHabit.tags, estimated_time: state.newHabit.estimated_time ?? null,
-        planned_time: state.newHabit.planned_time ?? null,
+        // An all-day habit (no time goal) holds no time.
+        planned_time: isAllDayHabit(state.newHabit) ? null : state.newHabit.planned_time ?? null,
       });
       state.setNewHabit({ title: '', tags: [], estimated_time: null });
       state.setShowCreateHabitModal(false);

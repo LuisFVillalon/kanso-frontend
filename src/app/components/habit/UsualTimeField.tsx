@@ -12,7 +12,7 @@ interface UsualTimeFieldProps {
   /** "HH:MM", null for no set time, undefined while untouched (a new habit then takes the first suggestion). */
   value: string | null | undefined;
   onChange: (time: string | null) => void;
-  /** The daily time goal in hours; the time held is 30 minutes without one. */
+  /** The daily time goal in hours (the form shows this field only once there is one). */
   goalHours: number | null | undefined;
   tasks: Task[];
   habits: Habit[];

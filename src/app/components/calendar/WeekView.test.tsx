@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   restoreEvent: vi.fn(),
   updateGoogleEventTags: vi.fn(),
   updateWorkBlock: vi.fn(),
+  deleteWorkBlock: vi.fn(),
   push: vi.fn(),
 }));
 
@@ -45,6 +46,7 @@ vi.mock('@/app/lib/backend-api', () => ({
   restoreEvent: mocks.restoreEvent,
   updateGoogleEventTags: mocks.updateGoogleEventTags,
   updateWorkBlock: mocks.updateWorkBlock,
+  deleteWorkBlock: mocks.deleteWorkBlock,
   describeError: (_err: unknown, fallback: string) => fallback,
 }));
 vi.mock('@/app/context/TasksContext', () => ({
@@ -629,6 +631,24 @@ describe('WeekView', { timeout: 30_000 }, () => {
       const block = button('Habit block: Run, 6:00 PM – 6:30 PM');
       expect(block.textContent).toContain('Habit');
       expect(block.getAttribute('style')).toContain('var(--tm-week-habit)');
+    });
+
+    it("deletes a habit block from the calendar, leaving the habit, and task blocks have no delete button", async () => {
+      let blocks = [
+        workBlock({ id: 9, task_id: null, habit_id: 5, title: 'Run', start_time: '18:00', end_time: '18:30' }),
+        workBlock({ id: 8, task_id: 1, title: 'Task', start_time: '15:00', end_time: '16:00' }),
+      ];
+      mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({ ...activityFor(start, end), work_blocks: blocks }));
+      mocks.deleteWorkBlock.mockReset().mockImplementation(async (id: number) => { blocks = blocks.filter(b => b.id !== id); });
+      await render();
+      const remove = [...document.querySelectorAll<HTMLButtonElement>('[data-delete-block]')];
+      expect(remove.map(b => b.getAttribute('aria-label'))).toEqual(['Remove Run from the calendar']);
+      await act(async () => remove[0].click());
+      expect(mocks.deleteWorkBlock).toHaveBeenCalledWith(9);
+      expect(mocks.updateTask).not.toHaveBeenCalled();
+      expect(document.querySelector('[aria-label="Habit block: Run, 6:00 PM – 6:30 PM"]')).toBeNull();
+      expect(document.querySelector('[data-delete-block]')).toBeNull();
+      expect(document.querySelector('[aria-label^="Work on: Task"]')).not.toBeNull();
     });
 
     it('splits an event that runs past midnight across both days, and puts all-day events in the all-day row', async () => {
