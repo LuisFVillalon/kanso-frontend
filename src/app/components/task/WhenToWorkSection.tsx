@@ -1,20 +1,19 @@
 'use client';
 
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Clock, MoonStar, Split } from 'lucide-react';
+import { MoonStar, Split } from 'lucide-react';
 import { AppShellContext } from '@/app/context/AppShellContext';
 import type { WorkBlock } from '@/app/types/workBlock';
 import type { SlotPlanner } from '@/app/hooks/useSlotPlanner';
 import { blockSpan, minutesOf, planMinutes } from '@/app/hooks/useSlotPlanner';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 import {
-  afterWorkHours, freeMinutesOn, planRange, slotReason, splitFill, suggest,
-  type PlanRange, type Slot, type SlotState,
+  afterWorkHours, freeMinutesOn, planRange, splitFill, suggest, type PlanRange,
 } from '@/app/utils/slotSuggest';
 import { clock, dayName, dayShort, lengthText, timeRange } from '@/app/utils/slotLabels';
-import { pickKey, samePick, togglePicks, type PlanPick } from '@/app/utils/workBlockPlans';
+import { samePick, togglePicks, type PlanPick } from '@/app/utils/workBlockPlans';
 import Callout from './Callout';
-import FreeTimeStrip from './FreeTimeStrip';
+import SlotChooser, { SlotRow } from './SlotChooser';
 
 /** Waits for `value` to settle for `ms` before passing it on, so typing a date doesn't recompute every keystroke. */
 function useSettled<T>(value: T, ms = 300): T {
@@ -48,84 +47,6 @@ export function usePlanInputs(planner: SlotPlanner | null, dueDate: string | Dat
   }, [planner, settled]);
 }
 
-interface SlotRowsProps {
-  slots: Slot[];
-  picks: PlanPick[];
-  onToggle: (slot: Slot) => void;
-  state: SlotState;
-  range: PlanRange;
-  today: string;
-  /** Labels the first row "Soonest". */
-  soonest?: boolean;
-}
-
-/** The suggested times as toggle rows: day, time, a "Soonest" pill on the first, and why it's offered. */
-export const SlotRows: React.FC<SlotRowsProps> = ({ slots, picks, onToggle, state, range, today, soonest = true }) => (
-  <ul className="flex flex-col gap-1.5" aria-label="Suggested times">
-    {slots.map((s, i) => {
-      const on = picks.some(p => samePick(p, s));
-      const reason = slotReason(s, state, range.hasDue ? range.due : null, clock);
-      return (
-        <li key={pickKey(s)}>
-          <SlotRow
-            on={on}
-            onClick={() => onToggle(s)}
-            day={dayName(s.date, today)}
-            time={timeRange(s.start, s.end)}
-            pill={soonest && i === 0 ? 'Soonest' : undefined}
-            reason={reason}
-          />
-        </li>
-      );
-    })}
-  </ul>
-);
-
-interface SlotRowProps {
-  on: boolean;
-  onClick: () => void;
-  day: React.ReactNode;
-  time: string;
-  pill?: string;
-  reason?: string;
-  icon?: React.ReactNode;
-}
-
-const SlotRow: React.FC<SlotRowProps> = ({ on, onClick, day, time, pill, reason, icon }) => (
-  <button
-    type="button"
-    aria-pressed={on}
-    onClick={onClick}
-    data-slot-row
-    className="w-full flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors hover:bg-[var(--tm-accent-subtle)]"
-    style={{
-      borderColor: on ? 'var(--tm-accent)' : 'var(--tm-border)',
-      backgroundColor: on ? 'var(--tm-accent-subtle)' : 'var(--tm-surface)',
-    }}
-  >
-    <span
-      aria-hidden
-      className="w-4 h-4 flex-shrink-0 rounded-full border flex items-center justify-center"
-      style={{ borderColor: on ? 'var(--tm-accent)' : 'var(--tm-border-strong)', backgroundColor: on ? 'var(--tm-accent)' : 'transparent' }}
-    >
-      {on && <Check className="w-3 h-3" style={{ color: 'var(--tm-accent-text)' }} />}
-    </span>
-    <span className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-      <span className="inline-flex items-center gap-1 font-semibold text-text-primary whitespace-nowrap">{icon}{day}</span>
-      <span className="text-text-primary whitespace-nowrap">{time}</span>
-      {pill && (
-        <span
-          className="rounded-full px-1.5 text-[10.5px] font-bold"
-          style={{ backgroundColor: 'var(--tm-accent)', color: 'var(--tm-accent-text)' }}
-        >
-          {pill}
-        </span>
-      )}
-      {reason && <span className="basis-full sm:basis-auto text-xs text-text-muted">{reason}</span>}
-    </span>
-  </button>
-);
-
 interface WhenToWorkSectionProps {
   planner: SlotPlanner | null;
   dueDate: string | Date | null | undefined;
@@ -145,16 +66,17 @@ interface WhenToWorkSectionProps {
 /**
  * "When to work on it": up to 3 free times before the task is due, after
  * events, today's habits and the tasks due sooner, ranked soonest first, one
- * per day, keeping off the due day while other days have room. Picking rows
- * (any number) adds a block to the calendar for each when the task saves;
- * "Other time…" opens the free-time strip to place one anywhere free. When
- * nothing fits it offers to split the time or go past work hours.
+ * per day, keeping off the due day while other days have room. A "Which day"
+ * strip over them swaps in up to 3 times on any one day before the deadline.
+ * Picking rows (any number) adds a block to the calendar for each when the
+ * task saves, and a picked row can move 30 minutes earlier or later or change
+ * its length inside its free time. When nothing fits it offers to split the
+ * time or go past work hours.
  */
 const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
   planner, dueDate, dueTime, estimatedHours, picks, onPicksChange, kept = [], removedKept, onToggleKept, error,
 }) => {
   const shell = useContext(AppShellContext);
-  const [stripOpen, setStripOpen] = useState(false);
   const inputs = usePlanInputs(planner, dueDate, dueTime, estimatedHours);
 
   // The rows change with the due date and length, and so do the times picked from them.
@@ -181,9 +103,6 @@ const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
   const { slots, days, split, after } = result;
   const dueToday = range.hasDue && range.due.date === today;
   const toggle = (p: PlanPick | PlanPick[]) => onPicksChange(togglePicks(picks, Array.isArray(p) ? p : [p]));
-  // Picks that aren't one of the rows: placed on the strip, split pieces, after work hours.
-  const listed = [...slots, ...(split ?? []), ...(after ? [after] : [])];
-  const custom = picks.filter(p => !listed.some(s => samePick(s, p)));
   const keptSpans = kept.map(b => ({ b, span: blockSpan(b) }));
 
   return (
@@ -192,23 +111,10 @@ const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
         <span id="when-to-work-label" className="block text-sm font-medium text-text-secondary">
           When to work on it <span className="font-normal text-text-muted">(optional)</span>
         </span>
-        <span className="flex flex-wrap items-baseline gap-x-3 text-xs ml-auto">
-          {dueToday && (
-            <span className="text-text-muted whitespace-nowrap">Due today · {lengthText(freeMinutesOn(days, today))} free left</span>
-          )}
-          <button
-            type="button"
-            onClick={() => setStripOpen(o => !o)}
-            aria-expanded={stripOpen}
-            className="font-semibold text-accent hover:underline whitespace-nowrap"
-          >
-            Other time…
-          </button>
-        </span>
+        {dueToday && (
+          <span className="text-xs text-text-muted whitespace-nowrap ml-auto">Due today · {lengthText(freeMinutesOn(days, today))} free left</span>
+        )}
       </div>
-      <p className="text-xs text-text-muted mb-2">
-        Free time before it&apos;s due, after your events, today&apos;s habits and tasks due sooner. Pick one or more; each adds a block to your calendar.
-      </p>
 
       {!planner.workHoursSet && (
         <div className="mb-2">
@@ -223,8 +129,21 @@ const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
         </div>
       )}
 
-      <div className="flex flex-col gap-1.5" role="group" aria-labelledby="when-to-work-label">
-        {keptSpans.map(({ b, span }) => (
+      <SlotChooser
+        // A new due date or length starts over on Best, as the picks are cleared.
+        key={inputs.key}
+        state={state}
+        days={days}
+        range={range}
+        len={len}
+        today={today}
+        best={slots}
+        picks={picks}
+        onPicksChange={onPicksChange}
+        shownElsewhere={[...(split ?? []), ...(after ? [after] : [])]}
+        labelledBy="when-to-work-label"
+        stripClassName="-mx-6 px-6 sm:mx-0 sm:px-0 mb-1"
+        before={keptSpans.map(({ b, span }) => (
           <SlotRow
             key={`kept-${b.id}`}
             on={!removedKept?.has(b.id)}
@@ -235,12 +154,7 @@ const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
             reason={removedKept?.has(b.id) ? 'removed when you save' : 'on your calendar'}
           />
         ))}
-
-        {slots.length > 0 && (
-          <SlotRows slots={slots} picks={picks} onToggle={toggle} state={state} range={range} today={today} />
-        )}
-
-        {slots.length === 0 && (
+        empty={(
           <Callout tone="warning">
             <span>No free {lengthText(len)} before {dueText(range, today)}.</span>
             {(split || after) && (
@@ -251,7 +165,13 @@ const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
                     onClick={() => toggle(split)}
                     icon={<Split className="w-3.5 h-3.5" aria-hidden />}
                     day="Split it"
-                    time={split.map(p => `${dayShort(p.date, today)} ${timeRange(p.start, p.end)}`).join(' + ')}
+                    wrapTime
+                    time={split.map((p, i) => (
+                      <React.Fragment key={i}>
+                        {i > 0 && ' + '}
+                        <span className="whitespace-nowrap">{dayShort(p.date, today)} {timeRange(p.start, p.end)}</span>
+                      </React.Fragment>
+                    ))}
                     reason={`${split.length} blocks`}
                   />
                 )}
@@ -268,36 +188,7 @@ const WhenToWorkSection: React.FC<WhenToWorkSectionProps> = ({
             )}
           </Callout>
         )}
-
-        {custom.map(p => (
-          <SlotRow
-            key={`custom-${pickKey(p)}`}
-            on
-            onClick={() => toggle(p)}
-            icon={<Clock className="w-3.5 h-3.5" aria-hidden />}
-            day={dayName(p.date, today)}
-            time={timeRange(p.start, p.end)}
-            reason="your pick"
-          />
-        ))}
-      </div>
-
-      {stripOpen && (
-        <div className="mt-3 rounded-lg border border-border p-3" style={{ backgroundColor: 'var(--tm-surface-raised)' }}>
-          <FreeTimeStrip
-            state={state}
-            days={days}
-            range={range}
-            len={len}
-            slots={slots}
-            picks={picks}
-            events={planner.events}
-            workBlocks={planner.workBlocks}
-            today={today}
-            onPlace={p => { if (!picks.some(x => samePick(x, p))) onPicksChange([...picks, p]); }}
-          />
-        </div>
-      )}
+      />
 
       {error && <div className="mt-2">{error}</div>}
     </div>

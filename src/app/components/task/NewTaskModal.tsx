@@ -4,14 +4,15 @@ import { BaseTaskForm, LinkedTaskRef, Tag, Task } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
 import TaskFormFields, { TaskFormData } from './TaskFormFields';
 import LinkedTasksField, { type LinkedPlan } from './LinkedTasksField';
-import WhenToWorkSection, { SlotRows, usePlanInputs } from './WhenToWorkSection';
+import WhenToWorkSection, { usePlanInputs } from './WhenToWorkSection';
+import SlotChooser from './SlotChooser';
 import Callout from './Callout';
 import Modal from '@/app/components/common/Modal';
 import { LinkedDraft, LinkedTasksSaveError, linkedSaveMessage, toLinkedRefs } from '@/app/utils/linkedTasks';
 import { useSlotPlanner, planMinutes, minutesOf, type SlotPlanner } from '@/app/hooks/useSlotPlanner';
 import { earlierRange, planRange, spread, suggest, withHeld, type PlanRange, type SpreadItem } from '@/app/utils/slotSuggest';
 import { clock, dayShort } from '@/app/utils/slotLabels';
-import { WorkBlocksSaveError, savePlans, samePick, togglePicks, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
+import { WorkBlocksSaveError, savePlans, samePick, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 
 /**
@@ -259,8 +260,9 @@ function rowInputs(d: LinkedDraft, byId: Map<number, Task>) {
  * The Linked tasks section's slot pills: each open row's time from spreading
  * the rows in list order, before the parent and the row are due, where a
  * picked row keeps its pick and the rows after it follow it ("Plan all"
- * picks the rest), and when a pill is opened, that row's own 3 suggestions.
- * The parent's picks and the other rows' picks count as taken.
+ * picks the rest), and when a pill is opened, that row's own 3 suggestions
+ * with a "Which day" strip over them and Earlier/Later and length on a picked
+ * time. The parent's picks and the other rows' picks count as taken.
  */
 function useLinkedPlan(
   planner: SlotPlanner | null,
@@ -329,23 +331,28 @@ function useLinkedPlan(
       const range = r && rangeFor(r);
       if (!r || !range) return <p className="text-xs text-text-muted">It&apos;s past due, so there&apos;s nothing to plan.</p>;
       const state = heldFor(key);
-      const own = suggest(state, r.len, range).slots;
+      const { slots: own, days } = suggest(state, r.len, range);
       const spreadSlot = spreadOut.get(key);
       const lead = linkedPicks[key]?.length ? linkedPicks[key] : spreadSlot ? [spreadSlot] : [];
       const slots = [
         ...lead.map(p => ({ ...p, gap: p.end - p.start })),
         ...own.filter(s => !lead.some(p => samePick(s, p))),
       ].slice(0, Math.max(3, lead.length));
-      if (slots.length === 0) return <p className="text-xs text-text-muted">No free time fits it before it&apos;s due.</p>;
       return (
-        <SlotRows
-          slots={slots}
-          picks={linkedPicks[key] ?? []}
-          onToggle={s => setLinkedPicks(prev => ({ ...prev, [key]: togglePicks(prev[key] ?? [], [s]) }))}
+        // Mounted per open pill, so its day starts on Best each time one opens.
+        <SlotChooser
+          key={key}
           state={state}
+          days={days}
           range={range}
+          len={r.len}
           today={today}
+          best={slots}
           soonest={false}
+          picks={linkedPicks[key] ?? []}
+          onPicksChange={next => setLinkedPicks(prev => ({ ...prev, [key]: next }))}
+          stripClassName="-mx-2.5 px-2.5 sm:mx-0 sm:px-0 mb-1"
+          empty={<p className="text-xs text-text-muted">No free time fits it before it&apos;s due.</p>}
         />
       );
     },

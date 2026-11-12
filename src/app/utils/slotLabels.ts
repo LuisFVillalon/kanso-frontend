@@ -45,3 +45,28 @@ export function lengthText(minutes: number): string {
 /** Minutes → "HH:MM", as the API takes times; the end of the day is "23:59". */
 export const hhmm = (minutes: number): string =>
   minutes >= 1440 ? '23:59' : `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** "30m", "1h", "1h 30m": a day chip's free time. */
+export function shortLength(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+/** "Friday, Nov 13": a day spelled out for screen readers. */
+export const dayLong = (date: string): string =>
+  parseLocalDate(date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+/** "Thu 12": a day chip's label. */
+export const dayChip = (date: string, today: string): string => {
+  if (date === today) return 'Today';
+  const d = parseLocalDate(date);
+  return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${d.getDate()}`;
+};
+
+/** "today", "tomorrow", or "Fri, Nov 13", to go after "on" or stand alone in a sentence. */
+export const dayInSentence = (date: string, today: string): string => {
+  const name = dayName(date, today);
+  return date === today || date === addDaysStr(today, 1) ? name.toLowerCase() : `on ${name}`;
+};

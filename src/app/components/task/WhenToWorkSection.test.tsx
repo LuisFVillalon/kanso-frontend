@@ -188,14 +188,180 @@ describe('When to work on it', () => {
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ task_id: 120, date: '2026-11-11', start_time: '11:30', end_time: '12:00' }));
   });
 
-  it('places a block on any free time from "Other time…"', async () => {
+  it('has no "Other time…" link and no hint under the heading', async () => {
     await render({}, creating());
-    await act(async () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Other time…')!.click());
-    const strip = document.querySelector('[data-free-time-strip]')!;
-    const free = strip.querySelector<HTMLButtonElement>('button[aria-label^="Free Today 5:00 – 7:00 PM"]')!;
-    await act(async () => free.click());
-    expect(rows().at(-1)!.textContent).toContain('5:00 – 6:00 PM');
-    expect(rows().at(-1)!.textContent).toContain('your pick');
+    const section = document.querySelector('[data-when-to-work]')!;
+    expect([...section.querySelectorAll('button')].some(b => b.textContent === 'Other time…')).toBe(false);
+    expect(section.textContent).not.toContain('Free time before it');
+    expect(section.textContent).not.toContain('Pick one or more');
+  });
+});
+
+describe('Which day', () => {
+  const chips = () => [...document.querySelectorAll<HTMLButtonElement>('[data-when-to-work] [data-day-chip]')];
+  const chip = (pick: string) => document.querySelector<HTMLButtonElement>(`[data-when-to-work] [data-day-chip="${pick}"]`)!;
+  const selected = () => chips().find(c => c.getAttribute('aria-checked') === 'true')!.dataset.dayChip;
+  const key = (el: Element, k: string) => act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); });
+
+  it('lists Best and each day to the deadline, with rest days and too-full days disabled and the due day flagged', async () => {
+    await render({ estimated_time: 3 }, creating());
+    expect(document.querySelector('[role="radiogroup"]')!.getAttribute('aria-label')).toBe('Which day');
+    expect(chips().map(c => c.dataset.dayChip)).toEqual(['best', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16']);
+    expect(chips().map(c => c.textContent)).toEqual(['Best2 times', 'Today3h 30m', 'Thu 1210h', 'Fri 138h', 'Sat 14Off', 'Sun 15Off', 'Mon 161hDue']);
+    expect(chips().filter(c => c.disabled).map(c => c.dataset.dayChip)).toEqual(['2026-11-11', '2026-11-14', '2026-11-15', '2026-11-16']);
+    expect(chip('2026-11-13').getAttribute('aria-label')).toBe('Friday, Nov 13: 8 hr free');
+    expect(chip('2026-11-14').getAttribute('aria-label')).toBe('Saturday, Nov 14: rest day');
+    expect(chip('2026-11-16').getAttribute('aria-label')).toBe('Monday, Nov 16: no free 3 hr, due 10:00 AM');
+    expect(selected()).toBe('best');
+    expect(chip('best').tabIndex).toBe(0);
+    expect(chip('2026-11-12').tabIndex).toBe(-1);
+  });
+
+  it("shows a day's times, and says when that's all the free time before it's due", async () => {
+    await render({}, creating());
+    await act(async () => chip('2026-11-12').click());
+    expect(selected()).toBe('2026-11-12');
+    expect(rows().map(r => r.textContent)).toEqual([
+      'Tomorrow9:00 – 10:00 AMstart of your work day',
+      'Tomorrow10:00 – 11:00 AMfree until 7:00 PM',
+      'Tomorrow6:00 – 7:00 PMend of your work day',
+    ]);
+    expect(document.body.textContent).toContain('Showing Thursday, Nov 12');
+    await act(async () => chip('2026-11-16').click());
+    expect(rows().map(r => r.textContent)).toEqual(["Mon, Nov 169:00 – 10:00 AMthe day it's due"]);
+    expect(document.body.textContent).toContain("That's all the free time on Mon, Nov 16 before it's due at 10:00 AM.");
+    await act(async () => chip('best').click());
+    expect(rows()[0].textContent).toContain('Soonest');
+  });
+
+  it('moves between days with the arrow keys, skipping disabled ones', async () => {
+    await render({}, creating());
+    chip('best').focus();
+    await key(chip('best'), 'ArrowRight');
+    expect(selected()).toBe('2026-11-11');
+    expect(document.activeElement).toBe(chip('2026-11-11'));
+    await key(chip('2026-11-11'), 'End');
+    expect(selected()).toBe('2026-11-16');
+    await key(chip('2026-11-16'), 'ArrowLeft');
+    // Sat and Sun are rest days.
+    expect(selected()).toBe('2026-11-13');
+    await key(chip('2026-11-13'), 'Home');
+    expect(selected()).toBe('best');
+  });
+
+  it('keeps a time picked on another day as "your pick"', async () => {
+    await render({}, creating());
+    await act(async () => chip('2026-11-12').click());
+    await act(async () => rows()[1].click());
+    await act(async () => chip('best').click());
+    expect(rows()).toHaveLength(4);
+    expect(rows()[3].textContent).toBe('Tomorrow10:00 – 11:00 AMyour pick');
+    expect(rows()[3].getAttribute('aria-pressed')).toBe('true');
     expect(submitButton().textContent).toBe('Create & plan');
+  });
+
+  it('goes back to Best and clears the picks when the length changes', async () => {
+    await render({}, creating());
+    await act(async () => chip('2026-11-12').click());
+    await act(async () => rows()[0].click());
+    const twoHours = [...document.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent === '2 hours')!;
+    await act(async () => twoHours.click());
+    await act(async () => { await new Promise(r => setTimeout(r, 350)); });
+    expect(selected()).toBe('best');
+    expect(rows().every(r => r.getAttribute('aria-pressed') === 'false')).toBe(true);
+    expect(submitButton().textContent).toBe('Create Task');
+  });
+});
+
+describe('Earlier, Later and length on a picked time', () => {
+  const button = (label: string) => document.querySelector<HTMLButtonElement>(`[data-when-to-work] button[aria-label="${label}"]`)!;
+  const tune = () => document.querySelector<HTMLElement>('[data-when-to-work] [data-tune-bar]');
+
+  it('shows only under a picked row', async () => {
+    await render({}, creating());
+    expect(tune()).toBeNull();
+    await act(async () => rows()[1].click());
+    expect(tune()!.querySelector('[role="group"]')!.getAttribute('aria-label')).toBe('Adjust Tomorrow 9:00 – 10:00 AM');
+  });
+
+  it('moves a pick inside its free time and keeps its row, then says why at an edge', async () => {
+    const onSubmit = creating();
+    await render({}, onSubmit);
+    await act(async () => rows()[1].click());
+    expect(button('30 minutes earlier').getAttribute('aria-disabled')).toBe('true');
+    expect(tune()!.textContent).toContain("Can't go earlier: your work day starts at 9:00 AM.");
+    button('30 minutes later').focus();
+    await act(async () => button('30 minutes later').click());
+    expect(rows()[1].textContent).toBe('Tomorrow9:30 – 10:30 AMmoved from 9:00 AM');
+    expect(rows()[1].getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).toBe(button('30 minutes later'));
+    expect(document.body.textContent).toContain('Moved to 9:30 – 10:30 AM');
+    await submit();
+    expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ task_id: 99, date: '2026-11-12', start_time: '09:30', end_time: '10:30' }));
+  });
+
+  it('names the events at both ends of a full gap', async () => {
+    await render({}, creating());
+    await act(async () => rows()[0].click());
+    expect(button('30 minutes earlier').getAttribute('aria-disabled')).toBe('true');
+    expect(button('30 minutes later').getAttribute('aria-disabled')).toBe('true');
+    expect(tune()!.textContent).toContain("Can't go earlier: Study group ends at 1:00 PM. Can't go later: Shift at the library starts at 2:00 PM.");
+  });
+
+  it('changes the length, disabling lengths that do not fit', async () => {
+    await render({}, creating());
+    await act(async () => rows()[0].click());
+    expect(button('1 hr').getAttribute('aria-pressed')).toBe('true');
+    expect(button('2 hr').disabled).toBe(true);
+    expect(button('2 hr').title).toBe('No free 2 hr here');
+    await act(async () => button('30 min').click());
+    expect(rows()[0].textContent).toContain('1:00 – 1:30 PMSoonestmoved from 1:00 PM, 30 min');
+    await act(async () => button('30 minutes later').click());
+    expect(rows()[0].textContent).toContain('1:30 – 2:00 PM');
+  });
+
+  it('drops the move when the row is unpicked', async () => {
+    await render({}, creating());
+    await act(async () => rows()[1].click());
+    await act(async () => button('30 minutes later').click());
+    await act(async () => rows()[1].click());
+    expect(rows()[1].textContent).toBe('Tomorrow9:00 – 10:00 AMstart of your work day');
+    expect(rows()[1].getAttribute('aria-pressed')).toBe('false');
+    expect(tune()).toBeNull();
+    expect(submitButton().textContent).toBe('Create Task');
+  });
+});
+
+describe('Linked tasks', () => {
+  const addLinked = async (title: string) => {
+    const input = document.querySelector<HTMLInputElement>('input[aria-labelledby="linked-new-label"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, title);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+  };
+  const pill = () => document.querySelector<HTMLButtonElement>('[data-slot-pill]')!;
+  const options = () => document.querySelector<HTMLElement>('[data-slot-options]')!;
+
+  it('has no description line', async () => {
+    await render({}, creating());
+    expect(document.body.textContent).not.toContain('Tasks that need to happen before this one is finished');
+  });
+
+  it('opens a pill with the day strip, and a day pick plus Later updates the pill', async () => {
+    await render({ due_date: '2026-11-17', due_time: '23:59' }, creating());
+    await addLinked('Find sources');
+    await act(async () => pill().click());
+    expect(options().querySelector('[role="radiogroup"][aria-label="Which day"]')).not.toBeNull();
+    await act(async () => options().querySelector<HTMLButtonElement>('[data-day-chip="2026-11-12"]')!.click());
+    const optionRows = () => [...options().querySelectorAll<HTMLButtonElement>('[data-slot-row]')];
+    expect(optionRows().map(r => r.textContent?.split('AM')[0])).toEqual(['Tomorrow9:00 – 9:30 ', 'Tomorrow9:30 – 10:00 ', 'Tomorrow6:30 – 7:00 PMend of your work day']);
+    await act(async () => optionRows()[0].click());
+    expect(pill().getAttribute('aria-label')).toContain('Planned Tomorrow 9:00 AM');
+    await act(async () => options().querySelector<HTMLButtonElement>('button[aria-label="30 minutes later"]')!.click());
+    // Later steps past the 9:30 row, so the moved pick keeps its own row.
+    expect(pill().textContent).toBe('Tomorrow 9:30 AM');
+    expect(optionRows()[0].textContent).toContain('moved from 9:00 AM');
   });
 });
