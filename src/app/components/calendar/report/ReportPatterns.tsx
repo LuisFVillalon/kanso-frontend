@@ -77,12 +77,12 @@ const tagsPickFor = (rows: PatternRow[], { row, feeling }: PatternFinding): Tags
 };
 
 /** Where the page opens: each card on its clearest finding, and on a phone the card holding the clearest of all. */
-const opening = (rows: PatternRow[], findings: PatternFinding[]) => {
+const opening = (findings: PatternFinding[]) => {
   const act = findings.find(x => x.row.source === 'activity');
   const tag = findings.find(x => x.row.source !== 'activity');
   return {
     activity: { metric: act?.row.metric ?? 'tasks', feeling: act?.feeling ?? 'mood' } as ActivityPick,
-    tags: tag ? tagsPickFor(rows, tag) : { source: 'tag', feeling: 'mood', open: null, more: false } as TagsPick,
+    tags: { source: (tag?.row.source ?? 'tag') as TagSource, feeling: tag?.feeling ?? 'mood', open: null, more: false } as TagsPick,
     panel: findings[0] && findings[0].row.source !== 'activity' ? 'tags' as const : 'activity' as const,
   };
 };
@@ -132,7 +132,7 @@ const ReportPatterns: React.FC<ReportPatternsProps> = ({ activity, byDay, period
   );
   const findings = useMemo(() => patternFindings(analysis.rows), [analysis]);
 
-  const [start] = useState(() => opening(analysis.rows, findings));
+  const [start] = useState(() => opening(findings));
   const [act, setAct] = useState<ActivityPick>(start.activity);
   const [tags, setTags] = useState<TagsPick>(start.tags);
   const [panel, setPanel] = useState<'activity' | 'tags'>(start.panel);

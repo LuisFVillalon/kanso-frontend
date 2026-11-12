@@ -269,11 +269,14 @@ describe('CalendarReportView mood', () => {
     expect(text()).not.toMatch(/\b(better|worse)\b/);
     expect(text()).not.toMatch(/ρ|Spearman/);
 
-    // The Tags & moments card opens on the Moments, its finding said in a sentence with its days shown.
+    // The Tags & moments card opens on the Moments, its finding said in a sentence with its days kept closed until asked for.
     expect(tab('Moments').getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('What went with your mood this month?');
     expect(text()).toMatch(/On days you picked “Exercised” your mood was higher: 4\.\d (Good|Great) vs [12]\.\d (Rough|Low) on other days\./);
-    expect(text()).toContain('Early sign: only 8 days so far · 8 days vs 12 other · Hide days');
+    expect(text()).toContain('Early sign: only 8 days so far · 8 days vs 12 other · See the days');
+    expect(container.querySelector('[data-strip="month"]')).toBeNull();
+    expect(buttonLabelled(/^See the days$/).getAttribute('aria-expanded')).toBe('false');
+    await click(buttonLabelled(/^See the days$/));
     expect(buttonLabelled(/^Hide days$/).getAttribute('aria-expanded')).toBe('true');
     expect(container.querySelector('[data-strip="month"]')).not.toBeNull();
 
@@ -370,7 +373,7 @@ describe('CalendarReportView mood', () => {
     expect(tab('Your tags').getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('Went with a difference');
     expect(text()).toContain('On Gym days your mood was higher: 5.0 Great vs 2.0 Low on other days.');
-    expect(text()).toContain('Early sign: only 7 days so far · 7 days vs 14 other · from habits · Hide days');
+    expect(text()).toContain('Early sign: only 7 days so far · 7 days vs 14 other · from habits · See the days');
     expect(text()).toContain('About the same as usual: Reading (6)');
     expect(text()).toContain('Not enough days yet: COMM 103, Trip');
     const reasons = [...container.querySelectorAll('details li')].map(li => li.textContent);
@@ -381,8 +384,10 @@ describe('CalendarReportView mood', () => {
     expect(text()).toContain('A tag counts on days you finished a task, wrote in a note, checked off a habit or had an event with it.');
     expect(text()).toContain('These went together. That doesn’t mean one caused the other');
 
-    // The finding opens on its days: one cell a day, Gym days marked, days to come dotted.
+    // See the days opens the finding's days: one cell a day, Gym days marked, days to come dotted.
     const strip = () => container.querySelector('[role="img"][aria-label^="Mood averaged 5.0 (Great) on Gym days"]');
+    expect(strip()).toBeNull();
+    await click(buttonLabelled(/^See the days$/));
     expect(strip()).not.toBeNull();
     const cells = [...container.querySelectorAll('[data-strip="month"] > span')];
     expect(cells).toHaveLength(31);
