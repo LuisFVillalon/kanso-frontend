@@ -282,7 +282,7 @@ const ReportPace: React.FC<ReportPaceProps> = ({ period, activity, previous, wor
   if (!pace.hasCurrent && (!ready || !pace.hasPrevious)) {
     const yet = pace.finished ? '' : ' yet';
     return (
-      <div className="flex-1 flex flex-col gap-1.5">
+      <div ref={chartRef} className="flex-1 flex flex-col gap-1.5 min-w-0">
         <EmptyBox>
           {ready
             ? `Nothing done${yet} ${names.current} or ${names.previous}.`
@@ -316,7 +316,7 @@ const ReportPace: React.FC<ReportPaceProps> = ({ period, activity, previous, wor
   const curAt = (i: number): number => (period.kind === 'year' ? series.currentPoints[i] : series.currentRunning[i]);
 
   return (
-    <div className="flex-1 flex flex-col gap-3 min-w-0">
+    <div ref={chartRef} className="flex-1 flex flex-col gap-3 min-w-0">
       <div role="group" aria-label="Compare" className="flex gap-1.5 flex-nowrap overflow-x-auto scrollbar-none sm:flex-wrap sm:overflow-visible">
         {PACE_METRICS.map(m => {
           const s = pace.metrics[m];
@@ -349,7 +349,7 @@ const ReportPace: React.FC<ReportPaceProps> = ({ period, activity, previous, wor
         <Legend names={names} compare={compare} />
       </div>
 
-      <div ref={chartRef} className="flex-1 flex items-end min-w-0">
+      <div className="flex-1 flex items-end min-w-0">
         <PaceChart pace={pace} metric={metric} compare={compare} width={width} compact={compact} label={chartLabel} />
       </div>
 

@@ -167,6 +167,18 @@ describe('ReportPace', () => {
     expect(text()).toContain('The week before ended at 1. Compared over the whole week.');
   });
 
+  it('draws the chart at the card’s measured width when it first showed the empty box', async () => {
+    const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(360);
+    try {
+      await render(week, activity(), loaded(week, null, 'loading'));
+      expect(container.querySelector('[data-testid="pace-chart"]')).toBeNull();
+      await render(week, thisWeek, loaded(week, lastWeek));
+      expect(container.querySelector('[data-testid="pace-chart"]')?.getAttribute('width')).toBe('360');
+    } finally {
+      clientWidth.mockRestore();
+    }
+  });
+
   it('shows this week alone when last week fails to load', async () => {
     await render(week, thisWeek, loaded(week, null, 'error'));
     expect(chips().map(b => b.textContent)).toEqual(['Done4', 'Tasks3', 'Habits1', 'Note time30m', 'Events0m']);
