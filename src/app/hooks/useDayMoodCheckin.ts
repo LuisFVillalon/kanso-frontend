@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/app/context/ToastContext';
 import { deleteMoodCheckin, describeError, fetchMoodCheckins, saveMoodCheckin } from '@/app/lib/backend-api';
 import { checkinToSave, moodLabel, type MoodCheckin } from '@/app/types/mood';
-import { announceMoodCheckin, followMoments, isLatestMoodCheckin, onMoodCheckin, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
+import { announceMoodCheckin, isLatestMoodCheckin, momentsFromNow, onMoodCheckin, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 
 interface Loaded {
   date: string;
@@ -22,9 +22,11 @@ export function useDayMoodCheckin(date: string | null) {
   useEffect(() => {
     if (!date) return;
     let cancelled = false;
+    const moments = momentsFromNow();
     fetchMoodCheckins(date, date, ['day'])
       .then(rows => {
-        if (!cancelled) setLoaded({ date, row: rows.find(r => r.period_kind === 'day' && r.period_start === date) ?? null });
+        const row = rows.find(r => r.period_kind === 'day' && r.period_start === date);
+        if (!cancelled) setLoaded({ date, row: row ? moments.row(row) : null });
       })
       .catch(() => { if (!cancelled) setFailedDate(date); });
     const unsubscribe = onMoodCheckin(({ kind, start, row }) => {
@@ -60,11 +62,11 @@ export function useMoodCheckinSaved() {
     dismissSavedToast.current = null;
 
     if (previous) {
-      const restored = followMoments(previous);
+      const moments = momentsFromNow();
       showToast('Check-in updated.', 'success', {
         label: 'Undo',
         onClick: () => {
-          saveMoodCheckin(checkinToSave(restored()))
+          saveMoodCheckin(checkinToSave(moments.row(previous)))
             .then(row => announceMoodCheckin({ kind: row.period_kind, start: row.period_start, row }))
             .catch(err => showToast(describeError(err, "Couldn't undo. Please try again.")));
         },

@@ -320,6 +320,20 @@ describe('MoodCheckinModal moments: edit and delete', () => {
     expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ tags: ['Gym'] }));
   });
 
+  it('keeps a moment deleted or renamed before the moment list loads out of it once it lands', async () => {
+    let land!: (tags: { defaults: string[]; custom: string[] }) => void;
+    api.fetchMoodTags.mockReturnValueOnce(new Promise(resolve => { land = resolve; }));
+    await render();
+    await click(button('Delete moment Focused'));
+    await click(button('Delete moment'));
+    await click(button('Edit moment Tired'));
+    await type(momentInput('Tired'), 'Drained');
+    await click(button('Save moment'));
+
+    await act(async () => { land({ defaults: ['Slept well', 'Focused', 'Tired'], custom: ['Gym'] }); });
+    expect(moments()).toEqual(['Slept well', 'Drained', 'Gym']);
+  });
+
   it('keeps the moment when the delete is cancelled or fails', async () => {
     await render();
     await click(button('Delete moment Gym'));

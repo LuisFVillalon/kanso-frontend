@@ -3,7 +3,7 @@ import { fetchMoodCheckins } from '@/app/lib/backend-api';
 import type { MoodCheckin, MoodPeriodKind } from '@/app/types/mood';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import type { ReportPeriod } from '@/app/utils/calendarReport';
-import { onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
+import { momentsFromNow, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 import { moodFetchRanges } from '@/app/utils/moodReport';
 
 interface Fetched {
@@ -29,12 +29,13 @@ export function useReportMood(period: ReportPeriod) {
 
   useEffect(() => {
     let cancelled = false;
+    const moments = momentsFromNow();
     Promise.all(key.split(',').map(range => {
       const [startStr, endStr] = range.split(':');
       return fetchMoodCheckins(startStr, endStr);
     }))
       .then(parts => {
-        if (!cancelled) setFetched({ key, checkins: parts.flat() });
+        if (!cancelled) setFetched({ key, checkins: parts.flat().map(moments.row) });
       })
       .catch(err => {
         console.error('[useReportMood] Failed to fetch mood check-ins:', err);

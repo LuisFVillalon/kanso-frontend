@@ -10,7 +10,7 @@ import type { ProfileFields } from '@/app/hooks/useProfile';
 import { checkinToSave, moodLabel, type MoodCheckin, type MoodPeriodKind } from '@/app/types/mood';
 import type { Task } from '@/app/types/task';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
-import { announceMoodCheckin, followMoments, isLatestMoodCheckin, onMoodCheckin, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
+import { announceMoodCheckin, isLatestMoodCheckin, momentsFromNow, onMoodCheckin, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 import { indexDayCheckins, summarizeMood } from '@/app/utils/moodReport';
 import { checkinDayAt, endsPeriod, periodStartOf, type PeriodCheckinKind } from '@/app/utils/moodCheckinDay';
 
@@ -62,8 +62,9 @@ const PeriodMoodCheckins: React.FC<Props> = ({ profile, profileLoaded, tasks }) 
     if (!kindsKey) return;
     let cancelled = false;
     const kinds = kindsKey.split(',') as MoodPeriodKind[];
+    const moments = momentsFromNow();
     fetchMoodCheckins(fetchFrom, dayKey, kinds)
-      .then(rows => { if (!cancelled) setLoaded({ date: dayKey, kinds, rows }); })
+      .then(rows => { if (!cancelled) setLoaded({ date: dayKey, kinds, rows: rows.map(moments.row) }); })
       .catch(() => {}); // stay hidden; saving would likely fail too
     return () => { cancelled = true; };
   }, [dayKey, fetchFrom, kindsKey]);
@@ -107,8 +108,7 @@ const PeriodMoodCheckins: React.FC<Props> = ({ profile, profileLoaded, tasks }) 
     announceMoodCheckin({ kind, start, row });
   };
 
-  const restore = async (previous: () => MoodCheckin) => {
-    const row = previous();
+  const restore = async (row: MoodCheckin) => {
     try {
       setRow(row.period_kind, row.period_start, await saveMoodCheckin(checkinToSave(row)));
     } catch (err) {
@@ -123,8 +123,8 @@ const PeriodMoodCheckins: React.FC<Props> = ({ profile, profileLoaded, tasks }) 
     if (previous) {
       dismissSavedToast.current?.();
       dismissSavedToast.current = null;
-      const restored = followMoments(previous);
-      showToast(`${what} updated.`, 'success', { label: 'Undo', onClick: () => restore(restored) });
+      const moments = momentsFromNow();
+      showToast(`${what} updated.`, 'success', { label: 'Undo', onClick: () => restore(moments.row(previous)) });
       return;
     }
     dismissSavedToast.current = showToast(`${what} saved · ${moodLabel(saved.mood)}`, 'success', {

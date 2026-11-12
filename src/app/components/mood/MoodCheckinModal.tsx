@@ -23,7 +23,7 @@ import {
 } from '@/app/types/mood';
 import { periodContaining } from '@/app/utils/calendarReport';
 import { formatDateRange, formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
-import { announceMoodMoment, onMoodMoment, replaceMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
+import { announceMoodMoment, momentsFromNow, onMoodMoment, replaceMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 
 /** What the user already did that day, shown above the faces so they reflect rather than guess. */
 export interface DaySummary {
@@ -149,8 +149,9 @@ const MoodCheckinModal: React.FC<Props> = ({
   useEffect(() => {
     if (!showsTags) return;
     let cancelled = false;
+    const moments = momentsFromNow();
     fetchMoodTags()
-      .then(({ defaults, custom }) => { if (!cancelled) setSuggestions([...defaults, ...custom]); })
+      .then(({ defaults, custom }) => { if (!cancelled) setSuggestions(moments.list([...defaults, ...custom])); })
       .catch(() => {}); // keep the built-in list
     return () => { cancelled = true; };
   }, [showsTags]);

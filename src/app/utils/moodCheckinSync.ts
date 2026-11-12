@@ -71,8 +71,15 @@ export function onMoodMoment(listener: MomentListener): () => void {
   return () => { momentListeners.delete(listener); };
 }
 
-/** A getter for `row` with every moment renamed or deleted from now on applied, e.g. for a later Undo. */
-export function followMoments(row: MoodCheckin): () => MoodCheckin {
+/**
+ * Applies the moments renamed or deleted from now on to a row or list read
+ * now but used later: a fetch that lands after a change, or an Undo.
+ */
+export function momentsFromNow() {
   const seen = momentChanges.length;
-  return () => momentChanges.slice(seen).reduce(withMomentChange, row);
+  const since = () => momentChanges.slice(seen);
+  return {
+    row: (row: MoodCheckin): MoodCheckin => since().reduce(withMomentChange, row),
+    list: (list: string[]): string[] => since().reduce((l, { from, to }) => replaceMoment(l, from, to), list),
+  };
 }
