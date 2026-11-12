@@ -304,9 +304,6 @@ const LinkedTasksField: React.FC<LinkedTasksFieldProps> = ({
             )}
           </span>
         </div>
-        <p className="text-xs text-text-muted mt-1">
-          Tasks that need to happen before this one is finished. Each one is a full task in your list.
-        </p>
       </div>
 
       {total > 0 && <LinkedProgressBar done={done} total={total} />}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  afterWorkHours, freeMinutesOn, freeTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
+  afterWorkHours, allStarts, blockedBy, dayBest, dayList, freeMinutesOn, nudge, relength, freeTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
   splitFill, spread, suggest, withHeld, type BusyItem, type HabitInput, type SlotState, type Span, type TaskInput,
 } from './slotSuggest';
 
@@ -329,5 +329,105 @@ describe('slotReason', () => {
     expect(slotReason({ date: '2026-11-18', start: H(9), end: H(10), gap: 60 }, S, null, clock)).toBe('start of your work day');
     expect(slotReason({ date: '2026-11-18', start: H(18), end: H(19), gap: 60 }, S, null, clock)).toBe('end of your work day');
     expect(slotReason({ date: '2026-11-18', start: H(12), end: H(13), gap: 120 }, S, null, clock)).toBe('free until 14:00');
+  });
+});
+
+describe('allStarts: every start a block can take in each gap', () => {
+  it('starts on the grid, every 30 minutes, and once more ending at the gap end', () => {
+    const days = [{ date: '2026-11-18', gaps: [[H(9), H(10, 45)], [H(13, 5), H(15)]] as Span[] }];
+    expect(allStarts(days, 60).map(s => [s.start, s.end, s.gap])).toEqual([
+      [H(9), H(10), 105], [H(9, 30), H(10, 30), 75], [H(9, 45), H(10, 45), 60],
+      [H(13, 15), H(14, 15), 105], [H(13, 45), H(14, 45), 75], [H(14), H(15), 60],
+    ]);
+  });
+
+  it('gives nothing for a gap shorter than the length', () => {
+    expect(allStarts([{ date: '2026-11-18', gaps: [[H(9), H(9, 45)]] }], 60)).toEqual([]);
+  });
+});
+
+describe('dayList and dayBest: the day strip', () => {
+  const r = range('2026-11-16', H(10));
+  const { days } = suggest(sample(), 60, r);
+
+  it('lists each day to the deadline, marking rest days, days too full for the length and the due day', () => {
+    expect(dayList(sample(), days, 90, r)).toEqual([
+      { date: '2026-11-11', off: false, free: 90, fits: false, due: false },
+      { date: '2026-11-12', off: false, free: 180, fits: true, due: false },
+      { date: '2026-11-13', off: false, free: 150, fits: true, due: false },
+      { date: '2026-11-14', off: true, free: 0, fits: false, due: false },
+      { date: '2026-11-15', off: true, free: 0, fits: false, due: false },
+      { date: '2026-11-16', off: false, free: 60, fits: false, due: true },
+    ]);
+  });
+
+  it('spreads a day\'s times across its gaps and never overlaps them', () => {
+    const spread = [{ date: '2026-11-18', gaps: [[H(9), H(12)], [H(14), H(15)]] as Span[] }];
+    expect(dayBest(spread, '2026-11-18', 60).map(at)).toEqual(['2026-11-18 540-600', '2026-11-18 660-720', '2026-11-18 840-900']);
+    expect(dayBest(days, '2026-11-12', 60).map(at)).toEqual(['2026-11-12 720-780', '2026-11-12 960-1020']);
+    expect(dayBest(days, '2026-11-13', 60).map(at)).toEqual(['2026-11-13 780-840', '2026-11-13 870-930']);
+    expect(dayBest(days, '2026-11-14', 60)).toEqual([]);
+  });
+
+  it('fits back-to-back times on the 15-minute grid for a length that is not a multiple of 30', () => {
+    const one = (e: number) => [{ date: '2026-11-18', gaps: [[H(9), e]] as Span[] }];
+    expect(dayBest(one(H(11, 15)), '2026-11-18', 45).map(at)).toEqual(['2026-11-18 540-585', '2026-11-18 585-630', '2026-11-18 630-675']);
+    expect(dayBest(one(H(12, 45)), '2026-11-18', 75).map(at)).toEqual(['2026-11-18 540-615', '2026-11-18 615-690', '2026-11-18 690-765']);
+  });
+
+  it('stops at the deadline on the due day', () => {
+    const { days: due } = suggest(sample(), 60, range('2026-11-12', H(16, 30)));
+    expect(dayBest(due, '2026-11-12', 60).map(at)).toEqual(['2026-11-12 720-780']);
+    expect(dayBest(due, '2026-11-12', 30).map(at)).toEqual(['2026-11-12 540-570', '2026-11-12 720-750', '2026-11-12 960-990']);
+  });
+});
+
+describe('nudge and relength: moving a picked time in its gap', () => {
+  // Spanish practice at 6:00 PM, so today's 5:00–6:00 PM gap ends at a habit.
+  const S = sample({ habits: [{ id: 3, title: 'Spanish practice', len: 30, time: H(18), done: false }] });
+  const r = range('2026-11-16', H(10));
+  const { days } = suggest(S, 60, r);
+  const p = (date: string, start: number, end: number) => ({ date, start, end });
+
+  it('moves 30 minutes, or less at the gap edge', () => {
+    expect(nudge(S, days, p('2026-11-13', H(14), H(15)), 30, r)).toEqual({ pick: p('2026-11-13', H(14, 30), H(15, 30)) });
+    expect(nudge(S, days, p('2026-11-13', H(15, 45), H(16, 45)), 30, r)).toEqual({ pick: p('2026-11-13', H(16), H(17)) });
+    expect(nudge(S, days, p('2026-11-13', H(13, 15), H(14, 15)), -30, r)).toEqual({ pick: p('2026-11-13', H(13), H(14)) });
+  });
+
+  it('names an event, a timed habit, now, the deadline and the work day edge', () => {
+    const blocked = (pick: ReturnType<typeof p>, delta: number) => {
+      const out = nudge(S, days, pick, delta, r);
+      return out && 'blocked' in out ? out.blocked : out;
+    };
+    expect(blocked(p('2026-11-11', H(17), H(18)), -30)).toEqual({ kind: 'event', title: 'Shift at the library', at: H(17) });
+    expect(blocked(p('2026-11-11', H(17), H(18)), 30)).toEqual({ kind: 'habit', title: 'Spanish practice', at: H(18) });
+    expect(blocked(p('2026-11-11', H(11, 30), H(12)), -30)).toEqual({ kind: 'now', at: H(11, 30) });
+    // A 10:00 AM lecture would name the lecture; a 9:45 deadline names the deadline.
+    const early = range('2026-11-16', H(9, 45));
+    const dueOut = nudge(S, suggest(S, 30, early).days, p('2026-11-16', H(9, 15), H(9, 45)), 30, early);
+    expect(dueOut).toEqual({ blocked: { kind: 'due', at: H(9, 45) } });
+    expect(blocked(p('2026-11-16', H(9), H(10)), -30)).toEqual({ kind: 'workStart', at: H(9) });
+    const free = sample({ habits: [], tasks: [] });
+    const later = range('2026-11-20', H(17));
+    const out = nudge(free, suggest(free, 60, later).days, p('2026-11-18', H(18), H(19)), 30, later);
+    expect(out).toEqual({ blocked: { kind: 'workEnd', at: H(19) } });
+  });
+
+  it('keeps off the form\'s other picks and names them', () => {
+    const other = p('2026-11-13', H(15), H(16));
+    expect(nudge(S, days, p('2026-11-13', H(14), H(15)), 30, r, [other])).toEqual({ blocked: { kind: 'block', at: H(15) } });
+    expect(blockedBy(S, '2026-11-12', H(9, 30), 'later', r)).toEqual({ kind: 'event', title: 'Team sync', at: H(9, 30) });
+  });
+
+  it('is null for a time outside the free gaps', () => {
+    expect(nudge(S, days, p('2026-11-11', H(14), H(15)), 30, r)).toBeNull();
+  });
+
+  it('keeps the start for a new length, or shifts it inside the gap, or gives null', () => {
+    expect(relength(days, p('2026-11-13', H(14), H(15)), 120)).toEqual(p('2026-11-13', H(14), H(16)));
+    expect(relength(days, p('2026-11-13', H(16), H(17)), 120)).toEqual(p('2026-11-13', H(15), H(17)));
+    expect(relength(days, p('2026-11-11', H(17), H(18)), 30)).toEqual(p('2026-11-11', H(17), H(17, 30)));
+    expect(relength(days, p('2026-11-11', H(17), H(18)), 90)).toBeNull();
   });
 });

@@ -463,3 +463,155 @@ export function slotReason(slot: Pick<Slot, 'date' | 'start' | 'end' | 'gap'>, S
 /** Whether two ranges on the same day overlap. */
 export const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }) =>
   a.start < b.end && b.start < a.end;
+
+const floorStep = (m: number) => Math.floor(m / SLOT_STEP) * SLOT_STEP;
+/** How far apart `allStarts` puts the starts inside one gap. */
+const START_SPACING = 30;
+
+/**
+ * Every start a `len` block can take in each free gap: the gap's start on the
+ * 15-minute grid, every 30 minutes after it, and the start that ends the block
+ * at the gap's end. Each slot's `gap` runs to the end of its gap, as for `candidates`.
+ */
+export function allStarts(days: FreeDay[], len: number): Slot[] {
+  const out: Slot[] = [];
+  for (const day of days) {
+    for (const [s, e] of day.gaps) {
+      const first = ceilStep(s);
+      const last = floorStep(e - len);
+      if (last < first) continue;
+      const starts: number[] = [];
+      for (let t = first; t <= last; t += START_SPACING) starts.push(t);
+      if (starts[starts.length - 1] !== last) starts.push(last);
+      for (const t of starts) out.push({ date: day.date, start: t, end: t + len, gap: e - t });
+    }
+  }
+  return out;
+}
+
+/** A day in the "Which day" strip. */
+export interface DayChoice {
+  date: string;
+  /** A rest day: no work window. */
+  off: boolean;
+  /** Free minutes left that day. */
+  free: number;
+  /** A block of the task's length fits somewhere that day. */
+  fits: boolean;
+  /** The day the task is due. */
+  due: boolean;
+}
+
+/** Each day in `days` (today to the range's end) for the day strip: rest days, free time, whether `len` fits, the due day. */
+export function dayList(S: SlotState, days: FreeDay[], len: number, range: PlanRange): DayChoice[] {
+  return days.map(d => ({
+    date: d.date,
+    off: !S.windowOn(d.date),
+    free: freeMinutesOn(days, d.date),
+    fits: allStarts([d], len).length > 0,
+    due: range.hasDue && d.date === range.due.date,
+  }));
+}
+
+/**
+ * Up to `n` times on `date` that don't overlap, spread across the day: the
+ * first start of each gap, then each gap's last start that fits, then every
+ * other start on the 15-minute grid, taken in that order while they don't
+ * overlap, then sorted by start.
+ */
+export function dayBest(days: FreeDay[], date: string, len: number, n = SLOT_COUNT): Slot[] {
+  const day = days.find(d => d.date === date);
+  if (!day) return [];
+  const byGap = day.gaps.map(g => allStarts([{ date, gaps: [g] }], len)).filter(x => x.length > 0);
+  const grid = day.gaps.flatMap(([s, e]) => {
+    const out: Slot[] = [];
+    for (let t = ceilStep(s); t <= floorStep(e - len); t += SLOT_STEP) out.push({ date, start: t, end: t + len, gap: e - t });
+    return out;
+  });
+  const order = [...byGap.map(x => x[0]), ...byGap.map(x => x[x.length - 1]), ...grid];
+  const out: Slot[] = [];
+  for (const x of order) {
+    if (out.length >= n) break;
+    if (!out.some(o => overlaps(o, x))) out.push(x);
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
+
+/** What stops a picked time from moving further, for "Can't go earlier/later: …". */
+export interface Edge {
+  /**
+   * An event or a habit's usual time, the time already gone today, the
+   * deadline, the work day's start or end, another planned time (a kept
+   * block or another pick), or time held for an untimed habit or a task due sooner.
+   */
+  kind: 'event' | 'habit' | 'now' | 'due' | 'workStart' | 'workEnd' | 'block' | 'held';
+  title?: string;
+  /** The edge, in minutes from midnight. */
+  at: number;
+}
+
+/** A time on a day: a pick, a piece, or a kept block. */
+type DaySpan = { date: string; start: number; end: number };
+
+/**
+ * What ends a free gap at `at` on `date`: on the `earlier` side something
+ * ending there, on the `later` side something starting there. `others` are
+ * the form's other picks, which count as planned time.
+ */
+export function blockedBy(
+  S: SlotState, date: string, at: number, side: 'earlier' | 'later', range: PlanRange, others: DaySpan[] = [],
+): Edge {
+  const edge = (x: { start: number; end: number }) => (side === 'earlier' ? x.end === at : x.start === at);
+  const ev = S.events.find(e => e.date === date && e.busy !== false && !e.allDay && edge(e));
+  if (ev) return { kind: 'event', title: ev.title, at };
+  const habit = timedHabits(S).find(h => h.time != null && edge({ start: h.time, end: h.time + h.len }));
+  if (habit) return { kind: 'habit', title: habit.title, at };
+  if (side === 'earlier' && date === S.now.date && at <= ceilStep(S.now.min)) return { kind: 'now', at };
+  if (side === 'later' && range.hasDue && date === range.due.date && at >= range.due.min) return { kind: 'due', at: range.due.min };
+  const win = S.windowOn(date);
+  if (win && side === 'earlier' && at <= win[0]) return { kind: 'workStart', at: win[0] };
+  if (win && side === 'later' && at >= win[1]) return { kind: 'workEnd', at: win[1] };
+  if ([...S.blocks, ...others].some(b => b.date === date && edge(b))) return { kind: 'block', at };
+  return { kind: 'held', at };
+}
+
+/** The free gap holding `pick`, with the other picks that don't overlap it taken out. Null when it isn't in one. */
+export function gapOf(days: FreeDay[], pick: DaySpan, others: DaySpan[] = []): Span | null {
+  const day = days.find(d => d.date === pick.date);
+  if (!day) return null;
+  let gaps = day.gaps;
+  for (const o of others) if (o.date === pick.date && !overlaps(o, pick)) gaps = subtract(gaps, [o.start, o.end]);
+  return gaps.find(([s, e]) => s <= pick.start && pick.end <= e) ?? null;
+}
+
+/**
+ * Moves `pick` by `delta` minutes (±30), clamped to its free gap on the
+ * 15-minute grid, so a shorter step at the edge is fine. When it can't move at
+ * all, says what's in the way. Null when the pick isn't in a free gap.
+ */
+export function nudge(
+  S: SlotState, days: FreeDay[], pick: DaySpan, delta: number, range: PlanRange, others: DaySpan[] = [],
+): { pick: PlanPiece } | { blocked: Edge } | null {
+  const g = gapOf(days, pick, others);
+  if (!g) return null;
+  const len = pick.end - pick.start;
+  const start = delta < 0
+    ? Math.max(ceilStep(g[0]), pick.start + delta)
+    : Math.min(floorStep(g[1] - len), pick.start + delta);
+  if (delta === 0 || (delta < 0 ? start >= pick.start : start <= pick.start)) {
+    return { blocked: delta < 0 ? blockedBy(S, pick.date, g[0], 'earlier', range, others) : blockedBy(S, pick.date, g[1], 'later', range, others) };
+  }
+  return { pick: { date: pick.date, start, end: start + len } };
+}
+
+/**
+ * `pick` at `len` minutes: the same start when it fits in its gap, else the
+ * latest start in that gap that fits; null when `len` doesn't fit there.
+ */
+export function relength(days: FreeDay[], pick: DaySpan, len: number, others: DaySpan[] = []): PlanPiece | null {
+  const g = gapOf(days, pick, others);
+  if (!g) return null;
+  if (pick.start + len <= g[1]) return { date: pick.date, start: pick.start, end: pick.start + len };
+  const start = floorStep(g[1] - len);
+  return start >= ceilStep(g[0]) ? { date: pick.date, start, end: start + len } : null;
+}
