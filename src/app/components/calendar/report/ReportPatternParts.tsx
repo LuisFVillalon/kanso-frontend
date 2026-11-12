@@ -46,14 +46,15 @@ const unit = (s: string) => (hash(s) % 1000) / 1000;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const capitalize = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
 
-/** A side label in at most two lines of `n` characters, broken between words, so a long one wraps rather than being cut off. */
+/** A side label in lines of at most `n` characters, broken between words, so a long one wraps rather than being cut off. */
 const wrap = (s: string, n: number): string[] => {
-  if (s.length <= n) return [s];
-  const words = s.split(' ');
-  let first = words[0];
-  let i = 1;
-  while (i < words.length && `${first} ${words[i]}`.length <= n) first = `${first} ${words[i++]}`;
-  return i < words.length ? [clip(first, n), clip(words.slice(i).join(' '), n)] : [clip(first, n)];
+  const lines: string[] = [];
+  for (const word of s.split(' ')) {
+    const last = lines[lines.length - 1];
+    if (last != null && `${last} ${word}`.length <= n) lines[lines.length - 1] = `${last} ${word}`;
+    else lines.push(clip(word, n));
+  }
+  return lines;
 };
 
 /**
@@ -75,7 +76,9 @@ export const PatternLine: React.FC<{ row: PatternRow; feeling: Feeling; days: Pa
   const bottom = (short ? 112 : narrow ? 128 : 138) - 34;
   const x0 = padL + (width - padL) * 0.2;
   const x1 = padL + (width - padL) * 0.8;
-  const room = Math.max(12, Math.floor(((x1 - x0) * 0.95) / 6.4));
+  // Each label is centred on its end, so it has the gap between the ends and twice the room to the chart's edge;
+  // bold 11.5px text runs about 7px a character.
+  const room = Math.max(8, Math.floor(Math.min((x1 - x0) * 0.95, 2 * (width - x1)) / 7));
   const offLines = wrap(capitalize(row.off), room);
   const onLines = wrap(capitalize(row.on), room);
   const height = bottom + 34 + 13 * (Math.max(offLines.length, onLines.length) - 1);
