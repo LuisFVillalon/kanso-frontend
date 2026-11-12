@@ -1124,7 +1124,7 @@ describe('CalendarReportView Events view', () => {
       .toEqual(['Time in events by day', 'Work hours', 'Busiest days', 'Top events by time7 events']);
     // The chart is the Events chart alone, with no Completions / Note time switch.
     expect(container.querySelector('[aria-label="Chart metric"]')).toBeNull();
-    expect(container.querySelectorAll('[data-testid="work-hours"]')).toHaveLength(5);
+    expect(container.querySelectorAll('[data-part="free"]')).toHaveLength(5);
   });
 
   it('shows booked, free and outside work hours from the series, and what’s still free', async () => {
