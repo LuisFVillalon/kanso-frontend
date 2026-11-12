@@ -238,8 +238,9 @@ describe('NoteEditor toolbar', () => {
       'Text style, paragraph',
       'Bold (Ctrl+B)', 'Italic (Ctrl+I)', 'Underline (Ctrl+U)', 'Strikethrough (Ctrl+Shift+S)', 'Highlight text', 'Highlight color',
       'Bulleted list (Ctrl+Shift+8)', 'Numbered list (Ctrl+Shift+7)', 'Checklist (Ctrl+Shift+9)',
-      'Insert table', 'Insert image', 'Link (Ctrl+K)', 'Quote (Ctrl+Shift+B)', 'Code block (Ctrl+Alt+C)',
+      'Insert table', 'Insert image', 'Link (Ctrl+K)', 'Quote (Ctrl+Shift+B)', 'Code block (Ctrl+Alt+C)', 'Divider',
       'Align left (Ctrl+Shift+L)', 'Align center (Ctrl+Shift+E)', 'Align right (Ctrl+Shift+R)', 'Justify (Ctrl+Shift+J)',
+      'Keyboard shortcuts',
     ]);
     for (const label of ['Outline', 'Focus mode (Ctrl+Shift+F)', 'Resources', 'Export', 'More note actions']) {
       expect(byLabel(label), label).not.toBeNull();
@@ -275,6 +276,93 @@ describe('NoteEditor toolbar', () => {
     act(() => byLabel('Quote (Ctrl+Shift+B)')!.click());
     act(() => byLabel('Code block (Ctrl+Alt+C)')!.click());
     expect(editorHtml()).toContain('<pre');
+  });
+
+  it('inserts the same divider as the "/" menu\'s Divider from the toolbar', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    expect(editorHtml()).not.toContain('<hr');
+    act(() => byLabel('Divider')!.click());
+    expect(editorHtml()).toContain('<hr');
+  });
+
+  describe('keyboard shortcuts', () => {
+    const panel = () => container.querySelector<HTMLElement>('[role="dialog"][aria-label="Keyboard shortcuts"]');
+    const rows = () => Array.from(panel()!.querySelectorAll('li')).map(li => [
+      li.firstChild?.textContent, li.querySelector('kbd')?.textContent,
+    ]);
+    const trigger = () => byLabel('Keyboard shortcuts') as HTMLButtonElement;
+
+    it('lists the toolbar\'s shortcuts with Ctrl, and closes on a second click, Escape or an outside click', () => {
+      render(vi.fn<Update>().mockResolvedValue(true));
+      expect(panel()).toBeNull();
+      act(() => trigger().click());
+      expect(trigger().getAttribute('aria-expanded')).toBe('true');
+      expect(rows()).toEqual(expect.arrayContaining([
+        ['Bold', 'Ctrl+B'], ['Italic', 'Ctrl+I'], ['Underline', 'Ctrl+U'],
+        ['Strikethrough', 'Ctrl+Shift+S'], ['Highlight', 'Ctrl+Shift+H'],
+        ['Heading 1–5', 'Ctrl+Alt+1–5'], ['Link', 'Ctrl+K'], ['Code block', 'Ctrl+Alt+C'],
+        ['Align center', 'Ctrl+Shift+E'], ['Redo', 'Ctrl+Shift+Z'],
+      ]));
+      // The divider has no key binding, so it isn't listed.
+      expect(rows().some(([label]) => label === 'Divider')).toBe(false);
+
+      act(() => trigger().click());
+      expect(panel()).toBeNull();
+
+      act(() => trigger().click());
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+      expect(panel()).toBeNull();
+
+      act(() => trigger().click());
+      act(() => { document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); });
+      expect(panel()).toBeNull();
+    });
+
+    it('shows Cmd and Option on a Mac', () => {
+      Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+      try {
+        render(vi.fn<Update>().mockResolvedValue(true));
+        act(() => trigger().click());
+        expect(rows()).toEqual(expect.arrayContaining([
+          ['Bold', 'Cmd+B'], ['Italic', 'Cmd+I'], ['Underline', 'Cmd+U'],
+          ['Strikethrough', 'Cmd+Shift+S'], ['Highlight', 'Cmd+Shift+H'], ['Code block', 'Cmd+Option+C'],
+        ]));
+      } finally {
+        delete (navigator as unknown as Record<string, unknown>).platform;
+      }
+    });
+
+    it('opens on hover until the pointer leaves, and on keyboard focus until focus moves on', () => {
+      render(vi.fn<Update>().mockResolvedValue(true));
+      const wrapper = trigger().parentElement!;
+      act(() => { wrapper.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body })); });
+      expect(panel()).not.toBeNull();
+      act(() => { wrapper.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })); });
+      expect(panel()).not.toBeNull();
+      act(() => vi.advanceTimersByTime(200));
+      expect(panel()).toBeNull();
+
+      act(() => trigger().focus());
+      expect(panel()).not.toBeNull();
+      act(() => trigger().blur());
+      expect(panel()).toBeNull();
+    });
+
+    it('pins the panel open when the focused button is activated from the keyboard, and closes it on a second activation', () => {
+      render(vi.fn<Update>().mockResolvedValue(true));
+      act(() => trigger().focus());
+      expect(panel()).not.toBeNull();
+      // Enter or Space on a focused button fires its click.
+      act(() => trigger().click());
+      expect(panel()).not.toBeNull();
+      expect(trigger().getAttribute('aria-expanded')).toBe('true');
+      act(() => trigger().blur());
+      expect(panel()).not.toBeNull();
+
+      act(() => trigger().focus());
+      act(() => trigger().click());
+      expect(panel()).toBeNull();
+    });
   });
 
   it('inserts a table from the table button\'s size grid', () => {
