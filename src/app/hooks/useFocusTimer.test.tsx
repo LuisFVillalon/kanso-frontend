@@ -181,10 +181,13 @@ describe('useFocusTimer', () => {
 
   it("tallies a session that ran out before its cross-tab claim settles", async () => {
     mount();
-    act(() => timer.start(null));
+    act(() => timer.start(7));
     await advance(25 * MIN);
     expect(timer.phase).toBe('done');
+    expect(api.fetchCalendarActivity).not.toHaveBeenCalled();
     expect(JSON.parse(localStorage.getItem(FOCUS_LOG_KEY)!).sessions).toHaveLength(1);
+    await settle();
+    expect(api.createWorkBlock).toHaveBeenCalledTimes(1);
   });
 
   it('only tallies sessions with no task and ones under 5 minutes', async () => {
