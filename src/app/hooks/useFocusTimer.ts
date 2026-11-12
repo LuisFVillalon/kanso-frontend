@@ -19,6 +19,13 @@ export const SAVED_NOTICE_MS = 10_000;
 
 export const FOCUS_TIMER_KEY = 'tm-focus-timer';
 export const FOCUS_LOG_KEY = 'tm-focus-log';
+/** The lengths a person added themselves, in minutes. */
+export const FOCUS_CUSTOM_KEY = 'tm-focus-custom';
+/** Bounds for a custom length, in minutes. */
+export const MIN_CUSTOM_MINUTES = 1;
+export const MAX_CUSTOM_MINUTES = 240;
+/** How many custom lengths are kept; adding one more drops the oldest. */
+export const MAX_CUSTOM_LENGTHS = 4;
 
 const MINUTE = 60_000;
 
@@ -126,6 +133,31 @@ export function readFocusLog(today: string): FocusSession[] {
   }
 }
 
+const isPreset = (m: number) => (FOCUS_PRESETS as readonly number[]).includes(m);
+
+/** A whole number of minutes a custom length can be, or null. */
+export function customMinutesOf(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v.trim()) : v;
+  if (!isNum(n) || !Number.isInteger(n)) return null;
+  return n >= MIN_CUSTOM_MINUTES && n <= MAX_CUSTOM_MINUTES ? n : null;
+}
+
+/** The saved custom lengths, oldest first; none when storage can't be read. */
+export function readFocusCustom(): number[] {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(FOCUS_CUSTOM_KEY) ?? 'null');
+    if (!Array.isArray(raw)) return [];
+    const out: number[] = [];
+    for (const v of raw) {
+      const m = customMinutesOf(v);
+      if (m != null && !isPreset(m) && !out.includes(m)) out.push(m);
+    }
+    return out.slice(-MAX_CUSTOM_LENGTHS);
+  } catch {
+    return [];
+  }
+}
+
 export const focusPhase = (s: FocusTimerState): FocusPhase =>
   s.startedAt == null ? 'idle' : s.savedAt != null ? 'done' : s.resumedAt != null ? 'running' : 'paused';
 
@@ -187,11 +219,13 @@ export async function saveFocusBlock(taskId: number, start: number, end: number)
 interface FocusStore {
   state: FocusTimerState;
   sessions: FocusSession[];
+  /** Custom lengths, oldest first. */
+  custom: number[];
   saved: FocusSaved | null;
   error: string | null;
 }
 
-const SERVER_STORE: FocusStore = { state: idleState(), sessions: [], saved: null, error: null };
+const SERVER_STORE: FocusStore = { state: idleState(), sessions: [], custom: [], saved: null, error: null };
 let store: FocusStore = SERVER_STORE;
 let hydrated = false;
 let savedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -212,12 +246,13 @@ function commit(state: FocusTimerState) {
 function onStorage(e: StorageEvent) {
   if (e.key === FOCUS_TIMER_KEY) setStore({ state: readFocusState() });
   else if (e.key === FOCUS_LOG_KEY) setStore({ sessions: readFocusLog(today()) });
+  else if (e.key === FOCUS_CUSTOM_KEY) setStore({ custom: readFocusCustom() });
 }
 
 function subscribe(listener: () => void) {
   if (!hydrated) {
     hydrated = true;
-    store = { ...store, state: readFocusState(), sessions: readFocusLog(today()) };
+    store = { ...store, state: readFocusState(), sessions: readFocusLog(today()), custom: readFocusCustom() };
     window.addEventListener('storage', onStorage);
   }
   listeners.add(listener);
@@ -380,6 +415,29 @@ const actions = {
     if (phase === 'running' || phase === 'paused') return;
     commit(idleState(minutes, s.taskId, s.taskPicked));
   },
+  /**
+   * Saves a custom length for reuse and picks it (while idle or done). A
+   * preset or one already saved is just picked. Returns false for a length
+   * out of bounds.
+   */
+  addCustomMinutes(value: number | string): boolean {
+    const minutes = customMinutesOf(value);
+    if (minutes == null) return false;
+    if (!isPreset(minutes) && !store.custom.includes(minutes)) {
+      const custom = [...store.custom, minutes].slice(-MAX_CUSTOM_LENGTHS);
+      writeJson(FOCUS_CUSTOM_KEY, custom);
+      setStore({ custom });
+    }
+    actions.setMinutes(minutes);
+    return true;
+  },
+  /** Forgets a saved custom length; the current one stays until another is picked. */
+  removeCustomMinutes(minutes: number) {
+    if (!store.custom.includes(minutes)) return;
+    const custom = store.custom.filter(m => m !== minutes);
+    writeJson(FOCUS_CUSTOM_KEY, custom);
+    setStore({ custom });
+  },
   setTaskId(taskId: number | null) {
     const s = store.state;
     commit(focusPhase(s) === 'done' ? idleState(s.minutes, taskId, true) : { ...s, taskId, taskPicked: true });
@@ -410,6 +468,8 @@ export interface FocusTimer {
   /** Whether `taskId` was picked (No task included) rather than left to the default. */
   taskPicked: boolean;
   minutes: number;
+  /** Lengths the person added, oldest first (presets not included). */
+  customMinutes: number[];
   remainingMs: number;
   totalMs: number;
   /** Today's finished sessions, oldest first. */
@@ -422,6 +482,9 @@ export interface FocusTimer {
   stop: () => void;
   /** Changes the length; only while idle or done. */
   setMinutes: (minutes: number) => void;
+  /** Saves a custom length (1 to 240 whole minutes) and picks it; false when out of bounds. */
+  addCustomMinutes: (value: number | string) => boolean;
+  removeCustomMinutes: (minutes: number) => void;
   /** Picks which task the session is for, shared by every view and tab. */
   setTaskId: (taskId: number | null) => void;
   undo: () => void;
@@ -437,7 +500,7 @@ export interface FocusTimer {
  * saved as a work block.
  */
 export function useFocusTimer(): FocusTimer {
-  const { state, sessions, saved, error } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const { state, sessions, custom, saved, error } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [now, setNow] = useState(() => Date.now());
 
   // Tick while running, and catch up as soon as a hidden tab comes back.
@@ -469,6 +532,7 @@ export function useFocusTimer(): FocusTimer {
     taskId: state.taskId,
     taskPicked: state.taskPicked,
     minutes: state.minutes,
+    customMinutes: custom,
     remainingMs: focusRemainingMs(state, running ? Math.max(now, state.resumedAt ?? 0) : now),
     totalMs: state.minutes * MINUTE,
     sessions: todaysSessions,
