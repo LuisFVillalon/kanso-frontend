@@ -243,15 +243,19 @@ function showSaved(saved: FocusSaved | null) {
   setStore({ saved });
 }
 
-/** Puts a finished session in today's tally and, when it counts, on the calendar. */
-async function record(session: FocusSession) {
-  if (session.ms >= MINUTE) {
-    const date = toLocalDateStr(new Date(session.start));
-    const sessions = [...readFocusLogOr(date, store.sessions), session];
-    writeJson(FOCUS_LOG_KEY, { date, sessions });
-    setStore({ sessions });
-  }
-  if (session.taskId == null || session.ms < MIN_SAVED_MINUTES * MINUTE) return;
+/** Puts a finished session in today's tally, once even when several tabs finish it. */
+function addToTally(session: FocusSession) {
+  if (session.ms < MINUTE) return;
+  const date = toLocalDateStr(new Date(session.start));
+  const logged = readFocusLogOr(date, store.sessions);
+  if (logged.some(s => s.start === session.start)) { setStore({ sessions: logged }); return; }
+  const sessions = [...logged, session];
+  writeJson(FOCUS_LOG_KEY, { date, sessions });
+  setStore({ sessions });
+}
+
+/** Puts a finished session on a task on the calendar. */
+async function saveSession(session: FocusSession & { taskId: number }) {
   setStore({ error: null });
   try {
     const result = await saveFocusBlock(session.taskId, session.start, session.end);
@@ -284,13 +288,16 @@ export const CLAIM_SETTLE_MS = 250;
 const TAB_TOKEN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 
 /**
- * Claims the session that started at `startedAt` for this tab: writes this
- * tab's token, waits for other tabs' writes to land, then reads it back. Tabs
- * that claim together each write; the last write wins, so only one tab still
- * finds its own token. Without storage there are no other tabs to race.
+ * Claims the session that started at `startedAt` for this tab: unless another
+ * tab already holds it, writes this tab's token, waits for other tabs' writes
+ * to land, then reads it back. Tabs that claim together each write; the last
+ * write wins, so only one tab still finds its own token. Without storage there
+ * are no other tabs to race.
  */
 async function holdsClaim(startedAt: number): Promise<boolean> {
   try {
+    const held = JSON.parse(window.localStorage.getItem(FOCUS_CLAIM_KEY) ?? 'null');
+    if (held && held.startedAt === startedAt && held.token !== TAB_TOKEN) return false;
     window.localStorage.setItem(FOCUS_CLAIM_KEY, JSON.stringify({ startedAt, token: TAB_TOKEN }));
   } catch {
     return true;
@@ -306,21 +313,13 @@ async function holdsClaim(startedAt: number): Promise<boolean> {
 
 /**
  * Ends the current session at `at`: Stop (`toIdle`) or running out. The
- * session is claimed in storage with this tab's token before it is recorded,
- * so only one tab (and one of this tab's views) records it, even when tabs
- * load together and each reads the stored state before the other's write
- * reaches it. Where the browser has Web Locks, the claim and the save also
- * run under one cross-tab lock.
+ * session goes in today's tally at once. A Stop saves it at once too; a
+ * session that ran out is claimed in storage with this tab's token first, so
+ * only one tab saves it even when tabs load together and each reads the
+ * stored state before the other's write reaches it. Where the browser has Web
+ * Locks, that claim and save run under one cross-tab lock.
  */
 function finish(at: number, toIdle: boolean) {
-  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
-  if (!locks) { void claimAndRecord(at, toIdle); return; }
-  locks.request(FINISH_LOCK, () => claimAndRecord(at, toIdle)).catch(err => {
-    console.error('[useFocusTimer] Finishing the session failed:', err);
-  });
-}
-
-async function claimAndRecord(at: number, toIdle: boolean): Promise<void> {
   const s = store.state;
   if (s.startedAt == null || s.savedAt != null) return;
   if (hasStoredState()) {
@@ -337,14 +336,24 @@ async function claimAndRecord(at: number, toIdle: boolean): Promise<void> {
   const end = s.resumedAt != null && ran >= total ? s.resumedAt + (total - s.elapsedBeforePauseMs) : s.pausedAt ?? at;
   // The view moves on now; this tab's other views see it finished and stay out.
   commit(toIdle ? idleState(s.minutes, s.taskId, s.taskPicked) : { ...s, resumedAt: null, pausedAt: null, elapsedBeforePauseMs: ran, savedAt: at });
-  if (!(await holdsClaim(s.startedAt))) return;
-  await record({ taskId: s.taskId, start: s.startedAt, end, ms: ran });
+  const session = { taskId: s.taskId, start: s.startedAt, end, ms: ran };
+  addToTally(session);
+  if (session.taskId == null || session.ms < MIN_SAVED_MINUTES * MINUTE) return;
+  const onTask = { ...session, taskId: session.taskId };
+  if (toIdle) { void saveSession(onTask); return; }
+  const claimThenSave = async () => { if (await holdsClaim(onTask.start)) await saveSession(onTask); };
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!locks) { void claimThenSave(); return; }
+  locks.request(FINISH_LOCK, claimThenSave).catch(err => {
+    console.error('[useFocusTimer] Finishing the session failed:', err);
+  });
 }
 
 const actions = {
   start(taskId: number | null) {
     const t = Date.now();
-    commit({ ...idleState(store.state.minutes, taskId, store.state.taskPicked), startedAt: t, resumedAt: t });
+    const { minutes, taskPicked, taskId: picked } = store.state;
+    commit({ ...idleState(minutes, taskId, taskPicked && taskId === picked), startedAt: t, resumedAt: t });
   },
   pause() {
     const s = store.state;

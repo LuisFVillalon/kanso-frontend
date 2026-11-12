@@ -176,6 +176,26 @@ describe('FocusOverlay', () => {
     expect(JSON.parse(localStorage.getItem('tm-focus-timer')!).taskId).toBe(1);
   });
 
+  it("doesn't turn the default it fell back to into a pick when a session starts", async () => {
+    const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13' }), task(3, 'HW 3', { due_date: '2026-11-20' })];
+    await render(<FocusOverlay tasks={tasks} />);
+    const select = container.querySelector('select')!;
+    await act(async () => {
+      select.value = '2';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    const later = tasks.map(t => (t.id === 2 ? { ...t, completed: true } : t));
+    await render(<FocusTimerCard tasks={later} {...tools} />);
+    expect(container.querySelector('select')!.value).toBe('1');
+    await act(async () => button('Start')!.click());
+    await act(async () => button('Stop')!.click());
+    act(() => root.unmount());
+    root = createRoot(container);
+    workBlocks = [block({ task_id: 3, start_time: '14:30', end_time: '15:30' })];
+    await render(<FocusTimerCard tasks={later} {...tools} />);
+    expect(container.querySelector('select')!.value).toBe('3');
+  });
+
   it("lists today's sessions and links to the calendar's week view", async () => {
     localStorage.setItem('tm-focus-log', JSON.stringify({
       date: TODAY,

@@ -169,6 +169,24 @@ describe('useFocusTimer', () => {
     expect(timer.saved).toBeNull();
   });
 
+  it('records a stopped session at once, without waiting for a cross-tab claim', () => {
+    mount();
+    act(() => timer.start(7));
+    vi.setSystemTime(new Date(START.getTime() + 30 * MIN));
+    act(() => timer.stop());
+    expect(timer.phase).toBe('idle');
+    expect(JSON.parse(localStorage.getItem(FOCUS_LOG_KEY)!).sessions).toHaveLength(1);
+    expect(api.fetchCalendarActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it("tallies a session that ran out before its cross-tab claim settles", async () => {
+    mount();
+    act(() => timer.start(null));
+    await advance(25 * MIN);
+    expect(timer.phase).toBe('done');
+    expect(JSON.parse(localStorage.getItem(FOCUS_LOG_KEY)!).sessions).toHaveLength(1);
+  });
+
   it('only tallies sessions with no task and ones under 5 minutes', async () => {
     mount();
     act(() => timer.start(null));
