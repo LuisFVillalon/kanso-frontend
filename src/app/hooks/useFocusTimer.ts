@@ -274,20 +274,34 @@ function readFocusLogOr(date: string, inMemory: FocusSession[]): FocusSession[] 
   return inMemory.filter(s => toLocalDateStr(new Date(s.start)) === date);
 }
 
+/** The cross-tab lock a tab holds while it claims and saves a finished session. */
+const FINISH_LOCK = 'tm-focus-finish';
+
 /**
  * Ends the current session at `at`: Stop (`toIdle`) or running out. The
  * session is claimed in storage before it is recorded, so only one tab (and
- * one of this tab's views) records it.
+ * one of this tab's views) records it. Where the browser has Web Locks, the
+ * claim and the save run under one cross-tab lock: tabs that load together
+ * can each read the stored state before the other's claim reaches them, so
+ * the next tab only checks once the first has claimed and saved.
  */
 function finish(at: number, toIdle: boolean) {
+  const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
+  if (!locks) { void claimAndRecord(at, toIdle); return; }
+  locks.request(FINISH_LOCK, () => claimAndRecord(at, toIdle)).catch(err => {
+    console.error('[useFocusTimer] Finishing the session failed:', err);
+  });
+}
+
+function claimAndRecord(at: number, toIdle: boolean): Promise<void> {
   const s = store.state;
-  if (s.startedAt == null || s.savedAt != null) return;
+  if (s.startedAt == null || s.savedAt != null) return Promise.resolve();
   if (hasStoredState()) {
     const stored = readFocusState();
     // Another tab already stopped it, recorded it, or started another.
     if (stored.startedAt !== s.startedAt || stored.savedAt != null) {
       setStore({ state: stored });
-      return;
+      return Promise.resolve();
     }
   }
   const total = s.minutes * MINUTE;
@@ -295,7 +309,7 @@ function finish(at: number, toIdle: boolean) {
   // Ran out: it ended the moment it reached zero, not when this tab noticed.
   const end = s.resumedAt != null && ran >= total ? s.resumedAt + (total - s.elapsedBeforePauseMs) : s.pausedAt ?? at;
   commit(toIdle ? idleState(s.minutes, s.taskId, s.taskPicked) : { ...s, resumedAt: null, pausedAt: null, elapsedBeforePauseMs: ran, savedAt: at });
-  void record({ taskId: s.taskId, start: s.startedAt, end, ms: ran });
+  return record({ taskId: s.taskId, start: s.startedAt, end, ms: ran });
 }
 
 const actions = {

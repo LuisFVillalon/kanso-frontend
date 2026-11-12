@@ -198,6 +198,54 @@ describe('useFocusTimer', () => {
     expect(JSON.parse(localStorage.getItem(FOCUS_TIMER_KEY)!).savedAt).not.toBeNull();
   });
 
+  it('saves a session that ran out unattended once when two tabs load together', async () => {
+    // A session ran out while no tab was open.
+    localStorage.setItem(FOCUS_TIMER_KEY, JSON.stringify({
+      taskId: 7, taskPicked: false, minutes: 25, startedAt: START.getTime(), resumedAt: START.getTime(),
+      elapsedBeforePauseMs: 0, pausedAt: null, savedAt: null,
+    }));
+    vi.setSystemTime(new Date(START.getTime() + 70 * MIN));
+    // Another tab sees a timer write only a moment later, as with real tabs.
+    const realSet = Storage.prototype.setItem;
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+      if (k === FOCUS_TIMER_KEY) queueMicrotask(() => realSet.call(this, k, v));
+      else realSet.call(this, k, v);
+    });
+    // A Web Locks stand-in: one holder at a time, the rest wait their turn.
+    let queue: Promise<unknown> = Promise.resolve();
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      locks: {
+        request: (_name: string, cb: () => Promise<void>) => {
+          const run = queue.then(cb);
+          queue = run.catch(() => undefined);
+          return run;
+        },
+      },
+    });
+
+    // Two tabs, each with its own copy of the module, open at the same moment.
+    const tabs: { root: Root; el: HTMLDivElement; Probe: React.FC }[] = [];
+    for (let i = 0; i < 2; i++) {
+      vi.resetModules();
+      const mod = await import('./useFocusTimer');
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      tabs.push({ root: createRoot(el), el, Probe: () => { mod.useFocusTimer(); return null; } });
+    }
+    try {
+      act(() => { tabs.forEach(({ root: r, Probe: P }) => r.render(<P />)); });
+      await advance(5000);
+      expect(api.createWorkBlock).toHaveBeenCalledTimes(1);
+      expect(api.updateWorkBlock).not.toHaveBeenCalled();
+    } finally {
+      act(() => tabs.forEach(t => t.root.unmount()));
+      tabs.forEach(t => t.el.remove());
+      set.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('follows another tab through the storage event', () => {
     mount();
     const other = { taskId: 3, minutes: 90, startedAt: START.getTime(), resumedAt: START.getTime(), elapsedBeforePauseMs: 0, pausedAt: null, savedAt: null };
