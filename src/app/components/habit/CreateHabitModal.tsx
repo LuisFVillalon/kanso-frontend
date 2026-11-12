@@ -6,6 +6,7 @@ import Modal from '@/app/components/common/Modal';
 import TagMultiSelect from '@/app/components/common/TagMultiSelect';
 import HabitTimeGoalField from './HabitTimeGoalField';
 import UsualTimeField from './UsualTimeField';
+import { isAllDayHabit } from '@/app/hooks/useSlotPlanner';
 
 interface CreateHabitModalProps {
   isOpen: boolean;
@@ -86,7 +87,8 @@ const CreateHabitModal: React.FC<CreateHabitModalProps> = ({
           onChange={hours => onHabitChange({ ...newHabit, estimated_time: hours })}
         />
 
-        {allTasks && (
+        {/* Without a time goal the habit is all-day, so there's no time to hold. */}
+        {allTasks && !isAllDayHabit(newHabit) && (
           <UsualTimeField
             value={newHabit.planned_time}
             onChange={time => onHabitChange({ ...newHabit, planned_time: time })}

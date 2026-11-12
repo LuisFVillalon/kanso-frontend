@@ -5,7 +5,7 @@ import { CalendarClock, Check, Flame, Loader2, Repeat } from 'lucide-react';
 import { createWorkBlock, deleteWorkBlock, describeError } from '@/app/lib/backend-api';
 import { notifyWorkBlocksChanged } from '@/app/hooks/useWorkBlocksVersion';
 import type { SlotPlanner } from '@/app/hooks/useSlotPlanner';
-import { blockSpan, minutesOf, planMinutes } from '@/app/hooks/useSlotPlanner';
+import { blockSpan, isAllDayHabit, minutesOf, planMinutes } from '@/app/hooks/useSlotPlanner';
 import type { Habit } from '@/app/types/habit';
 import type { WorkBlock } from '@/app/types/workBlock';
 import { formatHabitGoal } from '@/app/utils/habitLabels';
@@ -34,7 +34,8 @@ const listPlans = (items: { title: string; start: number }[]) => {
  * passed; or, with no usual time, the first free gap after now that fits once
  * today's events and tasks due today are held), and a Plan button that
  * blocks that time. "Plan my habits" plans every one left in one tap, with
- * Undo.
+ * Undo. A habit with no time goal is all-day: it's listed with "Any time
+ * today" and never planned.
  */
 const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onToggleHabit }) => {
   const [busy, setBusy] = useState(false);
@@ -49,12 +50,12 @@ const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onTogg
   const suggested = new Map<number, Span | null>(
     planner
       ? habitsToday({ ...planner.state, habits: planner.state.habits.filter(h => !planned.has(h.id)) }).map(x => [x.habit.id, x.slot])
-      : live.map(h => {
+      : live.filter(h => !isAllDayHabit(h)).map(h => {
         const t = minutesOf(h.planned_time);
         return [h.id, t === null ? null : [t, t + planMinutes(h.estimated_time)] as Span];
       }),
   );
-  const open = live.filter(h => !h.logged_today && !planned.has(h.id) && suggested.get(h.id));
+  const open = live.filter(h => !h.logged_today && !planned.has(h.id) && !isAllDayHabit(h) && suggested.get(h.id));
 
   const plan = async (list: Habit[]) => {
     if (!today || list.length === 0) return;
@@ -173,6 +174,8 @@ const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onTogg
                   style={{ backgroundColor: 'color-mix(in srgb, var(--tm-week-habit) 18%, var(--tm-surface))', color: 'var(--tm-text-primary)' }}>
                   Planned {clock(blockSpan(block).start)}
                 </span>
+              ) : isAllDayHabit(h) ? (
+                <span className="text-[11px] text-text-muted">Any time today</span>
               ) : slot ? (
                 <span className="flex items-center gap-1.5">
                   <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-text-secondary" style={{ border: '1px dashed var(--tm-border-strong)' }}>

@@ -28,6 +28,10 @@ export const minutesOf = (time: string | null | undefined): number | null =>
 export const planMinutes = (hours: number | null | undefined): number =>
   hours != null && hours > 0 ? Math.max(15, Math.round((hours * 60) / 15) * 15) : DEFAULT_PLAN_MINUTES;
 
+/** A habit with no daily time goal: done any time of day, so it's never scheduled. */
+export const isAllDayHabit = (h: Pick<Habit, 'estimated_time'>): boolean =>
+  !(h.estimated_time != null && h.estimated_time > 0);
+
 type WorkDay = Pick<ProfileFields, 'dayStartTime' | 'shutoffTime' | 'restDays'> & Partial<Pick<ProfileFields, 'dayWindows'>>;
 
 /** The work window on a local day as [start, end) minutes (one past midnight is cut at midnight), or null on a rest day. */
@@ -99,6 +103,7 @@ export function buildSlotState({ now, profile, tasks, habits, events, workBlocks
   });
   const habitInputs: HabitInput[] = habits.filter(h => !h.archived_at).map(h => ({
     id: h.id, title: h.title, len: planMinutes(h.estimated_time), time: minutesOf(h.planned_time), done: !!h.logged_today,
+    allDay: isAllDayHabit(h),
   }));
   return {
     now: { date: today, min: nowMin },

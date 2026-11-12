@@ -63,6 +63,8 @@ export interface HabitInput {
   time: number | null;
   /** Logged today. */
   done: boolean;
+  /** No time goal: done any time of day, so it holds no time and gets no slot (its usual time is ignored). */
+  allDay?: boolean;
 }
 
 export interface TaskInput {
@@ -131,6 +133,9 @@ const keep = (spans: Span[]) => spans.filter(([s, e]) => e - s >= SLOT_STEP);
 const habitPlannedOn = (S: SlotState, habitId: number, date: string) =>
   S.blocks.some(b => b.habitId === habitId && b.date === date);
 
+/** The habits that take time: all-day ones (no time goal) are left out. */
+const timedHabits = (S: SlotState) => S.habits.filter(h => !h.allDay);
+
 /**
  * Free gaps on one day before any holds: the work window minus busy timed
  * events and kept blocks, and on today minus the time already gone.
@@ -186,9 +191,10 @@ export function freeTime(S: SlotState, untilDate: string, beforeDue: DayMinute):
   for (let d = S.now.date; d <= untilDate; d = addDaysStr(d, 1)) days.push({ date: d, gaps: rawGaps(S, d) });
 
   // Habits are daily: one with a usual time holds it; one without holds its length at the end of the day.
+  // All-day habits (no time goal) hold nothing.
   for (const day of days) {
     if (!S.windowOn(day.date)) continue;
-    const open = S.habits.filter(h => !(day.date === S.now.date && h.done) && !habitPlannedOn(S, h.id, day.date));
+    const open = timedHabits(S).filter(h => !(day.date === S.now.date && h.done) && !habitPlannedOn(S, h.id, day.date));
     for (const h of open) if (h.time != null) day.gaps = keep(subtract(day.gaps, [h.time, h.time + h.len]));
     for (const h of open) if (h.time == null) day.gaps = holdLate(day.gaps, h.len);
   }
@@ -348,13 +354,14 @@ function holdNearest(spans: Span[], len: number, near: number): { spans: Span[];
  * not, rest days included). Once the kept usual times and open tasks due
  * today are held, a habit whose usual time was taken or has passed goes in
  * the free time nearest it, and a habit without one in the first free gap
- * after now that fits.
+ * after now that fits. All-day habits (no time goal) aren't scheduled, so
+ * they're left out.
  */
 export function habitsToday(S: SlotState): HabitToday[] {
   const today = S.now.date;
   let gaps = rawGaps(S, today);
   let wholeDay = rawGaps({ ...S, windowOn: () => [0, 24 * 60] }, today, { ignoreNow: true });
-  const open = S.habits.filter(x => !x.done);
+  const open = timedHabits(S).filter(x => !x.done);
   const slots = new Map<number, HabitToday>();
   for (const h of open) {
     if (h.time == null) continue;
@@ -394,7 +401,7 @@ export interface HabitTimeOption {
 /**
  * Usual times for a new habit of `len` minutes: the half-hour starts free on
  * the most of the next `n` work days (from tomorrow), outside the usual times
- * of the habits in `S`, earliest first on ties, up to 3 options at least two
+ * of the habits in `S` (all-day ones hold none), earliest first on ties, up to 3 options at least two
  * hours apart.
  */
 export function habitTime(S: SlotState, len: number, n = 5): { picks: HabitTimeOption[]; dates: string[] } {
@@ -405,7 +412,7 @@ export function habitTime(S: SlotState, len: number, n = 5): { picks: HabitTimeO
   if (dates.length === 0) return { picks: [], dates };
   const lo = Math.min(...dates.map(d => S.windowOn(d)![0]));
   const hi = Math.max(...dates.map(d => S.windowOn(d)![1]));
-  const gapsByDate = new Map(dates.map(d => [d, S.habits.reduce(
+  const gapsByDate = new Map(dates.map(d => [d, timedHabits(S).reduce(
     (g, h) => (h.time == null || habitPlannedOn(S, h.id, d) ? g : keep(subtract(g, [h.time, h.time + h.len]))),
     rawGaps(S, d, { ignoreNow: true }),
   )]));

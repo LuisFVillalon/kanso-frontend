@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Archive, CalendarDays, Check, CheckCircle2, Circle, Clock, FileText, Flame, Repeat } from 'lucide-react';
+import { Archive, CalendarDays, Check, CheckCircle2, Circle, Clock, FileText, Flame, Repeat, X } from 'lucide-react';
 import {
   AllDayItem,
   DeadlineFlag,
@@ -190,6 +190,8 @@ interface WeekGridProps {
    * work blocks don't drag.
    */
   onMoveWorkBlock?: (block: WorkBlock, dayIndex: number, startMin: number, endMin: number) => Promise<boolean>;
+  /** Takes a habit's work block off the calendar (the habit stays). Without it, habit blocks have no delete button. */
+  onDeleteWorkBlock?: (block: WorkBlock) => void;
   /** Timed open tasks' deadlines, drawn as a line at the due time. */
   deadlines?: DeadlineFlag[];
   /** Where work blocks that lost their time to an event could move, with Move and Keep. */
@@ -224,7 +226,7 @@ interface WeekGridProps {
 const WeekGrid: React.FC<WeekGridProps> = ({
   days, timed, allDay, workDays, todayIndex, nowMinutes, scrollToMinutes, scrollKey,
   canOpenTask, canOpenHabit, onSlotClick, onAllDayClick, onDragCreate, onOpenEvent, onMoveEvent, onMoveWorkBlock,
-  deadlines = [], ghosts = [], onGhostMove, onGhostKeep, selection = null,
+  onDeleteWorkBlock, deadlines = [], ghosts = [], onGhostMove, onGhostKeep, selection = null,
   onOpenTask, onOpenNote, onOpenHabit, fill = false,
 }) => {
   const hintId = useId();
@@ -466,6 +468,8 @@ const WeekGrid: React.FC<WeekGridProps> = ({
                         else onOpenTask(e.taskId!);
                       }}
                       onDragStart={canMove(e, !!onMoveEvent, !!onMoveWorkBlock) ? (ev, mode) => startMove(ev, e, mode) : undefined}
+                      onDelete={onDeleteWorkBlock && e.kind === 'work' && e.habitId != null && e.workBlock
+                        ? () => onDeleteWorkBlock(e.workBlock!) : undefined}
                       lifted={isLifted(moving, e)}
                     />
                   ))}
@@ -684,9 +688,11 @@ interface EventBlockProps {
   onDragStart?: (e: React.PointerEvent<HTMLElement>, mode: EventMoveMode) => void;
   /** It's being dragged: it fades where it was while the moved copy follows the pointer. */
   lifted?: boolean;
+  /** Set for a habit's work block: a delete button at its top right (on hover or focus; always shown on touch screens). */
+  onDelete?: () => void;
 }
 
-const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDragStart, lifted = false }) => {
+const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDragStart, lifted = false, onDelete }) => {
   const isEvent = event.kind === 'event' && !!event.event;
   const height = minutesToPx(event.drawEndMin - event.drawStartMin);
   const label = timedLabel(event);
@@ -767,10 +773,9 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
   );
   const className = 'absolute pointer-events-auto flex flex-col items-start overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-text-primary shadow-sm';
 
-  if (!openable) {
-    return <div className={className} style={style} title={title} aria-label={label} role="note" data-week-block>{content}</div>;
-  }
-  return (
+  const block = !openable ? (
+    <div className={className} style={style} title={title} aria-label={label} role="note" data-week-block>{content}</div>
+  ) : (
     <button
       type="button"
       data-week-block
@@ -784,6 +789,36 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
     >
       {content}
     </button>
+  );
+  if (!onDelete) return block;
+  // A sibling of the block (a button can't sit in a button), at its top right
+  // and left of the clash badge: it shows while the block is hovered or it has
+  // focus, and stays on touch screens, where it's a bigger target.
+  return (
+    <div className="contents group/block">
+      {block}
+      <button
+        type="button"
+        data-week-block
+        data-delete-block
+        onClick={onDelete}
+        aria-label={`Remove ${event.title} from the calendar`}
+        title="Remove from the calendar"
+        className="absolute z-[1] pointer-events-auto flex items-center justify-center rounded-full w-5 h-5 opacity-0 group-hover/block:opacity-100 hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:w-7 [@media(pointer:coarse)]:h-7 transition-opacity"
+        style={{
+          top: minutesToPx(event.drawStartMin) + 2,
+          maxWidth: Math.max(0, height - 4),
+          maxHeight: Math.max(0, height - 4),
+          left: `calc(${((event.column + 1) / event.columns) * 100}% - 2px - ${event.clashWith ? 20 : 2}px)`,
+          transform: 'translateX(-100%)',
+          backgroundColor: 'var(--tm-surface)',
+          border: '1px solid var(--tm-border)',
+          color: 'var(--tm-text-secondary)',
+        }}
+      >
+        <X className="w-3 h-3 max-w-full max-h-full" aria-hidden />
+      </button>
+    </div>
   );
 };
 

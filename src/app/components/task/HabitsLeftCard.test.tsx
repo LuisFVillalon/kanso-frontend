@@ -135,6 +135,39 @@ describe('Plans that lost their time', () => {
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 3, date: '2026-11-11', start_time: '11:30', end_time: '12:00' }));
   });
 
+  it('lists a habit with no time goal as "Any time today", with no time or Plan, and Plan my habits skips it', async () => {
+    const habits = [habit(4, 'Drink water', { estimated_time: null, planned_time: '11:30', current_streak: 6 }), habit(2, 'Read 20 pages')];
+    await act(async () => root.render(<HabitsLeftCard habits={habits} planner={plannerWith({ habits })} />));
+    const [water, read] = [...container.querySelectorAll('li')];
+    expect(water.textContent).toContain('Drink water');
+    expect(water.textContent).toContain('6');
+    expect(water.textContent).toContain('Any time today');
+    expect(water.textContent).not.toMatch(/AM|PM|Plan/);
+    expect(water.querySelector('[aria-label="Mark done: Drink water"]')).not.toBeNull();
+    // Its old usual time holds nothing, so the other habit gets 11:30.
+    expect(read.textContent).toContain('11:30 AM');
+    await act(async () => buttonByText('Plan my habits')!.click());
+    expect(api.createWorkBlock).toHaveBeenCalledTimes(1);
+    expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 2, start_time: '11:30', end_time: '12:00' }));
+  });
+
+  it('has no Plan my habits when only all-day habits are left, and shows "Any time today" before the calendar loads', async () => {
+    const habits = [habit(4, 'Drink water', { estimated_time: null, planned_time: '09:00' })];
+    await act(async () => root.render(<HabitsLeftCard habits={habits} planner={plannerWith({ habits })} />));
+    expect(buttonByText('Plan my habits')).toBeUndefined();
+    await act(async () => root.render(<HabitsLeftCard habits={habits} planner={null} />));
+    expect(container.querySelector('li')!.textContent).toContain('Any time today');
+  });
+
+  it("doesn't ask about an all-day habit whose old usual time an event takes", async () => {
+    const habits = [habit(4, 'Drink water', { estimated_time: null, planned_time: '13:00' })];
+    const office = ev('Office hours', '2026-11-11', '13:00:00', '13:45:00');
+    const planner = plannerWith({ habits, events: [...EVENTS, office] });
+    await act(async () => root.render(<PlanConflictCallouts planner={planner} tasks={[]} habits={habits} />));
+    expect(container.textContent).not.toContain('Office hours takes');
+    expect(buttonByText('Do it at 11:30 AM')).toBeUndefined();
+  });
+
   it('gives a habit whose usual time is taken the same time on the card and in the callout', async () => {
     const habits = [habit(3, 'Spanish practice', { planned_time: '18:00' })];
     const club = ev('Club meeting', '2026-11-11', '18:00:00', '18:30:00');
