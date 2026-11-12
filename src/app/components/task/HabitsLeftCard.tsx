@@ -175,7 +175,7 @@ const HabitsLeftCard: React.FC<HabitsLeftCardProps> = ({ habits, planner, onTogg
                   Planned {clock(blockSpan(block).start)}
                 </span>
               ) : isAllDayHabit(h) ? (
-                <span className="text-[11px] text-text-muted">Any time today</span>
+                <span className="text-[11px] text-text-muted">All day</span>
               ) : slot ? (
                 <span className="flex items-center gap-1.5">
                   <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-text-secondary" style={{ border: '1px dashed var(--tm-border-strong)' }}>
