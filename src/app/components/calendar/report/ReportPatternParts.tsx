@@ -46,6 +46,16 @@ const unit = (s: string) => (hash(s) % 1000) / 1000;
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const capitalize = (s: string) => `${s[0].toUpperCase()}${s.slice(1)}`;
 
+/** A side label in at most two lines of `n` characters, broken between words, so a long one wraps rather than being cut off. */
+const wrap = (s: string, n: number): string[] => {
+  if (s.length <= n) return [s];
+  const words = s.split(' ');
+  let first = words[0];
+  let i = 1;
+  while (i < words.length && `${first} ${words[i]}`.length <= n) first = `${first} ${words[i++]}`;
+  return i < words.length ? [clip(first, n), clip(words.slice(i).join(' '), n)] : [clip(first, n)];
+};
+
 /**
  * One row and feeling as a line: each day a faint dot on its side, the
  * other days' usual at one end and the row's days' average at the other,
@@ -60,18 +70,20 @@ export const PatternLine: React.FC<{ row: PatternRow; feeling: Feeling; days: Pa
   const c = row.feel[feeling];
   const kind = row.answer[feeling].kind;
   const narrow = width < 480;
-  const height = short ? 112 : narrow ? 128 : 138;
   const padL = narrow ? 50 : 62;
   const top = 10;
-  const bottom = height - 34;
+  const bottom = (short ? 112 : narrow ? 128 : 138) - 34;
   const x0 = padL + (width - padL) * 0.2;
   const x1 = padL + (width - padL) * 0.8;
+  const room = Math.max(12, Math.floor(((x1 - x0) * 0.95) / 6.4));
+  const offLines = wrap(capitalize(row.off), room);
+  const onLines = wrap(capitalize(row.on), room);
+  const height = bottom + 34 + 13 * (Math.max(offLines.length, onLines.length) - 1);
   const yOf = (v: number) => top + ((5 - v) / 4) * (bottom - top);
   const words = FEELING_WORDS[feeling];
   const wait = kind === 'wait' || c.avg == null || c.other == null;
   const color = kind === 'same' ? 'var(--tm-text-muted)' : lineColor(feeling);
   const label = wait ? 'No line yet: not enough to compare' : patternNumbers(row, feeling);
-  const room = Math.max(12, Math.floor(((x1 - x0) * 0.95) / 6.4));
 
   const dots = (side: PatternDay[], x: number, tag: string) =>
     side.flatMap(d => {
@@ -81,10 +93,12 @@ export const PatternLine: React.FC<{ row: PatternRow; feeling: Feeling; days: Pa
       const cy = yOf(v) + (unit(`${d.day}y`) - 0.5) * 8;
       return [<circle key={d.day} cx={cx} cy={cy} r={3.2} fill={feeling === 'mood' ? moodColor(v) : FEELING_COLOR[feeling]} fillOpacity={0.4} />];
     });
-  const end = (x: number, text: string, n: number) => (
+  const end = (x: number, lines: string[], n: number) => (
     <g>
-      <text x={x} y={height - 18} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="var(--tm-text-secondary)">{clip(capitalize(text), room)}</text>
-      <text x={x} y={height - 5} textAnchor="middle" fontSize={10.5} fill="var(--tm-text-muted)">{n} {n === 1 ? 'day' : 'days'}</text>
+      <text x={x} y={bottom + 16} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="var(--tm-text-secondary)">
+        {lines.map((l, i) => <tspan key={i} x={x} dy={i ? 13 : 0}>{i < lines.length - 1 ? `${l} ` : l}</tspan>)}
+      </text>
+      <text x={x} y={bottom + 29 + 13 * (lines.length - 1)} textAnchor="middle" fontSize={10.5} fill="var(--tm-text-muted)">{n} {n === 1 ? 'day' : 'days'}</text>
     </g>
   );
 
@@ -117,8 +131,8 @@ export const PatternLine: React.FC<{ row: PatternRow; feeling: Feeling; days: Pa
               <circle cx={x1} cy={yOf(c.avg!)} r={5.5} fill="var(--tm-surface)" stroke={color} strokeWidth={2.4} />
             </>
           )}
-          {end(x0, row.off, c.nOtherAll)}
-          {end(x1, row.on, c.nAll)}
+          {end(x0, offLines, c.nOtherAll)}
+          {end(x1, onLines, c.nAll)}
         </svg>
       </div>
     </div>
