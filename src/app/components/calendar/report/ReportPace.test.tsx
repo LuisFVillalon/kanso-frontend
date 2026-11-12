@@ -73,7 +73,7 @@ const loaded = (period: ReportPeriod, a: CalendarActivity | null, state: 'ready'
 });
 
 const Harness: React.FC<{ period: ReportPeriod; current: CalendarActivity; previous: PreviousActivity }> = ({ period, current, previous }) => {
-  const [metric, setMetric] = useState<PaceMetric>('done');
+  const [metric, setMetric] = useState<PaceMetric>('tasks');
   return <ReportPace period={period} activity={current} previous={previous} workDays={workDays} metric={metric} onMetric={setMetric} />;
 };
 
@@ -98,16 +98,16 @@ describe('ReportPace', () => {
     await render(week, thisWeek, loaded(week, lastWeek));
     // The arrows are hidden from screen readers, which read "up" and "down".
     expect(chips().map(b => b.textContent)).toEqual([
-      'Done4▲ up 3', 'Tasks3▲ up 2', 'Habits1▲ up 1', 'Note time30m▼ down 30m', 'Events0m=',
+      'Tasks3▲ up 2', 'Habits1▲ up 1', 'Note time30m▼ down 30m', 'Events0m=',
     ]);
-    expect(chip('Done').getAttribute('aria-pressed')).toBe('true');
-    expect(verdict()).toBe('Ahead of last week: 4 done by Wednesday, against 1 by last Wednesday');
+    expect(chip('Tasks').getAttribute('aria-pressed')).toBe('true');
+    expect(verdict()).toBe('Ahead of last week: 3 tasks by Wednesday, against 1 by last Wednesday');
     expect(legend()).toEqual(['This week', 'Last week']);
-    expect(chartLabel()).toBe('Done: running total this week against last week');
+    expect(chartLabel()).toBe('Tasks: running total this week against last week');
     expect(tableRows()).toEqual([
       ['Monday, November 9', '1', '0'],
-      ['Tuesday, November 10', '3', '1'],
-      ['Wednesday, November 11', '4', '1'],
+      ['Tuesday, November 10', '2', '1'],
+      ['Wednesday, November 11', '3', '1'],
     ]);
     expect(container.querySelector('[data-testid="pace-last"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="pace-today"]')).not.toBeNull();
@@ -124,14 +124,14 @@ describe('ReportPace', () => {
     const same = activity({ completed_tasks: [task(7, day(2026, 11, 2))] });
     const one = activity({ completed_tasks: [task(8, day(2026, 11, 9))] });
     await render(week, one, loaded(week, same));
-    expect(chip('Done').textContent).toBe('Done1=');
-    expect(verdict()).toMatch(/^Level with last week: 1 done by Wednesday/);
+    expect(chip('Tasks').textContent).toBe('Tasks1=');
+    expect(verdict()).toMatch(/^Level with last week: 1 tasks by Wednesday/);
   });
 
   it('shows this week alone for a new user, with nothing to compare yet', async () => {
     await render(week, thisWeek, loaded(week, activity()));
-    expect(chips().map(b => b.textContent)).toEqual(['Done4', 'Tasks3', 'Habits1', 'Note time30m', 'Events0m']);
-    expect(verdict()).toBe('4 done this week · nothing last week to compare with yet');
+    expect(chips().map(b => b.textContent)).toEqual(['Tasks3', 'Habits1', 'Note time30m', 'Events0m']);
+    expect(verdict()).toBe('3 tasks this week · nothing last week to compare with yet');
     expect(legend()).toEqual(['This week']);
     expect(container.querySelector('[data-testid="pace-last"]')).toBeNull();
     expect(container.querySelector('[data-testid="pace-last-dot"]')).toBeNull();
@@ -150,11 +150,11 @@ describe('ReportPace', () => {
     const prev = activity({ completed_tasks: [task(9, day(2025, 3, 1)), task(10, day(2025, 12, 1))] });
     await render(year, thisWeek, loaded(year, prev));
     expect(legend()).toEqual(['2026', '2025']);
-    expect(verdict()).toBe('Ahead of 2025: 4 done by this point, against 1 by this time in 2025');
+    expect(verdict()).toBe('Ahead of 2025: 3 tasks by this point, against 1 by this time in 2025');
     expect(text()).toContain('2025 ended at 2.');
     // January to November, the last at today's total against last year's same point.
     expect(tableRows()).toHaveLength(11);
-    expect(tableRows()[10]).toEqual(['November', '4', '1']);
+    expect(tableRows()[10]).toEqual(['November', '3', '1']);
   });
 
   it('draws no today marker for a finished week, and compares whole totals', async () => {
@@ -162,7 +162,7 @@ describe('ReportPace', () => {
     const before = activity({ completed_tasks: [task(11, day(2026, 10, 28))] });
     await render(last, lastWeek, loaded(last, before));
     expect(container.querySelector('[data-testid="pace-today"]')).toBeNull();
-    expect(verdict()).toBe('Ahead of the week before: 3 done in Nov 2–8, 2026, against 1 in Oct 26 – Nov 1, 2026');
+    expect(verdict()).toBe('Ahead of the week before: 3 tasks in Nov 2–8, 2026, against 1 in Oct 26 – Nov 1, 2026');
     expect(tableRows()).toHaveLength(7);
     expect(text()).toContain('The week before ended at 1. Compared over the whole week.');
   });
@@ -181,8 +181,8 @@ describe('ReportPace', () => {
 
   it('shows this week alone when last week fails to load', async () => {
     await render(week, thisWeek, loaded(week, null, 'error'));
-    expect(chips().map(b => b.textContent)).toEqual(['Done4', 'Tasks3', 'Habits1', 'Note time30m', 'Events0m']);
-    expect(verdict()).toBe('4 done this week');
+    expect(chips().map(b => b.textContent)).toEqual(['Tasks3', 'Habits1', 'Note time30m', 'Events0m']);
+    expect(verdict()).toBe('3 tasks this week');
     expect(text()).toContain('Couldn’t load last week.');
     expect(container.querySelector('[data-testid="pace-last"]')).toBeNull();
   });

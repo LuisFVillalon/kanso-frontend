@@ -13,18 +13,17 @@ import { useNowMinute } from './ReportEventsChart';
 import { useMeasuredWidth } from './useChartSize';
 
 const METRIC_NAME: Record<PaceMetric, string> = {
-  done: 'Done', tasks: 'Tasks', habits: 'Habits', notes: 'Note time', events: 'Events',
+  tasks: 'Tasks', habits: 'Habits', notes: 'Note time', events: 'Events',
 };
 const METRIC_COLOR: Record<PaceMetric, string> = {
-  done: 'var(--tm-text-primary)',
   tasks: 'var(--tm-accent)',
   habits: 'var(--tm-success)',
   notes: 'var(--tm-accent-2)',
   events: 'var(--tm-week-note)',
 };
-/** What the verdict calls a metric's amount: "12 done", "2h in notes". */
+/** What the verdict calls a metric's amount: "12 tasks", "2h in notes". */
 const METRIC_UNIT: Record<PaceMetric, string> = {
-  done: 'done', tasks: 'tasks', habits: 'check-ins', notes: 'in notes', events: 'in events',
+  tasks: 'tasks', habits: 'check-ins', notes: 'in notes', events: 'in events',
 };
 /** Green going up: #0B8A63 in the light theme, #45CFA3 in the dark one. */
 const UP_COLOR = 'var(--tm-week-completed)';
