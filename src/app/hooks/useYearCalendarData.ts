@@ -65,8 +65,7 @@ const notesByDay = (activity: CalendarActivity, year: number): Map<string, DayNo
   const tags = new Map((activity.notes ?? []).map(n => [n.id, n.tags]));
   const days = new Map<string, DayNote[]>();
   for (const [dateStr, seconds] of noteSecondsByDay(activity, new Date(year, 0, 1), new Date(year, 11, 31))) {
-    const notes = [...seconds].map(([id, s]) => ({ id, title: titles.get(id) ?? '', tags: tags.get(id) ?? [], seconds: s }));
-    days.set(dateStr, notes.sort((a, b) => b.seconds - a.seconds || a.title.localeCompare(b.title)));
+    days.set(dateStr, [...seconds].map(([id, s]) => ({ id, title: titles.get(id) ?? '', tags: tags.get(id) ?? [], seconds: s })));
   }
   return days;
 };
@@ -74,7 +73,7 @@ const notesByDay = (activity: CalendarActivity, year: number): Map<string, DayNo
 export function useYearCalendarData(year: number = new Date().getFullYear()) {
   const { tasks, isLoading: tasksLoading } = useTasksContext();
   const { habits, habitsLoading } = useHabitsContext();
-  const { isLoading: notesLoading, archiveSyncToken } = useNotesContext();
+  const { notes, isLoading: notesLoading, archiveSyncToken } = useNotesContext();
 
   const [yearActivity, setYearActivity] = useState<YearActivityResult | null>(null);
   const eventsVersion = useEventsVersion();
@@ -150,7 +149,15 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
       ensure(dateStr).tasksCompleted.push(task);
     }
 
-    for (const [dateStr, dayNotes] of yearNotes ?? []) ensure(dateStr).notesEdited = dayNotes;
+    const liveNotes = new Map(notes.map(n => [n.persistedId ?? n.id, n]));
+    for (const [dateStr, dayNotes] of yearNotes ?? []) {
+      ensure(dateStr).notesEdited = dayNotes
+        .map(n => {
+          const live = liveNotes.get(n.id);
+          return live ? { ...n, title: live.title, tags: live.tags } : n;
+        })
+        .sort((a, b) => b.seconds - a.seconds || a.title.localeCompare(b.title));
+    }
 
     for (const habit of habits) {
       const logged = habitLogged?.get(habit.id);
@@ -170,7 +177,7 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
     }
 
     return map;
-  }, [tasks, habits, habitLogged, yearEvents, yearNotes, year]);
+  }, [tasks, habits, notes, habitLogged, yearEvents, yearNotes, year]);
 
   return {
     year,

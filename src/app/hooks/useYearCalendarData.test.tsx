@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalendarActivity } from '@/app/types/activity';
 import type { Habit } from '@/app/types/habit';
 import type { Task } from '@/app/types/task';
+import type { Note } from '@/app/types/notes';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -12,12 +13,13 @@ const mocks = vi.hoisted(() => ({
   fetchCalendarActivity: vi.fn(),
   tasks: [] as Task[],
   habits: [] as Habit[],
+  notes: [] as Note[],
 }));
 
 vi.mock('@/app/lib/backend-api', () => ({ fetchCalendarActivity: mocks.fetchCalendarActivity }));
 vi.mock('@/app/context/TasksContext', () => ({ useTasksContext: () => ({ tasks: mocks.tasks, isLoading: false }) }));
 vi.mock('@/app/context/HabitsContext', () => ({ useHabitsContext: () => ({ habits: mocks.habits, habitsLoading: false }) }));
-vi.mock('@/app/context/NotesContext', () => ({ useNotesContext: () => ({ notes: [], isLoading: false, archiveSyncToken: 0 }) }));
+vi.mock('@/app/context/NotesContext', () => ({ useNotesContext: () => ({ notes: mocks.notes, isLoading: false, archiveSyncToken: 0 }) }));
 
 import { useYearCalendarData } from './useYearCalendarData';
 import { notifyEventsChanged } from './useEventsVersion';
@@ -50,6 +52,7 @@ beforeEach(() => {
     { id: 1, title: 'Old essay', due_date: '2024-03-04', estimated_time: 2 } as Task,
     { id: 2, title: 'Essay', due_date: '2026-10-22', estimated_time: 1 } as Task,
   ];
+  mocks.notes = [];
   mocks.habits = [{ id: 5, title: 'Run', estimated_time: 0.5, logged_today: true } as Habit];
   mocks.fetchCalendarActivity.mockReset().mockImplementation(async (start: string, end: string) =>
     activity(start, end, [{ habit_id: 5, habit_title: 'Run', date: `${start.slice(0, 4)}-03-04`, estimated_time: 0.5 }]));
@@ -172,5 +175,27 @@ describe('useYearCalendarData', () => {
     await act(async () => notifyActivityChanged());
     expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(2);
     expect(result.dayData.get('2026-10-21')!.notesEdited.map(n => [n.title, n.seconds])).toEqual([['Lab notes', 900]]);
+  });
+
+  it('shows a live note\'s current title and tags without refetching, keeping the activity\'s for an archived note', async () => {
+    const at = (h: number, m = 0) => new Date(2026, 9, 19, h, m).toISOString();
+    mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      ...activity(start, end, []),
+      note_sessions: [
+        { id: 1, note_id: 1, note_title: 'Lab notes', started_at: at(10), ended_at: at(10, 40), duration_seconds: 2400 },
+        { id: 2, note_id: 3, note_title: 'Archived reading', started_at: at(14), ended_at: at(14, 20), duration_seconds: 1200 },
+      ],
+      notes: [{ id: 1, title: 'Lab notes', tags: [{ id: 7, name: 'CS', color: '#00f' }] }, { id: 3, title: 'Archived reading', tags: [{ id: 8, name: 'Old', color: '#f00' }] }],
+    }));
+    mocks.notes = [{ id: -1, persistedId: 1, title: 'Lab notes', tags: [{ id: 7, name: 'CS', color: '#00f' }] } as Note];
+    await render();
+
+    mocks.notes = [{ id: -1, persistedId: 1, title: 'Lab report', tags: [{ id: 9, name: 'Physics', color: '#0f0' }] } as Note];
+    await render();
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(1);
+    expect(result.dayData.get('2026-10-19')!.notesEdited.map(n => [n.title, n.tags.map(t => t.name)])).toEqual([
+      ['Lab report', ['Physics']],
+      ['Archived reading', ['Old']],
+    ]);
   });
 });
