@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   afterWorkHours, allStarts, blockedBy, dayBest, dayList, freeMinutesOn, nudge, relength, freeTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
-  splitFill, spread, suggest, withHeld, type BusyItem, type HabitInput, type SlotState, type Span, type TaskInput,
+  splitFill, spread, suggest, withHeld, checkHabitTime, habitGaps, habitReason, habitStarts, nearestFree, type BusyItem, type HabitInput, type SlotState, type Span, type TaskInput,
 } from './slotSuggest';
 
 // The prototype board's sample week. "Now" is Wed Nov 11 2026, 11:20 AM.
@@ -429,5 +429,87 @@ describe('nudge and relength: moving a picked time in its gap', () => {
     expect(relength(days, p('2026-11-13', H(16), H(17)), 120)).toEqual(p('2026-11-13', H(15), H(17)));
     expect(relength(days, p('2026-11-11', H(17), H(18)), 30)).toEqual(p('2026-11-11', H(17), H(17, 30)));
     expect(relength(days, p('2026-11-11', H(17), H(18)), 90)).toBeNull();
+  });
+});
+
+describe("changing a habit's time today", () => {
+  // The habit-time board's sample day: Thu Nov 12 2026, work day 9 AM – 7 PM, now 8:40 AM.
+  const DAY = '2026-11-12';
+  const DAY_EVENTS: BusyItem[] = [
+    ev(DAY, 'BIO 210 lecture', H(11, 30), H(12, 45)),
+    ev(DAY, 'Library shift', H(14), H(17)),
+    ev(DAY, 'Dinner with Sam', H(19, 30), H(20, 30)),
+  ];
+  const DAY_HABITS: HabitInput[] = [
+    { id: 1, title: 'Workout', len: 90, time: null, done: false },
+    { id: 2, title: 'Leetcode', len: 60, time: null, done: false },
+    { id: 3, title: 'Read', len: 30, time: null, done: false },
+    { id: 4, title: 'Eat healthy', len: 30, time: null, done: false, allDay: true },
+  ];
+  const day = (now: number, patch: Partial<SlotState> = {}): SlotState =>
+    ({ now: { date: DAY, min: now }, windowOn, events: DAY_EVENTS, habits: DAY_HABITS, tasks: [], blocks: [], ...patch });
+  const clockText = (m: number) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+  const workout = { id: 1, title: 'Workout', start: H(9), end: H(10, 30) };
+  const leetcode = { id: 2, title: 'Leetcode', start: H(10, 30), end: H(11, 30) };
+  const read = { id: 3, title: 'Read', start: H(12, 45), end: H(13, 15) };
+
+  it('reproduces the card: Workout 9:00, Leetcode 10:30, Read 12:45', () => {
+    expect(habitsToday(day(H(8, 40))).map(x => x.slot)).toEqual([[H(9), H(10, 30)], [H(10, 30), H(11, 30)], [H(12, 45), H(13, 15)]]);
+  });
+
+  it('habitGaps runs from now past the work day to midnight, without events, blocks or the other habits', () => {
+    const S = day(H(8, 40), { blocks: [{ date: DAY, start: H(21), end: H(22), taskId: 9 }, { date: DAY, start: H(9), end: H(10, 30), habitId: 1 }] });
+    expect(habitGaps(S, 1, [leetcode, read])).toEqual([
+      [H(8, 45), H(10, 30)], [H(13, 15), H(14)], [H(17), H(19, 30)], [H(20, 30), H(21)], [H(22), H(24)],
+    ]);
+    // Its own block is free for itself; another habit's block isn't.
+    expect(habitGaps(S, 2, [read]).slice(0, 2)).toEqual([[H(8, 45), H(9)], [H(10, 30), H(11, 30)]]);
+  });
+
+  it('habitStarts are every 15-minute start that fits, ending at the gap end at the latest', () => {
+    const gaps = habitGaps(day(H(8, 40)), 1, [leetcode, read]);
+    expect(habitStarts(gaps, 90)).toEqual([
+      H(8, 45), H(9), H(17), H(17, 15), H(17, 30), H(17, 45), H(18),
+      H(20, 30), H(20, 45), H(21), H(21, 15), H(21, 30), H(21, 45), H(22), H(22, 15), H(22, 30),
+    ]);
+    expect(habitStarts([[H(9, 10), H(10)]], 30)).toEqual([H(9, 15), H(9, 30)]);
+  });
+
+  it('checkHabitTime names each kind of clash and offers the nearest free start', () => {
+    const S = day(H(8, 40), { blocks: [{ date: DAY, start: H(13, 15), end: H(14), taskId: 9, title: 'Lab report' }] });
+    expect(checkHabitTime(S, [workout, read], 2, H(11, 45), 60))
+      .toEqual({ ok: false, clash: { kind: 'event', title: 'BIO 210 lecture', start: H(11, 30), end: H(12, 45) }, fix: H(10, 30) });
+    expect(checkHabitTime(S, [workout, read], 2, H(9, 30), 60))
+      .toMatchObject({ ok: false, clash: { kind: 'habit', title: 'Workout', start: H(9), end: H(10, 30) }, fix: H(10, 30) });
+    expect(checkHabitTime(S, [workout, leetcode], 3, H(13, 30), 30))
+      .toMatchObject({ ok: false, clash: { kind: 'block', title: 'Lab report' } });
+    expect(checkHabitTime(S, [leetcode, read], 1, H(8), 90)).toEqual({ ok: false, clash: { kind: 'past' }, fix: H(8, 45) });
+    expect(checkHabitTime(S, [leetcode, read], 1, H(23), 90)).toEqual({ ok: false, clash: { kind: 'midnight' }, fix: H(22, 30) });
+    expect(checkHabitTime(S, [workout, read], 2, H(10, 30), 60)).toEqual({ ok: true });
+  });
+
+  it('nearestFree picks the closest start that fits, earlier on ties, or null', () => {
+    expect(nearestFree([[H(9), H(10)], [H(11), H(12)]], 60, H(10))).toBe(H(9));
+    expect(nearestFree([[H(9), H(10)], [H(11), H(12)]], 60, H(10, 30))).toBe(H(11));
+    expect(nearestFree([[H(9), H(9, 30)]], 60, H(9))).toBeNull();
+  });
+
+  it('habitReason names the neighbours, the work day, or how long it stays free', () => {
+    const S = day(H(8, 40));
+    expect(habitReason(S, [leetcode, read], 1, H(9), H(10, 30), clockText)).toBe('right before Leetcode');
+    expect(habitReason(S, [workout, read], 2, H(10, 30), H(11, 30), clockText)).toBe('between Workout and BIO 210 lecture');
+    expect(habitReason(S, [workout, leetcode], 3, H(12, 45), H(13, 15), clockText)).toBe('right after BIO 210 lecture');
+    expect(habitReason(S, [], 3, H(9), H(9, 30), clockText)).toBe('free until 11:30');
+    expect(habitReason(S, [], 3, H(22), H(22, 30), clockText)).toBe('after your work day');
+    expect(habitReason(day(H(7)), [], 3, H(8), H(8, 30), clockText)).toBe('before your work day');
+    expect(habitReason(day(H(8, 40), { windowOn: () => null }), [], 3, H(22), H(22, 30), clockText)).toBe('free until midnight');
+  });
+
+  it('late in the day, a habit with no room in the work day finds its first time in the evening', () => {
+    const S = day(H(16, 50));
+    const shown = habitsToday(S);
+    expect(shown.map(x => x.slot)).toEqual([[H(17), H(18, 30)], null, [H(18, 30), H(19)]]);
+    const others = [{ id: 1, title: 'Workout', start: H(17), end: H(18, 30) }, { id: 3, title: 'Read', start: H(18, 30), end: H(19) }];
+    expect(habitStarts(habitGaps(S, 2, others), 60)[0]).toBe(H(20, 30));
   });
 });

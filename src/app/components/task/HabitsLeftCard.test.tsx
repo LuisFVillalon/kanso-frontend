@@ -71,6 +71,12 @@ afterEach(() => {
 });
 
 const buttonByText = (text: string) => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === text);
+/** Plan my habits, then the review's "Plan N habits" without changing anything. */
+const planAll = async () => {
+  await act(async () => buttonByText('Plan my habits')!.click());
+  const go = [...container.querySelectorAll('button')].find(b => /^Plan \d+ habits?$/.test(b.textContent?.trim() ?? ''))!;
+  await act(async () => go.click());
+};
 
 describe('Habits left today', () => {
   it('shows each habit done, or with its suggested time and a Plan button', async () => {
@@ -82,9 +88,9 @@ describe('Habits left today', () => {
     expect(items[2]).toContain('1:00 PM');
   });
 
-  it('plans every habit left in one tap, says so, and Undo takes the blocks off again', async () => {
+  it('plans every habit left from the review, says so, and Undo takes the blocks off again', async () => {
     await act(async () => root.render(<HabitsLeftCard habits={HABITS} planner={plannerWith()} />));
-    await act(async () => buttonByText('Plan my habits')!.click());
+    await planAll();
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 2, date: '2026-11-11', start_time: '11:30', end_time: '12:00' }));
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 3, date: '2026-11-11', start_time: '13:00', end_time: '13:30' }));
     expect(container.textContent).toContain("Planned Read 20 pages at 11:30 AM and Spanish practice at 1:00 PM. They're on your calendar.");
@@ -95,7 +101,7 @@ describe('Habits left today', () => {
 
   it('Undo after a failed delete only retries the blocks still there', async () => {
     await act(async () => root.render(<HabitsLeftCard habits={HABITS} planner={plannerWith()} />));
-    await act(async () => buttonByText('Plan my habits')!.click());
+    await planAll();
     api.deleteWorkBlock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('offline'));
     await act(async () => buttonByText('Undo')!.click());
     expect(container.textContent).toContain("Couldn't undo that.");
@@ -109,7 +115,7 @@ describe('Habits left today', () => {
     const habits = [habit(2, 'Read 20 pages', { planned_time: '09:00' })];
     await act(async () => root.render(<HabitsLeftCard habits={habits} planner={plannerWith({ habits })} />));
     expect(container.querySelector('li')!.textContent).toContain('11:30 AM');
-    await act(async () => buttonByText('Plan my habits')!.click());
+    await planAll();
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 2, start_time: '11:30', end_time: '12:00' }));
   });
 
@@ -146,7 +152,7 @@ describe('Plans that lost their time', () => {
     expect(water.querySelector('[aria-label="Mark done: Drink water"]')).not.toBeNull();
     // Its old usual time holds nothing, so the other habit gets 11:30.
     expect(read.textContent).toContain('11:30 AM');
-    await act(async () => buttonByText('Plan my habits')!.click());
+    await planAll();
     expect(api.createWorkBlock).toHaveBeenCalledTimes(1);
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 2, start_time: '11:30', end_time: '12:00' }));
   });
@@ -178,7 +184,7 @@ describe('Plans that lost their time', () => {
     </>));
     expect(container.querySelector('li')!.textContent).toContain('5:30 PM');
     expect(container.textContent).toContain('Today only: 5:30 – 6:00 PM?');
-    await act(async () => buttonByText('Plan my habits')!.click());
+    await planAll();
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 3, start_time: '17:30', end_time: '18:00' }));
   });
 
@@ -222,5 +228,166 @@ describe('Plans that lost their time', () => {
 
     await act(async () => buttonByText('Keep it')!.click());
     expect(container.textContent).not.toContain('Advisor meeting now covers');
+  });
+});
+
+// The habit-time board's sample day: Thu Nov 12 2026, work day 9 AM – 7 PM.
+describe('Changing the times before planning', () => {
+  const DAY = '2026-11-12';
+  const DAY_EVENTS = [
+    ev('BIO 210 lecture', DAY, '11:30:00', '12:45:00'),
+    ev('Library shift', DAY, '14:00:00', '17:00:00'),
+    ev('Dinner with Sam', DAY, '19:30:00', '20:30:00'),
+  ];
+  const DAY_HABITS = [
+    habit(1, 'Workout', { estimated_time: 1.5 }),
+    habit(2, 'Leetcode', { estimated_time: 1 }),
+    habit(3, 'Read', { estimated_time: 0.5 }),
+    habit(4, 'Eat healthy', { estimated_time: null }),
+  ];
+  const dayPlanner = (now: Date, workBlocks: WorkBlock[] = []): SlotPlanner => ({
+    state: buildSlotState({ now, profile: PROFILE as never, tasks: [], habits: DAY_HABITS, events: DAY_EVENTS, workBlocks }),
+    events: DAY_EVENTS, workBlocks, workHoursSet: true, today: DAY,
+  });
+  const MORNING = new Date(2026, 10, 12, 8, 40);
+  const LATE = new Date(2026, 10, 12, 16, 50);
+
+  const byLabel = <T extends HTMLElement = HTMLElement>(label: string) => container.querySelector<T>(`[aria-label="${label}"]`);
+  const setTime = async (label: string, value: string) => {
+    const input = byLabel<HTMLInputElement>(label)!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const row = (id: number) => container.querySelector(`[data-review-row="${id}"]`)!;
+  const render = async (now: Date, workBlocks: WorkBlock[] = []) => {
+    vi.setSystemTime(now);
+    await act(async () => root.render(<HabitsLeftCard habits={DAY_HABITS} planner={dayPlanner(now, workBlocks)} />));
+  };
+
+  it('opens a review from Plan my habits and books nothing until "Plan 3 habits", at the reviewed times', async () => {
+    await render(MORNING);
+    const chips = [...container.querySelectorAll('li')].map(li => li.textContent);
+    expect(chips[0]).toContain('9:00 AM');
+    expect(chips[1]).toContain('10:30 AM');
+    expect(chips[2]).toContain('12:45 PM');
+
+    await act(async () => buttonByText('Plan my habits')!.click());
+    expect(container.textContent).toContain('Plan today’s habits');
+    expect(container.textContent).toContain('Nothing is booked until you do.');
+    expect(row(1).textContent).toContain('9:00 – 10:30 AM · right before Leetcode');
+    expect(row(2).textContent).toContain('between Workout and BIO 210 lecture');
+    expect(container.querySelector('[data-review-row="4"]')).toBeNull();
+    expect(api.createWorkBlock).not.toHaveBeenCalled();
+
+    // A typed time that clashes says with what, offers the nearest fix, and holds the plan back.
+    await setTime('Leetcode start time', '11:45');
+    expect(row(2).textContent).toContain('Clashes with BIO 210 lecture (11:30 AM – 12:45 PM).');
+    expect(row(2).querySelector('[role="alert"]')).not.toBeNull();
+    const plan3 = buttonByText('Plan 3 habits')!;
+    expect(plan3.getAttribute('aria-disabled')).toBe('true');
+    expect(container.textContent).toContain('Fix the time above first.');
+    await act(async () => plan3.click());
+    expect(api.createWorkBlock).not.toHaveBeenCalled();
+    await act(async () => buttonByText('Use 10:30 AM')!.click());
+    expect(byLabel<HTMLInputElement>('Leetcode start time')!.value).toBe('10:30');
+    expect(container.textContent).not.toContain('Fix the time above first.');
+
+    // › jumps to the next free start, past Leetcode, the lecture, Read and the shift.
+    expect(byLabel('Earlier free time: 8:45 AM')).not.toBeNull();
+    await act(async () => byLabel<HTMLButtonElement>('Later free time: 5:00 PM')!.click());
+    expect(row(1).textContent).toContain('5:00 – 6:30 PM');
+
+    await act(async () => buttonByText('Plan 3 habits')!.click());
+    expect(api.createWorkBlock.mock.calls.map(c => [c[0].habit_id, c[0].start_time, c[0].end_time])).toEqual([
+      [1, '17:00', '18:30'], [2, '10:30', '11:30'], [3, '12:45', '13:15'],
+    ]);
+    expect(container.textContent).toContain('Planned Workout at 5:00 PM, Leetcode at 10:30 AM and Read at 12:45 PM.');
+    expect(container.querySelector('[data-habit-review]')).toBeNull();
+  });
+
+  it('still books a single row in one tap with its Plan link', async () => {
+    await render(MORNING);
+    await act(async () => byLabel<HTMLButtonElement>('Plan Workout at 9:00 AM')!.click());
+    expect(container.querySelector('[data-habit-review]')).toBeNull();
+    expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 1, start_time: '09:00', end_time: '10:30' }));
+  });
+
+  it("opens the review from a habit's time chip with that habit's field focused", async () => {
+    await render(MORNING);
+    const chip = byLabel<HTMLButtonElement>("Change Leetcode's time, now 10:30 AM")!;
+    expect(chip.getAttribute('aria-haspopup')).toBe('dialog');
+    await act(async () => chip.click());
+    expect(document.activeElement).toBe(byLabel('Leetcode start time'));
+  });
+
+  it('leaves an unticked habit out for today', async () => {
+    await render(MORNING);
+    await act(async () => buttonByText('Plan my habits')!.click());
+    await act(async () => byLabel<HTMLInputElement>('Plan Read today')!.click());
+    expect(row(3).textContent).toContain('Not today');
+    expect(byLabel<HTMLInputElement>('Read start time')!.disabled).toBe(true);
+    await act(async () => buttonByText('Plan 2 habits')!.click());
+    expect(api.createWorkBlock.mock.calls.map(c => c[0].habit_id)).toEqual([1, 2]);
+  });
+
+  it('Cancel and Esc discard the changes and give focus back to what opened the review', async () => {
+    await render(MORNING);
+    const chip = byLabel<HTMLButtonElement>("Change Workout's time, now 9:00 AM")!;
+    await act(async () => chip.click());
+    await setTime('Workout start time', '17:00');
+    await act(async () => buttonByText('Cancel')!.click());
+    expect(container.querySelector('[data-habit-review]')).toBeNull();
+    expect(document.activeElement).toBe(byLabel("Change Workout's time, now 9:00 AM"));
+
+    await act(async () => buttonByText('Plan my habits')!.click());
+    expect(byLabel<HTMLInputElement>('Workout start time')!.value).toBe('09:00');
+    await act(async () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(container.querySelector('[data-habit-review]')).toBeNull();
+    expect(document.activeElement).toBe(buttonByText('Plan my habits'));
+    expect(api.createWorkBlock).not.toHaveBeenCalled();
+  });
+
+  it('late in the day, Find a time on a "No free time left" row opens the review at the first evening time', async () => {
+    await render(LATE);
+    const leetcode = [...container.querySelectorAll('li')][1];
+    expect(leetcode.textContent).toContain('No free time left');
+    await act(async () => buttonByText('Find a time')!.click());
+    expect(byLabel<HTMLInputElement>('Leetcode start time')!.value).toBe('20:30');
+    expect(byLabel<HTMLInputElement>('Plan Leetcode today')!.checked).toBe(true);
+    expect(row(2).textContent).toContain('8:30 – 9:30 PM');
+    expect(document.activeElement).toBe(byLabel('Leetcode start time'));
+    await act(async () => buttonByText('Plan 3 habits')!.click());
+    expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ habit_id: 2, start_time: '20:30', end_time: '21:30' }));
+  });
+
+  it('moves a planned habit from its pill, sending only the new time', async () => {
+    const planned = block({ id: 77, habit_id: 1, title: 'Workout', date: DAY, start_time: '09:00', end_time: '10:30' });
+    await render(MORNING, [planned]);
+    await act(async () => byLabel<HTMLButtonElement>('Move Workout, planned at 9:00 AM')!.click());
+    expect(container.textContent).toContain('Move planned habits');
+    expect(document.activeElement).toBe(byLabel('Workout start time'));
+    await setTime('Workout start time', '18:00');
+    await act(async () => buttonByText('Move to 6:00 PM')!.click());
+    expect(api.updateWorkBlock).toHaveBeenCalledWith(77, { date: DAY, start_time: '18:00', end_time: '19:30' });
+    expect(container.textContent).toContain('Moved Workout to 6:00 PM');
+  });
+
+  it('"Change times" after a plan moves just the habits that changed', async () => {
+    await render(MORNING);
+    await planAll();
+    await act(async () => buttonByText('Change times')!.click());
+    expect(container.textContent).toContain('Move planned habits');
+    await setTime('Read start time', '13:15');
+    await act(async () => buttonByText('Save times')!.click());
+    expect(api.updateWorkBlock).toHaveBeenCalledTimes(1);
+    expect(api.updateWorkBlock).toHaveBeenCalledWith(103, { date: DAY, start_time: '13:15', end_time: '13:45' });
+    expect(container.textContent).toContain('Planned Workout at 9:00 AM, Leetcode at 10:30 AM and Read at 1:15 PM.');
+    // Undo still takes off every block it made.
+    await act(async () => buttonByText('Undo')!.click());
+    expect(api.deleteWorkBlock.mock.calls.map(c => c[0])).toEqual([101, 102, 103]);
   });
 });

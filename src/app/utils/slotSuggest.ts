@@ -50,6 +50,8 @@ export interface PlannedBlock {
   end: number;
   taskId?: number | null;
   habitId?: number | null;
+  /** What it's for, to name it when something clashes with it. */
+  title?: string;
 }
 
 export interface HabitInput {
@@ -333,17 +335,25 @@ export interface HabitToday {
   fixed: boolean;
 }
 
-/** Takes `len` minutes from the free time nearest `near` (on the 15-minute grid, earlier on ties). */
-function holdNearest(spans: Span[], len: number, near: number): { spans: Span[]; placed: Span | null } {
-  let best: Span | null = null;
-  for (const [s, e] of spans) {
+/** The start nearest `want` where `len` minutes fit in `gaps`, on the 15-minute grid (earlier on ties); null when none fits. */
+export function nearestFree(gaps: Span[], len: number, want: number): number | null {
+  let best: number | null = null;
+  for (const [s, e] of gaps) {
     const lo = ceilStep(s);
     const hi = Math.floor((e - len) / SLOT_STEP) * SLOT_STEP;
     if (hi < lo) continue;
-    const start = Math.min(hi, Math.max(lo, Math.round(near / SLOT_STEP) * SLOT_STEP));
-    if (!best || Math.abs(start - near) < Math.abs(best[0] - near)) best = [start, start + len];
+    const start = Math.min(hi, Math.max(lo, Math.round(want / SLOT_STEP) * SLOT_STEP));
+    if (best === null || Math.abs(start - want) < Math.abs(best - want)) best = start;
   }
-  return best ? { spans: keep(subtract(spans, best)), placed: best } : { spans, placed: null };
+  return best;
+}
+
+/** Takes `len` minutes from the free time nearest `near` (on the 15-minute grid, earlier on ties). */
+function holdNearest(spans: Span[], len: number, near: number): { spans: Span[]; placed: Span | null } {
+  const start = nearestFree(spans, len, near);
+  if (start === null) return { spans, placed: null };
+  const placed: Span = [start, start + len];
+  return { spans: keep(subtract(spans, placed)), placed };
 }
 
 /**
@@ -614,4 +624,93 @@ export function relength(days: FreeDay[], pick: DaySpan, len: number, others: Da
   if (pick.start + len <= g[1]) return { date: pick.date, start: pick.start, end: pick.start + len };
   const start = floorStep(g[1] - len);
   return start >= ceilStep(g[0]) ? { date: pick.date, start, end: start + len } : null;
+}
+
+const DAY_END = 24 * 60;
+
+/** Another habit's time today (a shown suggestion, a pick in the review, or a planned block), which a habit being moved keeps off. */
+export interface HabitTime {
+  id: number;
+  title: string;
+  start: number;
+  end: number;
+}
+
+/** Today's kept blocks other than `habitId`'s own, or those of the habits in `others` (they're named as habits). */
+const otherBlocksToday = (S: SlotState, habitId: number, others: HabitTime[]) =>
+  S.blocks.filter(b => b.date === S.now.date && b.habitId !== habitId && !(b.habitId != null && others.some(o => o.id === b.habitId)));
+
+/**
+ * The free time a habit can take today: from now to midnight (inside work
+ * hours or not), minus busy timed events, kept blocks other than its own, and
+ * the other habits' times in `others`. Gaps under 15 minutes are dropped.
+ */
+export function habitGaps(S: SlotState, habitId: number, others: HabitTime[]): Span[] {
+  const today = S.now.date;
+  const S2: SlotState = { ...S, windowOn: () => [0, DAY_END], blocks: S.blocks.filter(b => !(b.habitId === habitId && b.date === today)) };
+  let gaps = rawGaps(S2, today);
+  for (const o of others) if (o.id !== habitId) gaps = subtract(gaps, [o.start, o.end]);
+  return keep(gaps);
+}
+
+/** Every start on the 15-minute grid where `len` minutes fit in `gaps`, in order. */
+export function habitStarts(gaps: Span[], len: number): number[] {
+  const out: number[] = [];
+  for (const [s, e] of gaps) for (let t = ceilStep(s); t + len <= e; t += SLOT_STEP) out.push(t);
+  return out;
+}
+
+/** What a habit's time runs into. */
+export type HabitClash =
+  | { kind: 'past' }
+  | { kind: 'midnight' }
+  | { kind: 'event' | 'habit' | 'block'; title: string; start: number; end: number };
+
+export type HabitTimeCheck = { ok: true } | { ok: false; clash: HabitClash; fix: number | null };
+
+/** Today's busy events, the other habits and the other kept blocks, earliest first, for naming what's around a time. */
+function neighbours(S: SlotState, habitId: number, others: HabitTime[]) {
+  const today = S.now.date;
+  const items: { kind: 'event' | 'habit' | 'block'; title: string; start: number; end: number }[] = [
+    ...S.events.filter(e => e.date === today && e.busy !== false && !e.allDay)
+      .map(e => ({ kind: 'event' as const, title: e.title, start: e.start, end: e.end })),
+    ...others.filter(o => o.id !== habitId).map(o => ({ kind: 'habit' as const, title: o.title, start: o.start, end: o.end })),
+    ...otherBlocksToday(S, habitId, others).map(b => ({ kind: 'block' as const, title: b.title || 'a planned block', start: b.start, end: b.end })),
+  ];
+  return items.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * Whether `habitId` can take `len` minutes from `start` today: not already
+ * past, not past midnight, and clear of events, the other habits in `others`
+ * and kept blocks. When it can't, the clash (the first in that order, then the
+ * earliest) and the nearest start that works.
+ */
+export function checkHabitTime(S: SlotState, others: HabitTime[], habitId: number, start: number, len: number): HabitTimeCheck {
+  const end = start + len;
+  const fail = (clash: HabitClash): HabitTimeCheck => ({ ok: false, clash, fix: nearestFree(habitGaps(S, habitId, others), len, start) });
+  if (start < ceilStep(S.now.min)) return fail({ kind: 'past' });
+  if (end > DAY_END) return fail({ kind: 'midnight' });
+  const hit = neighbours(S, habitId, others).find(x => x.start < end && start < x.end);
+  return hit ? fail(hit) : { ok: true };
+}
+
+/**
+ * Why a habit's time works: the events, habits or blocks right around it,
+ * before or after the work day, else how long it stays free ("free until
+ * 7:30 PM", or "midnight").
+ */
+export function habitReason(S: SlotState, others: HabitTime[], habitId: number, start: number, end: number, clockFn: (min: number) => string): string {
+  const around = neighbours(S, habitId, others);
+  const after = around.find(x => x.end === start);
+  const before = around.find(x => x.start === end);
+  if (after && before) return `between ${after.title} and ${before.title}`;
+  if (after) return `right after ${after.title}`;
+  if (before) return `right before ${before.title}`;
+  const win = S.windowOn(S.now.date);
+  if (win && end <= win[0]) return 'before your work day';
+  if (win && start >= win[1]) return 'after your work day';
+  const gap = habitGaps(S, habitId, others).find(([s, e]) => s <= start && end <= e);
+  if (!gap) return '';
+  return `free until ${gap[1] >= DAY_END ? 'midnight' : clockFn(gap[1])}`;
 }
