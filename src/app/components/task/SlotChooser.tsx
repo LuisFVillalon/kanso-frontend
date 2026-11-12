@@ -263,7 +263,7 @@ const SlotChooser: React.FC<SlotChooserProps> = ({
     />
   );
 
-  const fewer = view !== 'best' && rows.length < 3;
+  const fewer = view !== 'best' && shown.length < 3;
   const dueThatDay = range.hasDue && view === range.due.date && range.due.min < 24 * 60;
 
   return (

@@ -330,13 +330,14 @@ describe('Earlier, Later and length on a picked time', () => {
       'Tomorrow9:30 – 10:30 AMmoved from 9:00 AM',
       'Tomorrow6:00 – 7:00 PMend of your work day',
     ]);
-    expect(document.body.textContent).toContain("That's all the free time tomorrow.");
+    expect(document.body.textContent).not.toContain("That's all the free time");
     await act(async () => button('30 minutes earlier').click());
     await act(async () => button('2 hr').click());
     expect(rows().map(r => r.textContent)).toEqual([
       'Tomorrow9:00 – 11:00 AMmoved from 9:00 AM, 2 hr',
       'Tomorrow6:00 – 7:00 PMend of your work day',
     ]);
+    expect(document.body.textContent).not.toContain("That's all the free time");
     await act(async () => rows()[0].click());
     expect(rows()).toHaveLength(3);
     expect(rows()[1].textContent).toBe('Tomorrow10:00 – 11:00 AMfree until 7:00 PM');
