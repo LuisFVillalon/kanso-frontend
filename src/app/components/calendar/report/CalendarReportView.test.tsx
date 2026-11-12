@@ -209,12 +209,13 @@ describe('CalendarReportView mood', () => {
     // One Tags & moments card beside it, opening on your own tags; its switch swaps in the Moments in place.
     expect(text()).toContain('Tags & moments');
     expect([...document.querySelector('[aria-label="Pattern to show"]')!.querySelectorAll('button')].map(b => b.textContent)).toEqual(['Activity', 'Tags & moments']);
-    expect(tab('Your task & note tags').getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('How is your mood on days with each tag?');
+    expect(tab('Your tags').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('What went with your mood this month?');
+    expect(text()).toContain('Tag your tasks, notes, habits and events and, once a tag is on 5 days with a check-in, this shows how you felt on those days.');
     await openTab('Moments');
     expect(tab('Moments').getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('How is your mood on days you pick each moment?');
-    expect(text()).not.toContain('How is your mood on days with each tag?');
+    expect(text()).toContain('Pick moments when you check in and, once one is on 5 days, this shows how you felt on those days.');
+    expect(text()).not.toContain('Tag your tasks, notes, habits and events');
     expect(text()).toContain('Mood & your activity');
     // The Overview says the same as the activity card.
     await openTab('Productivity');
@@ -258,14 +259,26 @@ describe('CalendarReportView mood', () => {
     // Tasks never varied.
     await click([...document.querySelectorAll('[aria-label="Compare with"] button')].find(b => b.textContent === 'Tasks')!);
     expect(text()).toContain('Your tasks barely changed from day to day');
+    // Events is the fourth chip, and says how its time is counted.
+    expect([...document.querySelectorAll('[aria-label="Compare with"] button')].map(b => b.textContent)).toEqual(['Tasks', 'Note time', 'Habits', 'Events']);
+    await click([...document.querySelectorAll('[aria-label="Compare with"] button')].find(b => b.textContent === 'Events')!);
+    expect(pressed('Compare with')).toEqual(['Events']);
+    expect(text()).toContain('How is your energy on days you spend more time in events?');
+    expect(text()).toContain('Your time in events barely changed from day to day');
+    expect(text()).toContain('Time in events counts each minute once even when events overlap.');
     expect(text()).not.toMatch(/\b(better|worse)\b/);
     expect(text()).not.toMatch(/ρ|Spearman/);
 
-    // The Tags & moments card opens on the Moments, its finding picked with its numbers.
+    // The Tags & moments card opens on the Moments, its finding said in a sentence with its days kept closed until asked for.
     expect(tab('Moments').getAttribute('aria-selected')).toBe('true');
-    expect(text()).toContain('How is your mood on days you pick each moment?');
-    expect(buttonLabelled(/^Exercised, 8 days: Maybe higher$/).getAttribute('aria-pressed')).toBe('true');
-    expect(text()).toContain('Your mood was maybe higher on days you picked “Exercised”. Too early to be sure · 8 days vs 12 other. Mood averaged');
+    expect(text()).toContain('What went with your mood this month?');
+    expect(text()).toMatch(/On days you picked “Exercised” your mood was higher: 4\.\d (Good|Great) vs [12]\.\d (Rough|Low) on other days\./);
+    expect(text()).toContain('Early sign: only 8 days so far · 8 days vs 12 other · See the days');
+    expect(container.querySelector('[data-strip="month"]')).toBeNull();
+    expect(buttonLabelled(/^See the days$/).getAttribute('aria-expanded')).toBe('false');
+    await click(buttonLabelled(/^See the days$/));
+    expect(buttonLabelled(/^Hide days$/).getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('[data-strip="month"]')).not.toBeNull();
 
     // The Overview gives the activity card's answer in the same words, with the whole sentence on hover.
     await openTab('Productivity');
@@ -283,7 +296,7 @@ describe('CalendarReportView mood', () => {
     api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
       start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [], habit_completions: [],
     }));
-    const still = 'Your tasks barely changed from day to day. Your time in notes barely changed from day to day. Your habits barely changed from day to day.';
+    const still = 'Your tasks barely changed from day to day. Your time in notes barely changed from day to day. Your habits barely changed from day to day. Your time in events barely changed from day to day.';
     await render();
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
@@ -295,57 +308,119 @@ describe('CalendarReportView mood', () => {
     expect(text()).not.toContain('Check in more');
   });
 
-  it('opens on a finding past the first 8 rows with its row shown and picked', async () => {
-    // Nine moments on every day outrank "Exercised", the only one with a finding.
+  it('lists the first 4 findings, then the rest on “Show N more”', async () => {
+    // Five moments on the Good and Great days, and one on the Rough and Low ones.
     const days = Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 2).padStart(2, '0')}`);
-    const always = Array.from({ length: 9 }, (_, k) => `Always ${k + 1}`);
-    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, (i % 5) + 1), id: i + 1, tags: [...always, ...(i % 5 >= 3 ? ['Exercised'] : [])] })));
+    const high = Array.from({ length: 5 }, (_, k) => `Up ${k + 1}`);
+    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, (i % 5) + 1), id: i + 1, tags: i % 5 >= 3 ? high : i % 5 <= 1 ? ['Tired'] : [] })));
     await render();
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     await openPatterns();
     expect(tab('Moments').getAttribute('aria-selected')).toBe('true');
-    expect(buttonLabelled(/^Always 8, 20 days: /)).toBeDefined();
-    expect(buttonLabelled(/^Exercised, 8 days: Maybe higher$/).getAttribute('aria-pressed')).toBe('true');
-    expect(text()).toContain('Your mood was maybe higher on days you picked “Exercised”. Too early to be sure · 8 days vs 12 other. Mood averaged');
-    expect(text()).toContain('Showing 9 of 10.');
-    // Tapped again it stays listed, until another row is picked.
-    await click(buttonLabelled(/^Exercised, 8 days: /));
-    expect(buttonLabelled(/^Exercised, 8 days: /).getAttribute('aria-pressed')).toBe('false');
-    await click(buttonLabelled(/^Always 1, 20 days: /));
-    expect(buttonLabelled(/^Exercised, 8 days: /)).toBeUndefined();
-    expect(text()).toContain('Showing 8 of 10.');
+    const sentences = () => [...container.querySelectorAll('ul[aria-labelledby] > li')].map(li => li.querySelector('p')!.textContent);
+    expect(sentences()).toHaveLength(4);
+    await click(buttonLabelled(/^Show 2 more$/));
+    expect(sentences()).toHaveLength(6);
+    expect(sentences().some(t => /^On days you picked “Tired” your mood was lower: /.test(t ?? ''))).toBe(true);
+    expect(buttonLabelled(/^Show \d more$/)).toBeUndefined();
+    // Another feeling starts over.
+    await click([...document.querySelectorAll('[aria-label="Feeling to show"]')][1].querySelectorAll('button')[2]);
+    expect(text()).toContain('What went with your stress this month?');
+    // Stress was never logged: nothing to say, and each moment says why.
+    expect(sentences()).toEqual([]);
+    expect(text()).toContain('Nothing went with a clear difference in your stress this month.');
+    expect([...container.querySelectorAll('details li')][0].textContent).toBe('Tired · no stress logged in your check-ins yet');
   });
 
-  it('shows a tag row’s numbers under the list on tap, one row at a time', async () => {
-    const days = Array.from({ length: 20 }, (_, i) => `2026-10-${String(i + 2).padStart(2, '0')}`);
-    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({
-      ...checkin(d, (i % 5) + 1), id: i + 1, tags: i % 5 >= 3 ? ['Exercised'] : i % 5 <= 1 ? ['Tired'] : i === 2 ? ['Exam'] : [],
-    })));
+  it('says each tag in a sentence, folds the rest into one line each, and shows a finding’s days on tap', async () => {
+    // Oct 1–21, with Oct 3–4, 10–11 and 17–18 the weekends. Gym (a habit) is on every third day, with a Great mood; Low otherwise.
+    const days = Array.from({ length: 21 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`);
+    const gymDays = days.filter((_, i) => i % 3 === 0);
+    const gym = { id: 1, name: 'Gym', color: '#3B9A5A' };
+    const reading = { id: 2, name: 'Reading', color: '#2F6FD6' };
+    const comm = { id: 3, name: 'COMM 103', color: '#BA7116' };
+    const trip = { id: 4, name: 'Trip', color: '#7A5AD0' };
+    const weekday = (d: string) => ![0, 6].includes(new Date(`${d}T12:00`).getDay());
+    const local = (d: string, h: number, m = 0) => new Date(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8)), h, m).toISOString();
+    const lecture = (d: string, i: number) => ({
+      event_id: 100 + i, occurrence_date: d, title: 'COMM 103', description: null, tags: [comm], all_day: false,
+      date: d, end_date: d, start_time: '10:00', end_time: '10:50', starts_at: local(d, 10), ends_at: local(d, 10, 50),
+      time_zone: 'America/Los_Angeles', repeat_days: [1, 3, 5], repeat_interval: 1, reminder_minutes: null, edited: false, past: true, archived: false,
+    });
+    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, gymDays.includes(d) ? 5 : 2), id: i + 1 })));
+    api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [],
+      // Reading: a note edited on six work days, two of them Gym days, so about as good as usual.
+      notes: [{ id: 7, title: 'Book log', tags: [reading] }],
+      note_sessions: ['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-07', '2026-10-08', '2026-10-09'].map((d, i) => ({
+        id: i + 1, note_id: 7, note_title: 'Book log', started_at: local(d, 21), ended_at: local(d, 21, 20), duration_seconds: 1200,
+      })),
+      habits: [{ id: 9, title: 'Lift', estimated_time: null, tags: [gym] }],
+      habit_completions: gymDays.map(d => ({ habit_id: 9, habit_title: 'Lift', date: d, estimated_time: null })),
+      events: [
+        // A lecture every weekday: no work day without it to compare with.
+        ...days.filter(weekday).map(lecture),
+        // A 3-day all-day trip.
+        { ...lecture('2026-10-16', 99), event_id: 200, title: 'Trip', tags: [trip], all_day: true, end_date: '2026-10-18', start_time: null, end_time: null, starts_at: local('2026-10-16', 0), ends_at: local('2026-10-19', 0) },
+      ],
+    }));
     await render();
     await openTab('Mood');
     await click(buttonLabelled(/^Month$/));
     await openPatterns();
+
+    expect(tab('Your tags').getAttribute('aria-selected')).toBe('true');
+    expect(text()).toContain('Went with a difference');
+    expect(text()).toContain('On Gym days your mood was higher: 5.0 Great vs 2.0 Low on other days.');
+    expect(text()).toContain('Early sign: only 7 days so far · 7 days vs 14 other · from habits · See the days');
+    expect(text()).toContain('About the same as usual: Reading (6)');
+    expect(text()).toContain('Not enough days yet: COMM 103, Trip');
+    const reasons = [...container.querySelectorAll('details li')].map(li => li.textContent);
+    expect(reasons).toEqual([
+      'COMM 103 · on nearly every work day · needs 5 work days without it to compare',
+      'Trip · on 3 days so far · needs 5',
+    ]);
+    expect(text()).toContain('A tag counts on days you finished a task, wrote in a note, checked off a habit or had an event with it.');
+    expect(text()).toContain('These went together. That doesn’t mean one caused the other');
+
+    // See the days opens the finding's days: one cell a day, Gym days marked, days to come dotted.
+    const strip = () => container.querySelector('[role="img"][aria-label^="Mood averaged 5.0 (Great) on Gym days"]');
+    expect(strip()).toBeNull();
+    await click(buttonLabelled(/^See the days$/));
+    expect(strip()).not.toBeNull();
+    const cells = [...container.querySelectorAll('[data-strip="month"] > span')];
+    expect(cells).toHaveLength(31);
+    expect(cells[0].getAttribute('title')).toBe('Oct 1: Great · Gym');
+    expect(cells[1].getAttribute('title')).toBe('Oct 2: Low');
+    expect(cells[25].getAttribute('title')).toBe('Oct 26: still to come');
+    await click(buttonLabelled(/^Hide days$/));
+    expect(strip()).toBeNull();
+    expect(buttonLabelled(/^See the days$/).getAttribute('aria-expanded')).toBe('false');
+    await click(buttonLabelled(/^See the days$/));
+    expect(strip()).not.toBeNull();
+    // Switching to the Moments closes it.
     await openTab('Moments');
+    await openTab('Your tags');
+    expect(strip()).toBeNull();
+  });
 
-    const exercised = buttonLabelled(/^Exercised, 8 days: /);
-    const tired = buttonLabelled(/^Tired, 8 days: /);
-    const exam = buttonLabelled(/^Exam, 1 day: /);
-    expect(tired.getAttribute('aria-label')).toBe('Tired, 8 days: Maybe lower');
-    expect(exam.getAttribute('aria-label')).toBe('Exam, 1 day: Can’t tell yet');
-    const caption = () => container.querySelector('p[aria-live="polite"]')?.textContent;
-
-    await click(tired);
-    expect(tired.getAttribute('aria-pressed')).toBe('true');
-    expect(exercised.getAttribute('aria-pressed')).toBe('false');
-    expect(caption()).toMatch(/^Your mood was maybe lower on days you picked “Tired”\. Too early to be sure · 8 days vs 12 other\. Mood averaged 1\.\d \((Rough|Low)\) on days you picked “Tired” and/);
-
-    await click(exam);
-    expect(tired.getAttribute('aria-pressed')).toBe('false');
-    expect(caption()).toBe('Can’t tell yet for Exam. Needs 5 days on each side · only 1 so far. Mood averaged 3.0 (Okay) on days you picked “Exam” and 2.8 (Okay) on other days.');
-
-    await click(exam);
-    expect(caption()).toContain('Moments are what you pick when you check in.');
+  it('asks for more check-ins in the Tags card while there are too few to compare', async () => {
+    const days = ['2026-10-05', '2026-10-06', '2026-10-07'];
+    const gym = { id: 1, name: 'Gym', color: '#3B9A5A' };
+    api.fetchMoodCheckins.mockResolvedValue(days.map((d, i) => ({ ...checkin(d, 4), id: i + 1 })));
+    api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      start_date: start, end_date: end, scheduled_tasks: [], completed_tasks: [], note_sessions: [],
+      habits: [{ id: 9, title: 'Lift', estimated_time: null, tags: [gym] }],
+      habit_completions: days.map(d => ({ habit_id: 9, habit_title: 'Lift', date: d, estimated_time: null })),
+    }));
+    await render();
+    await openTab('Mood');
+    await click(buttonLabelled(/^Month$/));
+    await openPatterns();
+    expect(text()).toContain('Only 3 check-ins this month so far. Each comparison needs 5 days with it and 5 without, so check back in a few days.');
+    expect(text()).toContain('Not enough days yet: Gym');
+    expect([...container.querySelectorAll('details li')].map(li => li.textContent)).toEqual(['Gym · on 3 days so far · needs 5']);
   });
 
   it('opens a month from the year chart', async () => {

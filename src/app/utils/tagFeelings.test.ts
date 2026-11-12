@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
+import type { EventOccurrence } from '@/app/types/event';
 import type { MoodCheckin } from '@/app/types/mood';
 import {
   chanceOf,
   compareFeeling,
+  eventTagDays,
   feelingWord,
   FEELINGS,
   formatAverage,
@@ -41,6 +43,15 @@ const task = (overrides: Partial<ActivityTask>): ActivityTask => ({
   completed_date: null,
   parent_task_id: null,
   tags: [],
+  ...overrides,
+});
+
+const event = (overrides: Partial<EventOccurrence>): EventOccurrence => ({
+  event_id: 1, occurrence_date: overrides.date ?? '2026-10-20', title: 'Event', description: null, tags: [],
+  all_day: false, date: '2026-10-20', end_date: overrides.date ?? '2026-10-20', start_time: '10:00', end_time: '11:00',
+  starts_at: at(Number((overrides.date ?? '2026-10-20').slice(8)), 10), ends_at: at(Number((overrides.date ?? '2026-10-20').slice(8)), 11),
+  time_zone: 'America/Los_Angeles', repeat_days: [], repeat_interval: 1, reminder_minutes: null,
+  edited: false, past: true, archived: false,
   ...overrides,
 });
 
@@ -106,7 +117,7 @@ const compareTags = (days: TagDay[], tags: Map<string, FeelingTag>, seedKey: str
 const tagOf = (compared: ReturnType<typeof compareTags>, name: string) => compared.find(t => t.tag.name === name)!;
 
 describe('tagsByDay', () => {
-  it('tags a day by the tasks completed and notes edited on it, not habits or tasks due', () => {
+  it('tags a day by the tasks completed, notes edited and habits checked off on it, not tasks due', () => {
     const { byDay, tags } = tagsByDay(activity({
       completed_tasks: [
         task({ id: 1, completed_date: at(20), tags: [cs] }),
@@ -128,8 +139,43 @@ describe('tagsByDay', () => {
       '2026-10-21': ['tag:2'],
       '2026-10-22': ['tag:3'],
       '2026-10-23': ['tag:3'],
+      '2026-10-24': ['tag:3'],
     });
     expect(tags.get('tag:2')).toEqual({ key: 'tag:2', name: 'Work', color: '#64748b' });
+  });
+
+  it('tags a day by its events: every day of an all-day trip, a timed one on its start day, none for one shown as free', () => {
+    const { byDay, kinds } = tagsByDay(activity({
+      events: [
+        event({ event_id: 1, date: '2026-10-20', tags: [cs] }),
+        // Declined or "Show as free" in Google: on no day.
+        event({ event_id: 2, date: '2026-10-21', tags: [work], busy: false }),
+        // A 3-day all-day trip.
+        event({ event_id: 3, date: '2026-10-22', end_date: '2026-10-24', all_day: true, start_time: null, end_time: null, starts_at: at(22, 0), ends_at: at(25, 0), tags: [health] }),
+        // 11pm to 12:30am: on its start day only.
+        event({ event_id: 4, date: '2026-10-21', end_date: '2026-10-22', start_time: '23:00', end_time: '00:30', starts_at: at(21, 23), ends_at: at(22, 0, 30), tags: [cs] }),
+        // Archived but past: still counts.
+        event({ event_id: 5, date: '2026-10-19', archived: true, tags: [work] }),
+      ],
+    }), new Date(2026, 9, 19), new Date(2026, 9, 25));
+    expect(Object.fromEntries([...byDay].map(([d, s]) => [d, [...s]]))).toEqual({
+      '2026-10-19': ['tag:2'],
+      '2026-10-20': ['tag:1'],
+      '2026-10-21': ['tag:1'],
+      '2026-10-22': ['tag:3'],
+      '2026-10-23': ['tag:3'],
+      '2026-10-24': ['tag:3'],
+    });
+    expect(kinds.get('2026-10-22')?.get('tag:3')).toEqual({ tasks: 0, notes: 0, habits: 0, events: 1 });
+  });
+});
+
+describe('eventTagDays', () => {
+  it('puts a timed event of 24 hours or more on each day it has time in', () => {
+    expect(eventTagDays(event({ date: '2026-10-20', end_date: '2026-10-22', start_time: '09:00', end_time: '00:00', starts_at: at(20, 9), ends_at: at(22, 0) })))
+      .toEqual(['2026-10-20', '2026-10-21']);
+    expect(eventTagDays(event({ date: '2026-10-20', end_date: '2026-10-22', start_time: '09:00', end_time: '10:00', starts_at: at(20, 9), ends_at: at(22, 10) })))
+      .toEqual(['2026-10-20', '2026-10-21', '2026-10-22']);
   });
 });
 

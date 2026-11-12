@@ -1,11 +1,12 @@
 /**
  * The tag side of Mood › Patterns (utils/patterns.ts): which of the user's
- * own tags (the ones on tasks, notes and habits) each day carries, and how
- * mood, energy and stress went on one set of check-in days compared with
- * another.
+ * own tags (the ones on tasks, notes, habits and events) each day carries,
+ * and how mood, energy and stress went on one set of check-in days compared
+ * with another.
  *
  * A tag's day is a day with a daily check-in on which a task carrying the
- * tag was completed or a note carrying it was edited. Tags are the ones items
+ * tag was completed, a note carrying it was edited, a habit carrying it was
+ * checked off or an event carrying it took place. Tags are the ones items
  * carry now, as in "Where your time went", so re-tagging moves history too.
  *
  * The honesty rules:
@@ -21,7 +22,9 @@
 
 import type { CalendarActivity } from '@/app/types/activity';
 import { ENERGY_LABELS, MOOD_LABELS, STRESS_LABELS, type MoodCheckin } from '@/app/types/mood';
-import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
+import { occurrenceSpanOn, spansDays } from '@/app/utils/eventOccurrences';
+import type { EventOccurrence } from '@/app/types/event';
 
 export type Feeling = 'mood' | 'energy' | 'stress';
 
@@ -43,8 +46,6 @@ export const MIN_GAP = 0.5;
 export const CHANCE_LEVEL = 0.05;
 /** Reshuffles per comparison. */
 export const SHUFFLES = 4000;
-/** Tags shown on the chart, those on the most days first. */
-export const MAX_CHART_TAGS = 8;
 
 export interface FeelingTag {
   /** `tag:<id>`. */
@@ -104,13 +105,34 @@ const tagKey = (id: number) => `tag:${id}`;
 /** The kinds of activity a tag's day can come from. */
 export type ActivityKind = 'tasks' | 'notes' | 'habits' | 'events';
 
+export const ACTIVITY_KINDS: ActivityKind[] = ['tasks', 'notes', 'habits', 'events'];
+
+/**
+ * The local days an event puts its tags on: every day an all-day event or
+ * one 24 hours or longer covers (a 3-day trip is 3 days), else the day it
+ * starts, so one ending just past midnight stays on its own day.
+ */
+export const eventTagDays = (o: EventOccurrence): string[] => {
+  if (!o.all_day && !spansDays(o)) return [o.date];
+  const days: string[] = [];
+  for (let d = parseLocalDate(o.date); ; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    const day = toLocalDateStr(d);
+    if (day > o.end_date) break;
+    // A long timed event ending right at midnight has no time on its end day.
+    if (o.all_day || day < o.end_date || occurrenceSpanOn(o, day)) days.push(day);
+  }
+  return days;
+};
+
 /** How many tasks completed, notes edited, habits checked off and events had with a tag on one day. */
 export type KindCounts = Record<ActivityKind, number>;
 
 /**
  * Per local day from `start` to `end`, each tag's count of tasks completed,
  * notes with editing time (sessions split at midnight, as in
- * `dailyActivity`), habit check-offs and events starting that day.
+ * `dailyActivity`), habit check-offs and events on it (`eventTagDays`).
+ * Declined and "Show as free" Google events (`busy: false`) count on no day,
+ * as in Reports › Events; past archived occurrences still count.
  */
 export const tagKindCounts = (activity: CalendarActivity, start: Date, end: Date): { byDay: Map<string, Map<string, KindCounts>>; tags: Map<string, FeelingTag> } => {
   const firstDay = toLocalDateStr(start);
@@ -163,26 +185,28 @@ export const tagKindCounts = (activity: CalendarActivity, start: Date, end: Date
   const habitTags = new Map((activity.habits ?? []).map(h => [h.id, h.tags]));
   for (const c of activity.habit_completions) add(c.date, 'habits', habitTags.get(c.habit_id) ?? []);
 
-  for (const e of activity.events ?? []) add(e.date, 'events', e.tags);
+  for (const e of activity.events ?? []) {
+    if (e.busy === false) continue;
+    for (const day of eventTagDays(e)) add(day, 'events', e.tags);
+  }
   return { byDay, tags };
 };
 
 /**
  * The tags each local day from `start` to `end` carries: those on tasks
- * completed that day and on notes with editing time that day (sessions are
- * split at midnight, as in `dailyActivity`).
+ * completed that day, notes with editing time that day (sessions are split
+ * at midnight, as in `dailyActivity`), habits checked off that day and
+ * events on it. `kinds` keeps, per day and tag, which of those it came from.
  */
-export const tagsByDay = (activity: CalendarActivity, start: Date, end: Date): { byDay: Map<string, Set<string>>; tags: Map<string, FeelingTag> } => {
+export const tagsByDay = (activity: CalendarActivity, start: Date, end: Date): {
+  byDay: Map<string, Set<string>>;
+  tags: Map<string, FeelingTag>;
+  kinds: Map<string, Map<string, KindCounts>>;
+} => {
   const counts = tagKindCounts(activity, start, end);
   const byDay = new Map<string, Set<string>>();
-  const tags = new Map<string, FeelingTag>();
-  for (const [day, perTag] of counts.byDay) {
-    const keys = [...perTag].filter(([, c]) => c.tasks || c.notes).map(([key]) => key);
-    if (!keys.length) continue;
-    byDay.set(day, new Set(keys));
-    for (const key of keys) tags.set(key, counts.tags.get(key)!);
-  }
-  return { byDay, tags };
+  for (const [day, perTag] of counts.byDay) byDay.set(day, new Set(perTag.keys()));
+  return { byDay, tags: counts.tags, kinds: counts.byDay };
 };
 
 /** Saturday, Sunday and the profile's rest days (0 = Sunday … 6 = Saturday). */
