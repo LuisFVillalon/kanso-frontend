@@ -22,8 +22,6 @@ export const NO_DUE_DAYS = 7;
 export const SLOT_COUNT = 3;
 /** A split piece is at least this long. */
 const MIN_SPLIT_MINUTES = 30;
-/** Usual-time options for a habit are at least this far apart. */
-const HABIT_TIME_SPACING = 120;
 
 /** A [start, end) range of minutes on one day. */
 export type Span = [number, number];
@@ -386,53 +384,6 @@ export function habitsToday(S: SlotState): HabitToday[] {
     slots.set(h.id, { habit: h, slot: r.placed, fixed: false });
   }
   return open.map(h => slots.get(h.id)!);
-}
-
-/** A usual-time option for a habit, and on how many of the next work days it's free. */
-export interface HabitTimeOption {
-  start: number;
-  end: number;
-  free: number;
-  of: number;
-  /** The work days it isn't free on. */
-  clash: string[];
-}
-
-/**
- * Usual times for a new habit of `len` minutes: the half-hour starts free on
- * the most of the next `n` work days (from tomorrow), outside the usual times
- * of the habits in `S` (all-day ones hold none), earliest first on ties, up to 3 options at least two
- * hours apart.
- */
-export function habitTime(S: SlotState, len: number, n = 5): { picks: HabitTimeOption[]; dates: string[] } {
-  const dates: string[] = [];
-  for (let d = addDaysStr(S.now.date, 1), i = 0; dates.length < n && i < PLAN_HORIZON_DAYS; d = addDaysStr(d, 1), i++) {
-    if (S.windowOn(d)) dates.push(d);
-  }
-  if (dates.length === 0) return { picks: [], dates };
-  const lo = Math.min(...dates.map(d => S.windowOn(d)![0]));
-  const hi = Math.max(...dates.map(d => S.windowOn(d)![1]));
-  const gapsByDate = new Map(dates.map(d => [d, timedHabits(S).reduce(
-    (g, h) => (h.time == null || habitPlannedOn(S, h.id, d) ? g : keep(subtract(g, [h.time, h.time + h.len]))),
-    rawGaps(S, d, { ignoreNow: true }),
-  )]));
-  const scores: HabitTimeOption[] = [];
-  for (let t = Math.ceil(lo / 30) * 30; t + len <= hi; t += 30) {
-    let free = 0;
-    const clash: string[] = [];
-    for (const d of dates) {
-      if (gapsByDate.get(d)!.some(([s, e]) => s <= t && t + len <= e)) free++; else clash.push(d);
-    }
-    scores.push({ start: t, end: t + len, free, of: dates.length, clash });
-  }
-  scores.sort((a, b) => b.free - a.free || a.start - b.start);
-  const picks: HabitTimeOption[] = [];
-  for (const s of scores) {
-    if (s.free === 0) break;
-    if (picks.every(p => Math.abs(p.start - s.start) >= HABIT_TIME_SPACING)) picks.push(s);
-    if (picks.length === 3) break;
-  }
-  return { picks, dates };
 }
 
 /**
