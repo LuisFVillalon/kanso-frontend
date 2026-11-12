@@ -148,11 +148,10 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     return true;
   };
 
-  const handleUpdateHabit = async (id: number, title: string, habitTags: Tag[], estimatedTime?: number | null, plannedTime?: string | null) => {
+  const handleUpdateHabit = async (id: number, title: string, habitTags: Tag[], estimatedTime?: number | null) => {
     try {
       await updateHabit(id, {
         title, tags: habitTags, estimated_time: estimatedTime ?? null,
-        ...(plannedTime !== undefined ? { planned_time: plannedTime } : {}),
       });
       reloadEditedHabits();
     } catch (err) {

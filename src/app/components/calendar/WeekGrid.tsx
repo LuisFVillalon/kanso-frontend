@@ -807,6 +807,8 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
         className="absolute z-[1] pointer-events-auto flex items-center justify-center rounded-full w-5 h-5 opacity-0 group-hover/block:opacity-100 hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:w-7 [@media(pointer:coarse)]:h-7 transition-opacity"
         style={{
           top: minutesToPx(event.drawStartMin) + 2,
+          maxWidth: Math.max(0, height - 4),
+          maxHeight: Math.max(0, height - 4),
           left: `calc(${((event.column + 1) / event.columns) * 100}% - 2px - ${event.clashWith ? 20 : 2}px)`,
           transform: 'translateX(-100%)',
           backgroundColor: 'var(--tm-surface)',
@@ -814,7 +816,7 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
           color: 'var(--tm-text-secondary)',
         }}
       >
-        <X className="w-3 h-3" aria-hidden />
+        <X className="w-3 h-3 max-w-full max-h-full" aria-hidden />
       </button>
     </div>
   );
