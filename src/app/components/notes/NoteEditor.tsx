@@ -17,6 +17,7 @@ import NoteSaveStatus from './NoteSaveStatus';
 import NoteMoreMenu, { NoteExportMenu } from './NoteMoreMenu';
 import NoteDetails, { type NoteStats } from './NoteDetails';
 import NoteOutline from './NoteOutline';
+import { getHighlightColor } from './highlightColor';
 import NoteSelectionMenu, { repositionSelectionMenu } from './NoteSelectionMenu';
 import LinkEditor from './LinkEditor';
 import SlashMenu from './SlashMenu';
@@ -142,8 +143,13 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         HTMLAttributes: { class: 'note-img' },
       }),
 
-      // Highlight: multicolor=true lets each mark carry its own background-color.
-      TiptapHighlight.configure({ multicolor: true }),
+      // Highlight: multicolor=true lets each mark carry its own background-color;
+      // Ctrl+Shift+H uses the highlighter's current color, like the toolbar button.
+      TiptapHighlight.extend({
+        addKeyboardShortcuts() {
+          return { 'Mod-Shift-h': () => this.editor.commands.toggleHighlight({ color: getHighlightColor() }) };
+        },
+      }).configure({ multicolor: true }),
 
       TiptapTextAlign.configure({
         types: ['heading', 'paragraph'],

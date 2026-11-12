@@ -10,6 +10,8 @@ vi.mock('@/app/hooks/useNoteSession', () => ({ useNoteSession: () => ({ pastSeco
 import { ToastProvider } from '@/app/context/ToastContext';
 import NoteEditor from './NoteEditor';
 import { AUTOSAVE_DELAY_MS } from '@/app/hooks/useNoteAutosave';
+import { DEFAULT_HIGHLIGHT_COLOR, setHighlightColor } from './highlightColor';
+import type { Editor } from '@tiptap/react';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -112,6 +114,97 @@ describe('NoteEditor saving', () => {
   });
 });
 
+const GREEN = '#bbf7d0';
+const BLUE = '#bae6fd';
+
+/** The Tiptap editor behind the rendered note. */
+const tiptap = () => (container.querySelector('.ProseMirror') as HTMLElement & { editor: Editor }).editor;
+
+/** Selects a word of the note's body, "Cells make ATP." */
+const selectWord = (word: string) => act(() => {
+  const editor = tiptap();
+  let from = -1;
+  editor.state.doc.descendants((node, pos) => {
+    const at = node.isText ? node.text!.indexOf(word) : -1;
+    if (from < 0 && at >= 0) from = pos + at;
+  });
+  editor.commands.setTextSelection({ from, to: from + word.length });
+});
+
+/** The highlight color on a word, or undefined when it isn't highlighted. */
+const highlightOn = (word: string) => Array.from(container.querySelectorAll('.notes-editor mark'))
+  .find(mark => mark.textContent === word)?.getAttribute('data-color') ?? undefined;
+
+const pickHighlightColor = (label: string) => {
+  act(() => byLabel('Highlight color')!.click());
+  act(() => container.querySelector<HTMLElement>(`[role="menuitemradio"][aria-label="${label}"]`)!.click());
+};
+
+const checkedHighlightColor = () => {
+  act(() => byLabel('Highlight color')!.click());
+  const checked = container.querySelector('[role="menuitemradio"][aria-checked="true"]')?.getAttribute('aria-label');
+  act(() => byLabel('Highlight color')!.click());
+  return checked;
+};
+
+describe('NoteEditor highlighter', () => {
+  afterEach(() => setHighlightColor(DEFAULT_HIGHLIGHT_COLOR));
+
+  it('keeps the last color picked for the next highlight, until another color is picked', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    selectWord('Cells');
+    pickHighlightColor('Green');
+    expect(highlightOn('Cells')).toBe(GREEN);
+
+    selectWord('make');
+    act(() => byLabel('Highlight text')!.click());
+    expect(highlightOn('make')).toBe(GREEN);
+    selectWord('ATP');
+    act(() => byLabel('Highlight text')!.click());
+    expect(highlightOn('ATP')).toBe(GREEN);
+    expect(checkedHighlightColor()).toBe('Green');
+    expect(container.querySelector<HTMLElement>('[data-highlight-swatch]')!.style.backgroundColor).toBe('rgb(187, 247, 208)');
+
+    selectWord('Overview');
+    pickHighlightColor('Blue');
+    expect(highlightOn('Overview')).toBe(BLUE);
+    selectWord('ATP');
+    act(() => byLabel('Highlight text')!.click());
+    expect(highlightOn('ATP')).toBe(BLUE);
+    expect(highlightOn('make')).toBe(GREEN);
+    expect(checkedHighlightColor()).toBe('Blue');
+  });
+
+  it('starts on yellow and keeps the picked color for the next note opened', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    expect(checkedHighlightColor()).toBe('Yellow');
+    pickHighlightColor('Green');
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    render(vi.fn<Update>().mockResolvedValue(true));
+    expect(checkedHighlightColor()).toBe('Green');
+    selectWord('Cells');
+    act(() => byLabel('Highlight text')!.click());
+    expect(highlightOn('Cells')).toBe(GREEN);
+  });
+
+  it('takes the highlight off with the highlighter, or with Remove highlight, and keeps the color', () => {
+    render(vi.fn<Update>().mockResolvedValue(true));
+    selectWord('Cells');
+    pickHighlightColor('Green');
+    act(() => byLabel('Highlight text')!.click());
+    expect(highlightOn('Cells')).toBeUndefined();
+
+    act(() => byLabel('Highlight text')!.click());
+    expect(highlightOn('Cells')).toBe(GREEN);
+    act(() => byLabel('Highlight color')!.click());
+    act(() => byLabel('Remove highlight')!.click());
+    expect(highlightOn('Cells')).toBeUndefined();
+    expect(checkedHighlightColor()).toBe('Green');
+  });
+});
+
 /** Lays the editor out at a given width; jsdom otherwise measures nothing. */
 const atWidth = (width: number) => {
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width } as DOMRect);
@@ -143,7 +236,7 @@ describe('NoteEditor toolbar', () => {
     expect(labels).toEqual([
       'Undo (Ctrl+Z)', 'Redo (Ctrl+Shift+Z)',
       'Text style, paragraph',
-      'Bold (Ctrl+B)', 'Italic (Ctrl+I)', 'Underline (Ctrl+U)', 'Strikethrough (Ctrl+Shift+S)', 'Highlight text',
+      'Bold (Ctrl+B)', 'Italic (Ctrl+I)', 'Underline (Ctrl+U)', 'Strikethrough (Ctrl+Shift+S)', 'Highlight text', 'Highlight color',
       'Bulleted list (Ctrl+Shift+8)', 'Numbered list (Ctrl+Shift+7)', 'Checklist (Ctrl+Shift+9)',
       'Insert table', 'Insert image', 'Link (Ctrl+K)', 'Quote (Ctrl+Shift+B)', 'Code block (Ctrl+Alt+C)',
       'Align left (Ctrl+Shift+L)', 'Align center (Ctrl+Shift+E)', 'Align right (Ctrl+Shift+R)', 'Justify (Ctrl+Shift+J)',
