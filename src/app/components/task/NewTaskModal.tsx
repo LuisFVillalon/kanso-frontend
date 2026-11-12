@@ -10,9 +10,9 @@ import Callout from './Callout';
 import Modal from '@/app/components/common/Modal';
 import { LinkedDraft, LinkedTasksSaveError, linkedSaveMessage, toLinkedRefs } from '@/app/utils/linkedTasks';
 import { useSlotPlanner, planMinutes, minutesOf, type SlotPlanner } from '@/app/hooks/useSlotPlanner';
-import { earlierRange, overlaps, planRange, spread, suggest, withHeld, type PlanRange, type SpreadItem } from '@/app/utils/slotSuggest';
+import { candidates, earlierRange, planRange, rankSlots, spread, suggest, withHeld, type PlanRange, type SpreadItem } from '@/app/utils/slotSuggest';
 import { clock, dayShort } from '@/app/utils/slotLabels';
-import { WorkBlocksSaveError, savePlans, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
+import { WorkBlocksSaveError, savePlans, samePick, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 
 /**
@@ -331,13 +331,15 @@ function useLinkedPlan(
       const range = r && rangeFor(r);
       if (!r || !range) return <p className="text-xs text-text-muted">It&apos;s past due, so there&apos;s nothing to plan.</p>;
       const state = heldFor(key);
-      const { slots: own, days } = suggest(state, r.len, range);
+      const { days } = suggest(state, r.len, range);
+      const own = rankSlots(candidates(days, r.len), range.due, 6);
+      const picks = linkedPicks[key] ?? [];
       const spreadSlot = spreadOut.get(key);
-      const lead = linkedPicks[key]?.length ? linkedPicks[key] : spreadSlot ? [spreadSlot] : [];
+      const lead = picks.length ? picks : spreadSlot ? [spreadSlot] : [];
       const slots = [
         ...lead.map(p => ({ ...p, gap: p.end - p.start })),
-        ...own.filter(s => !lead.some(p => p.date === s.date && overlaps(s, p))),
-      ].slice(0, Math.max(3, lead.length));
+        ...own.filter(s => !lead.some(p => samePick(s, p))),
+      ];
       return (
         // Mounted per open pill, so its day starts on Best each time one opens.
         <SlotChooser
@@ -348,8 +350,9 @@ function useLinkedPlan(
           len={r.len}
           today={today}
           best={slots}
+          limit={Math.max(3, picks.length)}
           soonest={false}
-          picks={linkedPicks[key] ?? []}
+          picks={picks}
           onPicksChange={next => setLinkedPicks(prev => ({ ...prev, [key]: next }))}
           stripClassName="-mx-2.5 px-2.5 sm:mx-0 sm:px-0 mb-1"
           empty={<p className="text-xs text-text-muted">No free time fits it before it&apos;s due.</p>}

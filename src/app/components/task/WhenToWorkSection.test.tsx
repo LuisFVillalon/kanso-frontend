@@ -387,4 +387,20 @@ describe('Linked tasks', () => {
     expect(pill().textContent).toBe('Tomorrow 9:30 AM');
     expect(optionRows()[0].textContent).toContain('moved from 9:00 AM');
   });
+
+  it('keeps 3 Best rows in a pill after a pick moves clear of where it started', async () => {
+    await render({ due_date: '2026-11-17', due_time: '23:59' }, creating());
+    await addLinked('Find sources');
+    await act(async () => pill().click());
+    const optionRows = () => [...options().querySelectorAll<HTMLButtonElement>('[data-slot-row]')];
+    await act(async () => options().querySelector<HTMLButtonElement>('[data-day-chip="2026-11-12"]')!.click());
+    await act(async () => optionRows()[0].click());
+    await act(async () => options().querySelector<HTMLButtonElement>('[data-day-chip="best"]')!.click());
+    expect(optionRows()[0].textContent).toContain('Tomorrow9:00 – 9:30 AM');
+    await act(async () => options().querySelector<HTMLButtonElement>('button[aria-label="30 minutes later"]')!.click());
+    expect(optionRows()).toHaveLength(3);
+    expect(optionRows()[0].textContent).toBe('Tomorrow9:30 – 10:00 AMmoved from 9:00 AM');
+    expect(optionRows()[0].getAttribute('aria-pressed')).toBe('true');
+    expect(optionRows().slice(1).every(r => r.getAttribute('aria-pressed') === 'false')).toBe(true);
+  });
 });

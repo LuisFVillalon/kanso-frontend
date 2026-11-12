@@ -171,6 +171,8 @@ interface SlotChooserProps {
   today: string;
   /** "Best": the suggested times. When empty, `empty` shows instead of the strip and rows. */
   best: Slot[];
+  /** Caps the "Best" rows, counted once moved picks sit on their own rows and covered times are left out. */
+  limit?: number;
   /** Labels the first "Best" row "Soonest". */
   soonest?: boolean;
   picks: PlanPick[];
@@ -194,7 +196,7 @@ interface SlotChooserProps {
  * says where it came from. Picks no longer on screen stay as "your pick" rows.
  */
 const SlotChooser: React.FC<SlotChooserProps> = ({
-  state, days, range, len, today, best, soonest = true, picks, onPicksChange,
+  state, days, range, len, today, best, limit, soonest = true, picks, onPicksChange,
   shownElsewhere = [], before, empty, labelledBy, stripClassName,
 }) => {
   const [day, setDay] = useState<DayPick>('best');
@@ -213,14 +215,21 @@ const SlotChooser: React.FC<SlotChooserProps> = ({
 
   // Each row on screen and the pick it shows, if any.
   const shownKeys = new Set(shown.map(pickKey));
-  const rows = shown.flatMap(s => {
+  const placed = new Set<string>();
+  const resolved = shown.flatMap(s => {
     const own = moved[pickKey(s)];
-    if (own && picked(own.to)) return [{ key: pickKey(s), slot: s, pick: own.to as PlanPick | null, from: own.from }];
     const m = movedFrom(s);
-    if (m && shownKeys.has(m[0])) return []; // Its pick shows on the row it was moved from.
+    const move: [string, Moved] | null = own && picked(own.to) ? [pickKey(s), own] : m && shownKeys.has(m[0]) ? m : null;
+    if (move) {
+      const [key, { from, to }] = move;
+      if (placed.has(key)) return [];
+      placed.add(key);
+      return [{ key, slot: shown.find(x => pickKey(x) === key)!, pick: to as PlanPick | null, from: from as PlanPick | undefined }];
+    }
     if (!picked(s) && picks.some(x => x.date === s.date && overlaps(x, s))) return [];
     return [{ key: m?.[0] ?? pickKey(s), slot: s, pick: picked(s) ? (s as PlanPick) : null, from: m?.[1].from }];
   });
+  const rows = limit != null && view === 'best' ? resolved.slice(0, limit) : resolved;
   const onScreen = [...rows.flatMap(r => (r.pick ? [r.pick] : [])), ...shownElsewhere];
   const custom = picks.filter(p => !onScreen.some(x => samePick(x, p)));
 
@@ -271,7 +280,7 @@ const SlotChooser: React.FC<SlotChooserProps> = ({
       {best.length > 0 && (
         <DayStrip
           days={choices}
-          bestCount={best.length}
+          bestCount={limit != null ? Math.min(best.length, limit) : best.length}
           selected={view}
           onSelect={select}
           today={today}
