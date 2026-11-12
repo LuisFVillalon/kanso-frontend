@@ -3,6 +3,7 @@ import { fetchMoodCheckins } from '@/app/lib/backend-api';
 import type { MoodCheckin, MoodPeriodKind } from '@/app/types/mood';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import type { ReportPeriod } from '@/app/utils/calendarReport';
+import { momentsFromNow, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 import { moodFetchRanges } from '@/app/utils/moodReport';
 
 interface Fetched {
@@ -14,7 +15,8 @@ interface Fetched {
  * Loads the mood check-ins a report period needs — daily, weekly and
  * monthly — whose first day falls in moodFetchRanges (the period before it
  * too, which the Mood over time summary compares with). Saving or
- * deleting a check-in from the report patches the loaded list in place.
+ * deleting a check-in from the report patches the loaded list in place, as
+ * does renaming or deleting a moment anywhere (utils/moodCheckinSync.ts).
  */
 export function useReportMood(period: ReportPeriod) {
   const key = moodFetchRanges(period)
@@ -27,12 +29,13 @@ export function useReportMood(period: ReportPeriod) {
 
   useEffect(() => {
     let cancelled = false;
+    const moments = momentsFromNow();
     Promise.all(key.split(',').map(range => {
       const [startStr, endStr] = range.split(':');
       return fetchMoodCheckins(startStr, endStr);
     }))
       .then(parts => {
-        if (!cancelled) setFetched({ key, checkins: parts.flat() });
+        if (!cancelled) setFetched({ key, checkins: parts.flat().map(moments.row) });
       })
       .catch(err => {
         console.error('[useReportMood] Failed to fetch mood check-ins:', err);
@@ -43,6 +46,10 @@ export function useReportMood(period: ReportPeriod) {
       setError(null);
     };
   }, [key, attempt]);
+
+  useEffect(() => onMoodMoment(change => {
+    setFetched(prev => prev && { ...prev, checkins: prev.checkins.map(c => withMomentChange(c, change)) });
+  }), []);
 
   const ready = fetched?.key === key ? fetched.checkins : null;
   const failed = !ready && error?.key === key ? error.message : null;

@@ -1,8 +1,9 @@
 /**
  * Keeps the places that show a check-in in step when one of them saves,
  * edits or undoes it: the dashboard's weekly and monthly chips, the Daily Brief's mood chip, the
- * calendar day panel, the calendar's month grid and the form a notification opens. In-memory and
- * per-tab; each place still loads its own rows from the server.
+ * calendar day panel, the calendar's month grid and the form a notification opens; and, when a
+ * moment is renamed or deleted, every check-in row they hold. In-memory and per-tab; each place
+ * still loads its own rows from the server.
  */
 
 import type { MoodCheckin, MoodPeriodKind } from '@/app/types/mood';
@@ -33,4 +34,52 @@ export function isLatestMoodCheckin(row: MoodCheckin): boolean {
 export function onMoodCheckin(listener: Listener): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
+}
+
+/** A moment renamed (`to`) or deleted (`to` null) on every check-in carrying it. */
+export interface MoodMomentChange {
+  from: string;
+  to: string | null;
+}
+
+type MomentListener = (change: MoodMomentChange) => void;
+
+const momentListeners = new Set<MomentListener>();
+const momentChanges: MoodMomentChange[] = [];
+
+const sameMoment = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
+
+/** `list` with `from` renamed to `to` (or dropped, for null), keeping one of each moment. */
+export const replaceMoment = (list: string[], from: string, to: string | null): string[] =>
+  list
+    .flatMap(t => (sameMoment(t, from) ? (to == null ? [] : [to]) : [t]))
+    .filter((t, i, all) => all.findIndex(o => sameMoment(o, t)) === i);
+
+/** `row` after `change`: the same row when it doesn't carry the moment. */
+export function withMomentChange(row: MoodCheckin, { from, to }: MoodMomentChange): MoodCheckin {
+  return row.tags.some(t => sameMoment(t, from)) ? { ...row, tags: replaceMoment(row.tags, from, to) } : row;
+}
+
+export function announceMoodMoment(change: MoodMomentChange): void {
+  momentChanges.push(change);
+  momentListeners.forEach(listener => listener(change));
+}
+
+/** Calls `listener` for every renamed or deleted moment; returns the unsubscribe. */
+export function onMoodMoment(listener: MomentListener): () => void {
+  momentListeners.add(listener);
+  return () => { momentListeners.delete(listener); };
+}
+
+/**
+ * Applies the moments renamed or deleted from now on to a row or list read
+ * now but used later: a fetch that lands after a change, or an Undo.
+ */
+export function momentsFromNow() {
+  const seen = momentChanges.length;
+  const since = () => momentChanges.slice(seen);
+  return {
+    row: (row: MoodCheckin): MoodCheckin => since().reduce(withMomentChange, row),
+    list: (list: string[]): string[] => since().reduce((l, { from, to }) => replaceMoment(l, from, to), list),
+  };
 }

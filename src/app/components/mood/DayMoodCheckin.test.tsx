@@ -13,10 +13,11 @@ const api = vi.hoisted(() => ({
   saveMoodCheckin: vi.fn(),
   deleteMoodCheckin: vi.fn(),
   fetchMoodTags: vi.fn(),
+  deleteMoodTag: vi.fn(),
 }));
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 
-import { DayClosedMoodReminder, DayMoodCheckinModal } from '@/app/components/mood/DayMoodCheckin';
+import DayMoodCheckin, { DayClosedMoodReminder, DayMoodCheckinModal } from '@/app/components/mood/DayMoodCheckin';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -188,5 +189,63 @@ describe('DayClosedMoodReminder', () => {
     await renderReminder({ profileLoaded: false });
     expect(reminder()).toBeNull();
     expect(api.fetchMoodCheckins).not.toHaveBeenCalled();
+  });
+});
+
+describe('DayMoodCheckin after a moment is deleted from another day', () => {
+  const rows: Record<string, MoodCheckin> = {
+    '2026-10-19': { ...checkin(3, '2026-10-19'), id: 1, tags: ['Focused'] },
+    '2026-10-20': { ...checkin(4, '2026-10-20'), id: 2, tags: ['Gym', 'Focused'] },
+  };
+  const byLabel = (name: string) => [...document.body.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === name)!;
+
+  beforeEach(() => {
+    api.fetchMoodCheckins.mockImplementation(async (from: string) => (rows[from] ? [rows[from]] : []));
+    api.fetchMoodTags.mockResolvedValue({ defaults: ['Focused'], custom: ['Gym'] });
+    api.deleteMoodTag.mockResolvedValue({ deleted: 1 });
+    api.saveMoodCheckin.mockImplementation(async (body: MoodCheckin) => ({ ...rows[body.period_start], ...body }));
+    vi.setSystemTime(new Date(2026, 9, 21, 12, 0));
+  });
+
+  const renderDays = async () => {
+    await act(async () => {
+      root.render(
+        <ToastProvider>
+          <DayMoodCheckin date="2026-10-19" variant="chip" />
+          <DayMoodCheckin date="2026-10-20" variant="chip" />
+        </ToastProvider>,
+      );
+    });
+  };
+  const deleteGymFromMonday = async () => {
+    await click(byLabel('Edit mood for Monday, October 19'));
+    await click(byLabel('Delete moment Gym'));
+    await click(byText('Delete moment'));
+    expect(api.deleteMoodTag).toHaveBeenCalledWith('Gym');
+    api.fetchMoodTags.mockResolvedValue({ defaults: ['Focused'], custom: [] });
+    await click(byLabel('Close'));
+  };
+
+  it("opens the other day's check-in without the deleted moment, and doesn't save it back", async () => {
+    await renderDays();
+    await deleteGymFromMonday();
+
+    await click(byLabel('Edit mood for Tuesday, October 20'));
+    expect(byText('Gym')).toBeUndefined();
+    expect(byText('Focused').getAttribute('aria-pressed')).toBe('true');
+    await click(byText('Save changes'));
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_start: '2026-10-20', tags: ['Focused'] }));
+  });
+
+  it('leaves the deleted moment out of an earlier Undo', async () => {
+    await renderDays();
+    await click(byLabel('Edit mood for Tuesday, October 20'));
+    await click(byText('Save changes'));
+    expect(document.body.textContent).toContain('Check-in updated.');
+    await deleteGymFromMonday();
+
+    api.saveMoodCheckin.mockClear();
+    await click(byText('Undo'));
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_start: '2026-10-20', tags: ['Focused'] }));
   });
 });

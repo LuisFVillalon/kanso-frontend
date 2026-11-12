@@ -1,7 +1,7 @@
 /**
  * Mood check-ins, backed by the backend's `/get-mood-checkins`,
- * `/save-mood-checkin`, `/del-mood-checkin/{id}` and `/get-mood-tags`
- * endpoints. One check-in per period: the local day itself, the Monday of a
+ * `/save-mood-checkin`, `/del-mood-checkin/{id}`, `/get-mood-tags`,
+ * `/rename-mood-tag` and `/del-mood-tag` endpoints. One check-in per period: the local day itself, the Monday of a
  * Mon–Sun week, or the 1st of a month. Mood data stays out of the Daily Brief
  * and every AI feature.
  */
@@ -41,7 +41,10 @@ export interface MoodCheckin {
 export type MoodCheckinSave = Pick<MoodCheckin, 'period_kind' | 'period_start' | 'mood'> &
   Partial<Pick<MoodCheckin, 'energy' | 'stress' | 'workload' | 'highlight' | 'progress' | 'word' | 'note' | 'tags'>>;
 
-/** GET /get-mood-tags: the built-in list in picker order, then the user's own, most recent first. */
+/**
+ * GET /get-mood-tags: the built-in list in picker order, then the user's own,
+ * most recent first. Moments the user renamed away or deleted aren't listed.
+ */
 export interface MoodTags {
   defaults: string[];
   custom: string[];

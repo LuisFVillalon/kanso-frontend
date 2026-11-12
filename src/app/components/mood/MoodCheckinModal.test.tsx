@@ -7,10 +7,13 @@ import type { MoodCheckin } from '@/app/types/mood';
 const api = vi.hoisted(() => ({
   saveMoodCheckin: vi.fn(),
   fetchMoodTags: vi.fn(),
+  renameMoodTag: vi.fn(),
+  deleteMoodTag: vi.fn(),
 }));
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 
 import MoodCheckinModal from './MoodCheckinModal';
+import { onMoodMoment, type MoodMomentChange } from '@/app/utils/moodCheckinSync';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -27,6 +30,8 @@ const saved: MoodCheckin = {
 beforeEach(() => {
   api.saveMoodCheckin.mockResolvedValue(saved);
   api.fetchMoodTags.mockResolvedValue({ defaults: ['Slept well', 'Focused'], custom: ['Gym'] });
+  api.renameMoodTag.mockResolvedValue({ renamed: 3 });
+  api.deleteMoodTag.mockResolvedValue({ deleted: 2 });
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -204,5 +209,142 @@ describe('MoodCheckinModal for a week or month', () => {
     await render({ kind: 'week', date: new Date(2026, 9, 19), existing });
     await click(button('Save changes'));
     expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ period_start: '2026-10-19', workload: 1, highlight: 'Hike', note: 'kept', tags: ['Outdoors'] }));
+  });
+});
+
+describe('MoodCheckinModal moments: edit and delete', () => {
+  const moments = () =>
+    [...document.body.querySelectorAll('[role="group"][aria-label="Moments"] button[aria-pressed]')].map(b => b.textContent?.trim());
+  const momentInput = (name: string) => document.body.querySelector<HTMLInputElement>(`input[aria-label="Rename moment ${name}"]`)!;
+  const type = async (el: HTMLInputElement, value: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+  const key = async (el: Element, k: string) => {
+    await act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); });
+  };
+  let changes: MoodMomentChange[];
+  let unsubscribe: () => void;
+  beforeEach(() => { changes = []; unsubscribe = onMoodMoment(c => changes.push(c)); });
+  afterEach(() => unsubscribe());
+
+  it('gives every moment an Edit and a Delete, shown on hover or focus', async () => {
+    await render();
+    for (const name of ['Slept well', 'Focused', 'Gym']) {
+      expect(button(`Edit moment ${name}`).className).toContain('mood-moment-action');
+      expect(button(`Delete moment ${name}`).closest('.mood-moment')).not.toBeNull();
+    }
+  });
+
+  it('shows every moment\'s Edit and Delete behind Edit moments, for touch screens', async () => {
+    await render();
+    const group = document.body.querySelector('[role="group"][aria-label="Moments"]')!;
+    expect(group.classList.contains('is-managing')).toBe(false);
+    await click(button('Edit moments'));
+    expect(group.classList.contains('is-managing')).toBe(true);
+    await click(button('Done'));
+    expect(group.classList.contains('is-managing')).toBe(false);
+  });
+
+  it('renames a moment everywhere, in place, and keeps it picked', async () => {
+    const existing: MoodCheckin = { ...saved, tags: ['Gym', 'Focused'] };
+    const { onSaved } = await render({ existing });
+    await click(button('Edit moment Gym'));
+    const input = momentInput('Gym');
+    expect(input.value).toBe('Gym');
+    await type(input, '  Lifting  ');
+    await click(button('Save moment'));
+
+    expect(api.renameMoodTag).toHaveBeenCalledWith('Gym', 'Lifting');
+    expect(moments()).toEqual(['Slept well', 'Focused', 'Lifting']);
+    expect(button('Lifting').getAttribute('aria-pressed')).toBe('true');
+    expect(changes).toEqual([{ from: 'Gym', to: 'Lifting' }]);
+
+    await click(button('Save changes'));
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ tags: ['Lifting', 'Focused'] }));
+    // Undo restores the check-in as it now stands on the server, not the old moment name.
+    expect(onSaved).toHaveBeenCalledWith(saved, { ...existing, tags: ['Lifting', 'Focused'] });
+  });
+
+  it('merges a moment renamed to one that already exists', async () => {
+    await render({ existing: { ...saved, tags: ['Gym', 'Focused'] } });
+    await click(button('Edit moment Gym'));
+    await type(momentInput('Gym'), 'focused');
+    await key(momentInput('Gym'), 'Enter');
+    expect(api.renameMoodTag).toHaveBeenCalledWith('Gym', 'focused');
+    expect(moments()).toEqual(['Slept well', 'Focused']);
+  });
+
+  it('cancels a rename with Cancel or Escape without calling the API or closing the form', async () => {
+    const onClose = vi.fn();
+    await render({ onClose });
+    await click(button('Edit moment Gym'));
+    await type(momentInput('Gym'), 'Lifting');
+    await click(button('Cancel renaming'));
+    expect(moments()).toContain('Gym');
+
+    await click(button('Edit moment Gym'));
+    await key(momentInput('Gym'), 'Escape');
+    expect(momentInput('Gym')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(api.renameMoodTag).not.toHaveBeenCalled();
+  });
+
+  it('keeps the rename open with an error when it fails', async () => {
+    api.renameMoodTag.mockRejectedValueOnce(new Error('offline'));
+    await render();
+    await click(button('Edit moment Gym'));
+    await type(momentInput('Gym'), 'Lifting');
+    await click(button('Save moment'));
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Couldn't rename that moment. Please try again.");
+    expect(momentInput('Gym').value).toBe('Lifting');
+    expect(moments()).toEqual(['Slept well', 'Focused']);
+  });
+
+  it('deletes a moment from every check-in after a confirm', async () => {
+    const existing: MoodCheckin = { ...saved, tags: ['Gym', 'Focused'] };
+    await render({ existing });
+    await click(button('Delete moment Focused'));
+    expect(api.deleteMoodTag).not.toHaveBeenCalled();
+    expect(document.body.querySelector('[role="alertdialog"]')!.textContent).toContain('It comes off all your past check-ins');
+
+    await click(button('Delete moment'));
+    expect(api.deleteMoodTag).toHaveBeenCalledWith('Focused');
+    expect(moments()).toEqual(['Slept well', 'Gym']);
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(changes).toEqual([{ from: 'Focused', to: null }]);
+
+    await click(button('Save changes'));
+    expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ tags: ['Gym'] }));
+  });
+
+  it('keeps a moment deleted or renamed before the moment list loads out of it once it lands', async () => {
+    let land!: (tags: { defaults: string[]; custom: string[] }) => void;
+    api.fetchMoodTags.mockReturnValueOnce(new Promise(resolve => { land = resolve; }));
+    await render();
+    await click(button('Delete moment Focused'));
+    await click(button('Delete moment'));
+    await click(button('Edit moment Tired'));
+    await type(momentInput('Tired'), 'Drained');
+    await click(button('Save moment'));
+
+    await act(async () => { land({ defaults: ['Slept well', 'Focused', 'Tired'], custom: ['Gym'] }); });
+    expect(moments()).toEqual(['Slept well', 'Drained', 'Gym']);
+  });
+
+  it('keeps the moment when the delete is cancelled or fails', async () => {
+    await render();
+    await click(button('Delete moment Gym'));
+    await click(button('Keep it'));
+    expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+
+    api.deleteMoodTag.mockRejectedValueOnce(new Error('offline'));
+    await click(button('Delete moment Gym'));
+    await click(button('Delete moment'));
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("Couldn't delete that moment. Please try again.");
+    expect(moments()).toContain('Gym');
+    expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
   });
 });

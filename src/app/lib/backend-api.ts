@@ -1524,6 +1524,33 @@ export async function fetchMoodTags(): Promise<MoodTags> {
   return res.json();
 }
 
+/**
+ * Renames a moment everywhere: every check-in carrying `oldTag` gets `newTag`
+ * instead (once, if it already had it), and a built-in moment renamed away is
+ * hidden from the picker. Returns how many check-ins changed.
+ */
+export async function renameMoodTag(oldTag: string, newTag: string): Promise<{ renamed: number }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/rename-mood-tag`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ old: oldTag, new: newTag }),
+  });
+  await assertOk(res, "renameMoodTag");
+  return res.json();
+}
+
+/**
+ * Deletes a moment everywhere: it comes off every check-in, and a built-in
+ * one is hidden from the picker. Returns how many check-ins changed.
+ */
+export async function deleteMoodTag(tag: string): Promise<{ deleted: number }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE_URL}/del-mood-tag?${new URLSearchParams({ tag })}`, { method: "DELETE", headers });
+  await assertOk(res, "deleteMoodTag");
+  return res.json();
+}
+
 // ── Drawing (doodle mode) ───────────────────────────────────────────────────
 // Shape mirrors fetchProfile/saveProfile (GET 404 → null for "no drawing
 // saved yet", POST upserts, backend derives user_id from the JWT). See

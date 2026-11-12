@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, CalendarRange, CircleCheck, Clock, Loader2, Plus, Repeat } from 'lucide-react';
+import { ArrowLeft, CalendarRange, Check, CircleCheck, Clock, Loader2, Pencil, Plus, Repeat, Trash2, X } from 'lucide-react';
 import Modal, { type ModalLayer } from '@/app/components/common/Modal';
 import MoodFacePicker from '@/app/components/mood/MoodFacePicker';
-import { describeError, fetchMoodTags, saveMoodCheckin } from '@/app/lib/backend-api';
+import { deleteMoodTag, describeError, fetchMoodTags, renameMoodTag, saveMoodCheckin } from '@/app/lib/backend-api';
 import {
   DEFAULT_MOOD_TAGS,
   ENERGY_LABELS,
@@ -23,6 +23,7 @@ import {
 } from '@/app/types/mood';
 import { periodContaining } from '@/app/utils/calendarReport';
 import { formatDateRange, formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
+import { announceMoodMoment, momentsFromNow, onMoodMoment, replaceMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 
 /** What the user already did that day, shown above the faces so they reflect rather than guess. */
 export interface DaySummary {
@@ -134,13 +135,23 @@ const MoodCheckinModal: React.FC<Props> = ({
   const [newTag, setNewTag] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Renaming or deleting a moment changes every check-in carrying it, the open one included.
+  const [baseline, setBaseline] = useState<MoodCheckin | null>(existing);
+  const [editingMoment, setEditingMoment] = useState<string | null>(null);
+  const [momentName, setMomentName] = useState('');
+  const [deletingMoment, setDeletingMoment] = useState<string | null>(null);
+  const [momentBusy, setMomentBusy] = useState(false);
+  const [momentError, setMomentError] = useState<string | null>(null);
+  // Touch screens have no hover, so they show every moment's Edit and Delete behind this toggle.
+  const [managingMoments, setManagingMoments] = useState(false);
 
   const showsTags = kind !== 'month';
   useEffect(() => {
     if (!showsTags) return;
     let cancelled = false;
+    const moments = momentsFromNow();
     fetchMoodTags()
-      .then(({ defaults, custom }) => { if (!cancelled) setSuggestions([...defaults, ...custom]); })
+      .then(({ defaults, custom }) => { if (!cancelled) setSuggestions(moments.list([...defaults, ...custom])); })
       .catch(() => {}); // keep the built-in list
     return () => { cancelled = true; };
   }, [showsTags]);
@@ -165,6 +176,64 @@ const MoodCheckinModal: React.FC<Props> = ({
     setAddingTag(false);
   };
 
+  // After a moment is renamed or deleted on the server, the picker, this form and the open check-in follow.
+  useEffect(() => onMoodMoment(change => {
+    setSuggestions(prev => replaceMoment(prev, change.from, change.to));
+    setTags(prev => replaceMoment(prev, change.from, change.to));
+    setBaseline(prev => prev && withMomentChange(prev, change));
+  }), []);
+
+  const startEditingMoment = (tag: string) => {
+    setDeletingMoment(null);
+    setMomentError(null);
+    setEditingMoment(tag);
+    setMomentName(tag);
+  };
+
+  const cancelMomentEdit = () => {
+    setEditingMoment(null);
+    setMomentError(null);
+  };
+
+  const cancelMomentDelete = () => {
+    setDeletingMoment(null);
+    setMomentError(null);
+  };
+
+  const saveMomentEdit = async () => {
+    const from = editingMoment;
+    const to = momentName.trim();
+    if (from == null || !to || momentBusy) return;
+    if (to === from) { cancelMomentEdit(); return; }
+    setMomentBusy(true);
+    setMomentError(null);
+    try {
+      await renameMoodTag(from, to);
+      announceMoodMoment({ from, to });
+      setEditingMoment(null);
+    } catch (err) {
+      setMomentError(describeError(err, "Couldn't rename that moment. Please try again."));
+    } finally {
+      setMomentBusy(false);
+    }
+  };
+
+  const confirmMomentDelete = async () => {
+    const tag = deletingMoment;
+    if (tag == null || momentBusy) return;
+    setMomentBusy(true);
+    setMomentError(null);
+    try {
+      await deleteMoodTag(tag);
+      announceMoodMoment({ from: tag, to: null });
+      setDeletingMoment(null);
+    } catch (err) {
+      setMomentError(describeError(err, "Couldn't delete that moment. Please try again."));
+    } finally {
+      setMomentBusy(false);
+    }
+  };
+
   const period = kind === 'day' ? null : periodContaining(kind, date);
   const monthName = date.toLocaleDateString('en-US', { month: 'long' });
   const isToday = toLocalDateStr(date) === toLocalDateStr(new Date());
@@ -187,18 +256,18 @@ const MoodCheckinModal: React.FC<Props> = ({
   const suggested = periodSummary?.average != null ? Math.round(periodSummary.average) : null;
 
   const handleSave = async () => {
-    if (mood == null || busy) return;
+    if (mood == null || busy || momentBusy) return;
     setBusy(true);
     setError(null);
     // Saving replaces the whole check-in, so a field this form doesn't show keeps its saved value.
     const body: MoodCheckinSave = kind === 'week'
-      ? { period_kind: 'week', period_start: toLocalDateStr(period!.start), mood, workload, highlight: highlight.trim() || null, tags, note: existing?.note ?? null }
+      ? { period_kind: 'week', period_start: toLocalDateStr(period!.start), mood, workload, highlight: highlight.trim() || null, tags, note: baseline?.note ?? null }
       : kind === 'month'
-        ? { period_kind: 'month', period_start: toLocalDateStr(period!.start), mood, progress, word: word.trim() || null, note: note.trim() || null, tags: existing?.tags ?? [] }
+        ? { period_kind: 'month', period_start: toLocalDateStr(period!.start), mood, progress, word: word.trim() || null, note: note.trim() || null, tags: baseline?.tags ?? [] }
         : { period_kind: 'day', period_start: toLocalDateStr(date), mood, energy, stress, tags, note: note.trim() || null };
     try {
       const saved = await saveMoodCheckin(body);
-      onSaved(saved, existing);
+      onSaved(saved, baseline);
     } catch (err) {
       setError(describeError(err, "Couldn't save your check-in. Please try again."));
       setBusy(false);
@@ -361,20 +430,86 @@ const MoodCheckinModal: React.FC<Props> = ({
             <div>
               <FieldLabel>{kind === 'day' ? 'What was part of today?' : 'What was part of this week?'}</FieldLabel>
               <p className="text-[11px] text-text-muted -mt-1 mb-1.5">Pick your moments</p>
-              <div role="group" aria-label="Moments" className="flex flex-wrap gap-1.5">
+              <div role="group" aria-label="Moments" className={`mood-moments flex flex-wrap ${managingMoments ? 'is-managing gap-x-3.5 gap-y-3 pt-1' : 'gap-1.5'}`}>
                 {tagOptions.map(tag => {
                   const selected = tags.some(t => sameTag(t, tag));
+                  if (editingMoment != null && sameTag(editingMoment, tag)) {
+                    return (
+                      <span key={tag} className="inline-flex items-center gap-1">
+                        <input
+                          autoFocus
+                          value={momentName}
+                          maxLength={MOOD_TAG_MAX}
+                          disabled={momentBusy}
+                          onChange={e => setMomentName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); saveMomentEdit(); }
+                            if (e.key === 'Escape') {
+                              // Cancel just the rename: Modal closes on a document-level Escape.
+                              e.nativeEvent.stopImmediatePropagation();
+                              cancelMomentEdit();
+                            }
+                          }}
+                          aria-label={`Rename moment ${tag}`}
+                          className="input-field text-xs py-1 px-3 w-32 rounded-full"
+                        />
+                        <button
+                          type="button"
+                          onClick={saveMomentEdit}
+                          disabled={!momentName.trim() || momentBusy}
+                          aria-label="Save moment"
+                          title="Save"
+                          className="btn btn-ghost p-1 text-accent disabled:opacity-50"
+                        >
+                          {momentBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelMomentEdit}
+                          disabled={momentBusy}
+                          aria-label="Cancel renaming"
+                          title="Cancel"
+                          className="btn btn-ghost p-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    );
+                  }
                   return (
-                    <button
-                      key={tag}
-                      type="button"
-                      aria-pressed={selected}
-                      disabled={!selected && atTagLimit}
-                      onClick={() => toggleTag(tag)}
-                      className="chip mood-tag disabled:opacity-50"
-                    >
-                      {tag}
-                    </button>
+                    <span key={tag} className="mood-moment relative inline-flex">
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        disabled={!selected && atTagLimit}
+                        onClick={() => toggleTag(tag)}
+                        className="chip mood-tag disabled:opacity-50"
+                      >
+                        {tag}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startEditingMoment(tag)}
+                        disabled={momentBusy}
+                        aria-label={`Edit moment ${tag}`}
+                        title="Edit moment"
+                        className="mood-moment-action -left-1.5 text-[var(--tm-accent-text)]"
+                        style={{ backgroundColor: 'var(--tm-accent)' }}
+                      >
+                        <Pencil className="w-2.5 h-2.5" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { cancelMomentEdit(); setDeletingMoment(tag); }}
+                        disabled={momentBusy}
+                        aria-label={`Delete moment ${tag}`}
+                        title="Delete moment"
+                        className="mood-moment-action -right-1.5 text-white"
+                        style={{ backgroundColor: 'var(--tm-danger)' }}
+                      >
+                        <Trash2 className="w-2.5 h-2.5" aria-hidden="true" />
+                      </button>
+                    </span>
                   );
                 })}
                 {addingTag ? (
@@ -408,7 +543,54 @@ const MoodCheckinModal: React.FC<Props> = ({
                     Moment
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setManagingMoments(on => !on)}
+                  className="mood-moments-manage chip mood-tag"
+                >
+                  {managingMoments ? 'Done' : 'Edit moments'}
+                </button>
               </div>
+              {deletingMoment != null && (
+                <div
+                  role="alertdialog"
+                  aria-labelledby="mood-moment-delete-text"
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') {
+                      // Cancel just the delete: Modal closes on a document-level Escape.
+                      e.nativeEvent.stopImmediatePropagation();
+                      cancelMomentDelete();
+                    }
+                  }}
+                  className="mt-2 rounded-lg border border-border-subtle bg-surface-raised px-3 py-2 text-xs"
+                >
+                  <p id="mood-moment-delete-text" className="text-text-secondary">
+                    Delete <b className="font-semibold text-text-primary">{deletingMoment}</b>? It comes off all your past check-ins and out of this list.
+                  </p>
+                  <div className="flex justify-end gap-2 mt-2">
+                    <button
+                      type="button"
+                      autoFocus
+                      onClick={cancelMomentDelete}
+                      disabled={momentBusy}
+                      className="btn btn-secondary text-xs px-2.5 py-1"
+                    >
+                      Keep it
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmMomentDelete}
+                      disabled={momentBusy}
+                      className="btn text-xs px-2.5 py-1 text-white flex items-center gap-1.5"
+                      style={{ backgroundColor: 'var(--tm-danger)' }}
+                    >
+                      {momentBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+                      {momentBusy ? 'Deleting…' : 'Delete moment'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {momentError && <p role="alert" className="text-xs text-danger mt-1.5">{momentError}</p>}
             </div>
           )}
 
@@ -441,7 +623,7 @@ const MoodCheckinModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={handleSave}
-              disabled={mood == null || busy}
+              disabled={mood == null || busy || momentBusy}
               className="btn btn-primary flex-1 py-2 flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {busy && <Loader2 className="w-4 h-4 animate-spin" />}
