@@ -260,6 +260,17 @@ describe('Which day', () => {
     expect(submitButton().textContent).toBe('Create & plan');
   });
 
+  it('counts only the Best times still offered once a pick covers one', async () => {
+    await render({}, creating());
+    expect(chip('best').textContent).toBe('Best3 times');
+    await act(async () => chip('2026-11-12').click());
+    await act(async () => rows()[1].click());
+    await act(async () => document.querySelector<HTMLButtonElement>('[data-when-to-work] button[aria-label="30 minutes earlier"]')!.click());
+    expect(chip('best').textContent).toBe('Best2 times');
+    await act(async () => chip('best').click());
+    expect(rows().filter(r => r.getAttribute('aria-pressed') === 'false')).toHaveLength(2);
+  });
+
   it('goes back to Best and clears the picks when the length changes', async () => {
     await render({}, creating());
     await act(async () => chip('2026-11-12').click());
