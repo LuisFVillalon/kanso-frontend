@@ -7,6 +7,7 @@ import {
   Bold, ChevronDown, Code, Ellipsis, Highlighter, Image as ImageIcon, Italic, Link2, List, ListChecks, ListOrdered,
   Minus, PanelLeftClose, PanelLeftOpen, Plus, Quote, Redo2, Strikethrough, Table as TableIcon, Underline, Undo2, X,
 } from 'lucide-react';
+import { HIGHLIGHT_COLORS, setHighlightColor, useHighlightColor } from './highlightColor';
 
 // ─── Heading levels ──────────────────────────────────────────────────────────
 
@@ -19,14 +20,6 @@ const TABLE_MAX = 20;
 const TABLE_MIN_GRID = 8;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-export const HIGHLIGHT_COLORS = [
-  { color: '#fef08a', label: 'Yellow' },
-  { color: '#bbf7d0', label: 'Green' },
-  { color: '#bae6fd', label: 'Blue' },
-  { color: '#fbcfe8', label: 'Pink' },
-  { color: '#fed7aa', label: 'Orange' },
-] as const;
 
 type Alignment = 'left' | 'center' | 'right' | 'justify';
 
@@ -273,14 +266,23 @@ function useControlsState(editor: Editor | null): ControlsState {
 
 // ─── HighlightPicker ──────────────────────────────────────────────────────────
 
+/**
+ * A split button: the highlighter applies the last color picked (and removes
+ * it again from text that already has it); the arrow beside it opens the
+ * colors. The picked color stays the highlighter's color until another is picked.
+ */
 const HighlightPicker: React.FC<{ editor: Editor | null; state: ControlsState; placement: MenuPlacement }> = ({ editor, state, placement }) => {
   const { open, setOpen, containerRef, triggerRef } = usePopover<HTMLButtonElement>();
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const highlightColor = useHighlightColor();
+  const colorLabel = HIGHLIGHT_COLORS.find(({ color }) => color === highlightColor)?.label ?? 'Yellow';
   useFocusOnOpen(open, menuRef);
 
-  const applyColor = (color: string, alreadyActive: boolean) => {
-    if (alreadyActive) {
+  const pickColor = (color: string) => {
+    setHighlightColor(color);
+    // Picking the color the text already has takes the highlight off, as before.
+    if (state.highlightColor === color) {
       editor?.chain().focus().unsetHighlight().run();
     } else {
       editor?.chain().focus().setHighlight({ color }).run();
@@ -289,22 +291,39 @@ const HighlightPicker: React.FC<{ editor: Editor | null; state: ControlsState; p
   };
 
   return (
-    <div ref={containerRef} className="relative shrink-0">
+    <div ref={containerRef} className="relative shrink-0 flex items-center">
+      <button
+        type="button"
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => editor?.chain().focus().toggleHighlight({ color: highlightColor }).run()}
+        title={`Highlight text, ${colorLabel} (Ctrl+Shift+H)`}
+        aria-label="Highlight text"
+        aria-pressed={state.highlight}
+        className={`${triggerClass(state.highlight, placement)} relative`}
+        style={triggerStyle(state.highlight)}
+      >
+        <Highlighter className="w-4 h-4" />
+        <span
+          aria-hidden="true"
+          data-highlight-swatch
+          className="absolute bottom-1 left-1/2 -translate-x-1/2 w-3.5 h-[3px] rounded-full"
+          style={{ backgroundColor: highlightColor }}
+        />
+      </button>
       <button
         ref={triggerRef}
         type="button"
         onMouseDown={e => e.preventDefault()}
         onClick={() => setOpen(v => !v)}
-        title="Highlight text (Ctrl+Shift+H)"
-        aria-label="Highlight text"
+        title="Highlight color"
+        aria-label="Highlight color"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
-        aria-pressed={state.highlight}
-        className={triggerClass(state.highlight, placement)}
-        style={triggerStyle(state.highlight)}
+        className={`flex items-center justify-center ${placement === 'above' ? 'w-5 h-10' : 'w-4 h-8'} rounded-md outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-offset-1 text-[var(--tm-text-secondary)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)]`}
+        style={RING_STYLE}
       >
-        <Highlighter className="w-4 h-4" />
+        <ChevronDown className="w-3 h-3" aria-hidden="true" />
       </button>
 
       {open && (
@@ -319,7 +338,7 @@ const HighlightPicker: React.FC<{ editor: Editor | null; state: ControlsState; p
           className="p-2 flex items-center gap-1.5"
         >
           {HIGHLIGHT_COLORS.map(({ color, label }) => {
-            const isActive = state.highlightColor === color;
+            const isActive = highlightColor === color;
             return (
               <button
                 key={color}
@@ -329,7 +348,7 @@ const HighlightPicker: React.FC<{ editor: Editor | null; state: ControlsState; p
                 aria-label={label}
                 title={label}
                 onMouseDown={e => e.preventDefault()}
-                onClick={() => applyColor(color, isActive)}
+                onClick={() => pickColor(color)}
                 className="w-7 h-7 rounded-full outline-none transition-transform duration-200 hover:scale-110 active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-1"
                 style={{
                   ...RING_STYLE,

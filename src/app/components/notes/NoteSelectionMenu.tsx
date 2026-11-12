@@ -5,9 +5,8 @@ import { useEditorState, type Editor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { NodeSelection, PluginKey } from '@tiptap/pm/state';
 import { Bold, ExternalLink, Highlighter, Italic, Link2, Pencil, Strikethrough, Underline, Unlink } from 'lucide-react';
-import { HIGHLIGHT_COLORS, RING_STYLE, ToolbarButton } from './EditorToolbar';
-
-const YELLOW = HIGHLIGHT_COLORS[0].color;
+import { RING_STYLE, ToolbarButton } from './EditorToolbar';
+import { getHighlightColor } from './highlightColor';
 
 /**
  * A solid raised surface with a hairline border and a soft shadow, so text
@@ -112,7 +111,7 @@ const NoteSelectionMenu: React.FC<NoteSelectionMenuProps> = ({ editor, onEditLin
             active={state.highlight}
             onClick={() => (state.highlight
               ? editor.chain().focus().unsetHighlight().run()
-              : editor.chain().focus().setHighlight({ color: YELLOW }).run())}
+              : editor.chain().focus().setHighlight({ color: getHighlightColor() }).run())}
           >
             <Highlighter className="w-4 h-4" />
           </ToolbarButton>
