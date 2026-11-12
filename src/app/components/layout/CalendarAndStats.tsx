@@ -244,7 +244,9 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
         <Modal
           onClose={() => setExpandedId(null)}
           layer="raised"
-          panelClassName="modal-panel w-full max-w-3xl max-h-[86vh] overflow-y-auto scrollbar-custom p-6"
+          // Focus is a small timer and a short list: a narrow panel keeps it
+          // from sitting in a wide empty box.
+          panelClassName={`modal-panel w-full ${expandedId === 'tasks' ? 'max-w-md p-5' : 'max-w-3xl p-6'} max-h-[86vh] overflow-y-auto scrollbar-custom`}
         >
           <div className="flex items-center mb-4">
             {expandedId === 'reserved' ? (

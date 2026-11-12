@@ -1,10 +1,15 @@
 'use client';
 
-import React from 'react';
-import { ChevronDown, Pause, Play, Square, Timer } from 'lucide-react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, ChevronDown, Pause, Play, Plus, Square, X } from 'lucide-react';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
-import { useCalendarViewMode } from '@/app/hooks/useCalendarViewMode';
-import { FOCUS_PRESETS, useFocusTimer, type FocusTimer } from '@/app/hooks/useFocusTimer';
+import { KansoKIcon } from '@/app/components/common/KansoLogo';
+import { MODAL_LAYER } from '@/app/components/common/Modal';
+import { useMenu } from '@/app/hooks/useMenu';
+import {
+  FOCUS_PRESETS, MAX_CUSTOM_MINUTES, MIN_CUSTOM_MINUTES, customMinutesOf, useFocusTimer, type FocusTimer,
+} from '@/app/hooks/useFocusTimer';
 import { blockSpan, dueMinutesOf, useSlotPlanner } from '@/app/hooks/useSlotPlanner';
 import type { Task } from '@/app/types/task';
 import type { WorkBlock } from '@/app/types/workBlock';
@@ -121,6 +126,65 @@ function useFocusTask(tasks: Task[], timer: FocusTimer, planner: ReturnType<type
   return { task, id, options, choose: timer.setTaskId };
 }
 
+/** Space between a popup and its anchor, and kept from the viewport's edges. */
+const POPUP_GAP = 6;
+
+/**
+ * Places a fixed, portaled popup under `anchor` (above it when there's more
+ * room there), inside the viewport, before it paints. Portaled because the
+ * tile clips its overflow and its glass (backdrop-filter) would trap a fixed
+ * child; above the expand overlay so it works there too. Anything scrolling
+ * outside it, or a resize, calls `onDismiss`, as a native menu would.
+ */
+function usePopupPlacement(
+  open: boolean,
+  anchor: React.RefObject<HTMLElement | null>,
+  popup: React.RefObject<HTMLElement | null>,
+  onDismiss: () => void,
+) {
+  const dismiss = useRef(onDismiss);
+  useLayoutEffect(() => { dismiss.current = onDismiss; });
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const a = anchor.current?.getBoundingClientRect();
+    const el = popup.current;
+    if (!a || !el) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const below = vh - a.bottom - POPUP_GAP * 2;
+    const above = a.top - POPUP_GAP * 2;
+    const up = el.offsetHeight > below && above > below;
+    // Set on the element (not through state) so it's placed before it paints
+    // and can take focus at once.
+    el.style.setProperty('max-height', `${Math.max(120, up ? above : below)}px`);
+    el.style.setProperty('left', `${Math.max(POPUP_GAP, Math.min(a.left, vw - el.offsetWidth - POPUP_GAP))}px`);
+    el.style.setProperty('top', up ? `${Math.max(POPUP_GAP, a.top - POPUP_GAP - el.offsetHeight)}px` : `${a.bottom + POPUP_GAP}px`);
+  }, [open, anchor, popup]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onScroll = (e: Event) => {
+      if (popup.current?.contains(e.target as Node)) return;
+      dismiss.current();
+    };
+    const onResize = () => dismiss.current();
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [open, popup]);
+}
+
+const popupStyle: React.CSSProperties = { position: 'fixed', zIndex: MODAL_LAYER.elevated };
+
+/** Keeps Escape in a popup from also closing the expand overlay underneath (it listens on document). */
+const holdEscape = (e: React.KeyboardEvent) => {
+  if (e.key === 'Escape') e.nativeEvent.stopImmediatePropagation();
+};
+
 interface TaskPickerProps {
   task: Task | null;
   options: Task[];
@@ -128,27 +192,245 @@ interface TaskPickerProps {
   large?: boolean;
 }
 
-// A native select laid over the title: a real menu everywhere (and on phones
-// the system picker), and nothing the tile's overflow can clip.
-const TaskPicker: React.FC<TaskPickerProps> = ({ task, options, onChoose, large }) => (
-  <label className={`relative flex items-center gap-1.5 min-w-0 rounded-md -mx-1 px-1 hover:bg-surface-raised cursor-pointer ${large ? 'py-1' : ''}`}>
-    <TagDot task={task} />
-    <span className={`truncate font-semibold ${large ? 'text-sm' : 'text-xs'} ${task ? 'text-text-primary' : 'text-text-muted'}`}>
-      {task?.title ?? NO_TASK_LABEL}
-    </span>
-    <ChevronDown className="w-3 h-3 flex-shrink-0 text-text-muted" aria-hidden />
-    <select
-      aria-label="Task to focus on"
-      value={task ? String(task.id) : ''}
-      onChange={e => onChoose(e.target.value === '' ? null : Number(e.target.value))}
-      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-    >
-      {options.map(t => <option key={t.id} value={String(t.id)}>{t.title}</option>)}
-      <option value="">No task</option>
-    </select>
-  </label>
-);
+/** The task title as a menu button; its menu lists the open tasks up next, then No task. */
+const TaskPicker: React.FC<TaskPickerProps> = ({ task, options, onChoose, large }) => {
+  const menu = useMenu();
+  const anchorRef = useRef<HTMLDivElement>(null);
+  usePopupPlacement(menu.open, anchorRef, menu.menuProps.ref, () => menu.close(false));
 
+  // Open on the task picked, not the first row.
+  useEffect(() => {
+    if (!menu.open) return;
+    menu.menuProps.ref.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+  }, [menu.open, menu.menuProps.ref]);
+
+  const choose = (id: number | null) => {
+    onChoose(id);
+    menu.close();
+  };
+  const row = (id: number | null, label: string, t: Task | null) => {
+    const on = (task?.id ?? null) === id;
+    return (
+      <button
+        key={id ?? 'none'}
+        type="button"
+        role="menuitemradio"
+        aria-checked={on}
+        tabIndex={-1}
+        onClick={() => choose(id)}
+        className={`menu-row ${on ? 'font-semibold' : ''}`}
+        style={on ? { backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-text-primary)' } : undefined}
+      >
+        <TagDot task={t} />
+        <span className="flex-1 min-w-0 truncate">{label}</span>
+        {on ? <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden /> : <span className="w-3.5 flex-shrink-0" aria-hidden />}
+      </button>
+    );
+  };
+
+  return (
+    <div ref={anchorRef} className="min-w-0">
+      <button
+        {...menu.triggerProps}
+        aria-label={`Task to focus on: ${task?.title ?? 'no task'}`}
+        className={`flex items-center gap-1.5 max-w-full min-w-0 rounded-md -mx-1 px-1 text-left hover:bg-surface-raised ${large ? 'py-0.5' : ''}`}
+      >
+        <TagDot task={task} />
+        <span className={`truncate font-semibold ${large ? 'text-sm' : 'text-xs'} ${task ? 'text-text-primary' : 'text-text-muted'}`}>
+          {task?.title ?? NO_TASK_LABEL}
+        </span>
+        <ChevronDown className={`w-3 h-3 flex-shrink-0 text-text-muted transition-transform ${menu.open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {menu.open && typeof document !== 'undefined' && createPortal(
+        <div
+          {...menu.menuProps}
+          aria-label="Task to focus on"
+          onKeyDown={e => { holdEscape(e); menu.menuProps.onKeyDown(e); }}
+          className="menu-pop w-64 max-w-[calc(100vw-12px)] min-w-0 overflow-y-auto scrollbar-custom"
+          style={popupStyle}
+        >
+          {options.map(t => row(t.id, t.title, t))}
+          {options.length > 0 && <div className="menu-sep" role="separator" />}
+          {row(null, 'No task', null)}
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+};
+
+const isPresetLength = (m: number) => (FOCUS_PRESETS as readonly number[]).includes(m);
+
+const chipClass = 'rounded-full px-1.5 @[250px]:px-2 py-0.5 text-[11px] font-semibold border transition-colors disabled:cursor-not-allowed';
+const chipStyle = (on: boolean, locked: boolean): React.CSSProperties => ({
+  borderColor: on ? 'var(--tm-accent)' : 'var(--tm-border)',
+  backgroundColor: on ? 'var(--tm-accent-subtle)' : 'transparent',
+  color: on ? 'var(--tm-accent)' : 'var(--tm-text-secondary)',
+  opacity: locked && !on ? 0.5 : 1,
+});
+
+/** "+": a small dialog to pick a saved custom length, remove one, or add a new one. */
+const CustomLength: React.FC<{ timer: FocusTimer; locked: boolean }> = ({ timer, locked }) => {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('');
+  const [invalid, setInvalid] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const inputId = useId();
+  const close = (returnFocus = true) => {
+    setOpen(false);
+    setValue('');
+    setInvalid(false);
+    if (returnFocus) triggerRef.current?.focus();
+  };
+  usePopupPlacement(open, triggerRef, panelRef, () => close(false));
+
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.querySelector<HTMLInputElement>('input')?.focus();
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpen(false);
+      setValue('');
+      setInvalid(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [open]);
+
+  const pick = (m: number) => {
+    timer.setMinutes(m);
+    close();
+  };
+  const add = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (customMinutesOf(value) == null || !timer.addCustomMinutes(value)) { setInvalid(true); return; }
+    close();
+  };
+
+  const custom = !isPresetLength(timer.minutes);
+  return (
+    <>
+      {/* Wide: "+", or the custom length in use. Narrow (no room for the
+          presets): the length in use with a chevron, opening every length. */}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => (open ? close() : setOpen(true))}
+        disabled={locked}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`Custom length (now ${timer.minutes} min)`}
+        title="Custom length"
+        className={`${chipClass} inline-flex items-center justify-center gap-0.5`}
+        style={chipStyle(custom, locked)}
+      >
+        <span className={custom ? '' : 'inline @[168px]/len:hidden'}>{timer.minutes}m</span>
+        <Plus className={`w-3 h-[16.5px] ${custom ? 'hidden' : 'hidden @[168px]/len:block'}`} aria-hidden />
+        <ChevronDown className="w-3 h-3 block @[168px]/len:hidden" aria-hidden />
+      </button>
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-label="Custom length"
+          onKeyDown={e => {
+            if (e.key !== 'Escape') return;
+            holdEscape(e);
+            e.preventDefault();
+            close();
+          }}
+          className="menu-pop w-56 max-w-[calc(100vw-12px)] overflow-y-auto scrollbar-custom"
+          style={popupStyle}
+        >
+          <p className="px-2.5 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Length</p>
+          <div className="flex items-center gap-1 px-2.5 pb-1.5">
+            {FOCUS_PRESETS.map(m => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={timer.minutes === m}
+                onClick={() => pick(m)}
+                className={chipClass}
+                style={chipStyle(timer.minutes === m, false)}
+              >
+                {m}m
+              </button>
+            ))}
+          </div>
+          {timer.customMinutes.length > 0 && (
+            <>
+              <p className="px-2.5 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">Your lengths</p>
+              {timer.customMinutes.map(m => {
+                const on = timer.minutes === m;
+                return (
+                  <div key={m} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => pick(m)}
+                      className={`menu-row flex-1 min-w-0 ${on ? 'font-semibold' : ''}`}
+                      style={on ? { backgroundColor: 'var(--tm-accent-subtle)', color: 'var(--tm-text-primary)' } : undefined}
+                    >
+                      <span className="flex-1 tabular-nums">{m} min</span>
+                      {on && <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} aria-hidden />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => timer.removeCustomMinutes(m)}
+                      aria-label={`Remove ${m} min`}
+                      title="Remove"
+                      className="w-7 h-7 flex-shrink-0 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface"
+                    >
+                      <X className="w-3.5 h-3.5" aria-hidden />
+                    </button>
+                  </div>
+                );
+              })}
+              <div className="menu-sep" role="separator" />
+            </>
+          )}
+          <form onSubmit={add} className="px-2.5 pt-1 pb-1.5" noValidate>
+            <label htmlFor={inputId} className="block text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-1">New length</label>
+            <div className="flex items-center gap-1.5">
+              <input
+                id={inputId}
+                type="number"
+                inputMode="numeric"
+                min={MIN_CUSTOM_MINUTES}
+                max={MAX_CUSTOM_MINUTES}
+                step={1}
+                value={value}
+                onChange={e => { setValue(e.target.value); setInvalid(false); }}
+                placeholder="45"
+                aria-invalid={invalid}
+                aria-describedby={`${inputId}-hint`}
+                className="input-field w-16 px-2 py-1 text-sm tabular-nums"
+              />
+              <span className="text-xs text-text-secondary">min</span>
+              <button type="submit" className="btn btn-primary text-xs px-2.5 py-1 ml-auto">Add</button>
+            </div>
+            <p
+              id={`${inputId}-hint`}
+              className="mt-1 text-[11px] leading-4"
+              style={{ color: invalid ? 'var(--tm-slipped-text)' : 'var(--tm-text-muted)' }}
+            >
+              {MIN_CUSTOM_MINUTES} to {MAX_CUSTOM_MINUTES} whole minutes
+            </p>
+          </form>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+};
+
+/**
+ * The presets and "+" for custom lengths (showing the custom one in use).
+ * Inside a `@container/len` narrower than 168px, only the length in use shows,
+ * as a button opening every length.
+ */
 const PresetChips: React.FC<{ timer: FocusTimer }> = ({ timer }) => {
   const locked = timer.phase === 'running' || timer.phase === 'paused';
   return (
@@ -162,18 +444,14 @@ const PresetChips: React.FC<{ timer: FocusTimer }> = ({ timer }) => {
             onClick={() => timer.setMinutes(m)}
             disabled={locked}
             aria-pressed={on}
-            className="rounded-full px-1.5 @[250px]:px-2 py-0.5 text-[11px] font-semibold border transition-colors disabled:cursor-not-allowed"
-            style={{
-              borderColor: on ? 'var(--tm-accent)' : 'var(--tm-border)',
-              backgroundColor: on ? 'var(--tm-accent-subtle)' : 'transparent',
-              color: on ? 'var(--tm-accent)' : 'var(--tm-text-secondary)',
-              opacity: locked && !on ? 0.5 : 1,
-            }}
+            className={`${chipClass} hidden @[168px]/len:inline-block`}
+            style={chipStyle(on, locked)}
           >
             {m}m
           </button>
         );
       })}
+      <CustomLength timer={timer} locked={locked} />
     </div>
   );
 };
@@ -239,7 +517,7 @@ const FocusTimerCard: React.FC<FocusTimerCardProps> = ({ tasks, onExpand, dragHa
   return (
     <CardShell
       compact
-      icon={<Timer className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />}
+      icon={<KansoKIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />}
       header="Focus"
       headerAction={
         <>
@@ -250,7 +528,7 @@ const FocusTimerCard: React.FC<FocusTimerCardProps> = ({ tasks, onExpand, dragHa
     >
       <div className="@container flex-1 min-h-0 flex items-center gap-2 @[250px]:gap-3">
         <Ring pct={pct} label={mmss(timer.remainingMs)} className="w-[58px] h-[58px] @[250px]:w-[72px] @[250px]:h-[72px]" labelClassName="text-[13px] @[250px]:text-[15px]" />
-        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+        <div className="@container/len flex-1 min-w-0 flex flex-col gap-1.5">
           <div className="min-w-0">
             <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-muted">Working on</span>
             <TaskPicker task={task} options={options} onChoose={choose} />
@@ -272,16 +550,15 @@ export const FocusOverlay: React.FC<FocusOverlayProps> = ({ tasks }) => {
   const timer = useFocusTimer();
   const planner = useSlotPlanner({ enabled: true, tasks, habits: NO_HABITS });
   const { task, id, options, choose } = useFocusTask(tasks, timer, planner);
-  const [, setCalendarView] = useCalendarViewMode();
   const pct = timer.totalMs ? 1 - timer.remainingMs / timer.totalMs : 0;
   const titleOf = (taskId: number | null) => (taskId == null ? 'No task' : tasks.find(t => t.id === taskId)?.title ?? 'A removed task');
   const minuteOf = (ms: number) => { const d = new Date(ms); return d.getHours() * 60 + d.getMinutes(); };
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <Ring pct={pct} label={mmss(timer.remainingMs)} className="w-[120px] h-[120px]" labelClassName="text-[22px]" />
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        <Ring pct={pct} label={mmss(timer.remainingMs)} className="w-[96px] h-[96px] sm:w-[112px] sm:h-[112px]" labelClassName="text-[18px] sm:text-[21px]" />
+        <div className="@container/len flex-1 min-w-0 flex flex-col gap-2">
           <div className="min-w-0">
             <span className="block text-[11px] font-semibold uppercase tracking-wide text-text-muted">Working on</span>
             <TaskPicker task={task} options={options} onChoose={choose} large />
@@ -293,7 +570,7 @@ export const FocusOverlay: React.FC<FocusOverlayProps> = ({ tasks }) => {
       </div>
 
       <section>
-        <div className="flex items-baseline justify-between gap-2 mb-2">
+        <div className="flex items-baseline justify-between gap-2 mb-1">
           <h3 className="text-sm font-semibold text-text-primary">Today&apos;s sessions</h3>
           <span className="text-xs text-text-muted">{todayTally(timer)}</span>
         </div>
@@ -312,11 +589,6 @@ export const FocusOverlay: React.FC<FocusOverlayProps> = ({ tasks }) => {
         )}
       </section>
 
-      <p className="text-xs text-text-muted">
-        Sessions of 5 minutes or more on a task are saved as work blocks, so they show on your{' '}
-        <a href="/calendar" onClick={() => setCalendarView('week')} className="font-semibold text-accent hover:underline">calendar&apos;s week view</a>.
-        Sessions with no task only count here.
-      </p>
     </div>
   );
 };

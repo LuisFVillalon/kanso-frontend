@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 
 import {
-  CLAIM_SETTLE_MS, FOCUS_LOG_KEY, FOCUS_TIMER_KEY, readFocusState, resetFocusTimerForTests, useFocusTimer, type FocusTimer,
+  CLAIM_SETTLE_MS, FOCUS_CUSTOM_KEY, FOCUS_LOG_KEY, FOCUS_TIMER_KEY, customMinutesOf, readFocusCustom, readFocusState, resetFocusTimerForTests, useFocusTimer, type FocusTimer,
 } from './useFocusTimer';
 
 const START = new Date(2026, 10, 11, 14, 0, 0); // Wed Nov 11 2026, 2:00 PM
@@ -353,5 +353,21 @@ describe('useFocusTimer', () => {
       get.mockRestore();
       set.mockRestore();
     }
+  });
+});
+
+describe('custom lengths', () => {
+  it('accepts whole minutes from 1 to 240 only', () => {
+    expect(customMinutesOf('45')).toBe(45);
+    expect(customMinutesOf(' 1 ')).toBe(1);
+    expect(customMinutesOf(240)).toBe(240);
+    for (const bad of ['', '0', '241', '12.5', 'abc', -5, null]) expect(customMinutesOf(bad)).toBeNull();
+  });
+
+  it('reads saved lengths, dropping presets, repeats and junk, keeping the newest four', () => {
+    localStorage.setItem(FOCUS_CUSTOM_KEY, JSON.stringify([10, 25, 10, 'x', 0, 15, 20, 30, 45]));
+    expect(readFocusCustom()).toEqual([15, 20, 30, 45]);
+    localStorage.setItem(FOCUS_CUSTOM_KEY, '{bad');
+    expect(readFocusCustom()).toEqual([]);
   });
 });

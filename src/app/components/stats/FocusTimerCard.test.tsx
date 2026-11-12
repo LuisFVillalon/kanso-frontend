@@ -14,8 +14,6 @@ const api = vi.hoisted(() => ({
   fetchCalendarActivity: vi.fn(),
 }));
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
-const setView = vi.hoisted(() => vi.fn());
-vi.mock('@/app/hooks/useCalendarViewMode', () => ({ useCalendarViewMode: () => ['month', setView] }));
 
 import FocusTimerCard, { FocusOverlay, mmss, upNextTask } from './FocusTimerCard';
 import { CLAIM_SETTLE_MS, resetFocusTimerForTests } from '@/app/hooks/useFocusTimer';
@@ -41,6 +39,20 @@ const noop = () => {};
 const tools = { onExpand: noop, dragHandleProps: { onPointerDown: noop } as never };
 const text = () => container.textContent ?? '';
 const button = (label: string) => [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === label);
+const trigger = () => container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!;
+const menu = () => document.body.querySelector<HTMLElement>('[role="menu"]');
+const menuRows = () => [...document.body.querySelectorAll<HTMLElement>('[role="menuitemradio"]')];
+/** The task the picker shows as picked. */
+const pickedTitle = async () => {
+  await act(async () => trigger().click());
+  const title = menuRows().find(r => r.getAttribute('aria-checked') === 'true')?.textContent;
+  await act(async () => trigger().click());
+  return title;
+};
+const pickTask = async (title: string) => {
+  await act(async () => trigger().click());
+  await act(async () => menuRows().find(r => r.textContent === title)!.click());
+};
 
 const render = async (el: React.ReactElement) => {
   await act(async () => root.render(el));
@@ -121,8 +133,29 @@ describe('FocusTimerCard', () => {
     const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(3, 'HW 7')];
     await render(<FocusTimerCard tasks={tasks} {...tools} />);
     expect(text()).toContain('HW 7');
-    const options = [...container.querySelectorAll('option')].map(o => o.textContent);
-    expect(options).toEqual(['HW 7', 'Quiz prep', 'No task']);
+    await act(async () => trigger().click());
+    expect(menuRows().map(o => o.textContent)).toEqual(['HW 7', 'Quiz prep', 'No task']);
+    expect(menuRows()[0].getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(menuRows()[0]);
+  });
+
+  it('opens an on-theme menu that keys, picks, and closes', async () => {
+    const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13' })];
+    await render(<FocusTimerCard tasks={tasks} {...tools} />);
+    expect(container.querySelector('select')).toBeNull();
+    await act(async () => trigger().click());
+    // Portaled out of the tile, which clips its overflow.
+    expect(container.contains(menu())).toBe(false);
+    expect(menu()!.className).toContain('menu-pop');
+    await act(async () => menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })));
+    expect(document.activeElement?.textContent).toBe('Lab report');
+    await act(async () => (document.activeElement as HTMLElement).click());
+    expect(menu()).toBeNull();
+    expect(trigger().textContent).toContain('Lab report');
+    expect(document.activeElement).toBe(trigger());
+    await act(async () => trigger().click());
+    await act(async () => menu()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(menu()).toBeNull();
   });
 
   it('locks the lengths while running and saves the session when it ends', async () => {
@@ -147,13 +180,9 @@ describe('FocusOverlay', () => {
   it('shares its task pick with the tile, so Start on the tile uses it', async () => {
     const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13' })];
     await render(<FocusOverlay tasks={tasks} />);
-    const select = container.querySelector('select')!;
-    await act(async () => {
-      select.value = '2';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await pickTask('Lab report');
     await render(<FocusTimerCard tasks={tasks} {...tools} />);
-    expect(container.querySelector('select')!.value).toBe('2');
+    expect(await pickedTitle()).toBe('Lab report');
     await act(async () => button('Start')!.click());
     expect(JSON.parse(localStorage.getItem('tm-focus-timer')!).taskId).toBe(2);
   });
@@ -164,14 +193,10 @@ describe('FocusOverlay', () => {
   ])('falls back to the default once the picked task is %s', async (_, later) => {
     const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13' })];
     await render(<FocusOverlay tasks={tasks} />);
-    const select = container.querySelector('select')!;
-    await act(async () => {
-      select.value = '2';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await pickTask('Lab report');
     await render(<FocusTimerCard tasks={later} {...tools} />);
     expect(text()).toContain('Quiz prep');
-    expect(container.querySelector('select')!.value).toBe('1');
+    expect(await pickedTitle()).toBe('Quiz prep');
     await act(async () => button('Start')!.click());
     expect(JSON.parse(localStorage.getItem('tm-focus-timer')!).taskId).toBe(1);
   });
@@ -179,24 +204,20 @@ describe('FocusOverlay', () => {
   it("doesn't turn the default it fell back to into a pick when a session starts", async () => {
     const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13' }), task(3, 'HW 3', { due_date: '2026-11-20' })];
     await render(<FocusOverlay tasks={tasks} />);
-    const select = container.querySelector('select')!;
-    await act(async () => {
-      select.value = '2';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    });
+    await pickTask('Lab report');
     const later = tasks.map(t => (t.id === 2 ? { ...t, completed: true } : t));
     await render(<FocusTimerCard tasks={later} {...tools} />);
-    expect(container.querySelector('select')!.value).toBe('1');
+    expect(await pickedTitle()).toBe('Quiz prep');
     await act(async () => button('Start')!.click());
     await act(async () => button('Stop')!.click());
     act(() => root.unmount());
     root = createRoot(container);
     workBlocks = [block({ task_id: 3, start_time: '14:30', end_time: '15:30' })];
     await render(<FocusTimerCard tasks={later} {...tools} />);
-    expect(container.querySelector('select')!.value).toBe('3');
+    expect(await pickedTitle()).toBe('HW 3');
   });
 
-  it("lists today's sessions and links to the calendar's week view", async () => {
+  it("lists today's sessions, without the work-block explainer", async () => {
     localStorage.setItem('tm-focus-log', JSON.stringify({
       date: TODAY,
       sessions: [{ taskId: null, start: new Date(2026, 10, 11, 9, 0).getTime(), end: new Date(2026, 10, 11, 9, 25).getTime(), ms: 25 * MIN }],
@@ -205,14 +226,77 @@ describe('FocusOverlay', () => {
     expect(text()).toContain('9:00 AM');
     expect(text()).toContain('25m');
     expect(text()).toContain('No task');
-    const link = container.querySelector<HTMLAnchorElement>('a[href="/calendar"]')!;
-    link.addEventListener('click', e => e.preventDefault());
-    act(() => link.click());
-    expect(setView).toHaveBeenCalledWith('week');
+    expect(text()).not.toContain('saved as work blocks');
+    expect(container.querySelector('a[href="/calendar"]')).toBeNull();
   });
 
   it('shows the empty state with no sessions', async () => {
     await render(<FocusOverlay tasks={[]} />);
     expect(text()).toContain('None yet today');
+  });
+});
+
+describe('custom lengths', () => {
+  const customButton = () => container.querySelector<HTMLButtonElement>('button[aria-label^="Custom length"]')!;
+  const dialog = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="Custom length"]');
+  const typeMinutes = async (v: string) => {
+    const input = dialog()!.querySelector('input')!;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      set.call(input, v);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => dialog()!.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  };
+
+  it('adds a length, picks it, and keeps it for next time', async () => {
+    await render(<FocusTimerCard tasks={[]} {...tools} />);
+    await act(async () => customButton().click());
+    expect(document.activeElement).toBe(dialog()!.querySelector('input'));
+    await typeMinutes('45');
+    expect(dialog()).toBeNull();
+    expect(container.querySelector('[role="timer"]')?.textContent).toBe('45:00');
+    expect(customButton().getAttribute('aria-label')).toBe('Custom length (now 45 min)');
+    expect(customButton().textContent).toBe('45m');
+    expect(JSON.parse(localStorage.getItem('tm-focus-custom')!)).toEqual([45]);
+
+    // Back to a preset: 45 is still offered in the "+" dialog.
+    await act(async () => button('25m')!.click());
+    expect(customButton().textContent).toBe('25m');
+    await act(async () => customButton().click());
+    const saved = [...dialog()!.querySelectorAll('button')].find(b => b.textContent === '45 min')!;
+    await act(async () => saved.click());
+    expect(container.querySelector('[role="timer"]')?.textContent).toBe('45:00');
+    // Its presets too, for a tile too narrow to show them.
+    await act(async () => customButton().click());
+    await act(async () => [...dialog()!.querySelectorAll('button')].find(b => b.textContent === '90m')!.click());
+    expect(container.querySelector('[role="timer"]')?.textContent).toBe('1:30:00');
+  });
+
+  it('turns down a length out of bounds', async () => {
+    await render(<FocusTimerCard tasks={[]} {...tools} />);
+    await act(async () => customButton().click());
+    await typeMinutes('0');
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('input')!.getAttribute('aria-invalid')).toBe('true');
+    await typeMinutes('241');
+    expect(dialog()).not.toBeNull();
+    expect(localStorage.getItem('tm-focus-custom')).toBeNull();
+    expect(container.querySelector('[role="timer"]')?.textContent).toBe('25:00');
+  });
+
+  it('removes a saved length', async () => {
+    localStorage.setItem('tm-focus-custom', JSON.stringify([15, 45]));
+    await render(<FocusTimerCard tasks={[]} {...tools} />);
+    await act(async () => customButton().click());
+    await act(async () => dialog()!.querySelector<HTMLButtonElement>('[aria-label="Remove 15 min"]')!.click());
+    expect(JSON.parse(localStorage.getItem('tm-focus-custom')!)).toEqual([45]);
+    expect(dialog()!.textContent).not.toContain('15 min');
+  });
+
+  it("can't change the length while running", async () => {
+    await render(<FocusTimerCard tasks={[]} {...tools} />);
+    await act(async () => button('Start')!.click());
+    expect(customButton().disabled).toBe(true);
   });
 });
