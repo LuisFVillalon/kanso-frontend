@@ -22,6 +22,7 @@ import type { SettingsSection } from '@/app/components/settings/SettingsModal';
 import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import AppNav, { NAV_ITEMS } from '@/app/components/layout/AppNav';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
+import FocusHeaderBar from '@/app/components/layout/FocusHeaderBar';
 import NewEventModal from '@/app/components/event/NewEventModal';
 import DoodleBackdrop from '@/app/components/doodle/DoodleBackdrop';
 import type { Note } from '@/app/types/notes';
@@ -36,7 +37,8 @@ const GO_TO_WINDOW_MS = 1000;
  * The signed-in app's frame, shared by Home, Notes, Calendar, Archive and
  * Recently deleted through the (app) route group: the navigation (AppNav),
  * the modals its New and account menus open (so they work on every page),
- * the logout confirmation, and the global keyboard shortcuts (T new task,
+ * the logout confirmation, the running Focus session's bar across the top
+ * (FocusHeaderBar), and the global keyboard shortcuts (T new task,
  * N new note, G then a page's letter to go there).
  *
  * Until a user is signed in it renders the page alone, without navigation, so
@@ -290,6 +292,7 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         className={signedIn ? 'app-content' : undefined}
         data-nav-expanded={signedIn && navExpanded ? 'true' : undefined}
       >
+        {signedIn && <FocusHeaderBar tasks={tasks} />}
         {children}
       </div>
 

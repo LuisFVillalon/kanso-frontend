@@ -12,11 +12,12 @@ vi.mock('@/app/components/calendar/BigPictureCalendar', () => ({ default: () => 
 vi.mock('@/app/components/calendar/CurrentMonthWidget', () => ({ default: () => <div data-tile="CurrentMonth" />, CurrentMonthOverlay: () => null }));
 vi.mock('@/app/components/stats/TimersCard', () => ({ default: () => <div data-tile="Timers" />, TimersOverlay: () => null }));
 vi.mock('@/app/components/stats/HabitsStatsCard', () => ({ default: () => <div data-tile="Habits" />, HabitsOverlay: () => null }));
-vi.mock('@/app/components/stats/FocusTimerCard', () => ({ default: () => <div data-tile="Focus" />, FocusOverlay: () => null }));
+vi.mock('@/app/components/stats/FocusTimerCard', () => ({ default: () => <div data-tile="Focus" />, FocusOverlay: () => <div data-overlay="Focus" /> }));
 vi.mock('@/app/components/stats/FreeTimeCard', () => ({ default: () => <div data-tile="FreeTime" />, FreeTimeOverlay: () => null }));
 vi.mock('@/app/hooks/useDailyMood', () => ({ useDailyMood: () => true }));
 
 import CalendarAndStats from './CalendarAndStats';
+import { requestFocusWidget } from '@/app/utils/focusWidgetRequest';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -64,5 +65,31 @@ describe('CalendarAndStats', () => {
     localStorage.setItem('tm-dashboard-grid-order', JSON.stringify(['notes', 'reserved', 'tasks', 'calendar', 'habits', 'timers']));
     render(null);
     expect(tiles()).toEqual(['FreeTime', 'CurrentMonth', 'Focus', 'TermTracker', 'Habits', 'Timers']);
+  });
+
+  it("opens the Focus tile when the header's focus bar asks, before or after it mounts", () => {
+    const overlay = () => document.querySelector('[data-overlay="Focus"]');
+    requestFocusWidget();
+    render(null);
+    expect(overlay()).not.toBeNull();
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    render(null);
+    expect(overlay()).toBeNull();
+    act(() => requestFocusWidget());
+    expect(overlay()).not.toBeNull();
+  });
+
+  it('ignores an ask that went stale before Home mounted', () => {
+    vi.useFakeTimers();
+    try {
+      requestFocusWidget();
+      vi.advanceTimersByTime(6_000);
+      render(null);
+      expect(document.querySelector('[data-overlay="Focus"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

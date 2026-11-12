@@ -1512,6 +1512,73 @@ html[data-page-style="blank"] body {
   }
 }
 
+/* The running Focus session, stuck to the top of every signed-in page (FocusHeaderBar). */
+.focus-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background-color: var(--tm-surface-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--tm-border-subtle);
+}
+.focus-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  max-width: 1600px;
+  margin-inline: auto;
+  padding: 0.375rem 1rem;
+}
+.focus-bar-open {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 28rem;
+  height: 2rem;
+  padding: 0 0.75rem;
+  border-radius: var(--tm-radius-pills);
+  background-color: var(--tm-accent-subtle);
+  font-size: 0.875rem;
+  transition: box-shadow var(--tm-dur-fast) var(--tm-ease);
+}
+.focus-bar-open:hover { box-shadow: inset 0 0 0 1px var(--tm-accent); }
+.focus-bar-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background-color: var(--tm-accent);
+  animation: focus-bar-pulse 2s var(--tm-ease) infinite;
+}
+.focus-bar-dot[data-paused] {
+  background-color: var(--tm-text-muted);
+  animation: none;
+}
+@keyframes focus-bar-pulse {
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focus-bar-dot { animation: none; }
+}
+.focus-bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: var(--tm-text-secondary);
+  transition: background-color var(--tm-dur-fast) var(--tm-ease), color var(--tm-dur-fast) var(--tm-ease);
+}
+.focus-bar-btn:hover {
+  background-color: var(--tm-surface-raised);
+  color: var(--tm-text-primary);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SCROLLBAR UTILITIES
 ═══════════════════════════════════════════════════════════════════════════ */
