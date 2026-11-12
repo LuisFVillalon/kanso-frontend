@@ -6,7 +6,7 @@
  * (Feb 29 compares with Feb 28). A finished period compares whole totals.
  *
  * Every metric is a per-local-day series: tasks completed, habit check-ins,
- * their sum ("Done"), time in notes, and time in busy events before now,
+ * time in notes, and time in busy events before now,
  * overlaps counted once (see buildEventTimeSeries). Time is in seconds.
  */
 
@@ -16,16 +16,16 @@ import { formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
 import type { WorkDaySettings } from '@/app/utils/dayReport';
 import { buildEventTimeSeries } from '@/app/utils/eventTime';
 
-export type PaceMetric = 'done' | 'tasks' | 'habits' | 'notes' | 'events';
+export type PaceMetric = 'tasks' | 'habits' | 'notes' | 'events';
 
-export const PACE_METRICS: readonly PaceMetric[] = ['done', 'tasks', 'habits', 'notes', 'events'];
+export const PACE_METRICS: readonly PaceMetric[] = ['tasks', 'habits', 'notes', 'events'];
 
 /** Whether a metric counts things (tasks, check-ins) or time, in seconds. */
 export const isTimeMetric = (metric: PaceMetric): boolean => metric === 'notes' || metric === 'events';
 
 type DayValues = Record<PaceMetric, number>;
 
-const zero = (): DayValues => ({ done: 0, tasks: 0, habits: 0, notes: 0, events: 0 });
+const zero = (): DayValues => ({ tasks: 0, habits: 0, notes: 0, events: 0 });
 
 const startOfDay = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays = (d: Date, n: number): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
@@ -53,7 +53,6 @@ export const paceDays = (
     if (d) {
       values.tasks = d.tasksCompleted;
       values.habits = d.habitsCompleted;
-      values.done = d.tasksCompleted + d.habitsCompleted;
       values.notes = d.noteSeconds;
     }
     if (e) values.events = (e.inWindow.past + e.outside.past) * 60;

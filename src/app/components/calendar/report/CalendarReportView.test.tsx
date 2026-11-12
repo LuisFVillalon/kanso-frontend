@@ -881,7 +881,7 @@ describe('CalendarReportView tabs', () => {
     expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-12', '2026-10-18', { includeArchived: true });
     expect(document.querySelector('[role="alert"]')).toBeNull();
     expect(text()).toContain('Pace vs last week');
-    expect(text()).toContain('2 done this week');
+    expect(text()).toContain('0 tasks this week');
     expect(text()).toContain('Couldn’t load last week.');
     expect(text()).toContain('Highlights');
   });

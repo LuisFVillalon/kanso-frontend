@@ -715,7 +715,7 @@ const CalendarReportView: React.FC = () => {
   const moodView = parseMoodView(searchParams.get('mood'));
   const group = groupOf(view);
   const previous = usePreviousActivity(period, view === 'overview');
-  const [paceMetric, setPaceMetric] = useState<PaceMetric>('done');
+  const [paceMetric, setPaceMetric] = useState<PaceMetric>('tasks');
 
   // A tab reopens on the view it was last left on.
   const [lastViews, setLastViews] = useState<{ productivity: ReportView; mood: MoodView }>(() => ({

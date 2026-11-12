@@ -109,10 +109,9 @@ describe('buildPace', () => {
     expect(pace.hasCurrent).toBe(true);
     expect(pace.metrics.tasks).toMatchObject({ current: 2, previous: 1, previousTotal: 2 });
     expect(pace.metrics.habits).toMatchObject({ current: 1, previous: 2 });
-    expect(pace.metrics.done).toMatchObject({ current: 3, previous: 3, previousTotal: 4 });
     expect(pace.metrics.notes.current).toBe(45 * 60);
-    expect(pace.metrics.done.currentPoints).toEqual([1, 2, 3]);
-    expect(pace.metrics.done.previousPoints).toEqual([1, 2, 3, 4, 4, 4, 4]);
+    expect(pace.metrics.tasks.currentPoints).toEqual([1, 1, 2]);
+    expect(pace.metrics.tasks.previousPoints).toEqual([0, 0, 1, 2, 2, 2, 2]);
   });
 
   it('compares a finished week’s whole total', () => {
@@ -168,11 +167,11 @@ describe('deltas and formats', () => {
     expect(paceDelta('notes', 125, 100)).toEqual({ direction: 'equal', amount: 0 });
     expect(paceDelta('events', 2 * 3600, 3600 + 20)).toEqual({ direction: 'up', amount: 3600 });
     expect(paceDelta('tasks', 3, 5)).toEqual({ direction: 'down', amount: 2 });
-    expect(paceDelta('done', 4, 4)).toEqual({ direction: 'equal', amount: 0 });
+    expect(paceDelta('habits', 4, 4)).toEqual({ direction: 'equal', amount: 0 });
   });
 
   it('shows counts as whole numbers and time like the stat tiles', () => {
-    expect(formatPace('done', 12)).toBe('12');
+    expect(formatPace('tasks', 12)).toBe('12');
     expect(formatPace('notes', 0)).toBe('0m');
     expect(formatPace('notes', 20)).toBe('0m');
     expect(formatPace('notes', 9000)).toBe('2h 30m');
