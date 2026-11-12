@@ -10,9 +10,6 @@ import type { Task } from '@/app/types/task';
 
 const mood = vi.hoisted(() => ({ checkin: undefined as MoodCheckin | null | undefined }));
 
-vi.mock('@/app/hooks/useNoteTimeTotals', () => ({
-  useNoteTimeTotalsForRange: () => ({}),
-}));
 vi.mock('@/app/hooks/useDayMoodCheckin', () => ({
   useDayMoodCheckin: (date: string | null) => ({ checkin: date ? mood.checkin : undefined, failed: false }),
 }));
@@ -81,6 +78,14 @@ describe('DaySummary', () => {
     render(data);
     expect(container.querySelector('[data-day-sentence]')!.textContent).toBe('A lighter day: 2 events, 0 of 1 task done.');
     expect(container.querySelector('[data-day-counts]')!.textContent).toBe('2 events0/1 task0 noteshabits 1/2');
+  });
+
+  it('lists the day’s notes with their writing time that day', () => {
+    const cs = { id: 7, name: 'CS 460', color: '#3b82f6' };
+    render({ ...empty, notesEdited: [{ id: 1, title: 'Lab notes', tags: [cs], seconds: 2400 }, { id: 2, title: '', tags: [], seconds: 1800 }] });
+    expect(section('notes').querySelector('summary')!.textContent).toBe('Notes · 21h 10m writing · Lab notes, Untitled Note');
+    expect(section('notes').textContent).toContain('Lab notesCS 46040m writingUntitled Note30m writing');
+    expect(section('time').querySelector('summary')!.textContent).toBe('Where the time went · about 1.2hCS 460 0.7h · Untagged 0.5h');
   });
 
   it('opens Events and Tasks on desktop, and only Events on a phone', () => {

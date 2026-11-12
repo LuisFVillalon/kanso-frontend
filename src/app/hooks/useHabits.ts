@@ -9,6 +9,7 @@ import {
   describeError,
 } from '@/app/lib/backend-api';
 import { useToast } from '@/app/context/ToastContext';
+import { notifyActivityChanged } from '@/app/hooks/useActivityVersion';
 import { Habit } from '@/app/types/habit';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 
@@ -87,6 +88,8 @@ export function useHabits(enabled: boolean) {
           h.id === id ? { ...updated, logged_today: isToday ? optimisticLoggedToday : updated.logged_today } : h,
         ),
       );
+      // Today's check-in is read from logged_today; another day's only from the activity endpoint.
+      if (!isToday) notifyActivityChanged();
     } catch (err) {
       console.error('[useHabits] Failed to toggle habit date:', err);
       load();

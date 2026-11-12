@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchCalendarActivity } from '@/app/lib/backend-api';
 import { useHabitsContext } from '@/app/context/HabitsContext';
 import { useEventsVersion } from '@/app/hooks/useEventsVersion';
+import { useActivityVersion } from '@/app/hooks/useActivityVersion';
 import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { buildCalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
@@ -18,7 +19,8 @@ const periodKey = (p: ReportPeriod) => `${p.kind}:${toLocalDateStr(p.start)}`;
  * and summarizes it. Archived tasks, notes and habits count too — the report
  * covers everything the user did, not just what's still active. Habit streaks
  * come from the shared habits list, since the activity endpoint doesn't carry them.
- * Reloads when events change (see useEventsVersion).
+ * Reloads when events change (see useEventsVersion) and when a note session
+ * closes or a past day's habit check-in changes (see useActivityVersion).
  */
 export function useCalendarReport(period: ReportPeriod) {
   const { habits } = useHabitsContext();
@@ -26,6 +28,7 @@ export function useCalendarReport(period: ReportPeriod) {
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const eventsVersion = useEventsVersion();
+  const activityVersion = useActivityVersion();
   const key = periodKey(period);
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export function useCalendarReport(period: ReportPeriod) {
     };
     // `key` identifies the period; the Date objects inside it change identity every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, attempt, eventsVersion]);
+  }, [key, attempt, eventsVersion, activityVersion]);
 
   const ready = fetched?.key === key ? fetched : null;
   const failed = !ready && error?.key === key ? error.message : null;
