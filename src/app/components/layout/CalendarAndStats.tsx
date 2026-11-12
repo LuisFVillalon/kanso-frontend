@@ -4,8 +4,8 @@ import React, { useMemo, useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import BigPictureCalendar, { BigPictureOverlay } from '@/app/components/calendar/BigPictureCalendar';
 import CurrentMonthWidget, { CurrentMonthOverlay } from '@/app/components/calendar/CurrentMonthWidget';
-import TasksStatsCard, { TasksOverlay } from '@/app/components/stats/TasksStatsCard';
-import NotesStatsCard, { NotesOverlay } from '@/app/components/stats/NotesStatsCard';
+import FocusTimerCard, { FocusOverlay } from '@/app/components/stats/FocusTimerCard';
+import FreeTimeCard, { FreeTimeOverlay } from '@/app/components/stats/FreeTimeCard';
 import HabitsStatsCard, { HabitsOverlay } from '@/app/components/stats/HabitsStatsCard';
 import TimersCard, { TimersOverlay } from '@/app/components/stats/TimersCard';
 import DraggableGrid, { type DragHandleProps } from '@/app/components/common/DraggableGrid';
@@ -14,14 +14,14 @@ import { useGridOrder } from '@/app/hooks/useGridOrder';
 import { useDailyMood } from '@/app/hooks/useDailyMood';
 import type { TileSize } from '@/app/components/stats/TileTools';
 import { Habit } from '@/app/types/habit';
-import { StatsData, TagStats } from '@/app/types/task';
-import { Note } from '@/app/types/notes';
+import { StatsData } from '@/app/types/task';
 import type { ProfileFields, useProfile } from '@/app/hooks/useProfile';
 import type { CalendarSettings } from '@/app/types/calendar';
 
 // 'reserved' id kept as-is (rather than renamed to something calendar-ish)
 // so any already-persisted layoutOrder (localStorage / profile.layoutOrder)
 // keeps pointing at the right slot — it now renders CurrentMonthWidget.
+// Likewise 'tasks' now renders the Focus timer and 'notes' the Free Time tile.
 const GRID_ITEM_IDS = ['calendar', 'timers', 'habits', 'tasks', 'notes', 'reserved'];
 const GRID_ORDER_STORAGE_KEY = 'tm-dashboard-grid-order';
 
@@ -32,7 +32,7 @@ const TILE_SIZES: Record<string, TileSize> = {
   calendar: 'M', reserved: 'M', timers: 'S', tasks: 'S', habits: 'S', notes: 'S',
 };
 const TITLES: Record<string, string> = {
-  calendar: 'Term Tracker', reserved: 'Current Month', timers: 'Timers', tasks: 'Task Stats', habits: 'Habit Tracker', notes: 'Note Stats',
+  calendar: 'Term Tracker', reserved: 'Current Month', timers: 'Timers', tasks: 'Focus', habits: 'Habit Tracker', notes: 'Free Time',
 };
 
 // Explicit column-start classes for each of the grid's 4 tile slots (12-col
@@ -90,8 +90,6 @@ interface CalendarAndStatsProps {
   pendingHabitIds?: Set<number>;
   habitsLoading?: boolean;
   stats: StatsData;
-  allNotes: Note[];
-  noteTags: TagStats[];
   profile: ProfileFields;
   onSaveProfile: ReturnType<typeof useProfile>['saveProfile'];
   calendarSettings: CalendarSettings;
@@ -105,8 +103,6 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
   pendingHabitIds,
   habitsLoading,
   stats,
-  allNotes,
-  noteTags,
   profile,
   onSaveProfile,
   calendarSettings,
@@ -132,16 +128,16 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
   const goPrevMonth = () => setMonthViewMonth(m => (m === 0 ? 11 : m - 1));
   const goNextMonth = () => setMonthViewMonth(m => (m === 11 ? 0 : m + 1));
 
-  const tasksProps = { tasks: stats.total.tasks, total: stats.total.tasks.length };
+  const tasks = stats.total.tasks;
 
   const overlayBody = (id: string) => {
     switch (id) {
       case 'calendar': return <BigPictureOverlay settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'reserved': return <CurrentMonthOverlay year={monthViewYear} month={monthViewMonth} showMood={showMood} />;
       case 'timers': return <TimersOverlay profile={profile} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
-      case 'tasks': return <TasksOverlay {...tasksProps} />;
+      case 'tasks': return <FocusOverlay tasks={tasks} />;
       case 'habits': return <HabitsOverlay habits={habits} onToggle={onToggleHabit} pendingHabitIds={pendingHabitIds} />;
-      case 'notes': return <NotesOverlay notes={allNotes} noteTags={noteTags} />;
+      case 'notes': return <FreeTimeOverlay tasks={tasks} habits={habits} profile={profile} />;
       default: return null;
     }
   };
@@ -162,7 +158,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
       case 'calendar': return <BigPictureCalendar {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
       case 'reserved': return <CurrentMonthWidget {...tools} showMood={showMood} />;
       case 'timers': return <TimersCard profile={profile} {...tools} settings={calendarSettings} settingsLoading={calendarSettingsLoading} />;
-      case 'tasks': return <TasksStatsCard {...tasksProps} {...tools} />;
+      case 'tasks': return <FocusTimerCard tasks={tasks} {...tools} />;
       case 'habits': return (
         <HabitsStatsCard
           habits={habits}
@@ -173,7 +169,7 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
           {...tools}
         />
       );
-      case 'notes': return <NotesStatsCard notes={allNotes} noteTags={noteTags} {...tools} />;
+      case 'notes': return <FreeTimeCard tasks={tasks} habits={habits} profile={profile} {...tools} />;
       default: return null;
     }
   };
