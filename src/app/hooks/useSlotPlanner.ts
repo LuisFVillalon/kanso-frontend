@@ -69,7 +69,7 @@ export function eventBusyItems(o: EventOccurrence): BusyItem[] {
 export const blockSpan = (b: WorkBlock): PlannedBlock => {
   const start = minutesOf(b.start_time) ?? 0;
   const end = minutesOf(b.end_time) ?? start;
-  return { date: b.date, start, end: end > start ? end : 24 * 60, taskId: b.task_id, habitId: b.habit_id };
+  return { date: b.date, start, end: end > start ? end : 24 * 60, taskId: b.task_id, habitId: b.habit_id, title: b.title || undefined };
 };
 
 const dueDateOf = (t: Pick<Task, 'due_date'>) => (t.due_date ? toLocalDateStr(t.due_date) : null);
