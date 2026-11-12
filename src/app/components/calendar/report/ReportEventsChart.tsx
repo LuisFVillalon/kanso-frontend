@@ -15,11 +15,15 @@ import { rowColor } from './ReportTagBreakdown';
 
 /** The Events stat tile's color, so the chart matches the tile. */
 export const IN_COLOR = 'var(--tm-week-note)';
-const OUT_COLOR = 'color-mix(in srgb, var(--tm-week-note) 45%, transparent)';
-const REST_COLOR = 'color-mix(in srgb, var(--tm-text-muted) 38%, transparent)';
-
-/** A tag's color here: Untagged's usual grey is too close to "Other events", so it takes a lighter one. */
-const spotColor = (row: TagRow) => (row.key === UNTAGGED_KEY ? 'var(--tm-text-secondary)' : rowColor(row));
+/**
+ * Free work hours: a pale tint of the Work hours card's "Free for focus"
+ * green, edged with a dashed line so it never reads as a tag's solid color.
+ */
+export const FREE_COLOR = 'color-mix(in srgb, var(--tm-success) 30%, var(--tm-surface))';
+const FREE_EDGE = 'color-mix(in srgb, var(--tm-success) 75%, transparent)';
+const freeStyle: React.CSSProperties = { backgroundColor: FREE_COLOR, outline: `1px dashed ${FREE_EDGE}`, outlineOffset: -1 };
+/** How much a tag that isn't picked fades, as on the Tasks, Notes and Habits charts. */
+const DIMMED = 0.2;
 
 /** Upcoming time: stripes of the part's own color. */
 export const hatch = (color: string) =>
@@ -50,25 +54,18 @@ export const shortName = (kind: ReportPeriod['kind'], b: ReportBucket) => {
   return kind === 'week' ? weekday : `${weekday} ${d}`;
 };
 
-const LegendDot: React.FC<{ color: string; label: string }> = ({ color, label }) => (
-  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
-    <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
+const LegendDot: React.FC<{ swatch: React.CSSProperties; label: string; dimmed?: boolean }> = ({ swatch, label, dimmed }) => (
+  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary" style={{ opacity: dimmed ? 0.55 : 1 }}>
+    <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={swatch} />
     {label}
-  </span>
-);
-
-const OutlineKey: React.FC = () => (
-  <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
-    <span className="w-2.5 h-2.5 rounded-sm" style={{ border: '1px dashed var(--tm-border-strong)' }} />
-    Work hours
   </span>
 );
 
 interface Part {
   key: string;
   minutes: number;
-  color: string;
-  upcoming: boolean;
+  style: React.CSSProperties;
+  dimmed: boolean;
 }
 
 const EMPTY_TAG: EventTimeTag = { past: 0, upcoming: 0, inWindow: 0 };
@@ -123,10 +120,10 @@ interface ReportEventsChartProps {
 }
 
 /**
- * The Events view's chart: time in events per day (per month for a year).
- * Each workday's work hours are a dashed outline the day's events fill,
- * with time outside them lighter on top; time still to come is hatched.
- * Picking a tag recolors the bars by it, keeping the outline.
+ * The Events view's chart: time in events per day (per month for a year),
+ * each bar split by the events' tags in their own colors as on the Tasks,
+ * Notes and Habits charts, with the work hours left free on top; time
+ * still to come is hatched. Picking a tag fades the others.
  */
 const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, selection, tabs }) => {
   const { series: { rows, buckets: byKey }, selected, pick } = selection;
@@ -136,40 +133,39 @@ const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, 
   const totalOf = (b: ReportBucket) => { const d = dataOf(b); return d ? bucketTotal(d) : 0; };
   const inWindowOf = (b: ReportBucket) => { const d = dataOf(b); return d ? bucketInWindow(d) : 0; };
   const windowOf = (b: ReportBucket) => dataOf(b)?.windowMinutes ?? 0;
+  /** The work hours no event books; none on a rest day. */
+  const freeOf = (b: ReportBucket) => Math.max(windowOf(b) - inWindowOf(b), 0);
   const tagOf = (b: ReportBucket, row: TagRow) => dataOf(b)?.byTag.get(row.key) ?? EMPTY_TAG;
+  const tagMinutes = (b: ReportBucket, row: TagRow) => { const t = tagOf(b, row); return t.past + t.upcoming; };
   const upcomingOf = (b: ReportBucket) => { const d = dataOf(b); return d ? d.inWindow.upcoming + d.outside.upcoming : 0; };
 
   const max = Math.max(...buckets.map(totalOf), 0);
-  const scaleMax = Math.max(max, ...buckets.map(windowOf));
+  const scaleMax = Math.max(...buckets.map(b => totalOf(b) + freeOf(b)), 0);
   const ticks = axisTicks(scaleMax * 60, 'notes').map(t => t / 60);
   const scaleTop = ticks[ticks.length - 1];
   const grand = buckets.reduce((s, b) => s + totalOf(b), 0);
+  const freeTotal = buckets.reduce((s, b) => s + freeOf(b), 0);
+  const isDimmed = (key: string) => selected !== null && selected.key !== key;
 
+  /** Bottom up: each tag, largest first, its past time then its scheduled time; then the free work hours. */
   const partsOf = (b: ReportBucket): Part[] => {
-    const d = dataOf(b);
-    if (!d) return [];
-    if (!selected) {
+    const parts: Part[] = rows.flatMap(row => {
+      const tag = tagOf(b, row);
+      const color = rowColor(row);
       return [
-        { key: 'in-past', minutes: d.inWindow.past, color: IN_COLOR, upcoming: false },
-        { key: 'in-upcoming', minutes: d.inWindow.upcoming, color: IN_COLOR, upcoming: true },
-        { key: 'out-past', minutes: d.outside.past, color: OUT_COLOR, upcoming: false },
-        { key: 'out-upcoming', minutes: d.outside.upcoming, color: OUT_COLOR, upcoming: true },
+        { key: `${row.key}:past`, minutes: tag.past, style: fillOf(color, false), dimmed: isDimmed(row.key) },
+        { key: `${row.key}:upcoming`, minutes: tag.upcoming, style: fillOf(color, true), dimmed: isDimmed(row.key) },
       ];
-    }
-    const tag = tagOf(b, selected);
-    const color = spotColor(selected);
-    return [
-      { key: 'tag-past', minutes: tag.past, color, upcoming: false },
-      { key: 'tag-upcoming', minutes: tag.upcoming, color, upcoming: true },
-      { key: 'rest-past', minutes: Math.max(d.inWindow.past + d.outside.past - tag.past, 0), color: REST_COLOR, upcoming: false },
-      { key: 'rest-upcoming', minutes: Math.max(d.inWindow.upcoming + d.outside.upcoming - tag.upcoming, 0), color: REST_COLOR, upcoming: true },
-    ];
+    });
+    parts.push({ key: 'free', minutes: freeOf(b), style: freeStyle, dimmed: selected !== null });
+    return parts;
   };
 
   const describeBucket = (b: ReportBucket) => {
+    const tags = rows.filter(r => tagMinutes(b, r) > 0).map(r => `${r.name} ${duration(tagMinutes(b, r))}`);
     const window = windowOf(b);
-    const hours = window > 0 ? `${duration(inWindowOf(b))} of ${duration(window)} work hours` : 'rest day';
-    return `${b.longLabel}: ${duration(totalOf(b))} in events · ${hours}`;
+    const free = window > 0 ? `Free ${duration(freeOf(b))} of ${duration(window)} work hours` : 'rest day';
+    return `${b.longLabel}: ${duration(totalOf(b))} in events${tags.length ? ` (${tags.join(', ')})` : ''} · ${free}`;
   };
 
   // The bucket whose work hours are most booked, counting time still to come.
@@ -180,25 +176,14 @@ const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, 
     ? `Most booked: ${shortName(period.kind, booked)}, ${duration(inWindowOf(booked))} of ${duration(windowOf(booked))} work hours (${Math.round((inWindowOf(booked) / windowOf(booked)) * 100)}%)`
     : `Peak: ${duration(max)} in one ${unit}`;
 
-  const tagTotal = (row: TagRow) => buckets.reduce((s, b) => { const t = tagOf(b, row); return s + t.past + t.upcoming; }, 0);
+  const tagTotal = (row: TagRow) => buckets.reduce((s, b) => s + tagMinutes(b, row), 0);
   const tagInWindow = (row: TagRow) => buckets.reduce((s, b) => s + tagOf(b, row).inWindow, 0);
-  const summary = `Time in events per ${unit}, against your work hours${selected ? `, with ${selected.name} picked out` : ''}`;
+  const summary = `Time in events per ${unit} by tag, with the work hours left free${selected ? `, with ${selected.name} picked out` : ''}`;
   const withScheduled = (minutes: number, upcoming: number) =>
     `${duration(minutes)}${upcoming > 0 ? ` (${duration(upcoming)} scheduled)` : ''}`;
 
-  const legend = selected ? (
-    <>
-      <LegendDot color={spotColor(selected)} label={selected.name} />
-      <LegendDot color={REST_COLOR} label="Other events" />
-      <OutlineKey />
-    </>
-  ) : (
-    <>
-      <LegendDot color={IN_COLOR} label="In work hours" />
-      <LegendDot color={OUT_COLOR} label="Outside" />
-      <OutlineKey />
-    </>
-  );
+  // The tag chips below are the tags' key, as on the Tasks, Notes and Habits charts.
+  const legend = max > 0 && freeTotal > 0 && <LegendDot swatch={freeStyle} label="Free" dimmed={selected !== null} />;
 
   const chip = (key: string | null, label: React.ReactNode, color: string, isSelected: boolean) => (
     <button
@@ -233,7 +218,7 @@ const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, 
             {rows.map(row => chip(
               row.key,
               <span className={row.key === UNTAGGED_KEY ? 'italic' : ''}>{row.name}</span>,
-              spotColor(row),
+              rowColor(row),
               selected?.key === row.key,
             ))}
           </div>
@@ -260,34 +245,28 @@ const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, 
                     style={{ bottom: `${(t / scaleTop) * 100}%`, borderColor: 'var(--tm-border-subtle)' }}
                   />
                 ))}
-                {buckets.map(b => {
-                  const window = windowOf(b);
-                  return (
-                    // Today is marked by its label alone: a tinted column would clash with the outline.
-                    <div key={b.key} className="relative flex-1 min-w-0 h-full flex flex-col justify-end" title={describeBucket(b)}>
-                      {window > 0 && (
+                {buckets.map(b => (
+                  // Today is marked by its label alone: a tinted column would read as a tag's bar.
+                  <div key={b.key} className="relative flex-1 min-w-0 h-full flex flex-col justify-end" title={describeBucket(b)}>
+                    <div
+                      className="relative flex flex-col-reverse overflow-hidden rounded-t-sm"
+                      style={{ height: `${((totalOf(b) + freeOf(b)) / scaleTop) * 100}%`, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }}
+                    >
+                      {partsOf(b).filter(p => p.minutes > 0).map(p => (
                         <div
-                          data-testid="work-hours"
-                          className="absolute bottom-0 inset-x-0 rounded-t-sm"
+                          key={p.key}
+                          data-part={p.key}
                           style={{
-                            height: `${(window / scaleTop) * 100}%`,
-                            border: '1px dashed var(--tm-border-strong)',
-                            borderBottom: 'none',
-                            backgroundColor: 'color-mix(in srgb, var(--tm-text-muted) 7%, transparent)',
+                            flexGrow: p.minutes,
+                            ...p.style,
+                            opacity: p.dimmed ? DIMMED : 1,
+                            transition: 'opacity var(--tm-dur-fast) var(--tm-ease)',
                           }}
                         />
-                      )}
-                      <div
-                        className="relative flex flex-col-reverse overflow-hidden rounded-t-sm"
-                        style={{ height: `${(totalOf(b) / scaleTop) * 100}%`, transition: 'height var(--tm-dur-slow) var(--tm-ease)' }}
-                      >
-                        {partsOf(b).filter(p => p.minutes > 0).map(p => (
-                          <div key={p.key} data-part={p.key} style={{ flexGrow: p.minutes, ...fillOf(p.color, p.upcoming) }} />
-                        ))}
-                      </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
               <div className="col-start-2 flex gap-[2px] sm:gap-1 pt-1" aria-hidden="true">
                 {buckets.map((b, i) => (
@@ -323,22 +302,20 @@ const ReportEventsChart: React.FC<ReportEventsChartProps> = ({ period, buckets, 
             <tr>
               <th scope="col">{period.kind === 'year' ? 'Month' : 'Day'}</th>
               <th scope="col">Time in events</th>
-              <th scope="col">In work hours</th>
+              {rows.map(row => <th key={row.key} scope="col">{row.name}</th>)}
+              <th scope="col">Free</th>
               <th scope="col">Work hours</th>
-              {selected && <th scope="col">{selected.name}</th>}
             </tr>
           </thead>
           <tbody>
             {buckets.map(b => {
-              const d = dataOf(b);
-              const tag = selected ? tagOf(b, selected) : null;
               return (
                 <tr key={b.key}>
                   <th scope="row">{b.longLabel}</th>
                   <td>{withScheduled(totalOf(b), upcomingOf(b))}</td>
-                  <td>{withScheduled(inWindowOf(b), d?.inWindow.upcoming ?? 0)}</td>
+                  {rows.map(row => <td key={row.key}>{withScheduled(tagMinutes(b, row), tagOf(b, row).upcoming)}</td>)}
+                  <td>{windowOf(b) > 0 ? duration(freeOf(b)) : '—'}</td>
                   <td>{windowOf(b) > 0 ? duration(windowOf(b)) : 'Rest day'}</td>
-                  {tag && <td>{withScheduled(tag.past + tag.upcoming, tag.upcoming)}</td>}
                 </tr>
               );
             })}

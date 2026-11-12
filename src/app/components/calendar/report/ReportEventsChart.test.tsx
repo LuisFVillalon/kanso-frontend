@@ -93,17 +93,47 @@ const text = () => container.textContent ?? '';
 const legend = () => [...container.querySelectorAll('.ml-auto span.inline-flex')].map(s => s.textContent);
 
 describe('Events chart', () => {
-  it('outlines each workday’s hours and offers a chip per tag', async () => {
+  const bar = (day: string) => container.querySelector<HTMLElement>(`[title^="${day}"]`)!;
+  const parts = (day: string) => [...bar(day).querySelectorAll<HTMLElement>('[data-part]')];
+
+  it('stacks each bar by tag in the tags’ colors, with the free work hours on top', async () => {
     await render(periodContaining('week', new Date()), activityWith(weekEvents));
-    expect(container.querySelectorAll('[data-testid="work-hours"]')).toHaveLength(5);
     const chips = [...container.querySelectorAll('[aria-label="Show a tag"] button')].map(b => b.textContent);
     expect(chips).toEqual(['All events', 'CS 460', 'Work', 'Untagged']);
-    expect(legend()).toEqual(['In work hours', 'Outside', 'Work hours']);
-    expect(container.querySelector('[data-part="in-upcoming"]')).not.toBeNull();
-    expect(container.querySelector('[title^="Monday, November 9"]')?.getAttribute('title'))
-      .toBe('Monday, November 9: 3h in events · 3h of 8h work hours');
-    expect(container.querySelector('[title^="Saturday, November 14"]')?.getAttribute('title'))
+    expect(legend()).toEqual(['Free']);
+    expect(container.querySelector('[data-testid="work-hours"]')).toBeNull();
+    // Monday: 3h of CS 460 at the bottom, then the 5h left of its 8h work hours.
+    expect(parts('Monday, November 9').map(p => p.dataset.part)).toEqual(['tag:1:past', 'free']);
+    expect(parts('Monday, November 9').map(p => p.style.flexGrow)).toEqual(['180', '300']);
+    expect(parts('Monday, November 9')[0].style.backgroundColor).toBe('rgb(47, 111, 214)');
+    // Thursday's untagged hour is still to come, so it's hatched in Untagged's grey.
+    const thursday = parts('Thursday, November 12');
+    expect(thursday.map(p => p.dataset.part)).toEqual(['untagged:upcoming', 'free']);
+    expect(thursday[0].style.backgroundImage).toContain('var(--tm-border-strong)');
+    // A rest day with no events has no bar at all.
+    expect(parts('Saturday, November 14')).toHaveLength(0);
+    expect(bar('Monday, November 9').getAttribute('title'))
+      .toBe('Monday, November 9: 3h in events (CS 460 3h) · Free 5h of 8h work hours');
+    expect(bar('Wednesday, November 11').getAttribute('title'))
+      .toBe('Wednesday, November 11: 0m in events · Free 8h of 8h work hours');
+    expect(bar('Saturday, November 14').getAttribute('title'))
       .toBe('Saturday, November 14: 0m in events · rest day');
+  });
+
+  it('splits overlapping events between their tags, so the tags add up to the day', async () => {
+    const overlap = [occurrence(1, 10, 9, 9, 11, [cs]), occurrence(2, 10, 9, 10, 12, [work])];
+    await render(periodContaining('week', new Date()), activityWith(overlap));
+    expect(parts('Monday, November 9').map(p => [p.dataset.part, p.style.flexGrow]))
+      .toEqual([['tag:1:past', '90'], ['tag:2:past', '90'], ['free', '300']]);
+    expect(bar('Monday, November 9').getAttribute('title'))
+      .toBe('Monday, November 9: 3h in events (CS 460 1h 30m, Work 1h 30m) · Free 5h of 8h work hours');
+  });
+
+  it('shows no free time when the work hours are fully booked, and books time outside them on top', async () => {
+    await render(periodContaining('week', new Date()), activityWith([occurrence(1, 10, 9, 8, 18, [cs])]));
+    expect(parts('Monday, November 9').map(p => p.dataset.part)).toEqual(['tag:1:past']);
+    expect(bar('Monday, November 9').getAttribute('title'))
+      .toBe('Monday, November 9: 10h in events (CS 460 10h) · Free 0m of 8h work hours');
   });
 
   it('names the most booked day', async () => {
@@ -111,14 +141,16 @@ describe('Events chart', () => {
     expect(text()).toContain('Most booked: Mon, 3h of 8h work hours (38%)');
   });
 
-  it('recolors the bars by a picked tag and clears it with All events', async () => {
+  it('fades the other tags and the free time for a picked tag, and clears it with All events', async () => {
     await render(periodContaining('week', new Date()), activityWith(weekEvents));
     await click('CS 460');
-    expect(legend()).toEqual(['CS 460', 'Other events', 'Work hours']);
     expect(text()).toContain('CS 460: 3h · 60% of event time · 3h in work hours');
-    expect(container.querySelector('[data-part="tag-past"]')).not.toBeNull();
+    const opacity = (key: string) => container.querySelector<HTMLElement>(`[data-part="${key}"]`)!.style.opacity;
+    expect(opacity('tag:1:past')).toBe('1');
+    expect(opacity('tag:2:past')).toBe('0.2');
+    expect(opacity('free')).toBe('0.2');
     await click('All events');
-    expect(legend()).toEqual(['In work hours', 'Outside', 'Work hours']);
+    expect(opacity('tag:2:past')).toBe('1');
     expect(text()).not.toContain('of event time');
   });
 
@@ -136,16 +168,19 @@ describe('Events chart', () => {
   it('says so when a period has no event time', async () => {
     await render(periodContaining('week', new Date()), activityWith([]));
     expect(text()).toContain('No time in events in this period');
-    expect(legend()).toEqual(['In work hours', 'Outside', 'Work hours']);
+    expect(legend()).toEqual([]);
     expect(container.querySelector('[aria-label="Show a tag"]')).toBeNull();
   });
 
-  it('counts a year’s busy months in round 50-hour ticks', async () => {
-    // 130 hours of events in March, under months of ~170 work hours.
+  it('counts a year by month, with each month’s free work hours on top', async () => {
+    // 130 hours of events over March 2–14, under months of ~170 work hours.
     const events = Array.from({ length: 13 }, (_, i) => occurrence(10 + i, 2, i + 2, 8, 18));
     await render(periodContaining('year', new Date()), activityWith(events, '2026-01-01', '2026-12-31'));
     const ticks = [...container.querySelectorAll('.tabular-nums')].map(t => t.textContent);
-    expect(ticks).toEqual(['0', '50h', '100h', '150h', '200h']);
+    expect(ticks).toEqual(['0', '100h', '200h', '300h']);
+    // March: its 130h of untagged events, then the 96h left of its 22 eight-hour workdays (80h booked on its 10 workdays).
+    expect(parts('March').map(p => [p.dataset.part, p.style.flexGrow])).toEqual([['untagged:past', '7800'], ['free', '5760']]);
+    expect(bar('March').getAttribute('title')).toBe('March 2026: 130h in events (Untagged 130h) · Free 96h of 176h work hours');
   });
 });
 
