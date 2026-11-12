@@ -347,6 +347,22 @@ describe('NoteEditor toolbar', () => {
       act(() => trigger().blur());
       expect(panel()).toBeNull();
     });
+
+    it('pins the panel open when the focused button is activated from the keyboard, and closes it on a second activation', () => {
+      render(vi.fn<Update>().mockResolvedValue(true));
+      act(() => trigger().focus());
+      expect(panel()).not.toBeNull();
+      // Enter or Space on a focused button fires its click.
+      act(() => trigger().click());
+      expect(panel()).not.toBeNull();
+      expect(trigger().getAttribute('aria-expanded')).toBe('true');
+      act(() => trigger().blur());
+      expect(panel()).not.toBeNull();
+
+      act(() => trigger().focus());
+      act(() => trigger().click());
+      expect(panel()).toBeNull();
+    });
   });
 
   it('inserts a table from the table button\'s size grid', () => {

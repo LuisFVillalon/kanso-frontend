@@ -865,7 +865,7 @@ const ShortcutsMenu: React.FC<{ editor: Editor | null; placement: MenuPlacement 
         ref={triggerRef}
         type="button"
         onMouseDown={e => e.preventDefault()}
-        onClick={() => setMode(m => (m === 'closed' || m === 'hover' ? 'click' : 'closed'))}
+        onClick={() => setMode(m => (m === 'click' ? 'closed' : 'click'))}
         onFocus={() => setMode(m => (m === 'closed' ? 'focus' : m))}
         onBlur={() => setMode(m => (m === 'focus' ? 'closed' : m))}
         title="Keyboard shortcuts"
