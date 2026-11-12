@@ -774,7 +774,7 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
   const className = 'absolute pointer-events-auto flex flex-col items-start overflow-hidden rounded-md px-1.5 py-0.5 text-left text-[11px] leading-tight text-text-primary shadow-sm';
 
   const block = !openable ? (
-    <div className={`${className} peer`} style={style} title={title} aria-label={label} role="note" data-week-block>{content}</div>
+    <div className={className} style={style} title={title} aria-label={label} role="note" data-week-block>{content}</div>
   ) : (
     <button
       type="button"
@@ -782,7 +782,7 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
       data-event-key={isEvent ? event.key : undefined}
       onClick={e => onOpen(e.currentTarget.getBoundingClientRect())}
       onPointerDown={onDragStart ? e => onDragStart(e, 'move') : undefined}
-      className={`${className} peer hover:brightness-95 transition-[filter]`}
+      className={`${className} hover:brightness-95 transition-[filter]`}
       style={style}
       title={title}
       aria-label={label}
@@ -795,15 +795,16 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
   // and left of the clash badge: it shows while the block is hovered or it has
   // focus, and stays on touch screens, where it's a bigger target.
   return (
-    <>
+    <div className="contents group/block">
       {block}
       <button
         type="button"
+        data-week-block
         data-delete-block
         onClick={onDelete}
         aria-label={`Remove ${event.title} from the calendar`}
         title="Remove from the calendar"
-        className="absolute z-[1] pointer-events-auto flex items-center justify-center rounded-full w-5 h-5 opacity-0 peer-hover:opacity-100 hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:w-7 [@media(pointer:coarse)]:h-7 transition-opacity"
+        className="absolute z-[1] pointer-events-auto flex items-center justify-center rounded-full w-5 h-5 opacity-0 group-hover/block:opacity-100 hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [@media(pointer:coarse)]:w-7 [@media(pointer:coarse)]:h-7 transition-opacity"
         style={{
           top: minutesToPx(event.drawStartMin) + 2,
           left: `calc(${((event.column + 1) / event.columns) * 100}% - 2px - ${event.clashWith ? 20 : 2}px)`,
@@ -815,7 +816,7 @@ const EventBlock: React.FC<EventBlockProps> = ({ event, openable, onOpen, onDrag
       >
         <X className="w-3 h-3" aria-hidden />
       </button>
-    </>
+    </div>
   );
 };
 
