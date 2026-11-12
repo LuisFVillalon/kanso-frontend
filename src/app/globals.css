@@ -1512,8 +1512,13 @@ html[data-page-style="blank"] body {
   }
 }
 
-/* The running Focus session, stuck to the top of every signed-in page (FocusHeaderBar). */
+/* The running Focus session, stuck to the top of every signed-in page (FocusHeaderBar).
+   Full-height layouts subtract --tm-focus-bar-h, which is 0 while the bar is hidden. */
+:root:has(.focus-bar) {
+  --tm-focus-bar-h: calc(2.75rem + 1px);
+}
 .focus-bar {
+  height: var(--tm-focus-bar-h);
   position: sticky;
   top: 0;
   z-index: 30;
@@ -1544,7 +1549,7 @@ html[data-page-style="blank"] body {
   font-size: 0.875rem;
   transition: box-shadow var(--tm-dur-fast) var(--tm-ease);
 }
-.focus-bar-open:hover { box-shadow: inset 0 0 0 1px var(--tm-accent); }
+button.focus-bar-open:hover { box-shadow: inset 0 0 0 1px var(--tm-accent); }
 .focus-bar-dot {
   width: 0.5rem;
   height: 0.5rem;

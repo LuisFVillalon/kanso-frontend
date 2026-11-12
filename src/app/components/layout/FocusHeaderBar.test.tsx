@@ -22,6 +22,7 @@ vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fa
 import FocusHeaderBar from './FocusHeaderBar';
 import { FOCUS_LOG_KEY, readFocusState, resetFocusTimerForTests, type FocusTimerState } from '@/app/hooks/useFocusTimer';
 import { takeFocusWidgetRequest } from '@/app/utils/focusWidgetRequest';
+import { setHomeMode } from '@/app/utils/homeMode';
 
 const START = new Date(2026, 10, 11, 14, 0, 0);
 const MIN = 60_000;
@@ -48,6 +49,7 @@ beforeEach(() => {
   nav.push.mockReset();
   nav.pathname = '/notes';
   takeFocusWidgetRequest();
+  setHomeMode('normal');
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -106,6 +108,24 @@ describe('FocusHeaderBar', () => {
     act(() => button('Focus:').click());
     expect(nav.push).toHaveBeenCalledTimes(1);
     expect(takeFocusWidgetRequest()).toBe(true);
+  });
+
+  it.each(['focus', 'doodle'] as const)('shows the time as a plain label while Home is in %s mode', mode => {
+    store({ taskId: 7, startedAt: START.getTime(), resumedAt: START.getTime() });
+    mount();
+    expect(button('Focus:')).not.toBeNull();
+
+    act(() => setHomeMode(mode));
+    expect(container.querySelector('button[aria-label^="Focus:"]')).toBeNull();
+    expect(container.querySelector('[title="Open the Focus timer"]')).toBeNull();
+    expect(bar()?.textContent).toContain('25:00');
+    expect(bar()?.textContent).toContain('HW 7');
+    expect(button('Pause')).not.toBeNull();
+    expect(button('Stop')).not.toBeNull();
+
+    act(() => setHomeMode('normal'));
+    act(() => button('Focus:').click());
+    expect(nav.push).toHaveBeenCalledWith('/');
   });
 
   it('records a session that runs out away from Home', async () => {

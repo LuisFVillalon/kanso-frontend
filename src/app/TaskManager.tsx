@@ -13,6 +13,7 @@ import { useSplitPanel } from '@/app/hooks/useSplitPanel';
 import { toggleById } from '@/app/hooks/useTaskHandlers';
 import { DEFAULT_TASK_VIEW, isTaskView, useTaskFiltering } from '@/app/hooks/useTaskFiltering';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
+import { HOME_MODE_KEY, isAppMode, setHomeMode } from '@/app/utils/homeMode';
 import { useMountTransition } from '@/app/hooks/useMountTransition';
 import { useCanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { useCanvasTaskSync } from '@/app/hooks/useCanvasTaskSync';
@@ -57,9 +58,9 @@ const TaskManager: React.FC = () => {
   const { profile, loaded: profileLoaded, saveProfile } = shell.profileState;
   const { calendarSettings, loading: calendarSettingsLoading } = shell.calendarSettingsState;
   const [mode, setMode] = usePersistedPref<AppMode>(
-    'tm-app-mode',
+    HOME_MODE_KEY,
     'normal',
-    (c): c is AppMode => c === 'normal' || c === 'focus' || c === 'doodle',
+    isAppMode,
     profile.appMode as AppMode | null,
     next => { saveProfile({ ...profile, appMode: next }); },
   );
@@ -78,6 +79,7 @@ const TaskManager: React.FC = () => {
   // The order the panels sit in, on a wide screen and a phone alike; remembered on this device.
   const [panelOrder, setPanelOrder] = usePersistedPref<PanelKey[]>(`tm-home-panel-order:${dataUserId ?? 'guest'}`, [...PANEL_ORDER], isPanelOrder);
   const carouselRef = useRef<PanelCarouselHandle>(null);
+  useEffect(() => { setHomeMode(mode); }, [mode]);
   const focusMode = mode === 'focus';
   const doodleMode = mode === 'doodle';
 
