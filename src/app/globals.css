@@ -976,6 +976,32 @@ html[data-page-style="blank"] body {
     color: var(--tm-accent);
     border-color: color-mix(in srgb, var(--tm-accent) 40%, transparent);
   }
+  /* A moment's Edit and Delete: shown on hover or keyboard focus, or on every moment behind "Edit moments" on touch screens. */
+  .mood-moment-action {
+    position: absolute;
+    top: -0.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 9999px;
+    box-shadow: var(--tm-shadow-md);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+  .mood-moment-action:hover { transform: scale(1.1); }
+  .mood-moment:hover .mood-moment-action,
+  .mood-moment:focus-within .mood-moment-action {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .mood-moments.is-managing .mood-moment-action { opacity: 1; pointer-events: auto; }
+  .mood-moments-manage { display: none; }
+  @media (hover: none) {
+    .mood-moments-manage { display: inline-flex; }
+  }
 
   /* Inputs */
   .input-field {
