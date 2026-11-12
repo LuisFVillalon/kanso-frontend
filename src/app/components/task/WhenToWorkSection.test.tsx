@@ -320,6 +320,28 @@ describe('Earlier, Later and length on a picked time', () => {
     expect(rows()[0].textContent).toContain('1:30 – 2:00 PM');
   });
 
+  it('stops offering a time that a moved or longer pick now covers', async () => {
+    const thursday = () => act(async () => document.querySelector<HTMLButtonElement>('[data-when-to-work] [data-day-chip="2026-11-12"]')!.click());
+    await render({}, creating());
+    await thursday();
+    await act(async () => rows()[0].click());
+    await act(async () => button('30 minutes later').click());
+    expect(rows().map(r => r.textContent)).toEqual([
+      'Tomorrow9:30 – 10:30 AMmoved from 9:00 AM',
+      'Tomorrow6:00 – 7:00 PMend of your work day',
+    ]);
+    expect(document.body.textContent).toContain("That's all the free time tomorrow.");
+    await act(async () => button('30 minutes earlier').click());
+    await act(async () => button('2 hr').click());
+    expect(rows().map(r => r.textContent)).toEqual([
+      'Tomorrow9:00 – 11:00 AMmoved from 9:00 AM, 2 hr',
+      'Tomorrow6:00 – 7:00 PMend of your work day',
+    ]);
+    await act(async () => rows()[0].click());
+    expect(rows()).toHaveLength(3);
+    expect(rows()[1].textContent).toBe('Tomorrow10:00 – 11:00 AMfree until 7:00 PM');
+  });
+
   it('drops the move when the row is unpicked', async () => {
     await render({}, creating());
     await act(async () => rows()[1].click());

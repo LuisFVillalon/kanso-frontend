@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { Check, Clock } from 'lucide-react';
 import {
-  dayBest, dayList, nudge, relength, slotReason,
+  dayBest, dayList, nudge, overlaps, relength, slotReason,
   type Edge, type FreeDay, type PlanRange, type Slot, type SlotState,
 } from '@/app/utils/slotSuggest';
 import { clock, dayInSentence, dayLong, dayName, lengthText, shortLength, timeRange } from '@/app/utils/slotLabels';
@@ -218,6 +218,7 @@ const SlotChooser: React.FC<SlotChooserProps> = ({
     if (own && picked(own.to)) return [{ key: pickKey(s), slot: s, pick: own.to as PlanPick | null, from: own.from }];
     const m = movedFrom(s);
     if (m && shownKeys.has(m[0])) return []; // Its pick shows on the row it was moved from.
+    if (!picked(s) && picks.some(x => x.date === s.date && overlaps(x, s))) return [];
     return [{ key: m?.[0] ?? pickKey(s), slot: s, pick: picked(s) ? (s as PlanPick) : null, from: m?.[1].from }];
   });
   const onScreen = [...rows.flatMap(r => (r.pick ? [r.pick] : [])), ...shownElsewhere];
@@ -262,7 +263,7 @@ const SlotChooser: React.FC<SlotChooserProps> = ({
     />
   );
 
-  const fewer = view !== 'best' && shown.length < 3;
+  const fewer = view !== 'best' && rows.length < 3;
   const dueThatDay = range.hasDue && view === range.due.date && range.due.min < 24 * 60;
 
   return (
