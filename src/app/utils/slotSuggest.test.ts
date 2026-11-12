@@ -369,6 +369,12 @@ describe('dayList and dayBest: the day strip', () => {
     expect(dayBest(days, '2026-11-14', 60)).toEqual([]);
   });
 
+  it('fits back-to-back times on the 15-minute grid for a length that is not a multiple of 30', () => {
+    const one = (e: number) => [{ date: '2026-11-18', gaps: [[H(9), e]] as Span[] }];
+    expect(dayBest(one(H(11, 15)), '2026-11-18', 45).map(at)).toEqual(['2026-11-18 540-585', '2026-11-18 585-630', '2026-11-18 630-675']);
+    expect(dayBest(one(H(12, 45)), '2026-11-18', 75).map(at)).toEqual(['2026-11-18 540-615', '2026-11-18 615-690', '2026-11-18 690-765']);
+  });
+
   it('stops at the deadline on the due day', () => {
     const { days: due } = suggest(sample(), 60, range('2026-11-12', H(16, 30)));
     expect(dayBest(due, '2026-11-12', 60).map(at)).toEqual(['2026-11-12 720-780']);

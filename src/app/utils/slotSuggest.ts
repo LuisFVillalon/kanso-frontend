@@ -516,13 +516,19 @@ export function dayList(S: SlotState, days: FreeDay[], len: number, range: PlanR
 /**
  * Up to `n` times on `date` that don't overlap, spread across the day: the
  * first start of each gap, then each gap's last start that fits, then every
- * other start, taken in that order while they don't overlap, then sorted by start.
+ * other start on the 15-minute grid, taken in that order while they don't
+ * overlap, then sorted by start.
  */
 export function dayBest(days: FreeDay[], date: string, len: number, n = SLOT_COUNT): Slot[] {
   const day = days.find(d => d.date === date);
   if (!day) return [];
   const byGap = day.gaps.map(g => allStarts([{ date, gaps: [g] }], len)).filter(x => x.length > 0);
-  const order = [...byGap.map(x => x[0]), ...byGap.map(x => x[x.length - 1]), ...byGap.flat()];
+  const grid = day.gaps.flatMap(([s, e]) => {
+    const out: Slot[] = [];
+    for (let t = ceilStep(s); t <= floorStep(e - len); t += SLOT_STEP) out.push({ date, start: t, end: t + len, gap: e - t });
+    return out;
+  });
+  const order = [...byGap.map(x => x[0]), ...byGap.map(x => x[x.length - 1]), ...grid];
   const out: Slot[] = [];
   for (const x of order) {
     if (out.length >= n) break;

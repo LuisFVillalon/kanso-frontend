@@ -10,9 +10,9 @@ import Callout from './Callout';
 import Modal from '@/app/components/common/Modal';
 import { LinkedDraft, LinkedTasksSaveError, linkedSaveMessage, toLinkedRefs } from '@/app/utils/linkedTasks';
 import { useSlotPlanner, planMinutes, minutesOf, type SlotPlanner } from '@/app/hooks/useSlotPlanner';
-import { earlierRange, planRange, spread, suggest, withHeld, type PlanRange, type SpreadItem } from '@/app/utils/slotSuggest';
+import { earlierRange, overlaps, planRange, spread, suggest, withHeld, type PlanRange, type SpreadItem } from '@/app/utils/slotSuggest';
 import { clock, dayShort } from '@/app/utils/slotLabels';
-import { WorkBlocksSaveError, savePlans, samePick, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
+import { WorkBlocksSaveError, savePlans, type PlanPick, type PlanRequest } from '@/app/utils/workBlockPlans';
 import { toLocalDateStr, toLocalTimeStr } from '@/app/utils/dateUtils';
 
 /**
@@ -336,7 +336,7 @@ function useLinkedPlan(
       const lead = linkedPicks[key]?.length ? linkedPicks[key] : spreadSlot ? [spreadSlot] : [];
       const slots = [
         ...lead.map(p => ({ ...p, gap: p.end - p.start })),
-        ...own.filter(s => !lead.some(p => samePick(s, p))),
+        ...own.filter(s => !lead.some(p => p.date === s.date && overlaps(s, p))),
       ].slice(0, Math.max(3, lead.length));
       return (
         // Mounted per open pill, so its day starts on Best each time one opens.
