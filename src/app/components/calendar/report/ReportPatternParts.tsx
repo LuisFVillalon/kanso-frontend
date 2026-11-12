@@ -1,8 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { Hourglass, Minus, TrendingDown, TrendingUp } from 'lucide-react';
 import { moodColor } from '@/app/components/mood/MoodFacePicker';
+import type { ReportPeriod } from '@/app/utils/calendarReport';
+import { toLocalDateStr } from '@/app/utils/dateUtils';
 import { rowHas, patternNumbers, type AnswerKind, type PatternDay, type PatternRow } from '@/app/utils/patterns';
 import { FEELING_WORDS, hash, type Feeling } from '@/app/utils/tagFeelings';
 import { useMeasuredWidth, useShortWindow } from './useChartSize';
@@ -123,31 +125,85 @@ export const PatternLine: React.FC<{ row: PatternRow; feeling: Feeling; days: Pa
   );
 };
 
-/** Where a 1–5 value sits across a track. */
-const at = (v: number) => ((v - 1) / 4) * 100;
+/** A check-in value's colour on the mood palette; stress is turned over so Calm stays blue like a Great mood. */
+export const levelColor = (f: Feeling, v: number) => `var(--tm-mood-${f === 'stress' ? 6 - v : v})`;
 
-/** A row's small picture on 1–5: a tick at the other days' usual, a dot at the row's days, and the gap between. */
-export const Dumbbell: React.FC<{ row: PatternRow; feeling: Feeling }> = ({ row, feeling }) => {
-  const c = row.feel[feeling];
-  const wait = row.answer[feeling].kind === 'wait';
-  const color = wait ? 'var(--tm-text-muted)' : lineColor(feeling);
+const dayLabel = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+interface StripDay {
+  day: string;
+  date: Date;
+  value: number | null;
+  /** Has a daily check-in, maybe without this feeling. */
+  checked: boolean;
+  /** On the row's "with it" side. */
+  has: boolean;
+  future: boolean;
+}
+
+/**
+ * The period's days for one row and feeling: each check-in day in the
+ * feeling's colour, days with the tag or moment bright and marked, other
+ * days faded, days without a check-in outlined and days still to come
+ * dotted. A month is one strip; a year a week-by-week grid, Monday first,
+ * scrolled to its latest weeks when it's wider than the card.
+ */
+export const DayStrip: React.FC<{ row: PatternRow; feeling: Feeling; days: PatternDay[]; period: ReportPeriod; now?: Date }> = ({
+  row, feeling, days, period, now = new Date(),
+}) => {
+  const byDay = new Map(days.map(d => [d.day, d]));
+  const today = toLocalDateStr(now);
+  const cells: StripDay[] = [];
+  for (let d = period.start; d <= period.end; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    const day = toLocalDateStr(d);
+    const p = byDay.get(day);
+    cells.push({ day, date: d, value: p?.[feeling] ?? null, checked: !!p, has: !!p && rowHas(row, p), future: day > today });
+  }
+  const year = period.kind === 'year';
+  const scroller = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (scroller.current) scroller.current.scrollLeft = scroller.current.scrollWidth;
+  }, []);
+  const words = FEELING_WORDS[feeling];
+  const title = (c: StripDay) =>
+    `${dayLabel(c.date)}: ${c.future ? 'still to come' : !c.checked ? 'no check-in' : `${c.value == null ? `no ${feeling} logged` : words[c.value - 1]}${c.has ? ` · ${row.name}` : ''}`}`;
+  const cellStyle = (c: StripDay): React.CSSProperties =>
+    c.value != null
+      ? {
+        backgroundColor: levelColor(feeling, c.value),
+        opacity: c.has ? 1 : 0.2,
+        ...(year && c.has ? { outline: '1.5px solid var(--tm-text-primary)', outlineOffset: '0.5px', opacity: 1 } : {}),
+      }
+      : { border: `1px ${c.future ? 'dotted' : 'dashed'} var(--tm-border)` };
+
   return (
-    <span className="relative block h-3.5" aria-hidden="true">
-      <span className="absolute inset-x-0 top-[6px] h-0.5 rounded-full bg-border" />
-      {c.avg != null && c.other != null && (
-        <>
-          <span
-            className="absolute top-[6px] h-0.5"
-            style={{
-              left: `${Math.min(at(c.avg), at(c.other))}%`,
-              width: `${Math.abs(at(c.avg) - at(c.other))}%`,
-              background: wait ? `repeating-linear-gradient(90deg, ${color} 0 2px, transparent 2px 4px)` : color,
-            }}
-          />
-          <span className="absolute top-0.5 bottom-0.5 w-[1.5px] -ml-px bg-text-primary" style={{ left: `${at(c.other)}%` }} />
-          <span className="absolute top-[3px] w-2 h-2 -ml-1 rounded-full" style={{ left: `${at(c.avg)}%`, backgroundColor: color }} />
-        </>
-      )}
-    </span>
+    <div className="flex flex-col gap-2 rounded-lg bg-surface-raised p-2.5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-text-muted" aria-hidden="true">
+        {words.map((w, i) => (
+          <span key={w} className="inline-flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-[3px]" style={{ backgroundColor: levelColor(feeling, i + 1) }} />{w}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-[3px] opacity-20" style={{ backgroundColor: levelColor(feeling, 3) }} />day without it</span>
+        <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-[3px] border border-dashed border-border" />no check-in</span>
+      </div>
+      <div ref={scroller} role="img" aria-label={patternNumbers(row, feeling)} className={year ? 'overflow-x-auto pb-0.5' : ''}>
+        {year ? (
+          <div className="grid grid-flow-col grid-rows-7 auto-cols-[10px] gap-[2px] w-max p-[2px]" data-strip="year">
+            {/* Monday-first rows: pad the first week up to the year's first day. */}
+            {Array.from({ length: (period.start.getDay() + 6) % 7 }, (_, i) => <span key={`pad${i}`} />)}
+            {cells.map(c => <span key={c.day} title={title(c)} className="block w-[10px] h-[10px] rounded-[2px]" style={cellStyle(c)} />)}
+          </div>
+        ) : (
+          <div className="flex gap-[2px] pb-1.5" data-strip="month">
+            {cells.map(c => (
+              <span key={c.day} title={title(c)} className="relative flex-1 min-w-0 h-[14px] rounded-[3px]" style={cellStyle(c)}>
+                {c.has && <span className="absolute left-1/2 -bottom-[5px] -ml-[2px] w-1 h-0.5 bg-text-primary" />}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };

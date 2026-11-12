@@ -252,3 +252,25 @@ export const buildEventTimeSeries = (
   for (const [key, seen] of counted) buckets.get(key)!.eventCount = seen.size;
   return { rows, buckets };
 };
+
+/**
+ * Whole-day time in events per local day from `start` to `end` (inclusive),
+ * counted as Reports › Events counts it: each minute once however many
+ * events overlap, split at local midnights, with all-day events, ones 24
+ * hours or longer and declined or "Show as free" Google events adding none.
+ * Only days with some time are present.
+ */
+export const dailyEventMinutes = (activity: CalendarActivity, start: Date, end: Date): Map<string, number> => {
+  const rangeStart = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
+  const rangeEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).getTime();
+  const midnights: number[] = [];
+  for (let d = new Date(rangeStart); d.getTime() < rangeEnd; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+    midnights.push(d.getTime());
+  }
+  const days = new Map<string, number>();
+  for (const slice of eventMinuteShares(activity.events ?? [], rangeStart, rangeEnd, midnights)) {
+    const day = toLocalDateStr(new Date(slice.start));
+    days.set(day, (days.get(day) ?? 0) + slice.minutes);
+  }
+  return days;
+};

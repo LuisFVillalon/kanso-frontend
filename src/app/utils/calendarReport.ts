@@ -392,12 +392,17 @@ export const buildCalendarReport = (
 //
 // The activities Mood › Patterns compares with how you felt (utils/patterns.ts).
 
-export type MoodMetric = 'tasks' | 'notes' | 'habits';
+export type MoodMetric = 'tasks' | 'notes' | 'habits' | 'events';
 
-export const MOOD_METRICS: MoodMetric[] = ['tasks', 'notes', 'habits'];
+export const MOOD_METRICS: MoodMetric[] = ['tasks', 'notes', 'habits', 'events'];
 
-/** A day's value for a metric: tasks completed, whole minutes in notes, or habit check-ins. */
-export const metricValue = (day: DayActivity | undefined, metric: MoodMetric): number => {
+/**
+ * A day's value for a metric `dailyActivity` counts: tasks completed, whole
+ * minutes in notes, or habit check-ins. Time in events comes from
+ * `dailyEventMinutes` (utils/eventTime.ts) instead, so the rest of the
+ * report's daily activity never counts events.
+ */
+export const metricValue = (day: DayActivity | undefined, metric: Exclude<MoodMetric, 'events'>): number => {
   if (!day) return 0;
   if (metric === 'tasks') return day.tasksCompleted;
   if (metric === 'notes') return Math.round(day.noteSeconds / 60);

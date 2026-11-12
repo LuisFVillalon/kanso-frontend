@@ -4,10 +4,17 @@ import {
   analysePatterns,
   answerOf,
   describePattern,
+  findingSupport,
+  kindsPhrase,
+  patternDays,
   patternFindings,
   patternNumbers,
   patternsRest,
   patternSupport,
+  quietActivities,
+  quietLine,
+  tagsCardGroups,
+  thinReason,
   type PatternDay,
 } from './patterns';
 import type { FeelingComparison, FeelingTag } from './tagFeelings';
@@ -62,7 +69,7 @@ const month = (length = 24): PatternDay[] =>
     off: false,
     tags: new Set(i % 2 === 0 ? [study.key] : []),
     moments: new Set(i < 3 ? ['Exam'] : []),
-    activity: { tasks: i % 4, notes: 0, habits: 0 },
+    activity: { tasks: i % 4, notes: 0, habits: 0, events: 0 },
   }));
 
 describe('analysePatterns', () => {
@@ -70,7 +77,7 @@ describe('analysePatterns', () => {
   const row = (key: string) => analysis.rows.find(r => r.key === key)!;
 
   it('judges activities, tags and moments by one rule, sharing one chance bar per feeling', () => {
-    expect(analysis.rows.map(r => r.key)).toEqual(['activity:tasks', 'activity:notes', 'activity:habits', 'tag:7', 'moment:Exam']);
+    expect(analysis.rows.map(r => r.key)).toEqual(['activity:tasks', 'activity:notes', 'activity:habits', 'activity:events', 'tag:7', 'moment:Exam']);
     // Tasks and Study have enough days for stress; flat note time and habits, and a 3-day moment, don't.
     for (const r of analysis.rows) expect(r.feel.stress.k).toBe(2);
     expect(row('tag:7').answer.stress.short).toBe('Clearly higher');
@@ -116,18 +123,19 @@ describe('analysePatterns', () => {
   });
 
   it('says what never changed, not to check in more, when every check-in day was alike', () => {
-    const alike = month(25).map(d => ({ ...d, tags: new Set<string>(), moments: new Set(['Coffee']), activity: { tasks: 0, notes: 0, habits: 0 } }));
+    const alike = month(25).map(d => ({ ...d, tags: new Set<string>(), moments: new Set(['Coffee']), activity: { tasks: 0, notes: 0, habits: 0, events: 0 } }));
     expect(patternsRest(analysePatterns(alike, new Map(), 'x'), 'this month')).toEqual([
       'Your tasks barely changed from day to day.',
       'Your time in notes barely changed from day to day.',
       'Your habits barely changed from day to day.',
+      'Your time in events barely changed from day to day.',
     ]);
   });
 
   it('names no row as too few days when it is on every work day and no day off', () => {
     const workOnly = month(25).map((d, i) => {
       const off = i % 7 >= 5;
-      return { ...d, off, tags: new Set<string>(), moments: new Set(off ? [] : ['Lecture']), activity: { tasks: 0, notes: 0, habits: 0 } };
+      return { ...d, off, tags: new Set<string>(), moments: new Set(off ? [] : ['Lecture']), activity: { tasks: 0, notes: 0, habits: 0, events: 0 } };
     });
     const analysis = analysePatterns(workOnly, new Map(), 'x');
     expect(patternSupport(analysis.rows.find(r => r.key === 'moment:Lecture')!, 'mood'))
@@ -136,6 +144,7 @@ describe('analysePatterns', () => {
       'Your tasks barely changed from day to day.',
       'Your time in notes barely changed from day to day.',
       'Your habits barely changed from day to day.',
+      'Your time in events barely changed from day to day.',
     ]);
   });
 
@@ -143,7 +152,7 @@ describe('analysePatterns', () => {
     // 30 days: 22 work days with the habit checked off, 8 days off without it.
     const weekdays = month(30).map((d, i) => {
       const off = i % 7 >= 5;
-      return { ...d, off, tags: new Set<string>(), moments: new Set<string>(), activity: { tasks: 0, notes: 0, habits: off ? 0 : 1 } };
+      return { ...d, off, tags: new Set<string>(), moments: new Set<string>(), activity: { tasks: 0, notes: 0, habits: off ? 0 : 1, events: 0 } };
     });
     const analysis = analysePatterns(weekdays, new Map(), 'x');
     const habits = analysis.rows.find(r => r.key === 'activity:habits')!;
@@ -153,13 +162,14 @@ describe('analysePatterns', () => {
     expect(patternsRest(analysis, 'this month')).toEqual([
       'Your tasks barely changed from day to day.',
       'Your time in notes barely changed from day to day.',
+      'Your time in events barely changed from day to day.',
     ]);
   });
 
   it('never leaves the summary empty when every activity splits along work days and days off', () => {
     const split = month(30).map((d, i) => {
       const off = i % 7 >= 5;
-      return { ...d, off, tags: new Set<string>(), moments: new Set<string>(), activity: { tasks: off ? 0 : 2, notes: off ? 0 : 30, habits: off ? 0 : 1 } };
+      return { ...d, off, tags: new Set<string>(), moments: new Set<string>(), activity: { tasks: off ? 0 : 2, notes: off ? 0 : 30, habits: off ? 0 : 1, events: off ? 0 : 90 } };
     });
     expect(patternsRest(analysePatterns(split, new Map(), 'x'), 'this month')).toEqual([
       'Work days are compared with work days, days off with days off.',
@@ -167,12 +177,91 @@ describe('analysePatterns', () => {
   });
 
   it('names a rare tag as too few days, not the check-ins, when every day was checked in', () => {
-    const rare = month(25).map((d, i) => ({ ...d, tags: new Set(i < 2 ? [study.key] : []), moments: new Set<string>(), activity: { tasks: 0, notes: 0, habits: 0 } }));
+    const rare = month(25).map((d, i) => ({ ...d, tags: new Set(i < 2 ? [study.key] : []), moments: new Set<string>(), activity: { tasks: 0, notes: 0, habits: 0, events: 0 } }));
     expect(patternsRest(analysePatterns(rare, new Map([[study.key, study]]), 'x'), 'this month')).toEqual([
       'Your tasks barely changed from day to day.',
       'Your time in notes barely changed from day to day.',
       'Your habits barely changed from day to day.',
+      'Your time in events barely changed from day to day.',
       'Too few days to tell yet: Study.',
     ]);
+  });
+});
+
+describe('the Events row', () => {
+  // 24 work days: 0, 60, 120 or 180 minutes in events in turn, stress 2 on the quieter half and 4 on the busier.
+  const days = month().map((d, i) => ({ ...d, stress: i % 4 >= 2 ? 4 : 2, activity: { ...d.activity, events: (i % 4) * 60 } }));
+  const analysis = analysePatterns(days, new Map(), 'x');
+  const events = analysis.rows.find(r => r.key === 'activity:events')!;
+
+  it('splits days at the middle of their time in events and names the sides in hours', () => {
+    expect(events.name).toBe('Events');
+    expect(events.threshold).toBe(120);
+    expect(events.on).toBe('days with 2h+ in events');
+    expect(events.off).toBe('days with under 2h');
+    expect(describePattern(events, 'stress')).toBe('Your stress was clearly higher on days with more time in events');
+  });
+
+  it('reads whole minutes in events from the day’s minutes', () => {
+    const rows = [{ day: '2026-10-02', mood: 3, energy: null, stress: null, off: false, tags: new Set<string>() }];
+    const [d] = patternDays(rows, new Map(), new Map(), new Map([['2026-10-02', 89.6]]));
+    expect(d.activity).toEqual({ tasks: 0, notes: 0, habits: 0, events: 90 });
+  });
+
+  it('says how much you did made no difference only when all four activities were quiet', () => {
+    const quiet = analysePatterns(month().map((d, i) => ({ ...d, stress: 3, activity: { tasks: i % 2, notes: (i % 2) * 30, habits: i % 2, events: (i % 2) * 60 } })), new Map(), 'x');
+    expect(quietActivities(quiet.rows).map(r => r.name)).toEqual(['Tasks', 'Note time', 'Habits', 'Events']);
+    expect(quietLine(quietActivities(quiet.rows))).toBe('How much you did made no clear difference to how you felt.');
+    expect(quietLine(quietActivities(quiet.rows).slice(0, 3))).toBe('Tasks, note time and habits: no clear difference to how you felt.');
+  });
+});
+
+describe('the Tags & moments card', () => {
+  const kinds = (tasks: number, notes: number, habits: number, events: number) => new Map([[study.key, { tasks, notes, habits, events }]]);
+  const days = month().map((d, i) => ({ ...d, tagKinds: i % 2 === 0 ? kinds(i % 4 === 0 ? 1 : 0, 0, 0, 1) : undefined }));
+  const analysis = analysePatterns(days, new Map([[study.key, study]]), '2026-10-01|2026-10-31');
+  const tag = analysis.rows.find(r => r.key === 'tag:7')!;
+
+  it('counts a tag’s days by where it came from and says so, most days first', () => {
+    expect(tag.kinds).toEqual({ tasks: 6, notes: 0, habits: 0, events: 12 });
+    expect(findingSupport(tag, 'stress')).toBe('A clear pattern · 12 days vs 12 other · from events & tasks');
+    expect(kindsPhrase({ tasks: 3, notes: 5, habits: 1, events: 0 })).toBe('notes, tasks & habits');
+    expect(kindsPhrase({ tasks: 0, notes: 0, habits: 0, events: 0 })).toBeNull();
+  });
+
+  it('says how sure an early sign is by its days', () => {
+    const early = analysePatterns(month(14).map(d => ({ ...d, tags: new Set(Number(d.day.slice(8)) % 2 ? [study.key] : []) })), new Map([[study.key, study]]), 'x');
+    const row = early.rows.find(r => r.key === 'tag:7')!;
+    expect(row.answer.stress.step).toBe('maybe');
+    expect(findingSupport(row, 'stress')).toBe('Early sign: only 7 days so far · 7 days vs 7 other');
+  });
+
+  it('groups rows into found, about the same and not enough days', () => {
+    const groups = tagsCardGroups(analysis.rows, 'tag', 'stress');
+    expect(groups.found.map(r => r.name)).toEqual(['Study']);
+    expect(tagsCardGroups(analysis.rows, 'tag', 'mood').same.map(r => r.name)).toEqual(['Study']);
+    expect(tagsCardGroups(analysis.rows, 'moment', 'stress').thin.map(r => r.name)).toEqual(['Exam']);
+  });
+
+  it('gives each row with too few days its reason', () => {
+    const exam = analysis.rows.find(r => r.key === 'moment:Exam')!;
+    expect(thinReason(exam, 'stress', analysis.days)).toBe('on 3 days so far · needs 5');
+    expect(thinReason(tag, 'energy', analysis.days)).toBe('no energy logged in your check-ins yet');
+    // On every work day but 3, and never on a day off: no 5 work days without it to compare with.
+    const weekdays = month(28).map((d, i) => {
+      const off = i % 7 >= 5;
+      return { ...d, off, tags: new Set(!off && i % 7 !== 0 ? [study.key] : []), moments: new Set(i < 26 ? ['Daily'] : []) };
+    });
+    const busy = analysePatterns(weekdays, new Map([[study.key, study]]), 'x');
+    const row = (key: string) => busy.rows.find(r => r.key === key)!;
+    expect(row('tag:7').days).toBe(16);
+    expect(row('tag:7').answer.mood.kind).toBe('wait');
+    expect(thinReason(row('tag:7'), 'mood', busy.days)).toBe('on nearly every work day · needs 5 work days without it to compare');
+    expect(thinReason(row('moment:Daily'), 'mood', busy.days)).toBe('on almost every day · needs 5 days without it');
+    const weekends = weekdays.map(d => ({ ...d, tags: new Set(d.off ? [study.key] : []) }));
+    const wk = analysePatterns(weekends.slice(0, 26).concat(weekends.slice(26).map(d => ({ ...d, tags: new Set<string>() }))), new Map([[study.key, study]]), 'x');
+    const off = wk.rows.find(r => r.key === 'tag:7')!;
+    expect(off.answer.mood.kind).toBe('wait');
+    expect(thinReason(off, 'mood', wk.days)).toBe('only on days off · needs 5 days off without it');
   });
 });

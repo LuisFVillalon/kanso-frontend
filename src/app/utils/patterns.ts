@@ -1,7 +1,8 @@
 /**
  * Mood › Patterns: what tends to go with your mood, energy and stress. Every
- * row on the page — how much you did (tasks, note time, habits), each of
- * your own tags and each moment you pick when checking in — is judged for
+ * row on the page — how much you did (tasks, note time, habits, time in
+ * events), each of your own tags (from tasks, notes, habits and events) and
+ * each moment you pick when checking in — is judged for
  * all three feelings by one rule, the Tags card's (`compareFeeling` and
  * `settleVerdicts` in tagFeelings.ts), so the summary and both cards can't
  * disagree:
@@ -23,7 +24,9 @@ import type { CalendarActivity } from '@/app/types/activity';
 import type { MoodCheckin } from '@/app/types/mood';
 import { dailyActivity, metricValue, MOOD_METRICS, type DayActivity, type MoodMetric } from '@/app/utils/calendarReport';
 import { formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
+import { dailyEventMinutes } from '@/app/utils/eventTime';
 import {
+  ACTIVITY_KINDS,
   compareFeeling,
   feelingWord,
   FEELING_NAME,
@@ -35,9 +38,11 @@ import {
   tagDayRows,
   TAG_MIN_SIDE,
   tagsByDay,
+  type ActivityKind,
   type Feeling,
   type FeelingComparison,
   type FeelingTag,
+  type KindCounts,
   type TagDay,
 } from '@/app/utils/tagFeelings';
 
@@ -47,18 +52,29 @@ export const SURE_SIDE = 10;
 export const PLAIN_GAP = 0.75;
 export const CLEAR_GAP = 1.25;
 
-/** A check-in day with what it carries: the tags of its tasks and notes, its moments, and how much was done. */
+/** A check-in day with what it carries: the tags of its tasks, notes, habits and events, its moments, and how much was done. */
 export interface PatternDay extends TagDay {
   moments: Set<string>;
   activity: Record<MoodMetric, number>;
+  /** Per tag key, which kinds of activity put the tag on the day; absent tags have none. */
+  tagKinds?: Map<string, KindCounts>;
 }
 
-/** Joins the check-in rows from `tagDayRows` with each day's moments and activity. */
-export const patternDays = (rows: TagDay[], byDay: Map<string, MoodCheckin>, activity: Map<string, DayActivity>): PatternDay[] =>
+/** Joins the check-in rows from `tagDayRows` with each day's moments, activity, whole minutes in events and tags' kinds. */
+export const patternDays = (
+  rows: TagDay[],
+  byDay: Map<string, MoodCheckin>,
+  activity: Map<string, DayActivity>,
+  eventMinutes: Map<string, number> = new Map(),
+  tagKinds: Map<string, Map<string, KindCounts>> = new Map(),
+): PatternDay[] =>
   rows.map(d => ({
     ...d,
     moments: new Set(byDay.get(d.day)?.tags ?? []),
-    activity: Object.fromEntries(MOOD_METRICS.map(m => [m, metricValue(activity.get(d.day), m)])) as Record<MoodMetric, number>,
+    activity: Object.fromEntries(MOOD_METRICS.map(m => [
+      m, m === 'events' ? Math.round(eventMinutes.get(d.day) ?? 0) : metricValue(activity.get(d.day), m),
+    ])) as Record<MoodMetric, number>,
+    tagKinds: tagKinds.get(d.day),
   }));
 
 /** Which way a feeling went: higher, lower, about the same, or can't tell yet. Never good or bad. */
@@ -96,6 +112,8 @@ export interface PatternRow {
   /** Check-in days on each side. */
   days: number;
   otherDays: number;
+  /** A tag's check-in days by where the tag came from (a day can count for several kinds); null for activities and moments. */
+  kinds: Record<ActivityKind, number> | null;
   feel: Record<Feeling, FeelingComparison>;
   answer: Record<Feeling, PatternAnswer>;
 }
@@ -135,9 +153,9 @@ const UNIT: Record<'tasks' | 'habits', string> = { tasks: 'task', habits: 'habit
 
 /** An activity's two sides as people read them: "days with 2+ tasks" / "days with 0–1 tasks", "days with 30m+ in notes" / "days with under 30m". */
 const activitySides = (metric: MoodMetric, t: number, values: number[]): [string, string] => {
-  if (metric === 'notes') {
+  if (metric === 'notes' || metric === 'events') {
     const time = formatDurationShort(t * 60);
-    return [`days with ${time}+ in notes`, `days with under ${time}`];
+    return [`days with ${time}+ in ${metric}`, `days with under ${time}`];
   }
   const unit = UNIT[metric];
   const min = Math.min(...values);
@@ -145,13 +163,14 @@ const activitySides = (metric: MoodMetric, t: number, values: number[]): [string
   return [`days with ${t}+ ${unit}s`, `days with ${low}`];
 };
 
-export const METRIC_NAME: Record<MoodMetric, string> = { tasks: 'Tasks', notes: 'Note time', habits: 'Habits' };
+export const METRIC_NAME: Record<MoodMetric, string> = { tasks: 'Tasks', notes: 'Note time', habits: 'Habits', events: 'Events' };
 
 /** "finish more tasks", to ask "How is your mood on days you …?" */
 const METRIC_DO: Record<MoodMetric, string> = {
   tasks: 'finish more tasks',
   notes: 'spend more time in notes',
   habits: 'check off more habits',
+  events: 'spend more time in events',
 };
 
 /** How an answer ends for an activity: "on busier days". */
@@ -159,20 +178,21 @@ const METRIC_ON: Record<MoodMetric, string> = {
   tasks: 'on busier days',
   notes: 'on days with more note time',
   habits: 'on days with more habits checked off',
+  events: 'on days with more time in events',
 };
 
 const BARELY_CHANGED: Record<MoodMetric, string> = {
   tasks: 'Your tasks barely changed from day to day',
   notes: 'Your time in notes barely changed from day to day',
   habits: 'Your habits barely changed from day to day',
+  events: 'Your time in events barely changed from day to day',
 };
 
 /** The question the activity card asks: "How is your stress on days you finish more tasks?" */
 export const activityQuestion = (metric: MoodMetric, f: Feeling): string => `How is your ${f} on days you ${METRIC_DO[metric]}?`;
 
-/** The question the Tags & moments card asks. */
-export const tagsQuestion = (source: 'tag' | 'moment', f: Feeling): string =>
-  source === 'tag' ? `How is your ${f} on days with each tag?` : `How is your ${f} on days you pick each moment?`;
+/** The question the Tags & moments card asks: "What went with your energy in October?" */
+export const tagsQuestion = (f: Feeling, scope: string): string => `What went with your ${f} ${scope}?`;
 
 const comparisons = (on: PatternDay[], off: PatternDay[], key: string, seedKey: string) =>
   Object.fromEntries(FEELINGS.map(f => [f, compareFeeling(on, off, f, hash(`${key}|${f}|${seedKey}`))])) as Record<Feeling, FeelingComparison>;
@@ -195,7 +215,7 @@ export const analysePatterns = (days: PatternDay[], tags: Map<string, FeelingTag
     const key = `activity:${metric}`;
     return {
       source: 'activity', key, name: METRIC_NAME[metric], color: null, metric, threshold: t, flat: t == null,
-      on: onWords, off: offWords, days: on.length, otherDays: off.length, feel: comparisons(on, off, key, seedKey),
+      on: onWords, off: offWords, days: on.length, otherDays: off.length, kinds: null, feel: comparisons(on, off, key, seedKey),
     };
   });
 
@@ -211,9 +231,10 @@ export const analysePatterns = (days: PatternDay[], tags: Map<string, FeelingTag
     if (!tag) return [];
     const on = days.filter(d => d.tags.has(key));
     const off = days.filter(d => !d.tags.has(key));
+    const kinds = Object.fromEntries(ACTIVITY_KINDS.map(k => [k, on.filter(d => (d.tagKinds?.get(key)?.[k] ?? 0) > 0).length])) as Record<ActivityKind, number>;
     return [{
       source: 'tag', key, name: tag.name, color: tag.color, metric: null, threshold: null, flat: false,
-      on: `${tag.name} days`, off: 'other days', days: on.length, otherDays: off.length, feel: comparisons(on, off, key, seedKey),
+      on: `${tag.name} days`, off: 'other days', days: on.length, otherDays: off.length, kinds, feel: comparisons(on, off, key, seedKey),
     }];
   }).sort(byDays));
 
@@ -223,7 +244,7 @@ export const analysePatterns = (days: PatternDay[], tags: Map<string, FeelingTag
     const off = days.filter(d => !d.moments.has(name));
     return {
       source: 'moment', key, name, color: null, metric: null, threshold: null, flat: false,
-      on: `days you picked “${name}”`, off: 'other days', days: on.length, otherDays: off.length, feel: comparisons(on, off, key, seedKey),
+      on: `days you picked “${name}”`, off: 'other days', days: on.length, otherDays: off.length, kinds: null, feel: comparisons(on, off, key, seedKey),
     };
   }).sort(byDays));
 
@@ -234,9 +255,10 @@ export const analysePatterns = (days: PatternDay[], tags: Map<string, FeelingTag
 
 /** Every row of the page for a period: its check-in days with their tags, moments and activity, work days apart from `restDays`. */
 export const periodPatterns = (activity: CalendarActivity, byDay: Map<string, MoodCheckin>, start: Date, end: Date, restDays: number[]): PatternsAnalysis => {
-  const { byDay: tagDays, tags } = tagsByDay(activity, start, end);
+  const { byDay: tagDays, tags, kinds } = tagsByDay(activity, start, end);
   const rows = tagDayRows(byDay, tagDays, start, end, restDays);
-  return analysePatterns(patternDays(rows, byDay, dailyActivity(activity, start, end)), tags, `${toLocalDateStr(start)}|${toLocalDateStr(end)}`);
+  const days = patternDays(rows, byDay, dailyActivity(activity, start, end), dailyEventMinutes(activity, start, end), kinds);
+  return analysePatterns(days, tags, `${toLocalDateStr(start)}|${toLocalDateStr(end)}`);
 };
 
 /** Whether a check-in day is on a row's "with it" or busier side. */
@@ -362,4 +384,71 @@ export const patternsRest = (analysis: PatternsAnalysis, scope: string): string[
     rows.some(found) ? 'Everything else was about the same.' : `Nothing stood out ${scope}: every difference was small enough to be luck.`,
     waitingLine(rows),
   ].filter((line): line is string => !!line);
+};
+
+// ── Tags & moments card ─────────────────────────────────────────────────────
+//
+// The card says each finding as a plain sentence with its numbers, then
+// folds the rest into one "about the same" line and one "not enough days
+// yet" list, each row with the reason it can't be told.
+
+/** Findings the card shows before "Show N more". */
+export const CARD_FINDINGS = 4;
+
+/** The word before "higher" or "lower" in the card's sentences: "clearly ", "a little ", or none. */
+export const stepAdverb = (step: AnswerStep): string => (step === 'clearly' ? 'clearly ' : step === 'a little' ? 'a little ' : '');
+
+/** How sure the card says a finding is: "A clear pattern", "Showed up often", "Small but steady", or "Early sign: only 7 days so far". */
+export const howSure = (r: PatternRow, f: Feeling): string => {
+  const c = r.feel[f];
+  const step = r.answer[f].step!;
+  return step === 'maybe' ? `Early sign: only ${Math.min(c.n, c.nOther)} days so far` : HOW_SURE[step];
+};
+
+/** Where a tag's days came from, most days first: "events & tasks", "notes, tasks & habits"; null when none. */
+export const kindsPhrase = (kinds: Record<ActivityKind, number>): string | null => {
+  const list = ACTIVITY_KINDS.filter(k => kinds[k] > 0).sort((a, b) => kinds[b] - kinds[a]);
+  if (!list.length) return null;
+  return list.length === 1 ? list[0] : `${list.slice(0, -1).join(', ')} & ${list[list.length - 1]}`;
+};
+
+/** The line under a finding: "A clear pattern · 12 days vs 16 other · from events & tasks". */
+export const findingSupport = (r: PatternRow, f: Feeling): string => {
+  const c = r.feel[f];
+  const from = r.kinds && kindsPhrase(r.kinds);
+  return [howSure(r, f), `${plural(c.n, 'day')} vs ${c.nOther} other`, from && `from ${from}`].filter(Boolean).join(' · ');
+};
+
+/** Why a row can't be told yet for a feeling: "on 3 days so far · needs 5", "on nearly every work day · …". */
+export const thinReason = (r: PatternRow, f: Feeling, days: PatternDay[]): string => {
+  const c = r.feel[f];
+  if (c.nAll + c.nOtherAll === 0) return `no ${f} logged in your check-ins yet`;
+  if (c.nAll < TAG_MIN_SIDE) return `on ${plural(c.nAll, 'day')} so far · needs ${TAG_MIN_SIDE}`;
+  if (c.nOtherAll < TAG_MIN_SIDE) return `on almost every day · needs ${TAG_MIN_SIDE} days without it`;
+  // Enough days on each side, but not of the same kind: work days are only compared with work days.
+  const valued = days.filter(d => d[f] != null);
+  const count = (on: boolean, off: boolean) => valued.filter(d => rowHas(r, d) === on && d.off === off).length;
+  const [onWork, onOff, otherWork, otherOff] = [count(true, false), count(true, true), count(false, false), count(false, true)];
+  if (onWork >= onOff && otherWork < TAG_MIN_SIDE) return `on nearly every work day · needs ${TAG_MIN_SIDE} work days without it to compare`;
+  if (onOff > onWork && otherOff < TAG_MIN_SIDE) return `only on days off · needs ${TAG_MIN_SIDE} days off without it`;
+  return 'too few matching days to compare yet';
+};
+
+export interface TagsCardGroups {
+  /** Rows that went with a difference in the feeling, the surest and biggest first. */
+  found: PatternRow[];
+  /** Rows about the same as usual. */
+  same: PatternRow[];
+  /** Rows with too few days to tell. */
+  thin: PatternRow[];
+}
+
+/** The card's three groups for one source and feeling. */
+export const tagsCardGroups = (rows: PatternRow[], source: 'tag' | 'moment', f: Feeling): TagsCardGroups => {
+  const all = rows.filter(r => r.source === source);
+  return {
+    found: patternFindings(all).filter(x => x.feeling === f).map(x => x.row),
+    same: all.filter(r => r.answer[f].kind === 'same'),
+    thin: all.filter(r => r.answer[f].kind === 'wait'),
+  };
 };

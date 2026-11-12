@@ -3,7 +3,7 @@ import type { CalendarActivity } from '@/app/types/activity';
 import type { EventOccurrence } from '@/app/types/event';
 import type { WorkDaySettings } from './dayReport';
 import { workDayOn, workHoursSpan } from './dayReport';
-import { bucketInWindow, bucketTotal, buildEventTimeSeries, type EventTimeBucket } from './eventTime';
+import { bucketInWindow, bucketTotal, buildEventTimeSeries, dailyEventMinutes, type EventTimeBucket } from './eventTime';
 import { UNTAGGED_KEY } from './tagReport';
 
 // Local days depend on the zone; pin one with a DST change.
@@ -199,5 +199,21 @@ describe('buildEventTimeSeries', () => {
     expect(nov?.inWindow).toEqual({ past: 60, upcoming: 0 });
     expect(nov?.outside).toEqual({ past: 0, upcoming: 60 });
     expect(series.buckets.get('2026-12')?.windowMinutes).toBe(23 * 480);
+  });
+});
+
+describe('dailyEventMinutes', () => {
+  it('counts each minute once per local day, split at midnight, with all-day, 24-hour and free events adding none', () => {
+    const days = dailyEventMinutes(activity([
+      event([9, 10], [9, 12]),
+      // Overlaps the first: only the extra hour counts.
+      event([9, 11], [9, 13]),
+      // 11 PM to 1 AM: an hour on each day.
+      event([10, 23], [11, 1]),
+      event([12, 9], [12, 10], { busy: false }),
+      event([12, 0], [13, 0], { all_day: true }),
+      event([13, 9], [14, 9]),
+    ]), MON, SUN);
+    expect(Object.fromEntries(days)).toEqual({ '2026-11-09': 180, '2026-11-10': 60, '2026-11-11': 60 });
   });
 });
