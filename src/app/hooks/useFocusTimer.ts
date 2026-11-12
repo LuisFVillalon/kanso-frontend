@@ -30,6 +30,8 @@ const MINUTE = 60_000;
  */
 export interface FocusTimerState {
   taskId: number | null;
+  /** True once a task (or No task) was picked; false while `taskId` is still the default. */
+  taskPicked: boolean;
   minutes: number;
   /** When the session began (ms). */
   startedAt: number | null;
@@ -68,8 +70,8 @@ export interface FocusSaved {
   previous: { date: string; start_time: string; end_time: string } | null;
 }
 
-const idleState = (minutes = DEFAULT_FOCUS_MINUTES, taskId: number | null = null): FocusTimerState => ({
-  taskId, minutes, startedAt: null, resumedAt: null, elapsedBeforePauseMs: 0, pausedAt: null, savedAt: null,
+const idleState = (minutes = DEFAULT_FOCUS_MINUTES, taskId: number | null = null, taskPicked = false): FocusTimerState => ({
+  taskId, taskPicked, minutes, startedAt: null, resumedAt: null, elapsedBeforePauseMs: 0, pausedAt: null, savedAt: null,
 });
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -83,6 +85,7 @@ export function readFocusState(): FocusTimerState {
     const minutes = isNum(raw.minutes) && raw.minutes > 0 ? raw.minutes : DEFAULT_FOCUS_MINUTES;
     return {
       taskId: numOrNull(raw.taskId),
+      taskPicked: raw.taskPicked === true,
       minutes,
       startedAt: numOrNull(raw.startedAt),
       resumedAt: numOrNull(raw.resumedAt),
@@ -291,14 +294,14 @@ function finish(at: number, toIdle: boolean) {
   const ran = Math.min(total, focusElapsedMs(s, at));
   // Ran out: it ended the moment it reached zero, not when this tab noticed.
   const end = s.resumedAt != null && ran >= total ? s.resumedAt + (total - s.elapsedBeforePauseMs) : s.pausedAt ?? at;
-  commit(toIdle ? idleState(s.minutes, s.taskId) : { ...s, resumedAt: null, pausedAt: null, elapsedBeforePauseMs: ran, savedAt: at });
+  commit(toIdle ? idleState(s.minutes, s.taskId, s.taskPicked) : { ...s, resumedAt: null, pausedAt: null, elapsedBeforePauseMs: ran, savedAt: at });
   void record({ taskId: s.taskId, start: s.startedAt, end, ms: ran });
 }
 
 const actions = {
   start(taskId: number | null) {
     const t = Date.now();
-    commit({ ...idleState(store.state.minutes, taskId), startedAt: t, resumedAt: t });
+    commit({ ...idleState(store.state.minutes, taskId, store.state.taskPicked), startedAt: t, resumedAt: t });
   },
   pause() {
     const s = store.state;
@@ -316,18 +319,18 @@ const actions = {
     const s = store.state;
     const phase = focusPhase(s);
     if (phase === 'idle') return;
-    if (phase === 'done') { commit(idleState(s.minutes, s.taskId)); return; }
+    if (phase === 'done') { commit(idleState(s.minutes, s.taskId, s.taskPicked)); return; }
     finish(Date.now(), true);
   },
   setMinutes(minutes: number) {
     const s = store.state;
     const phase = focusPhase(s);
     if (phase === 'running' || phase === 'paused') return;
-    commit(idleState(minutes, s.taskId));
+    commit(idleState(minutes, s.taskId, s.taskPicked));
   },
   setTaskId(taskId: number | null) {
     const s = store.state;
-    commit(focusPhase(s) === 'done' ? idleState(s.minutes, taskId) : { ...s, taskId });
+    commit(focusPhase(s) === 'done' ? idleState(s.minutes, taskId, true) : { ...s, taskId, taskPicked: true });
   },
   undo() {
     const last = store.saved;
@@ -352,6 +355,8 @@ const actions = {
 export interface FocusTimer {
   phase: FocusPhase;
   taskId: number | null;
+  /** Whether `taskId` was picked (No task included) rather than left to the default. */
+  taskPicked: boolean;
   minutes: number;
   remainingMs: number;
   totalMs: number;
@@ -365,7 +370,7 @@ export interface FocusTimer {
   stop: () => void;
   /** Changes the length; only while idle or done. */
   setMinutes: (minutes: number) => void;
-  /** Changes which task the session is for. */
+  /** Picks which task the session is for, shared by every view and tab. */
   setTaskId: (taskId: number | null) => void;
   undo: () => void;
   dismissSaved: () => void;
@@ -410,6 +415,7 @@ export function useFocusTimer(): FocusTimer {
   return {
     phase: focusPhase(state),
     taskId: state.taskId,
+    taskPicked: state.taskPicked,
     minutes: state.minutes,
     remainingMs: focusRemainingMs(state, running ? Math.max(now, state.resumedAt ?? 0) : now),
     totalMs: state.minutes * MINUTE,

@@ -142,6 +142,19 @@ describe('fitsToday', () => {
     expect(a.slot.end - a.slot.start).toBe(30);
   });
 
+  it("doesn't hold an earlier pick's time a second time for the next one", () => {
+    const list = [
+      task(1, 'First', { due_date: TODAY, due_time: '12:00', estimated_time: 1 }),
+      task(2, 'Second', { due_date: TODAY, due_time: '17:00', estimated_time: 1 }),
+    ];
+    const S = stateWith({
+      now: new Date(2026, 10, 11, 9, 0), tasks: list, events: [], workBlocks: [],
+      profile: { ...PROFILE, shutoffTime: '11:00' },
+    });
+    const picks = fitsToday(S, list, [], TODAY);
+    expect(picks.map(f => [f.task.id, f.slot.start, f.slot.end])).toEqual([[1, 540, 600], [2, 600, 660]]);
+  });
+
   it('leaves out tasks that no longer fit today', () => {
     const big = [task(1, 'Huge', { due_date: '2026-11-12', estimated_time: 6 })];
     expect(fits(big)).toEqual([]);

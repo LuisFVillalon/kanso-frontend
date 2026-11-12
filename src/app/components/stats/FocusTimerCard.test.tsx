@@ -143,6 +143,20 @@ describe('FocusTimerCard', () => {
 });
 
 describe('FocusOverlay', () => {
+  it('shares its task pick with the tile, so Start on the tile uses it', async () => {
+    const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13' })];
+    await render(<FocusOverlay tasks={tasks} />);
+    const select = container.querySelector('select')!;
+    await act(async () => {
+      select.value = '2';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await render(<FocusTimerCard tasks={tasks} {...tools} />);
+    expect(container.querySelector('select')!.value).toBe('2');
+    await act(async () => button('Start')!.click());
+    expect(JSON.parse(localStorage.getItem('tm-focus-timer')!).taskId).toBe(2);
+  });
+
   it("lists today's sessions and links to the calendar's week view", async () => {
     localStorage.setItem('tm-focus-log', JSON.stringify({
       date: TODAY,

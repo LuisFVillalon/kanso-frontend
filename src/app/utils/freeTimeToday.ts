@@ -162,7 +162,7 @@ export function fitsToday(S: SlotState, tasks: Task[], workBlocks: Pick<WorkBloc
     const slot = suggest(others, len, { ...range, until: today }).slots.find(s => s.date === today);
     if (!slot) continue;
     out.push({ task, slot, len });
-    state = withHeld(state, [slot]);
+    state = { ...withHeld(state, [slot]), tasks: others.tasks };
   }
   return out;
 }

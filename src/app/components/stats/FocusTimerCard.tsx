@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { ChevronDown, Pause, Play, Square, Timer } from 'lucide-react';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
 import { useCalendarViewMode } from '@/app/hooks/useCalendarViewMode';
@@ -101,16 +101,12 @@ const Ring: React.FC<{ pct: number; label: string; className: string; labelClass
   );
 };
 
-/** The task picked for the next session: undefined while it's still the default. */
-type TaskChoice = number | null | undefined;
-
 /** Which task the timer is on, and the menu to change it. */
 function useFocusTask(tasks: Task[], timer: FocusTimer, planner: ReturnType<typeof useSlotPlanner>) {
-  const [pick, setPick] = useState<TaskChoice>(undefined);
   const byId = new Map(tasks.map(t => [t.id, t]));
   const def = upNextTask(tasks, planner?.workBlocks ?? [], new Date());
   const active = timer.phase === 'running' || timer.phase === 'paused';
-  const id: number | null = active ? timer.taskId : pick === undefined ? def?.id ?? null : pick;
+  const id: number | null = active || timer.taskPicked ? timer.taskId : def?.id ?? null;
   const task = id != null ? byId.get(id) ?? null : null;
 
   const options: Task[] = [];
@@ -121,11 +117,7 @@ function useFocusTask(tasks: Task[], timer: FocusTimer, planner: ReturnType<type
   }
   if (task && !options.includes(task)) options.unshift(task);
 
-  const choose = (value: number | null) => {
-    if (active) timer.setTaskId(value);
-    else setPick(value);
-  };
-  return { task, id, options, choose };
+  return { task, id, options, choose: timer.setTaskId };
 }
 
 interface TaskPickerProps {

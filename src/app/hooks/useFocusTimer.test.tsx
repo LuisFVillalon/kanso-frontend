@@ -208,6 +208,21 @@ describe('useFocusTimer', () => {
     expect(timer.minutes).toBe(90);
   });
 
+  it('keeps an idle pick, No task included, in storage apart from the default', () => {
+    mount();
+    expect(timer.taskPicked).toBe(false);
+    act(() => timer.setTaskId(null));
+    reload();
+    expect(timer.phase).toBe('idle');
+    expect(timer.taskPicked).toBe(true);
+    expect(timer.taskId).toBeNull();
+    act(() => timer.setTaskId(4));
+    act(() => timer.start(4));
+    act(() => timer.stop());
+    expect(timer.taskPicked).toBe(true);
+    expect(timer.taskId).toBe(4);
+  });
+
   it('still runs on the page when storage is unavailable', async () => {
     const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
     const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
