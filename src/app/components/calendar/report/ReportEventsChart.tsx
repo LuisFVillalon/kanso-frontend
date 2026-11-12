@@ -26,7 +26,7 @@ const freeStyle: React.CSSProperties = { backgroundColor: FREE_COLOR, outline: `
 const DIMMED = 0.2;
 
 /** Upcoming time: stripes of the part's own color. */
-export const hatch = (color: string) =>
+const hatch = (color: string) =>
   `repeating-linear-gradient(135deg, color-mix(in srgb, ${color} 70%, transparent) 0 3px, color-mix(in srgb, ${color} 38%, transparent) 3px 6px)`;
 
 const fillOf = (color: string, upcoming: boolean): React.CSSProperties =>
@@ -46,7 +46,7 @@ const showLabel = (kind: ReportPeriod['kind'], index: number) =>
   kind !== 'month' || index === 0 || (index + 1) % 5 === 0;
 
 /** "Wed", "Wed 11" or "Apr": how the peak line names a bucket. */
-export const shortName = (kind: ReportPeriod['kind'], b: ReportBucket) => {
+const shortName = (kind: ReportPeriod['kind'], b: ReportBucket) => {
   const [y, m, d = 1] = b.dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   if (kind === 'year') return date.toLocaleDateString('en-US', { month: 'short' });

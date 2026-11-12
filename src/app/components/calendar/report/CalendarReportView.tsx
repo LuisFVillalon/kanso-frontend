@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import {
   CalendarClock,
   CalendarRange,
-  ChartColumn,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -21,6 +20,7 @@ import {
   Star,
   Tag,
   Target,
+  TrendingUp,
   Trophy,
 } from 'lucide-react';
 import SegmentedTabs, { segmentedTabId, type SegmentedTab } from '@/app/components/common/SegmentedTabs';
@@ -30,6 +30,7 @@ import { moodColor } from '@/app/components/mood/MoodFacePicker';
 import { useAppShell } from '@/app/context/AppShellContext';
 import { useCalendarReport } from '@/app/hooks/useCalendarReport';
 import { useEventReport } from '@/app/hooks/useEventReport';
+import { usePreviousActivity, type PreviousActivity } from '@/app/hooks/usePreviousActivity';
 import { useReportMood } from '@/app/hooks/useReportMood';
 import type { ActivityTask, CalendarActivity } from '@/app/types/activity';
 import { moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
@@ -49,11 +50,12 @@ import {
   type ReportPeriodKind,
 } from '@/app/utils/calendarReport';
 import { hasMoodCheckins, indexDayCheckins, summarizeMood, type MoodSummary } from '@/app/utils/moodReport';
+import type { PaceMetric } from '@/app/utils/pace';
 import { completedTasksOf, rowHasTags, topNotesOfRow, type TagRow } from '@/app/utils/tagReport';
-import ReportActivityChart from './ReportActivityChart';
 import EventsReport from './ReportEventsSection';
 import ReportHighlights from './ReportHighlights';
 import ReportMoodSection, { scopeName, type MoodView } from './ReportMoodSection';
+import ReportPace from './ReportPace';
 import { TagActivityChart, useTagSelection } from './ReportTagActivityChart';
 import { EmptyLine, plural, ProgressRow, TagFilterLabel } from './ReportParts';
 import ReportTagBreakdown, { ReportTagShareBar } from './ReportTagBreakdown';
@@ -549,6 +551,14 @@ interface ReportMood {
   settings: MoodCheckinSettings;
 }
 
+interface ReportPaceState {
+  /** The period before, which the Pace card compares with. */
+  previous: PreviousActivity;
+  /** The Pace card's picked chip, kept here so it holds when the period changes. */
+  metric: PaceMetric;
+  onMetric: (metric: PaceMetric) => void;
+}
+
 interface ReportBodyProps {
   period: ReportPeriod;
   report: CalendarReport;
@@ -560,11 +570,12 @@ interface ReportBodyProps {
   workDays: WorkDaySettings;
   view: ReportView;
   moodView: MoodView;
+  pace: ReportPaceState;
   onOpen: (view: ReportView, moodView?: MoodView) => void;
   onSelectPeriod: (period: ReportPeriod) => void;
 }
 
-const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, restDays, workDays, view, moodView, onOpen, onSelectPeriod }) => {
+const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood, restDays, workDays, view, moodView, pace, onOpen, onSelectPeriod }) => {
   const days = elapsedDays(period);
   const checkins = mood.checkins;
   const byDay = useMemo(() => indexDayCheckins(checkins ?? []), [checkins]);
@@ -642,8 +653,15 @@ const ReportBody: React.FC<ReportBodyProps> = ({ period, report, activity, mood,
           <StatTiles period={period} report={report} mood={periodMood} current={current} onOpen={onOpen} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
             <div className="lg:col-span-2">
-              <CardShell icon={<ChartColumn className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Activity ${byUnit}`}>
-                <ReportActivityChart period={period} buckets={report.buckets} activity={activity} workDays={workDays} onOpenEvents={() => onOpen('events')} />
+              <CardShell icon={<TrendingUp className="w-4 h-4" style={{ color: 'var(--tm-accent)' }} />} header={`Pace vs last ${period.kind}`}>
+                <ReportPace
+                  period={period}
+                  activity={activity}
+                  previous={pace.previous}
+                  workDays={workDays}
+                  metric={pace.metric}
+                  onMetric={pace.onMetric}
+                />
               </CardShell>
             </div>
             <ReportHighlights
@@ -682,7 +700,7 @@ const ReportSkeleton: React.FC = () => (
 /**
  * Weekly / monthly / yearly report on the /reports page, in three tabs whose
  * views each fit one screen: Productivity (Overview — the stat tiles, the
- * activity chart, highlights and how the time split by tag — then Tasks, Notes,
+ * pace against the period before, highlights and how the time split by tag — then Tasks, Notes,
  * Habits and Events), Mood (Over time or Patterns) and Time. The open view lives in
  * the URL (`?view=tasks`, `?view=mood&mood=patterns`), so Back, reloads and
  * links keep it, and switching the period keeps the view.
@@ -696,6 +714,8 @@ const CalendarReportView: React.FC = () => {
   const view = parseView(searchParams.get('view'));
   const moodView = parseMoodView(searchParams.get('mood'));
   const group = groupOf(view);
+  const previous = usePreviousActivity(period, view === 'overview');
+  const [paceMetric, setPaceMetric] = useState<PaceMetric>('done');
 
   // A tab reopens on the view it was last left on.
   const [lastViews, setLastViews] = useState<{ productivity: ReportView; mood: MoodView }>(() => ({
@@ -857,6 +877,7 @@ const CalendarReportView: React.FC = () => {
             workDays={profile}
             view={view}
             moodView={moodView}
+            pace={{ previous, metric: paceMetric, onMetric: setPaceMetric }}
             onOpen={navigate}
             onSelectPeriod={setPeriod}
           />

@@ -6,6 +6,20 @@ import { rowColor } from './ReportTagBreakdown';
 
 export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
+/** One of a card's metric switch buttons, in a `role="group"` row. */
+export const MetricButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={active}
+    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+      active ? 'bg-surface-raised text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
+    }`}
+  >
+    {children}
+  </button>
+);
+
 export const EmptyLine: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="text-xs sm:text-sm text-text-muted italic py-2">{children}</p>
 );

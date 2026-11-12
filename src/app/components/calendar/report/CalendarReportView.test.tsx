@@ -846,7 +846,7 @@ describe('CalendarReportView tabs', () => {
 
   const tabs = (list: string) => [...document.querySelectorAll(`[role="tablist"][aria-label="${list}"] [role="tab"]`)].map(t => t.textContent);
 
-  it('opens on Productivity › Overview: tiles, activity, highlights and the time-by-tag bar', async () => {
+  it('opens on Productivity › Overview: tiles, pace, highlights and the time-by-tag bar', async () => {
     withHabits();
     await render();
     expect(tabs('Report sections')).toEqual(['Productivity', 'Mood', 'Time']);
@@ -856,7 +856,8 @@ describe('CalendarReportView tabs', () => {
     const panel = document.getElementById('report-views-tabpanel')!;
     expect(panel.getAttribute('aria-labelledby')).toBe(`${tab('Productivity').id} ${tab('Overview').id}`);
     expect(container.querySelector('.xl\\:grid-cols-7')).not.toBeNull();
-    expect(text()).toContain('Activity by day');
+    expect(text()).toContain('Pace vs last week');
+    expect(text()).not.toContain('Activity by day');
     expect(text()).toContain('Highlights');
     expect(text()).toContain('Current streak');
     expect(text()).not.toContain('Longest streak');
@@ -866,6 +867,40 @@ describe('CalendarReportView tabs', () => {
     expect(buttonLabelled(/^Where your time went: 1h estimated and tracked this week/)).toBeDefined();
     expect(text()).not.toContain('Mood over time');
     expect(text()).not.toContain('Busiest days');
+  });
+
+  it('loads last week for the Pace card, and only shows its own error when that fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    withHabits();
+    const thisWeek = api.fetchCalendarActivity.getMockImplementation()!;
+    api.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => {
+      if (start === '2026-10-12') throw new Error('offline');
+      return thisWeek(start, end);
+    });
+    await render();
+    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-10-12', '2026-10-18', { includeArchived: true });
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(text()).toContain('Pace vs last week');
+    expect(text()).toContain('2 done this week');
+    expect(text()).toContain('Couldn’t load last week.');
+    expect(text()).toContain('Highlights');
+  });
+
+  it('keeps the picked Pace chip when the period changes, and loads last period only on Overview', async () => {
+    withHabits();
+    await render();
+    const chip = (name: string) => [...document.querySelectorAll('[aria-label="Compare"] button')].find(b => b.textContent?.startsWith(name))!;
+    await click(chip('Habits'));
+    await click(buttonLabelled(/^Month$/));
+    expect(text()).toContain('Pace vs last month');
+    expect(chip('Habits').getAttribute('aria-pressed')).toBe('true');
+    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2026-09-01', '2026-09-30', { includeArchived: true });
+
+    await openTab('Tasks');
+    await click(buttonLabelled(/^Year$/));
+    expect(api.fetchCalendarActivity).not.toHaveBeenCalledWith('2025-01-01', '2025-12-31', { includeArchived: true });
+    await openTab('Overview');
+    expect(api.fetchCalendarActivity).toHaveBeenCalledWith('2025-01-01', '2025-12-31', { includeArchived: true });
   });
 
   it('opens a tile’s tab and puts it in the URL', async () => {
@@ -915,11 +950,11 @@ describe('CalendarReportView tabs', () => {
     expect(tab('Tasks').getAttribute('aria-selected')).toBe('true');
     expect(text()).toContain('Planned vs done');
     expect(text()).toContain('Busiest days');
-    // Note time is the Notes tab's chart, so Tasks has no metric switch.
-    expect(container.querySelector('[aria-label="Chart metric"]')).toBeNull();
+    // Pace is Overview's alone.
+    expect(container.querySelector('[aria-label="Compare"]')).toBeNull();
 
     await openTab('Overview');
-    expect(container.querySelector('[aria-label="Chart metric"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="Compare"]')).not.toBeNull();
     await click(buttonLabelled(/^Where your time went: /));
     expect(tab('Time').getAttribute('aria-selected')).toBe('true');
     expect(document.querySelector('[aria-label="Measure"]')).not.toBeNull();
@@ -999,7 +1034,7 @@ describe('CalendarReportView tabs', () => {
       api.fetchEventReport.mockRejectedValue(new Error('offline'));
       await render();
       expect(text()).toContain('Events—Couldn’t load events');
-      expect(text()).toContain('Activity by day');
+      expect(text()).toContain('Pace vs last week');
     });
 
     it('opens the Events view a link names', async () => {
@@ -1008,17 +1043,6 @@ describe('CalendarReportView tabs', () => {
       await render();
       expect(tab('Events').getAttribute('aria-selected')).toBe('true');
       expect(text()).toContain('Top events by time');
-    });
-
-    it('opens Events from the Activity card’s strip', async () => {
-      withEvent();
-      await render();
-      expect(container.querySelectorAll('[data-testid="events-cell"]')).toHaveLength(7);
-      await click(buttonLabelled(/^Open Events ›$/));
-      expect(window.location.search).toBe('?view=events');
-      await openTab('Overview');
-      await click(buttonLabelled(/^Open Events$/));
-      expect(window.location.search).toBe('?view=events');
     });
 
     it('shows a period that holds only events instead of calling it empty', async () => {
@@ -1449,10 +1473,10 @@ describe('CalendarReportView tag charts', () => {
     });
   });
 
-  it('keeps the Overview chart of tasks and habits', async () => {
+  it('keeps the Overview’s Pace card, with no tag chips', async () => {
     await render();
-    expect(text()).toContain('Activity by day');
-    expect(container.querySelector('[aria-label="Chart metric"]')).not.toBeNull();
+    expect(text()).toContain('Pace vs last week');
+    expect(container.querySelector('[aria-label="Compare"]')).not.toBeNull();
     expect(document.querySelector('[aria-label="Tags"]')).toBeNull();
   });
 });

@@ -25,7 +25,7 @@ import {
   type PatternsAnalysis,
 } from '@/app/utils/patterns';
 import { CHANCE_LEVEL, FEELING_NAME, FEELINGS, MAX_CHART_TAGS, MIN_GAP, TAG_MIN_SIDE, type Feeling } from '@/app/utils/tagFeelings';
-import { MetricButton } from './ReportActivityChart';
+import { MetricButton } from './ReportParts';
 import { AnswerBubble, AnswerIcon, Dumbbell, lineColor, PatternLine } from './ReportPatternParts';
 
 /** The heading over Mood › Patterns, saying what the page is for. */
