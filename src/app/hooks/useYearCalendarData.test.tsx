@@ -17,10 +17,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/app/lib/backend-api', () => ({ fetchCalendarActivity: mocks.fetchCalendarActivity }));
 vi.mock('@/app/context/TasksContext', () => ({ useTasksContext: () => ({ tasks: mocks.tasks, isLoading: false }) }));
 vi.mock('@/app/context/HabitsContext', () => ({ useHabitsContext: () => ({ habits: mocks.habits, habitsLoading: false }) }));
-vi.mock('@/app/context/NotesContext', () => ({ useNotesContext: () => ({ notes: [], isLoading: false }) }));
+vi.mock('@/app/context/NotesContext', () => ({ useNotesContext: () => ({ notes: [], isLoading: false, archiveSyncToken: 0 }) }));
 
 import { useYearCalendarData } from './useYearCalendarData';
 import { notifyEventsChanged } from './useEventsVersion';
+import { notifyActivityChanged } from './useActivityVersion';
+import { dailyActivity } from '@/app/utils/calendarReport';
 
 const activity = (start: string, end: string, completions: CalendarActivity['habit_completions']): CalendarActivity => ({
   start_date: start,
@@ -65,7 +67,7 @@ afterEach(() => {
 describe('useYearCalendarData', () => {
   it('loads the current year by default, keeping today in step with the habit', async () => {
     await render();
-    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-01-01', '2026-12-31');
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-01-01', '2026-12-31', { includeArchived: true });
     expect(result.loading).toBe(false);
     expect(result.dayData.get('2026-03-04')!.habitsCompleted.map(h => h.id)).toEqual([5]);
     expect(result.dayData.get('2026-10-21')!.habitsCompleted.map(h => h.id)).toEqual([5]);
@@ -79,7 +81,7 @@ describe('useYearCalendarData', () => {
     mocks.fetchCalendarActivity.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
 
     await render(2024);
-    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2024-01-01', '2024-12-31');
+    expect(mocks.fetchCalendarActivity).toHaveBeenLastCalledWith('2024-01-01', '2024-12-31', { includeArchived: true });
     expect(result.loading).toBe(false);
     expect(result.yearLoading).toBe(true);
     expect(result.dayData.get('2024-03-04')!.tasksDue.map(t => t.id)).toEqual([1]);
@@ -96,7 +98,7 @@ describe('useYearCalendarData', () => {
 
   it('loads a future year too', async () => {
     await render(2028);
-    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2028-01-01', '2028-12-31');
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2028-01-01', '2028-12-31', { includeArchived: true });
     expect(result.yearLoading).toBe(false);
     expect(result.dayData.has('2026-10-21')).toBe(false);
   });
@@ -115,7 +117,7 @@ describe('useYearCalendarData', () => {
       ],
     }));
     await render();
-    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-01-01', '2026-12-31');
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledWith('2026-01-01', '2026-12-31', { includeArchived: true });
     expect(result.dayData.get('2026-10-23')!.events.map(e => e.title)).toEqual(['Lecture', 'Night shift']);
     expect(result.dayData.get('2026-10-24')!.events.map(e => e.title)).toEqual(['Night shift']);
   });
@@ -125,5 +127,50 @@ describe('useYearCalendarData', () => {
     expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(1);
     await act(async () => notifyEventsChanged());
     expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(2);
+  });
+
+  // Regression: a note was listed only on the day of its last edit (its
+  // updated_date), with its time from a separate per-day totals call, so an
+  // earlier day lost a note as soon as it was edited again, while Reports
+  // still counted that day's session.
+  it('lists each note on every day it has editing time, with the same time Reports gives that day', async () => {
+    const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).toISOString();
+    const sessions: CalendarActivity['note_sessions'] = [
+      { id: 1, note_id: 1, note_title: 'Lab notes', started_at: at(19, 10), ended_at: at(19, 10, 40), duration_seconds: 2400 },
+      { id: 2, note_id: 1, note_title: 'Lab notes', started_at: at(21, 9), ended_at: at(21, 9, 30), duration_seconds: 1800 },
+      { id: 3, note_id: 2, note_title: 'Essay', started_at: at(19, 23, 30), ended_at: at(20, 0, 30), duration_seconds: 3600 },
+      { id: 4, note_id: 3, note_title: 'Archived reading', started_at: at(19, 14), ended_at: at(19, 14, 20), duration_seconds: 1200 },
+    ];
+    const year = (start: string, end: string): CalendarActivity => ({
+      ...activity(start, end, []),
+      note_sessions: sessions,
+      notes: [{ id: 1, title: 'Lab notes', tags: [{ id: 7, name: 'CS', color: '#00f' }] }, { id: 2, title: 'Essay', tags: [] }, { id: 3, title: 'Archived reading', tags: [] }],
+    });
+    mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => year(start, end));
+    await render();
+
+    const notesOn = (d: string) => result.dayData.get(d)?.notesEdited.map(n => [n.title, n.seconds]);
+    expect(notesOn('2026-10-19')).toEqual([['Lab notes', 2400], ['Essay', 1800], ['Archived reading', 1200]]);
+    expect(notesOn('2026-10-20')).toEqual([['Essay', 1800]]);
+    expect(notesOn('2026-10-21')).toEqual([['Lab notes', 1800]]);
+    expect(result.dayData.get('2026-10-19')!.notesEdited[0].tags.map(t => t.name)).toEqual(['CS']);
+
+    const reports = dailyActivity(year('2026-10-19', '2026-10-25'), new Date(2026, 9, 19), new Date(2026, 9, 25));
+    for (const d of ['2026-10-19', '2026-10-20', '2026-10-21']) {
+      const seconds = result.dayData.get(d)!.notesEdited.reduce((sum, n) => sum + n.seconds, 0);
+      expect(seconds).toBe(reports.get(d)!.noteSeconds);
+    }
+  });
+
+  it('reloads the year when a note session closes or a past day\'s check-in changes', async () => {
+    await render();
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(1);
+    mocks.fetchCalendarActivity.mockImplementation(async (start: string, end: string) => ({
+      ...activity(start, end, []),
+      note_sessions: [{ id: 9, note_id: 1, note_title: 'Lab notes', started_at: new Date(2026, 9, 21, 11).toISOString(), ended_at: new Date(2026, 9, 21, 11, 15).toISOString(), duration_seconds: 900 }],
+    }));
+    await act(async () => notifyActivityChanged());
+    expect(mocks.fetchCalendarActivity).toHaveBeenCalledTimes(2);
+    expect(result.dayData.get('2026-10-21')!.notesEdited.map(n => [n.title, n.seconds])).toEqual([['Lab notes', 900]]);
   });
 });

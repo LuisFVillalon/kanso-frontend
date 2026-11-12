@@ -173,6 +173,35 @@ export const addSecondsByLocalDay = (startMs: number, endMs: number, into: Map<s
   }
 };
 
+/**
+ * Seconds in each note's editing sessions on each local day from `start` to
+ * `end` (inclusive), keyed by day and then note id. Sessions are clipped to
+ * the range and split at midnight, so a day holds only the notes with time on
+ * it. Reports' per-day note time and the calendar's day report both use it.
+ */
+export const noteSecondsByDay = (activity: CalendarActivity, start: Date, end: Date): Map<string, Map<number, number>> => {
+  const rangeStartMs = startOfDay(start).getTime();
+  const rangeEndMs = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).getTime();
+  const byDay = new Map<string, Map<number, number>>();
+  const pieces = new Map<string, number>();
+  for (const session of activity.note_sessions) {
+    const startMs = Math.max(new Date(session.started_at).getTime(), rangeStartMs);
+    const endMs = Math.min(new Date(session.ended_at).getTime(), rangeEndMs);
+    if (endMs <= startMs) continue;
+    pieces.clear();
+    addSecondsByLocalDay(startMs, endMs, pieces);
+    for (const [dateStr, seconds] of pieces) {
+      let notes = byDay.get(dateStr);
+      if (!notes) {
+        notes = new Map();
+        byDay.set(dateStr, notes);
+      }
+      notes.set(session.note_id, (notes.get(session.note_id) ?? 0) + seconds);
+    }
+  }
+  return byDay;
+};
+
 // Busiest = most things finished (tasks + habit check-ins); time in notes
 // breaks ties, and alone still puts a day on the list.
 const busierFirst = (a: DayActivity, b: DayActivity): number =>
@@ -256,15 +285,9 @@ export const dailyActivity = (activity: CalendarActivity, start: Date, end: Date
     if (inRange(dateStr)) dayOf(dateStr).tasksCompleted++;
   }
 
-  const rangeStartMs = startOfDay(start).getTime();
-  const rangeEndMs = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).getTime();
-  const secondsByDay = new Map<string, number>();
-  for (const session of activity.note_sessions) {
-    const startMs = Math.max(new Date(session.started_at).getTime(), rangeStartMs);
-    const endMs = Math.min(new Date(session.ended_at).getTime(), rangeEndMs);
-    if (endMs > startMs) addSecondsByLocalDay(startMs, endMs, secondsByDay);
+  for (const [dateStr, notes] of noteSecondsByDay(activity, start, end)) {
+    for (const seconds of notes.values()) dayOf(dateStr).noteSeconds += seconds;
   }
-  for (const [dateStr, seconds] of secondsByDay) dayOf(dateStr).noteSeconds += seconds;
 
   for (const completion of activity.habit_completions) {
     if (inRange(completion.date)) dayOf(completion.date).habitsCompleted++;

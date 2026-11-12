@@ -4,11 +4,10 @@ import React, { useState } from 'react';
 import {
   Flame, SquareCheck, FileText, Clock, CheckCircle2, Circle, CalendarClock, CalendarDays, Repeat, Archive, ChevronRight, Smile,
 } from 'lucide-react';
-import type { DayData } from '@/app/hooks/useYearCalendarData';
+import type { DayData, DayNote } from '@/app/hooks/useYearCalendarData';
 import type { ModalLayer } from '@/app/components/common/Modal';
 import type { Task } from '@/app/types/task';
 import type { Habit } from '@/app/types/habit';
-import type { Note } from '@/app/types/notes';
 import type { EventOccurrence } from '@/app/types/event';
 import { ENERGY_LABELS, STRESS_LABELS, moodLabel, type MoodCheckin } from '@/app/types/mood';
 import { parseLocalDate, toLocalDateStr, toLocalTimeStr, formatDurationShort } from '@/app/utils/dateUtils';
@@ -37,7 +36,6 @@ import {
   type DayWhen,
   type ReportSectionKey,
 } from '@/app/utils/dayReport';
-import { useNoteTimeTotalsForRange } from '@/app/hooks/useNoteTimeTotals';
 import { useDayMoodCheckin } from '@/app/hooks/useDayMoodCheckin';
 import { useWorkDay } from '@/app/hooks/useWorkDay';
 import TagChipList from '@/app/components/common/TagChipList';
@@ -76,20 +74,19 @@ interface TimeCategory {
 
 // Hours spent, by tag: finished tasks and habits contribute their
 // estimated_time (the closest proxy available for time actually spent),
-// notes their tracked writing time for the day (noteTimeTotals, in seconds),
-// and events that took place their length.
+// notes their tracked writing time for the day, and events that took place
+// their length.
 const timeByTag = (
   tasksCompleted: Task[],
   habitsCompleted: Habit[],
-  notesEdited: Note[],
-  noteTimeTotals: Record<number, number>,
+  notesEdited: DayNote[],
   events: EventOccurrence[],
   dateStr: string,
 ): { buckets: TimeCategory[]; total: number } => {
   const items = [
     ...tasksCompleted.map(t => ({ tags: t.tags, value: t.estimated_time ?? 0 })),
     ...habitsCompleted.map(h => ({ tags: h.tags, value: h.estimated_time ?? 0 })),
-    ...notesEdited.map(n => ({ tags: n.tags, value: (noteTimeTotals[n.id] ?? 0) / 3600 })),
+    ...notesEdited.map(n => ({ tags: n.tags, value: n.seconds / 3600 })),
     ...events.filter(happened).map(e => ({ tags: e.tags, value: occurrenceMinutesOn(e, dateStr) / 60 })),
   ];
   return {
@@ -307,7 +304,6 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
   const dateStr = toLocalDateStr(date);
   const when = dayWhen(dateStr, toLocalDateStr(new Date()));
   const workDay = useWorkDay(date);
-  const noteTimeTotals = useNoteTimeTotalsForRange(dateStr, dateStr);
   const moodShown = showMood && when !== 'future';
   const { checkin } = useDayMoodCheckin(moodShown ? dateStr : null);
   const [open, setOpen] = useState(() => defaultOpenSections(isPhoneNow()));
@@ -320,8 +316,8 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
   const alsoDone = tasksCompleted.filter(t => !dueIds.has(t.id));
   const doneIds = new Set(habitsCompleted.map(h => h.id));
   const habits = [...allHabits, ...habitsCompleted.filter(h => !allHabits.some(a => a.id === h.id))];
-  const noteSeconds = notesEdited.reduce((sum, n) => sum + (noteTimeTotals[n.id] ?? 0), 0);
-  const { buckets: time, total: totalHours } = timeByTag(tasksCompleted, habitsCompleted, notesEdited, noteTimeTotals, events, dateStr);
+  const noteSeconds = notesEdited.reduce((sum, n) => sum + n.seconds, 0);
+  const { buckets: time, total: totalHours } = timeByTag(tasksCompleted, habitsCompleted, notesEdited, events, dateStr);
   const bucketHours = time.reduce((sum, c) => sum + c.value, 0);
   const clashes = eventClashes(tasksDue, events, dateStr);
 
@@ -506,8 +502,8 @@ const DaySummary: React.FC<DaySummaryProps> = ({ date, data, totalHabits, allHab
           <FileText className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--tm-week-note)' }} aria-hidden />
           <span className="text-sm font-medium text-text-primary truncate min-w-0">{n.title || 'Untitled Note'}</span>
           <TagChipList tags={n.tags} size="xs" />
-          {(noteTimeTotals[n.id] ?? 0) > 0 && (
-            <span className="ml-auto text-[11px] text-text-muted">{formatDurationShort(noteTimeTotals[n.id])} writing</span>
+          {n.seconds > 0 && (
+            <span className="ml-auto text-[11px] text-text-muted">{formatDurationShort(n.seconds)} writing</span>
           )}
         </div>
       ))}

@@ -15,8 +15,14 @@ vi.mock('@/app/lib/backend-api', () => ({
 }));
 
 import { useNoteSession } from './useNoteSession';
+import { useActivityVersion } from './useActivityVersion';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const VersionProbe: React.FC<{ onVersion: (v: number) => void }> = ({ onVersion }) => {
+  onVersion(useActivityVersion());
+  return null;
+};
 
 type Api = ReturnType<typeof useNoteSession>;
 
@@ -59,6 +65,23 @@ afterEach(() => {
 });
 
 describe('useNoteSession', () => {
+  it('tells the calendars and Reports to reload once the session closes', async () => {
+    let version = -1;
+    const versionRoot = createRoot(document.createElement('div'));
+    act(() => versionRoot.render(<VersionProbe onVersion={v => { version = v; }} />));
+    const before = version;
+
+    render(note(7));
+    await settle();
+    expect(version).toBe(before);
+    act(() => root.unmount());
+    await settle();
+    expect(version).toBe(before + 1);
+
+    root = createRoot(container);
+    act(() => versionRoot.unmount());
+  });
+
   it('counts only the time the tab is visible on this visit', async () => {
     render(note(7));
     await settle();

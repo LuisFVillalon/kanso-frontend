@@ -5,11 +5,23 @@ import { useNotesContext } from '@/app/context/NotesContext';
 import { fetchCalendarActivity } from '@/app/lib/backend-api';
 import { Habit } from '@/app/types/habit';
 import { Task } from '@/app/types/task';
-import { Note } from '@/app/types/notes';
+import type { Tag } from '@/app/types/task';
 import type { EventOccurrence } from '@/app/types/event';
+import type { CalendarActivity } from '@/app/types/activity';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
+import { noteSecondsByDay } from '@/app/utils/calendarReport';
 import { occurrenceDays } from '@/app/utils/eventOccurrences';
 import { useEventsVersion } from './useEventsVersion';
+import { useActivityVersion } from './useActivityVersion';
+
+/** A note with editing time on a day, and the title and tags it carries now. */
+export interface DayNote {
+  id: number;
+  title: string;
+  tags: Tag[];
+  /** Seconds in the note's editing sessions on that day. */
+  seconds: number;
+}
 
 export interface DayData {
   dateStr: string; // YYYY-MM-DD
@@ -17,7 +29,8 @@ export interface DayData {
   tasksDue: Task[];
   tasksCompleted: Task[];
   estimatedHours: number;
-  notesEdited: Note[];
+  /** Notes with editing time on the day, most time first: the same sessions and rule as Reports (noteSecondsByDay). */
+  notesEdited: DayNote[];
   /** Events on the day in start order: past ones (archived ones flagged) and upcoming ones that aren't archived. */
   events: EventOccurrence[];
 }
@@ -27,27 +40,45 @@ interface YearActivityResult {
   year: number;
   logged: Map<number, Set<string>>;
   events: EventOccurrence[];
+  notes: Map<string, DayNote[]>;
 }
 
 /**
  * Aggregates tasks/habits/notes/events into a per-day map for Jan 1 – Dec 31
- * of `year` (the current year by default). Habit completions and event
- * occurrences come from GET /get-calendar-activity for that whole year — one
- * ranged request that works for any past or future year, unlike
- * fetchHabitHistory's "past N days from today" window, which the backend caps
- * at 365 days. It reloads when events change (see useEventsVersion).
+ * of `year` (the current year by default). Habit completions, note editing
+ * sessions and event occurrences come from GET /get-calendar-activity for
+ * that whole year — one ranged request that works for any past or future
+ * year, unlike fetchHabitHistory's "past N days from today" window, which the
+ * backend caps at 365 days. Archived notes count, as in Reports, so a day
+ * shows the same notes and note time as Reports does. It reloads when events
+ * change (see useEventsVersion), when a note session closes or a past day's
+ * habit check-in changes (see useActivityVersion), and when a note is
+ * archived, deleted or restored.
  *
  * `loading` only covers the first load; while a different year's habit
  * completions and events load, `yearLoading` is set and the tasks/notes for
  * the new year already show.
  */
+/** Each day's notes with editing time in `year`, from that year's activity. */
+const notesByDay = (activity: CalendarActivity, year: number): Map<string, DayNote[]> => {
+  const titles = new Map(activity.note_sessions.map(s => [s.note_id, s.note_title]));
+  const tags = new Map((activity.notes ?? []).map(n => [n.id, n.tags]));
+  const days = new Map<string, DayNote[]>();
+  for (const [dateStr, seconds] of noteSecondsByDay(activity, new Date(year, 0, 1), new Date(year, 11, 31))) {
+    const notes = [...seconds].map(([id, s]) => ({ id, title: titles.get(id) ?? '', tags: tags.get(id) ?? [], seconds: s }));
+    days.set(dateStr, notes.sort((a, b) => b.seconds - a.seconds || a.title.localeCompare(b.title)));
+  }
+  return days;
+};
+
 export function useYearCalendarData(year: number = new Date().getFullYear()) {
   const { tasks, isLoading: tasksLoading } = useTasksContext();
   const { habits, habitsLoading } = useHabitsContext();
-  const { notes, isLoading: notesLoading } = useNotesContext();
+  const { isLoading: notesLoading, archiveSyncToken } = useNotesContext();
 
   const [yearActivity, setYearActivity] = useState<YearActivityResult | null>(null);
   const eventsVersion = useEventsVersion();
+  const activityVersion = useActivityVersion();
 
   useEffect(() => {
     if (habitsLoading) return;
@@ -56,7 +87,7 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
     const todayStr = toLocalDateStr(new Date());
 
     // Fetched even without habits: the year's events come from the same call.
-    fetchCalendarActivity(`${year}-01-01`, `${year}-12-31`)
+    fetchCalendarActivity(`${year}-01-01`, `${year}-12-31`, { includeArchived: true })
       .then(activity => {
         if (cancelled) return;
         const map = new Map<number, Set<string>>(habits.map(h => [h.id, new Set<string>()]));
@@ -70,11 +101,11 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
             else set.delete(todayStr);
           }
         }
-        setYearActivity({ year, logged: map, events: activity.events ?? [] });
+        setYearActivity({ year, logged: map, events: activity.events ?? [], notes: notesByDay(activity, year) });
       })
       .catch(err => {
         console.error('[useYearCalendarData] Failed to fetch the year\'s activity:', err);
-        if (!cancelled) setYearActivity({ year, logged: new Map(), events: [] });
+        if (!cancelled) setYearActivity({ year, logged: new Map(), events: [], notes: new Map() });
       });
 
     return () => { cancelled = true; };
@@ -83,11 +114,12 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
     // logged_today toggle, which is unnecessary since that override is
     // applied locally above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [habitsLoading, habits.length, year, eventsVersion]);
+  }, [habitsLoading, habits.length, year, eventsVersion, activityVersion, archiveSyncToken]);
 
   const ready = yearActivity?.year === year ? yearActivity : null;
   const habitLogged = ready?.logged ?? null;
   const yearEvents = ready?.events ?? null;
+  const yearNotes = ready?.notes ?? null;
 
   const dayData = useMemo(() => {
     const map = new Map<string, DayData>();
@@ -118,11 +150,7 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
       ensure(dateStr).tasksCompleted.push(task);
     }
 
-    for (const note of notes) {
-      const dateStr = toLocalDateStr(new Date(note.updated_date));
-      if (!dateStr.startsWith(yearPrefix)) continue;
-      ensure(dateStr).notesEdited.push(note);
-    }
+    for (const [dateStr, dayNotes] of yearNotes ?? []) ensure(dateStr).notesEdited = dayNotes;
 
     for (const habit of habits) {
       const logged = habitLogged?.get(habit.id);
@@ -142,7 +170,7 @@ export function useYearCalendarData(year: number = new Date().getFullYear()) {
     }
 
     return map;
-  }, [tasks, notes, habits, habitLogged, yearEvents, year]);
+  }, [tasks, habits, habitLogged, yearEvents, yearNotes, year]);
 
   return {
     year,

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Note } from '@/app/types/notes';
 import { supabase } from '@/app/lib/supabase';
 import { startNoteSession, endNoteSession, endNoteSessionKeepalive, fetchNoteTimeSpent } from '@/app/lib/backend-api';
+import { notifyActivityChanged } from '@/app/hooks/useActivityVersion';
 
 /**
  * Tracks how long a note is open in the editor by opening a session on the
@@ -73,7 +74,8 @@ export function useNoteSession(note: Note | null) {
       currentSessionId = null;
       if (id == null) return;
       if (keepalive) endNoteSessionKeepalive(id, accessToken);
-      else endNoteSession(id).catch(() => {});
+      // The closed session now counts toward the day's note time on the calendars and Reports.
+      else endNoteSession(id).then(notifyActivityChanged).catch(() => {});
     };
 
     beginSession();
