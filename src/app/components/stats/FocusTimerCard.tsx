@@ -106,7 +106,8 @@ function useFocusTask(tasks: Task[], timer: FocusTimer, planner: ReturnType<type
   const byId = new Map(tasks.map(t => [t.id, t]));
   const def = upNextTask(tasks, planner?.workBlocks ?? [], new Date());
   const active = timer.phase === 'running' || timer.phase === 'paused';
-  const id: number | null = active || timer.taskPicked ? timer.taskId : def?.id ?? null;
+  const picked = timer.taskPicked && (timer.taskId == null || (byId.has(timer.taskId) && isOpen(byId.get(timer.taskId)!)));
+  const id: number | null = active || picked ? timer.taskId : def?.id ?? null;
   const task = id != null ? byId.get(id) ?? null : null;
 
   const options: Task[] = [];

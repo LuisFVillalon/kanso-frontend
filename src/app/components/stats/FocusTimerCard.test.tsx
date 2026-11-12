@@ -157,6 +157,24 @@ describe('FocusOverlay', () => {
     expect(JSON.parse(localStorage.getItem('tm-focus-timer')!).taskId).toBe(2);
   });
 
+  it.each([
+    ['completed', [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13', completed: true })]],
+    ['deleted', [task(1, 'Quiz prep', { due_date: '2026-11-12' })]],
+  ])('falls back to the default once the picked task is %s', async (_, later) => {
+    const tasks = [task(1, 'Quiz prep', { due_date: '2026-11-12' }), task(2, 'Lab report', { due_date: '2026-11-13' })];
+    await render(<FocusOverlay tasks={tasks} />);
+    const select = container.querySelector('select')!;
+    await act(async () => {
+      select.value = '2';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await render(<FocusTimerCard tasks={later} {...tools} />);
+    expect(text()).toContain('Quiz prep');
+    expect(container.querySelector('select')!.value).toBe('1');
+    await act(async () => button('Start')!.click());
+    expect(JSON.parse(localStorage.getItem('tm-focus-timer')!).taskId).toBe(1);
+  });
+
   it("lists today's sessions and links to the calendar's week view", async () => {
     localStorage.setItem('tm-focus-log', JSON.stringify({
       date: TODAY,
