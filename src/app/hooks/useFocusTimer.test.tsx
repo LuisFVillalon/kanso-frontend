@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 
 import {
-  FOCUS_LOG_KEY, FOCUS_TIMER_KEY, readFocusState, resetFocusTimerForTests, useFocusTimer, type FocusTimer,
+  CLAIM_SETTLE_MS, FOCUS_LOG_KEY, FOCUS_TIMER_KEY, readFocusState, resetFocusTimerForTests, useFocusTimer, type FocusTimer,
 } from './useFocusTimer';
 
 const START = new Date(2026, 10, 11, 14, 0, 0); // Wed Nov 11 2026, 2:00 PM
@@ -51,9 +51,12 @@ const reload = () => {
 
 /** Lets the clock run (ticks included) and the saves that follow settle. */
 const advance = async (ms: number) => {
-  await act(async () => { vi.advanceTimersByTime(ms); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
   await act(async () => { await Promise.resolve(); });
 };
+
+/** Lets a finished session's cross-tab claim settle, so its save goes through. */
+const settle = () => advance(CLAIM_SETTLE_MS);
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -129,6 +132,7 @@ describe('useFocusTimer', () => {
     await advance(25 * MIN);
     expect(timer.phase).toBe('done');
     expect(timer.remainingMs).toBe(0);
+    await settle();
     expect(api.createWorkBlock).toHaveBeenCalledTimes(1);
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({
       task_id: 7, date: '2026-11-11', start_time: '14:00', end_time: '14:25',
@@ -142,6 +146,7 @@ describe('useFocusTimer', () => {
     mount();
     act(() => timer.start(7));
     await advance(25 * MIN);
+    await settle();
     expect(api.createWorkBlock).not.toHaveBeenCalled();
     expect(api.updateWorkBlock).toHaveBeenCalledTimes(1);
     expect(api.updateWorkBlock).toHaveBeenCalledWith(50, { date: '2026-11-11', start_time: '13:30', end_time: '14:25' });
@@ -156,7 +161,7 @@ describe('useFocusTimer', () => {
     act(() => timer.start(7));
     await advance(8 * MIN);
     act(() => timer.stop());
-    await advance(0);
+    await settle();
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ start_time: '14:00', end_time: '14:08' }));
     act(() => timer.undo());
     await advance(0);
@@ -168,10 +173,11 @@ describe('useFocusTimer', () => {
     mount();
     act(() => timer.start(null));
     await advance(25 * MIN);
+    await settle();
     act(() => timer.start(7));
     await advance(4 * MIN);
     act(() => timer.stop());
-    await advance(0);
+    await settle();
     expect(api.createWorkBlock).not.toHaveBeenCalled();
     expect(api.updateWorkBlock).not.toHaveBeenCalled();
     expect(timer.sessions.map(s => [s.taskId, s.ms])).toEqual([[null, 25 * MIN], [7, 4 * MIN]]);
@@ -238,6 +244,47 @@ describe('useFocusTimer', () => {
       await advance(5000);
       expect(api.createWorkBlock).toHaveBeenCalledTimes(1);
       expect(api.updateWorkBlock).not.toHaveBeenCalled();
+    } finally {
+      act(() => tabs.forEach(t => t.root.unmount()));
+      tabs.forEach(t => t.el.remove());
+      set.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('saves it once when two tabs load together even without Web Locks, by a claim token in storage', async () => {
+    // A session ran out while no tab was open.
+    localStorage.setItem(FOCUS_TIMER_KEY, JSON.stringify({
+      taskId: 7, taskPicked: false, minutes: 25, startedAt: START.getTime(), resumedAt: START.getTime(),
+      elapsedBeforePauseMs: 0, pausedAt: null, savedAt: null,
+    }));
+    vi.setSystemTime(new Date(START.getTime() + 70 * MIN));
+    // Every write reaches the shared storage only a moment later, as between real tabs.
+    const realSet = Storage.prototype.setItem;
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, k: string, v: string) {
+      queueMicrotask(() => realSet.call(this, k, v));
+    });
+    vi.stubGlobal('navigator', { ...navigator, locks: undefined });
+
+    // Two tabs: separate copies of the module (separate in-memory stores), one localStorage.
+    const tabs: { root: Root; el: HTMLDivElement; Probe: React.FC; read: () => FocusTimer | null }[] = [];
+    for (let i = 0; i < 2; i++) {
+      vi.resetModules();
+      const mod = await import('./useFocusTimer');
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      let last: FocusTimer | null = null;
+      tabs.push({ root: createRoot(el), el, Probe: () => { last = mod.useFocusTimer(); return null; }, read: () => last });
+    }
+    try {
+      act(() => { tabs.forEach(({ root: r, Probe: P }) => r.render(<P />)); });
+      await advance(5000);
+      expect(api.createWorkBlock).toHaveBeenCalledTimes(1);
+      expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ task_id: 7, start_time: '14:00', end_time: '14:25' }));
+      expect(api.updateWorkBlock).not.toHaveBeenCalled();
+      // Both tabs read 00:00, and today's tally holds the session once.
+      tabs.forEach(t => { expect(t.read()?.phase).toBe('done'); expect(t.read()?.remainingMs).toBe(0); });
+      expect(JSON.parse(localStorage.getItem(FOCUS_LOG_KEY)!).sessions).toHaveLength(1);
     } finally {
       act(() => tabs.forEach(t => t.root.unmount()));
       tabs.forEach(t => t.el.remove());

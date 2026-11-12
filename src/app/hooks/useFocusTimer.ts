@@ -276,14 +276,41 @@ function readFocusLogOr(date: string, inMemory: FocusSession[]): FocusSession[] 
 
 /** The cross-tab lock a tab holds while it claims and saves a finished session. */
 const FINISH_LOCK = 'tm-focus-finish';
+/** Which tab is recording which session: `{ startedAt, token }`. */
+export const FOCUS_CLAIM_KEY = 'tm-focus-claim';
+/** How long a tab waits after claiming before it checks that its claim stuck. */
+export const CLAIM_SETTLE_MS = 250;
+/** This tab's claim token. */
+const TAB_TOKEN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+/**
+ * Claims the session that started at `startedAt` for this tab: writes this
+ * tab's token, waits for other tabs' writes to land, then reads it back. Tabs
+ * that claim together each write; the last write wins, so only one tab still
+ * finds its own token. Without storage there are no other tabs to race.
+ */
+async function holdsClaim(startedAt: number): Promise<boolean> {
+  try {
+    window.localStorage.setItem(FOCUS_CLAIM_KEY, JSON.stringify({ startedAt, token: TAB_TOKEN }));
+  } catch {
+    return true;
+  }
+  await new Promise(resolve => setTimeout(resolve, CLAIM_SETTLE_MS));
+  try {
+    const claim = JSON.parse(window.localStorage.getItem(FOCUS_CLAIM_KEY) ?? 'null');
+    return !claim || claim.startedAt !== startedAt || claim.token === TAB_TOKEN;
+  } catch {
+    return true;
+  }
+}
 
 /**
  * Ends the current session at `at`: Stop (`toIdle`) or running out. The
- * session is claimed in storage before it is recorded, so only one tab (and
- * one of this tab's views) records it. Where the browser has Web Locks, the
- * claim and the save run under one cross-tab lock: tabs that load together
- * can each read the stored state before the other's claim reaches them, so
- * the next tab only checks once the first has claimed and saved.
+ * session is claimed in storage with this tab's token before it is recorded,
+ * so only one tab (and one of this tab's views) records it, even when tabs
+ * load together and each reads the stored state before the other's write
+ * reaches it. Where the browser has Web Locks, the claim and the save also
+ * run under one cross-tab lock.
  */
 function finish(at: number, toIdle: boolean) {
   const locks = typeof navigator !== 'undefined' ? navigator.locks : undefined;
@@ -293,23 +320,25 @@ function finish(at: number, toIdle: boolean) {
   });
 }
 
-function claimAndRecord(at: number, toIdle: boolean): Promise<void> {
+async function claimAndRecord(at: number, toIdle: boolean): Promise<void> {
   const s = store.state;
-  if (s.startedAt == null || s.savedAt != null) return Promise.resolve();
+  if (s.startedAt == null || s.savedAt != null) return;
   if (hasStoredState()) {
     const stored = readFocusState();
     // Another tab already stopped it, recorded it, or started another.
     if (stored.startedAt !== s.startedAt || stored.savedAt != null) {
       setStore({ state: stored });
-      return Promise.resolve();
+      return;
     }
   }
   const total = s.minutes * MINUTE;
   const ran = Math.min(total, focusElapsedMs(s, at));
   // Ran out: it ended the moment it reached zero, not when this tab noticed.
   const end = s.resumedAt != null && ran >= total ? s.resumedAt + (total - s.elapsedBeforePauseMs) : s.pausedAt ?? at;
+  // The view moves on now; this tab's other views see it finished and stay out.
   commit(toIdle ? idleState(s.minutes, s.taskId, s.taskPicked) : { ...s, resumedAt: null, pausedAt: null, elapsedBeforePauseMs: ran, savedAt: at });
-  return record({ taskId: s.taskId, start: s.startedAt, end, ms: ran });
+  if (!(await holdsClaim(s.startedAt))) return;
+  await record({ taskId: s.taskId, start: s.startedAt, end, ms: ran });
 }
 
 const actions = {

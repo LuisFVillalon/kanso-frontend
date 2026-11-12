@@ -18,7 +18,7 @@ const setView = vi.hoisted(() => vi.fn());
 vi.mock('@/app/hooks/useCalendarViewMode', () => ({ useCalendarViewMode: () => ['month', setView] }));
 
 import FocusTimerCard, { FocusOverlay, mmss, upNextTask } from './FocusTimerCard';
-import { resetFocusTimerForTests } from '@/app/hooks/useFocusTimer';
+import { CLAIM_SETTLE_MS, resetFocusTimerForTests } from '@/app/hooks/useFocusTimer';
 
 const TODAY = '2026-11-11';
 const NOW = new Date(2026, 10, 11, 14, 40);
@@ -134,6 +134,7 @@ describe('FocusTimerCard', () => {
     expect(button('25m')!.disabled).toBe(true);
     await act(async () => { vi.advanceTimersByTime(12 * MIN); });
     await act(async () => button('Stop')!.click());
+    await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_SETTLE_MS); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(api.createWorkBlock).toHaveBeenCalledWith(expect.objectContaining({ task_id: 7, start_time: '14:40', end_time: '14:52' }));
     expect(text()).toContain('Saved 12m to HW 7');
