@@ -23,7 +23,7 @@ import {
 } from '@/app/types/mood';
 import { periodContaining } from '@/app/utils/calendarReport';
 import { formatDateRange, formatDurationShort, toLocalDateStr } from '@/app/utils/dateUtils';
-import { announceMoodCheckin } from '@/app/utils/moodCheckinSync';
+import { announceMoodMoment, onMoodMoment, replaceMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 
 /** What the user already did that day, shown above the faces so they reflect rather than guess. */
 export interface DaySummary {
@@ -62,12 +62,6 @@ interface Props {
 }
 
 const sameTag = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
-
-/** `list` with `from` renamed to `to` (or dropped, for null), keeping one of each moment. */
-const replaceTag = (list: string[], from: string, to: string | null): string[] =>
-  list
-    .flatMap(t => (sameTag(t, from) ? (to == null ? [] : [to]) : [t]))
-    .filter((t, i, all) => all.findIndex(o => sameTag(o, t)) === i);
 
 /**
  * One row of a scale: energy, stress or progress from 1, workload from 0
@@ -181,16 +175,12 @@ const MoodCheckinModal: React.FC<Props> = ({
     setAddingTag(false);
   };
 
-  /** After a moment is renamed or deleted on the server, the picker, this form and the open check-in follow. */
-  const applyMomentChange = (from: string, to: string | null) => {
-    setSuggestions(prev => replaceTag(prev, from, to));
-    setTags(prev => replaceTag(prev, from, to));
-    if (baseline?.tags.some(t => sameTag(t, from))) {
-      const row = { ...baseline, tags: replaceTag(baseline.tags, from, to) };
-      setBaseline(row);
-      announceMoodCheckin({ kind: row.period_kind, start: row.period_start, row });
-    }
-  };
+  // After a moment is renamed or deleted on the server, the picker, this form and the open check-in follow.
+  useEffect(() => onMoodMoment(change => {
+    setSuggestions(prev => replaceMoment(prev, change.from, change.to));
+    setTags(prev => replaceMoment(prev, change.from, change.to));
+    setBaseline(prev => prev && withMomentChange(prev, change));
+  }), []);
 
   const startEditingMoment = (tag: string) => {
     setDeletingMoment(null);
@@ -218,7 +208,7 @@ const MoodCheckinModal: React.FC<Props> = ({
     setMomentError(null);
     try {
       await renameMoodTag(from, to);
-      applyMomentChange(from, to);
+      announceMoodMoment({ from, to });
       setEditingMoment(null);
     } catch (err) {
       setMomentError(describeError(err, "Couldn't rename that moment. Please try again."));
@@ -234,7 +224,7 @@ const MoodCheckinModal: React.FC<Props> = ({
     setMomentError(null);
     try {
       await deleteMoodTag(tag);
-      applyMomentChange(tag, null);
+      announceMoodMoment({ from: tag, to: null });
       setDeletingMoment(null);
     } catch (err) {
       setMomentError(describeError(err, "Couldn't delete that moment. Please try again."));

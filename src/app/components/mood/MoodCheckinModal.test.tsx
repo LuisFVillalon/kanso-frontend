@@ -13,7 +13,7 @@ const api = vi.hoisted(() => ({
 vi.mock('@/app/lib/backend-api', () => ({ ...api, describeError: (_: unknown, fallback: string) => fallback }));
 
 import MoodCheckinModal from './MoodCheckinModal';
-import { onMoodCheckin, type MoodCheckinChange } from '@/app/utils/moodCheckinSync';
+import { onMoodMoment, type MoodMomentChange } from '@/app/utils/moodCheckinSync';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -225,9 +225,9 @@ describe('MoodCheckinModal moments: edit and delete', () => {
   const key = async (el: Element, k: string) => {
     await act(async () => { el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); });
   };
-  let changes: MoodCheckinChange[];
+  let changes: MoodMomentChange[];
   let unsubscribe: () => void;
-  beforeEach(() => { changes = []; unsubscribe = onMoodCheckin(c => changes.push(c)); });
+  beforeEach(() => { changes = []; unsubscribe = onMoodMoment(c => changes.push(c)); });
   afterEach(() => unsubscribe());
 
   it('gives every moment an Edit and a Delete, shown on hover or focus', async () => {
@@ -260,7 +260,7 @@ describe('MoodCheckinModal moments: edit and delete', () => {
     expect(api.renameMoodTag).toHaveBeenCalledWith('Gym', 'Lifting');
     expect(moments()).toEqual(['Slept well', 'Focused', 'Lifting']);
     expect(button('Lifting').getAttribute('aria-pressed')).toBe('true');
-    expect(changes).toEqual([{ kind: 'day', start: '2026-10-20', row: { ...existing, tags: ['Lifting', 'Focused'] } }]);
+    expect(changes).toEqual([{ from: 'Gym', to: 'Lifting' }]);
 
     await click(button('Save changes'));
     expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ tags: ['Lifting', 'Focused'] }));
@@ -314,7 +314,7 @@ describe('MoodCheckinModal moments: edit and delete', () => {
     expect(api.deleteMoodTag).toHaveBeenCalledWith('Focused');
     expect(moments()).toEqual(['Slept well', 'Gym']);
     expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
-    expect(changes).toEqual([{ kind: 'day', start: '2026-10-20', row: { ...existing, tags: ['Gym'] } }]);
+    expect(changes).toEqual([{ from: 'Focused', to: null }]);
 
     await click(button('Save changes'));
     expect(api.saveMoodCheckin).toHaveBeenCalledWith(expect.objectContaining({ tags: ['Gym'] }));

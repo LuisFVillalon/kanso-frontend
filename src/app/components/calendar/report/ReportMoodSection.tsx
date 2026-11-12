@@ -11,6 +11,7 @@ import { deleteMoodCheckin, describeError, saveMoodCheckin } from '@/app/lib/bac
 import type { CalendarActivity } from '@/app/types/activity';
 import { checkinToSave, MOOD_LABELS, moodLabel, type MoodCheckin, type MoodCheckinSettings, type MoodPeriodKind } from '@/app/types/mood';
 import { parseLocalDate, toLocalDateStr } from '@/app/utils/dateUtils';
+import { followMoments } from '@/app/utils/moodCheckinSync';
 import { describePeriod, periodContaining, periodLength, type CalendarReport, type ReportPeriod } from '@/app/utils/calendarReport';
 import {
   hasMoodCheckins,
@@ -171,7 +172,8 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
     replaceDay(date, row, kind);
   };
 
-  const restore = async (row: MoodCheckin) => {
+  const restore = async (previous: () => MoodCheckin) => {
+    const row = previous();
     try {
       setDay(row.period_start, await saveMoodCheckin(checkinToSave(row)), row.period_kind);
     } catch (err) {
@@ -185,7 +187,8 @@ const ReportMoodSection: React.FC<ReportMoodSectionProps> = ({ period, report, a
     dismissSavedToast.current?.();
     dismissSavedToast.current = null;
     if (previous) {
-      showToast('Check-in updated.', 'success', { label: 'Undo', onClick: () => restore(previous) });
+      const restored = followMoments(previous);
+      showToast('Check-in updated.', 'success', { label: 'Undo', onClick: () => restore(restored) });
       return;
     }
     dismissSavedToast.current = showToast(`Saved · ${moodLabel(saved.mood)}`, 'success', {

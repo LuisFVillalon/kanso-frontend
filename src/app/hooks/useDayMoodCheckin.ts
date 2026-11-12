@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/app/context/ToastContext';
 import { deleteMoodCheckin, describeError, fetchMoodCheckins, saveMoodCheckin } from '@/app/lib/backend-api';
 import { checkinToSave, moodLabel, type MoodCheckin } from '@/app/types/mood';
-import { announceMoodCheckin, isLatestMoodCheckin, onMoodCheckin } from '@/app/utils/moodCheckinSync';
+import { announceMoodCheckin, followMoments, isLatestMoodCheckin, onMoodCheckin, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 
 interface Loaded {
   date: string;
@@ -30,9 +30,13 @@ export function useDayMoodCheckin(date: string | null) {
     const unsubscribe = onMoodCheckin(({ kind, start, row }) => {
       if (kind === 'day' && start === date) setLoaded({ date, row });
     });
+    const unsubscribeMoments = onMoodMoment(change => {
+      setLoaded(prev => (prev?.row ? { ...prev, row: withMomentChange(prev.row, change) } : prev));
+    });
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeMoments();
     };
   }, [date]);
 
@@ -56,10 +60,11 @@ export function useMoodCheckinSaved() {
     dismissSavedToast.current = null;
 
     if (previous) {
+      const restored = followMoments(previous);
       showToast('Check-in updated.', 'success', {
         label: 'Undo',
         onClick: () => {
-          saveMoodCheckin(checkinToSave(previous))
+          saveMoodCheckin(checkinToSave(restored()))
             .then(row => announceMoodCheckin({ kind: row.period_kind, start: row.period_start, row }))
             .catch(err => showToast(describeError(err, "Couldn't undo. Please try again.")));
         },

@@ -10,7 +10,7 @@ import type { ProfileFields } from '@/app/hooks/useProfile';
 import { checkinToSave, moodLabel, type MoodCheckin, type MoodPeriodKind } from '@/app/types/mood';
 import type { Task } from '@/app/types/task';
 import { toLocalDateStr } from '@/app/utils/dateUtils';
-import { announceMoodCheckin, isLatestMoodCheckin, onMoodCheckin } from '@/app/utils/moodCheckinSync';
+import { announceMoodCheckin, followMoments, isLatestMoodCheckin, onMoodCheckin, onMoodMoment, withMomentChange } from '@/app/utils/moodCheckinSync';
 import { indexDayCheckins, summarizeMood } from '@/app/utils/moodReport';
 import { checkinDayAt, endsPeriod, periodStartOf, type PeriodCheckinKind } from '@/app/utils/moodCheckinDay';
 
@@ -76,6 +76,9 @@ const PeriodMoodCheckins: React.FC<Props> = ({ profile, profileLoaded, tasks }) 
       return { ...prev, rows: row ? [...rest, row] : rest };
     });
   }), []);
+  useEffect(() => onMoodMoment(change => {
+    setLoaded(prev => prev && { ...prev, rows: prev.rows.map(r => withMomentChange(r, change)) });
+  }), []);
 
   // The check-in stays on the day it was opened for, even if the clock rolls past it.
   const [modal, setModal] = useState<{ kind: PeriodCheckinKind; day: Date; existing: MoodCheckin | null } | null>(null);
@@ -104,7 +107,8 @@ const PeriodMoodCheckins: React.FC<Props> = ({ profile, profileLoaded, tasks }) 
     announceMoodCheckin({ kind, start, row });
   };
 
-  const restore = async (row: MoodCheckin) => {
+  const restore = async (previous: () => MoodCheckin) => {
+    const row = previous();
     try {
       setRow(row.period_kind, row.period_start, await saveMoodCheckin(checkinToSave(row)));
     } catch (err) {
@@ -119,7 +123,8 @@ const PeriodMoodCheckins: React.FC<Props> = ({ profile, profileLoaded, tasks }) 
     if (previous) {
       dismissSavedToast.current?.();
       dismissSavedToast.current = null;
-      showToast(`${what} updated.`, 'success', { label: 'Undo', onClick: () => restore(previous) });
+      const restored = followMoments(previous);
+      showToast(`${what} updated.`, 'success', { label: 'Undo', onClick: () => restore(restored) });
       return;
     }
     dismissSavedToast.current = showToast(`${what} saved · ${moodLabel(saved.mood)}`, 'success', {
