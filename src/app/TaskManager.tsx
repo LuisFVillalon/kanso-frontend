@@ -251,17 +251,6 @@ const TaskManager: React.FC = () => {
     archiveNote(id);
   };
 
-  const noteTags = useMemo(() => {
-    const map: Record<number, { name: string; color: string; count: number }> = {};
-    allNotes.forEach(note => {
-      note.tags?.forEach(tag => {
-        if (!map[tag.id]) map[tag.id] = { name: tag.name, color: tag.color, count: 0 };
-        map[tag.id].count += 1;
-      });
-    });
-    return Object.values(map);
-  }, [allNotes]);
-
   const filteredNotes = useMemo(() => {
     const lower = searchTerm.trim().toLowerCase();
     const matching = allNotes.filter(note => {
@@ -439,8 +428,6 @@ const TaskManager: React.FC = () => {
                       pendingHabitIds={pendingHabitIds}
                       habitsLoading={habitsLoading}
                       stats={stats}
-                      allNotes={allNotes}
-                      noteTags={noteTags}
                       profile={profile}
                       onSaveProfile={saveProfile}
                       calendarSettings={calendarSettings}
