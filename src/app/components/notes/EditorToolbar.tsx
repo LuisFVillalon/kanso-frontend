@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useId, useLayoutEffect, us
 import { useEditorState, type Editor } from '@tiptap/react';
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight,
-  Bold, ChevronDown, Code, Ellipsis, Highlighter, Image as ImageIcon, Italic, Link2, List, ListChecks, ListOrdered,
+  Bold, ChevronDown, Code, Ellipsis, Highlighter, Image as ImageIcon, Italic, Keyboard, Link2, List, ListChecks, ListOrdered,
   Minus, PanelLeftClose, PanelLeftOpen, Plus, Quote, Redo2, Strikethrough, Table as TableIcon, Underline, Undo2, X,
 } from 'lucide-react';
 import { HIGHLIGHT_COLORS, setHighlightColor, useHighlightColor } from './highlightColor';
@@ -56,6 +56,9 @@ const triggerClass = (active: boolean, placement: MenuPlacement) =>
      : 'text-[var(--tm-text-secondary)] hover:bg-[var(--tm-surface)] hover:text-[var(--tm-text-primary)]'}`;
 
 const triggerStyle = (active: boolean) => (active ? { ...RING_STYLE, ...ACTIVE_OUTLINE_STYLE } : RING_STYLE);
+
+/** Inserts a ruled line, the same block the "/" menu's Divider adds. */
+const insertDivider = (editor: Editor | null) => editor?.chain().focus().setHorizontalRule().run();
 
 // ─── Divider ────────────────────────────────────────────────────────────────
 
@@ -618,7 +621,7 @@ const InsertMenu: React.FC<InsertMenuProps> = ({ editor, state, placement, onPic
     { key: 'link', label: 'Link', hint: 'Ctrl+K', Icon: Link2, run: () => { close(); onEditLink(); } },
     { key: 'quote', label: 'Quote', hint: 'Ctrl+Shift+B', Icon: Quote, run: () => { close(); editor?.chain().focus().toggleBlockquote().run(); } },
     { key: 'code', label: 'Code block', hint: 'Ctrl+Alt+C', Icon: Code, run: () => { close(); editor?.chain().focus().toggleCodeBlock().run(); } },
-    { key: 'divider', label: 'Divider', Icon: Minus, run: () => { close(); editor?.chain().focus().setHorizontalRule().run(); } },
+    { key: 'divider', label: 'Divider', Icon: Minus, run: () => { close(); insertDivider(editor); } },
   ];
 
   return (
@@ -737,6 +740,172 @@ const AlignMenu: React.FC<{ editor: Editor | null; state: ControlsState; placeme
               {label}
               <span className="ml-auto pl-4 text-xs" style={{ color: 'var(--tm-text-muted)' }}>{shortcut}</span>
             </button>
+          ))}
+        </MenuPanel>
+      )}
+    </div>
+  );
+};
+
+// ─── ShortcutsMenu ────────────────────────────────────────────────────────────
+
+/** A toolbar feature's key binding, as the editor configures it ("Mod" is Cmd on Apple devices, Ctrl elsewhere). */
+interface ShortcutSpec {
+  label: string;
+  keys: string[];
+  /** The editor extension that binds it; left out for bindings NoteEditor handles itself (Ctrl+K). */
+  extension?: string;
+}
+
+/** The toolbar's features that have a key binding, in toolbar order. */
+const SHORTCUT_SECTIONS: { title: string; items: ShortcutSpec[] }[] = [
+  {
+    title: 'Text',
+    items: [
+      { label: 'Bold',          keys: ['Mod', 'B'],          extension: 'bold' },
+      { label: 'Italic',        keys: ['Mod', 'I'],          extension: 'italic' },
+      { label: 'Underline',     keys: ['Mod', 'U'],          extension: 'underline' },
+      { label: 'Strikethrough', keys: ['Mod', 'Shift', 'S'], extension: 'strike' },
+      { label: 'Highlight',     keys: ['Mod', 'Shift', 'H'], extension: 'highlight' },
+      { label: 'Heading 1–5',   keys: ['Mod', 'Alt', '1–5'], extension: 'heading' },
+    ],
+  },
+  {
+    title: 'Lists and blocks',
+    items: [
+      { label: 'Bulleted list', keys: ['Mod', 'Shift', '8'], extension: 'bulletList' },
+      { label: 'Numbered list', keys: ['Mod', 'Shift', '7'], extension: 'orderedList' },
+      { label: 'Checklist',     keys: ['Mod', 'Shift', '9'], extension: 'taskList' },
+      { label: 'Link',          keys: ['Mod', 'K'] },
+      { label: 'Quote',         keys: ['Mod', 'Shift', 'B'], extension: 'blockquote' },
+      { label: 'Code block',    keys: ['Mod', 'Alt', 'C'],   extension: 'codeBlock' },
+    ],
+  },
+  {
+    title: 'Alignment',
+    items: ALIGNMENTS.map(({ label, shortcut }) => ({
+      label,
+      keys: ['Mod', ...shortcut.split('+').slice(1)],
+      extension: 'textAlign',
+    })),
+  },
+  {
+    title: 'History',
+    items: [
+      { label: 'Undo', keys: ['Mod', 'Z'],          extension: 'undoRedo' },
+      { label: 'Redo', keys: ['Mod', 'Shift', 'Z'], extension: 'undoRedo' },
+    ],
+  },
+];
+
+/** Whether "Mod" means Cmd here: the same test ProseMirror's keymap uses to bind it. */
+const isApplePlatform = () => typeof navigator !== 'undefined' && /Mac|iP(hone|[oa]d)/.test(navigator.platform);
+
+/** "Mod+Shift+S" as this device types it: Cmd+Shift+S on Apple devices, Ctrl+Shift+S elsewhere. */
+export const formatShortcut = (keys: string[], apple: boolean) =>
+  keys.map(key => (key === 'Mod' ? (apple ? 'Cmd' : 'Ctrl') : key === 'Alt' && apple ? 'Option' : key)).join('+');
+
+/** How the shortcuts panel was opened, which decides what closes it. */
+type ShortcutsOpenMode = 'closed' | 'hover' | 'click' | 'focus';
+
+/**
+ * A keyboard icon whose panel lists the shortcuts for the toolbar's features.
+ * Hovering opens it until the pointer leaves; a click or tap keeps it open
+ * until the next click, an outside click or Escape; keyboard focus opens it
+ * until focus moves on.
+ */
+const ShortcutsMenu: React.FC<{ editor: Editor | null; placement: MenuPlacement }> = ({ editor, placement }) => {
+  const [mode, setMode] = useState<ShortcutsOpenMode>('closed');
+  const open = mode !== 'closed';
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const leaveTimer = useRef<number | undefined>(undefined);
+  const panelId = useId();
+
+  const cancelLeave = () => window.clearTimeout(leaveTimer.current);
+  useEffect(() => cancelLeave, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setMode('closed');
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMode('closed');
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const has = (name: string) => !!editor?.extensionManager.extensions.some(ext => ext.name === name);
+  const apple = open && isApplePlatform();
+  const sections = SHORTCUT_SECTIONS
+    .map(section => ({ ...section, items: section.items.filter(item => !item.extension || has(item.extension)) }))
+    .filter(section => section.items.length > 0);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative shrink-0"
+      onMouseEnter={() => {
+        cancelLeave();
+        setMode(m => (m === 'closed' ? 'hover' : m));
+      }}
+      onMouseLeave={() => {
+        cancelLeave();
+        // A short grace period lets the pointer cross the gap to the panel.
+        leaveTimer.current = window.setTimeout(() => setMode(m => (m === 'hover' ? 'closed' : m)), 150);
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => setMode(m => (m === 'closed' || m === 'hover' ? 'click' : 'closed'))}
+        onFocus={() => setMode(m => (m === 'closed' ? 'focus' : m))}
+        onBlur={() => setMode(m => (m === 'focus' ? 'closed' : m))}
+        title="Keyboard shortcuts"
+        aria-label="Keyboard shortcuts"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={panelId}
+        className={triggerClass(open, placement)}
+        style={triggerStyle(open)}
+      >
+        <Keyboard className={placement === 'above' ? 'w-[18px] h-[18px]' : 'w-4 h-4'} />
+      </button>
+
+      {open && (
+        <MenuPanel
+          anchorRef={triggerRef}
+          placement={placement}
+          align="end"
+          id={panelId}
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+          className="py-1.5 min-w-[15rem]"
+        >
+          {sections.map(({ title, items }) => (
+            <section key={title} aria-label={title} className="px-3 py-1">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--tm-text-muted)' }}>{title}</h3>
+              <ul>
+                {items.map(({ label, keys }) => (
+                  <li key={label} className="flex items-center gap-4 py-0.5 text-sm" style={{ color: 'var(--tm-text-primary)' }}>
+                    {label}
+                    <kbd
+                      className="ml-auto px-1.5 py-px rounded text-xs font-sans whitespace-nowrap"
+                      style={{ color: 'var(--tm-text-secondary)', backgroundColor: 'var(--tm-surface)', border: '1px solid var(--tm-border)' }}
+                    >
+                      {formatShortcut(keys, apple)}
+                    </kbd>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
         </MenuPanel>
       )}
@@ -903,7 +1072,8 @@ const FoldedTools: React.FC<{ groups: ToolGroup[]; placement: MenuPlacement }> =
 /**
  * The top bar's formatting tools, every tool one click away: undo, redo |
  * text style | bold, italic, underline, strikethrough, highlight | lists,
- * checklist | table, image, link, quote, code block | alignment.
+ * checklist | table, image, link, quote, code block, divider | alignment |
+ * keyboard shortcuts.
  */
 const FormattingRow: React.FC<FormattingControlsProps> = ({ editor, onPickImage, onEditLink }) => {
   const state = useControlsState(editor);
@@ -944,6 +1114,9 @@ const FormattingRow: React.FC<FormattingControlsProps> = ({ editor, onPickImage,
               </ToolbarButton>
               {button({ key: 'quote', title: 'Quote (Ctrl+Shift+B)', Icon: Quote, active: state.blockquote, run: e => e.chain().focus().toggleBlockquote().run() })}
               {button({ key: 'code', title: 'Code block (Ctrl+Alt+C)', Icon: Code, active: state.codeBlock, run: e => e.chain().focus().toggleCodeBlock().run() })}
+              <ToolbarButton toggle={false} title="Divider" onClick={() => insertDivider(editor)}>
+                <Minus className="w-4 h-4" />
+              </ToolbarButton>
             </>
           ),
         },
@@ -957,6 +1130,7 @@ const FormattingRow: React.FC<FormattingControlsProps> = ({ editor, onPickImage,
             run: e => e.chain().focus().setTextAlign(value).run(),
           })),
         },
+        { key: 'shortcuts', node: <ShortcutsMenu editor={editor} placement={placement} /> },
       ]}
     />
   );
@@ -964,7 +1138,8 @@ const FormattingRow: React.FC<FormattingControlsProps> = ({ editor, onPickImage,
 
 /**
  * The phone's bottom bar tools: text style | bold, italic, underline,
- * highlight | lists, checklist | Insert, alignment | undo, redo.
+ * highlight | lists, checklist | Insert, alignment | undo, redo | keyboard
+ * shortcuts.
  */
 const BottomFormattingControls: React.FC<FormattingControlsProps> = ({ editor, onPickImage, onEditLink }) => {
   const state = useControlsState(editor);
@@ -1001,6 +1176,7 @@ const BottomFormattingControls: React.FC<FormattingControlsProps> = ({ editor, o
           ),
         },
         { key: 'history', node: <UndoRedo editor={editor} state={state} placement={placement} iconSize={iconSize} /> },
+        { key: 'shortcuts', node: <ShortcutsMenu editor={editor} placement={placement} /> },
       ]}
     />
   );
