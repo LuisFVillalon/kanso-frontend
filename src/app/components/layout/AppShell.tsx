@@ -23,6 +23,7 @@ import SignOutConfirm from '@/app/components/common/SignOutConfirm';
 import AppNav, { NAV_ITEMS } from '@/app/components/layout/AppNav';
 import TaskManagerModals from '@/app/components/layout/TaskManagerModals';
 import FocusHeaderBar from '@/app/components/layout/FocusHeaderBar';
+import { isAppMode, setHomeMode } from '@/app/utils/homeMode';
 import NewEventModal from '@/app/components/event/NewEventModal';
 import DoodleBackdrop from '@/app/components/doodle/DoodleBackdrop';
 import type { Note } from '@/app/types/notes';
@@ -226,6 +227,10 @@ const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // The shortcut listener is bound once and reads the latest actions from here.
   const actions = useRef(value);
   useEffect(() => { actions.current = value; });
+
+  useEffect(() => {
+    if (isAppMode(profile.appMode)) setHomeMode(profile.appMode);
+  }, [profile.appMode]);
 
   // Back from Google's consent screen: its Settings page says how that went.
   useEffect(() => {

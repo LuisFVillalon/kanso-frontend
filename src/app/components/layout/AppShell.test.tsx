@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   addNote: vi.fn(),
   tags: [] as Tag[],
   user: { id: 'u1', email: 'luis@example.com' } as { id: string; email: string } | null,
+  appMode: null as string | null,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -44,7 +45,7 @@ vi.mock('@/app/context/NotesContext', () => ({
 vi.mock('@/app/hooks/useRestoreFromTrash', () => ({ useRestoreFromTrash: () => vi.fn() }));
 vi.mock('@/app/lib/backend-api', () => ({ createHabit: vi.fn(), updateHabit: vi.fn(), describeError: vi.fn(), fetchDrawing: vi.fn(async () => null) }));
 vi.mock('@/app/hooks/useProfile', () => ({
-  useProfile: () => ({ profile: { name: 'Luis', avatar: null }, loading: false, loaded: true, saveProfile: vi.fn() }),
+  useProfile: () => ({ profile: { name: 'Luis', avatar: null, appMode: mocks.appMode }, loading: false, loaded: true, saveProfile: vi.fn() }),
 }));
 vi.mock('@/app/hooks/useCalendarSettings', () => ({
   useCalendarSettings: () => ({ calendarSettings: {}, loading: false, saveCalendarSettings: vi.fn() }),
@@ -65,6 +66,7 @@ vi.mock('@/app/components/event/NewEventModal', () => ({
 }));
 
 import AppShell from './AppShell';
+import { getHomeMode, setHomeMode } from '@/app/utils/homeMode';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -85,6 +87,7 @@ beforeEach(() => {
   mocks.pathname = '/calendar';
   mocks.user = { id: 'u1', email: 'luis@example.com' };
   mocks.tags = [];
+  mocks.appMode = null;
   mocks.addNote.mockReturnValue({ id: -1 });
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -160,6 +163,21 @@ describe('AppShell', () => {
     await act(async () => { confirm.click(); });
     expect(mocks.signOut).toHaveBeenCalledTimes(1);
     expect(mocks.replace).toHaveBeenCalledWith('/login');
+  });
+
+  it("shares Home's mode from the saved profile on any page, over this device's copy", () => {
+    setHomeMode('normal');
+    mocks.appMode = 'focus';
+    render();
+    expect(getHomeMode()).toBe('focus');
+
+    mocks.appMode = 'doodle';
+    render();
+    expect(getHomeMode()).toBe('doodle');
+
+    mocks.appMode = null;
+    render();
+    expect(getHomeMode()).toBe('doodle');
   });
 
   it('renders the page alone, with no nav or modals, when signed out', () => {

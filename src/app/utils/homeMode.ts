@@ -1,8 +1,9 @@
 import type { AppMode } from '@/app/components/common/ModeSwitcher';
 
 // Home's mode (Overview, kanso focus or Doodle), shared beyond Home so the
-// header's focus bar knows whether Home shows the Focus tile. Home publishes
-// it as it changes; until then it's what Home last saved on this device.
+// header's focus bar knows whether Home shows the Focus tile. The shell
+// publishes the profile's saved mode once it loads and Home publishes each
+// switch; until then it's what Home last saved on this device.
 
 export const HOME_MODE_KEY = 'tm-app-mode';
 

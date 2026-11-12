@@ -79,7 +79,6 @@ const TaskManager: React.FC = () => {
   // The order the panels sit in, on a wide screen and a phone alike; remembered on this device.
   const [panelOrder, setPanelOrder] = usePersistedPref<PanelKey[]>(`tm-home-panel-order:${dataUserId ?? 'guest'}`, [...PANEL_ORDER], isPanelOrder);
   const carouselRef = useRef<PanelCarouselHandle>(null);
-  useEffect(() => { setHomeMode(mode); }, [mode]);
   const focusMode = mode === 'focus';
   const doodleMode = mode === 'doodle';
 
@@ -120,6 +119,7 @@ const TaskManager: React.FC = () => {
   const handleModeChange = (next: AppMode) => {
     if (next === 'focus' && mode !== 'focus') playKeyPress(FOCUS_MODE_COPY, 'header');
     setMode(next);
+    setHomeMode(next);
   };
   const { tags, tagsLoading } = useTagsContext();
 
