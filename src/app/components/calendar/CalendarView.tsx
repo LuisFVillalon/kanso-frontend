@@ -48,7 +48,7 @@ const CalendarView: React.FC = () => {
   if (loading) return <PageSpinner />;
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="tm-page-min-h flex flex-col">
       <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-5 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl sm:text-3xl text-text-primary">Calendar</h1>
         {viewMode !== 'week' && (

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import BigPictureCalendar, { BigPictureOverlay } from '@/app/components/calendar/BigPictureCalendar';
 import CurrentMonthWidget, { CurrentMonthOverlay } from '@/app/components/calendar/CurrentMonthWidget';
@@ -17,6 +17,7 @@ import { Habit } from '@/app/types/habit';
 import { StatsData } from '@/app/types/task';
 import type { ProfileFields, useProfile } from '@/app/hooks/useProfile';
 import type { CalendarSettings } from '@/app/types/calendar';
+import { onFocusWidgetRequest, takeFocusWidgetRequest } from '@/app/utils/focusWidgetRequest';
 
 // 'reserved' id kept as-is (rather than renamed to something calendar-ish)
 // so any already-persisted layoutOrder (localStorage / profile.layoutOrder)
@@ -116,6 +117,13 @@ const CalendarAndStats: React.FC<CalendarAndStatsProps> = ({
   );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const showMood = useDailyMood() === true;
+
+  // The header's focus bar opens the Focus tile, here or after it navigates Home.
+  useEffect(() => {
+    const open = () => { if (takeFocusWidgetRequest()) setExpandedId('tasks'); };
+    open();
+    return onFocusWidgetRequest(open);
+  }, []);
 
   // Month/year shown in the 'reserved' (Current Month) overlay — separate
   // from the actual current date so the header's prev/next buttons can page

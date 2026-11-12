@@ -13,6 +13,7 @@ import { useSplitPanel } from '@/app/hooks/useSplitPanel';
 import { toggleById } from '@/app/hooks/useTaskHandlers';
 import { DEFAULT_TASK_VIEW, isTaskView, useTaskFiltering } from '@/app/hooks/useTaskFiltering';
 import { usePersistedPref } from '@/app/hooks/usePersistedPref';
+import { HOME_MODE_KEY, isAppMode, setHomeMode } from '@/app/utils/homeMode';
 import { useMountTransition } from '@/app/hooks/useMountTransition';
 import { useCanvasAddToTasks } from '@/app/hooks/useCanvasAddToTasks';
 import { useCanvasTaskSync } from '@/app/hooks/useCanvasTaskSync';
@@ -57,9 +58,9 @@ const TaskManager: React.FC = () => {
   const { profile, loaded: profileLoaded, saveProfile } = shell.profileState;
   const { calendarSettings, loading: calendarSettingsLoading } = shell.calendarSettingsState;
   const [mode, setMode] = usePersistedPref<AppMode>(
-    'tm-app-mode',
+    HOME_MODE_KEY,
     'normal',
-    (c): c is AppMode => c === 'normal' || c === 'focus' || c === 'doodle',
+    isAppMode,
     profile.appMode as AppMode | null,
     next => { saveProfile({ ...profile, appMode: next }); },
   );
@@ -118,6 +119,7 @@ const TaskManager: React.FC = () => {
   const handleModeChange = (next: AppMode) => {
     if (next === 'focus' && mode !== 'focus') playKeyPress(FOCUS_MODE_COPY, 'header');
     setMode(next);
+    setHomeMode(next);
   };
   const { tags, tagsLoading } = useTagsContext();
 
@@ -347,14 +349,14 @@ const TaskManager: React.FC = () => {
     {/*
      * DoodleCanvas renders first so DOM order keeps it visually behind
      * everything else here. pointer-events-none while doodling lets clicks
-     * fall through this whole wrapper to it — otherwise this min-h-screen
+     * fall through this whole wrapper to it — otherwise this full-height
      * box (which covers the full viewport regardless of how little content
      * it holds) would win hit-testing and swallow the clicks itself.
      * The header opts back into pointer-events-auto so it stays usable
      * while doodle mode hides everything else (the app nav sits outside
      * this wrapper, in AppShell).
      */}
-    <div className={`relative min-h-screen ${doodleMode ? 'pointer-events-none' : ''}`}>
+    <div className={`relative tm-page-min-h ${doodleMode ? 'pointer-events-none' : ''}`}>
       <DoodleCanvas ref={doodleCanvasRef} active={doodleMode} color={doodleColor} isErasing={doodleErasing} />
 
         <div className="max-w-[1600px] mx-auto px-2 sm:px-3 md:px-4 lg:px-6 pt-0 pb-4 sm:pb-6 lg:pb-10">
