@@ -349,14 +349,14 @@ const TaskManager: React.FC = () => {
     {/*
      * DoodleCanvas renders first so DOM order keeps it visually behind
      * everything else here. pointer-events-none while doodling lets clicks
-     * fall through this whole wrapper to it — otherwise this min-h-screen
+     * fall through this whole wrapper to it — otherwise this full-height
      * box (which covers the full viewport regardless of how little content
      * it holds) would win hit-testing and swallow the clicks itself.
      * The header opts back into pointer-events-auto so it stays usable
      * while doodle mode hides everything else (the app nav sits outside
      * this wrapper, in AppShell).
      */}
-    <div className={`relative min-h-screen ${doodleMode ? 'pointer-events-none' : ''}`}>
+    <div className={`relative tm-page-min-h ${doodleMode ? 'pointer-events-none' : ''}`}>
       <DoodleCanvas ref={doodleCanvasRef} active={doodleMode} color={doodleColor} isErasing={doodleErasing} />
 
         <div className="max-w-[1600px] mx-auto px-2 sm:px-3 md:px-4 lg:px-6 pt-0 pb-4 sm:pb-6 lg:pb-10">

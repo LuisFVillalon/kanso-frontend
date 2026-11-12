@@ -1517,6 +1517,10 @@ html[data-page-style="blank"] body {
 :root:has(.focus-bar) {
   --tm-focus-bar-h: calc(2.75rem + 1px);
 }
+/* Page wrappers fill the window below the bar instead of a full 100vh. */
+.tm-page-min-h {
+  min-height: calc(100vh - var(--tm-focus-bar-h, 0px));
+}
 .focus-bar {
   height: var(--tm-focus-bar-h);
   position: sticky;
