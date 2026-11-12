@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Check, Hourglass, Loader2, Plus } from 'lucide-react';
+import { CalendarRange, Check, Loader2, Plus } from 'lucide-react';
 import type { DragHandleProps } from '@/app/components/common/DraggableGrid';
 import { AppShellContext } from '@/app/context/AppShellContext';
 import { createWorkBlock, deleteWorkBlock, describeError } from '@/app/lib/backend-api';
@@ -177,7 +177,7 @@ const FreeTimeCard: React.FC<FreeTimeCardProps> = ({ tasks, habits, profile, onE
   ) => (
     <CardShell
       compact
-      icon={<Hourglass className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />}
+      icon={<CalendarRange className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--tm-accent)' }} />}
       header="Free Time"
       headerAction={<TileTools onExpand={onExpand} dragHandleProps={dragHandleProps} />}
     >
