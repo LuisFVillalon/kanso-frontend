@@ -171,8 +171,6 @@ const TaskManagerModals: React.FC<TaskManagerModalsProps> = ({
         onHabitChange={onHabitChange}
         onSubmit={onSubmitHabit}
         availableTags={tags}
-        allTasks={allTasks}
-        habits={habits}
       />
 
       <ManageHabitsModal

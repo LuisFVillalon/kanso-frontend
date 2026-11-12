@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  afterWorkHours, freeMinutesOn, freeTime, habitTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
+  afterWorkHours, freeMinutesOn, freeTime, habitsToday, planRange, rankSlots, rawGaps, resuggest, slotReason,
   splitFill, spread, suggest, withHeld, type BusyItem, type HabitInput, type SlotState, type Span, type TaskInput,
 } from './slotSuggest';
 
@@ -285,31 +285,6 @@ describe('freeTime: all-day habits (no time goal)', () => {
     const habits: HabitInput[] = [{ id: 5, title: 'Stretch', len: 60, time: H(9), done: false, allDay: true }];
     const S = sample({ now: { date: '2026-11-12', min: H(8) }, events: [], tasks: [], habits });
     expect(at(suggest(S, 60, planRange(S.now, '2026-11-12', null)!).slots[0])).toBe('2026-11-12 540-600');
-  });
-});
-
-describe('habitTime (usual time for a new habit)', () => {
-  it("leaves out the times other habits hold", () => {
-    const habits: HabitInput[] = [{ id: 2, title: 'Read 20 pages', len: 30, time: H(9), done: false }];
-    const { picks } = habitTime(sample({ habits }), 30);
-    expect(picks.length).toBeGreaterThan(0);
-    expect(picks.every(p => p.end <= H(9) || p.start >= H(9, 30))).toBe(true);
-  });
-
-  it("ignores an all-day habit's usual time", () => {
-    const habits: HabitInput[] = [{ id: 5, title: 'Stretch', len: 30, time: H(9), done: false, allDay: true }];
-    expect(habitTime(sample({ habits }), 30).picks).toEqual(habitTime(sample({ habits: [] }), 30).picks);
-  });
-
-
-  it('picks the starts free on the most of the next 5 work days, 2 hours apart', () => {
-    const { picks } = habitTime(sample(), 30);
-    expect(picks.map(p => [p.start, p.free, p.of])).toEqual([[H(9), 4, 5], [H(12, 30), 4, 5], [H(16), 4, 5]]);
-    expect(picks[0].clash).toEqual(['2026-11-13']);
-  });
-
-  it('offers nothing without work days', () => {
-    expect(habitTime(sample({ windowOn: () => null }), 30).picks).toEqual([]);
   });
 });
 
